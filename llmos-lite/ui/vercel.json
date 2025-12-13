@@ -1,6 +1,11 @@
 {
+  "buildCommand": "npm run build",
+  "framework": "nextjs",
   "functions": {
-    "api/**/*.py": {
+    "api/*.py": {
+      "runtime": "python3.9"
+    },
+    "api/cron/*.py": {
       "runtime": "python3.9"
     }
   }

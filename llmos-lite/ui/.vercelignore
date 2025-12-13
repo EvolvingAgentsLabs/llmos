@@ -1,0 +1,5 @@
+api/main_full.py.bak
+*.pyc
+__pycache__/
+.env
+.env.local
