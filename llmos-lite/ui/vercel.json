@@ -2,15 +2,5 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next",
-  "functions": {
-    "api/*.py": {
-      "runtime": "python3.9",
-      "includeFiles": ".requirements.txt"
-    },
-    "api/cron/*.py": {
-      "runtime": "python3.9",
-      "includeFiles": ".requirements.txt"
-    }
-  }
+  "outputDirectory": ".next"
 }
