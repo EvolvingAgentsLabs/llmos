@@ -374,8 +374,8 @@ graph TD
 
 ### Next Steps 🚧
 
-- [ ] Drag-drop from library → canvas
-- [ ] Workflow execution integration
+- [x] Drag-drop from library → canvas ✅
+- [x] Workflow execution integration ✅
 - [ ] Real-time collaboration
 
 ---
@@ -472,7 +472,9 @@ llmos-lite/
 ### Phase 3: React UI ✅ (Complete)
 - [x] React Flow canvas
 - [x] Node library panel
-- [x] Execution controls
+- [x] Drag-drop from library to canvas
+- [x] Workflow execution via API
+- [x] Execution controls & progress
 - [x] Storage integration (Redis + Blob)
 - [x] Chat interface
 - [x] Preview renderers (plots, 3D, circuits)
