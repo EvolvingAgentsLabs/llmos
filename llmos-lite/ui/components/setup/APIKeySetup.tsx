@@ -9,7 +9,7 @@ interface APIKeySetupProps {
 
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   const [apiKey, setApiKey] = useState('');
-  const [selectedModel, setSelectedModel] = useState<ModelId>('claude-opus-4.5');
+  const [modelName, setModelName] = useState('anthropic/claude-opus-4.5');
   const [error, setError] = useState('');
   const [isValid, setIsValid] = useState(false);
 
@@ -26,17 +26,19 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       return;
     }
 
+    if (!modelName.trim()) {
+      setError('Please enter a model name');
+      return;
+    }
+
     // Save to localStorage (always using OpenRouter)
     LLMStorage.saveProvider('openrouter');
     LLMStorage.saveApiKey(apiKey);
-    LLMStorage.saveModel(selectedModel);
+    LLMStorage.saveModel(modelName as ModelId);
 
     // Complete setup
     onComplete();
   };
-
-  // All models are available with OpenRouter
-  const availableModels = Object.entries(AVAILABLE_MODELS);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary p-4">
@@ -90,36 +92,23 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
           )}
         </div>
 
-        {/* Model Selection */}
+        {/* Model Input */}
         <div className="mb-6">
-          <h2 className="terminal-heading text-xs mb-3">MODEL SELECTION</h2>
-          <div className="space-y-2">
-            {availableModels.map(([modelId, model]) => (
-              <label
-                key={modelId}
-                className="flex items-center gap-3 p-3 rounded cursor-pointer terminal-hover border border-terminal-border"
-              >
-                <input
-                  type="radio"
-                  name="model"
-                  value={modelId}
-                  checked={selectedModel === modelId}
-                  onChange={() => setSelectedModel(modelId as ModelId)}
-                  className="w-4 h-4"
-                />
-                <div className="flex-1">
-                  <div className="text-sm text-terminal-fg-primary font-medium flex items-center gap-2">
-                    {model.name}
-                    {model.inputCost === '$0/M tokens' && (
-                      <span className="git-badge git-badge-committed">FREE</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-terminal-fg-secondary">
-                    {model.inputCost} input, {model.outputCost} output • {model.contextWindow}
-                  </div>
-                </div>
-              </label>
-            ))}
+          <h2 className="terminal-heading text-xs mb-3">MODEL NAME</h2>
+          <input
+            type="text"
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            placeholder="e.g., anthropic/claude-opus-4.5, tng/deepseek-r1t2-chimera:free"
+            className="terminal-input w-full"
+          />
+          <div className="mt-2 text-xs text-terminal-fg-secondary">
+            <p className="mb-1">Examples:</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li><code className="text-terminal-accent-green">tng/deepseek-r1t2-chimera:free</code> - Free reasoning model</li>
+              <li><code className="text-terminal-accent-blue">anthropic/claude-opus-4.5</code> - Premium quality</li>
+              <li><code className="text-terminal-accent-blue">openai/gpt-5.2</code> - Latest OpenAI</li>
+            </ul>
           </div>
         </div>
 
