@@ -107,7 +107,16 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
                   OpenRouter (Recommended)
                 </div>
                 <div className="text-xs text-terminal-fg-secondary">
-                  Access Claude, GPT, and free models through one API
+                  Access Claude, GPT, and{' '}
+                  <a
+                    href="https://openrouter.ai/models/?q=free"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-terminal-accent-blue hover:underline"
+                  >
+                    free models
+                  </a>
+                  {' '}through one API
                 </div>
               </div>
             </label>
@@ -163,14 +172,26 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
             className="terminal-input w-full"
           />
           <div className="mt-2 flex items-center justify-between">
-            <a
-              href={providerInfo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-terminal-accent-blue hover:underline"
-            >
-              Get your {providerInfo.name} API key →
-            </a>
+            <div className="flex flex-col gap-1">
+              <a
+                href={providerInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-terminal-accent-blue hover:underline"
+              >
+                Get your {providerInfo.name} API key →
+              </a>
+              {provider === 'openrouter' && (
+                <a
+                  href="https://openrouter.ai/models/?q=free"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-terminal-accent-green hover:underline"
+                >
+                  Browse free models →
+                </a>
+              )}
+            </div>
             {isValid && (
               <span className="text-xs text-terminal-accent-green">
                 ✓ Valid format

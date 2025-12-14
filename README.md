@@ -69,11 +69,13 @@ OPENROUTER_API_KEY=sk-or-v1-xxx...
 - `.env` is gitignored and will never be committed
 - OpenRouter gives you access to 100+ models including Claude, GPT-4, and free models
 - Get your free API key at https://openrouter.ai/keys
+- Browse all free models: https://openrouter.ai/models/?q=free
 
 **💡 Recommended Free Models:**
 - `qwen/qwen2.5-7b-instruct:free` - Fast, capable, completely free
 - `meta-llama/llama-3.1-8b-instruct:free` - Great for general tasks
 - `anthropic/claude-3.5-sonnet` - Premium (paid per token)
+- [View all free models →](https://openrouter.ai/models/?q=free)
 
 ### 3. Run the App
 
