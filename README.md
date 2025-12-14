@@ -345,9 +345,13 @@ Sessions store chat conversations with:
    - Blob client for skills/files
    - Graceful fallbacks to mock data
 
-### In Progress 🚧
+4. **Preview Renderers**
+   - PlotRenderer (line, scatter, bar charts via Recharts)
+   - ThreeRenderer (3D visualizations via Three.js + WebGL)
+   - CircuitRenderer (quantum circuit diagrams via SVG)
 
-- [ ] Preview renderers (3D, plots, circuits)
+### Next Steps 🚧
+
 - [ ] Drag-drop from library → canvas
 - [ ] Workflow execution integration
 - [ ] Real-time collaboration
@@ -403,13 +407,15 @@ llmunix/
 │       ├── components/
 │       │   ├── panel3-artifacts/
 │       │   │   ├── WorkflowCanvas.tsx
-│       │   │   └── NodeLibraryPanel.tsx
+│       │   │   ├── NodeLibraryPanel.tsx
+│       │   │   ├── PlotRenderer.tsx
+│       │   │   ├── ThreeRenderer.tsx
+│       │   │   └── CircuitRenderer.tsx
 │       │   └── ...
 │       └── lib/
 │           ├── workflow-executor.ts
 │           └── pyodide-executor.ts
 │
-├── test_redis.py                 # Redis connection test
 ├── README.md                     # This file
 ├── ARCHITECTURE.md               # Technical deep dive
 └── .env                          # Environment variables (gitignored)
@@ -437,7 +443,7 @@ llmunix/
 - [x] Execution controls & progress
 - [x] Storage integration (Redis + Blob)
 - [x] Chat interface integration
-- [ ] Preview renderers (plots, 3D, circuits)
+- [x] Preview renderers (plots, 3D, circuits)
 
 ### Phase 4: Advanced Features (Future)
 - [ ] GPU acceleration (WebGPU)
@@ -453,10 +459,10 @@ llmunix/
 We welcome contributions!
 
 **Priority areas:**
-1. Preview renderers (Three.js, Recharts, circuit diagrams)
+1. Workflow execution integration (connect UI → executor)
 2. New executable skills (domains: quantum, 3D, electronics, ML)
 3. Runtime integrations (WebGPU, WebR, etc.)
-4. Example workflows
+4. Example workflows and templates
 
 **Development workflow:**
 1. Fork the repository
