@@ -22,51 +22,79 @@ LLMunix is a four-layer architecture optimized for browser-native computational 
 
 ### Architecture Diagram
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    FRONTEND LAYER (Browser)                    │
-│                                                                │
-│  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ React Flow      │  │ Chat Panel   │  │ Node Library    │  │
-│  │ Canvas          │  │              │  │ Panel           │  │
-│  └────────┬────────┘  └──────┬───────┘  └────────┬─────────┘  │
-│           │                  │                   │            │
-│  ┌────────▼──────────────────▼───────────────────▼─────────┐  │
-│  │         Workflow Executor (TypeScript + Wasm)           │  │
-│  │  - DAG resolution                                       │  │
-│  │  - Pyodide runtime (Python → Wasm)                     │  │
-│  │  - Three.js runtime (3D graphics)                      │  │
-│  │  - Ngspice.js runtime (circuit simulation)            │  │
-│  └────────┬────────────────────────────────────────────────┘  │
-└───────────┼────────────────────────────────────────────────────┘
-            │ HTTP/WebSocket
-┌───────────▼────────────────────────────────────────────────────┐
-│                      API LAYER (FastAPI)                       │
-│                                                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐     │
-│  │ Sessions API │  │ Skills API   │  │ Chat API         │     │
-│  │              │  │              │  │ (+ LLM Context)  │     │
-│  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘     │
-│         │                 │                   │               │
-│  ┌──────▼─────────────────▼───────────────────▼─────────┐     │
-│  │            Storage Client Abstraction               │     │
-│  │  - redis_client.py (direct Redis)                   │     │
-│  │  - vercel_kv.py (KV REST API)                       │     │
-│  │  - vercel_blob.py (Blob storage)                    │     │
-│  └──────┬───────────────────────────────────────────────┘     │
-└─────────┼──────────────────────────────────────────────────────┘
-          │
-┌─────────▼──────────────────────────────────────────────────────┐
-│                   STORAGE LAYER                                │
-│                                                                │
-│  ┌────────────────────┐         ┌──────────────────────────┐  │
-│  │ Redis / Vercel KV  │         │ Vercel Blob              │  │
-│  │                    │         │                          │  │
-│  │ - Sessions         │         │ - Skills (Markdown)      │  │
-│  │ - Messages         │         │ - Workflows (JSON)       │  │
-│  │ - Metadata         │         │ - Files                  │  │
-│  └────────────────────┘         └──────────────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Frontend["🌐 FRONTEND LAYER (Browser)"]
+        ReactFlow["⚡ React Flow Canvas<br/>(Drag-drop workflow editor)"]
+        ChatPanel["💬 Chat Panel<br/>(LLM conversation)"]
+        NodeLib["📚 Node Library Panel<br/>(Skill browser)"]
+
+        subgraph Executor["⚙️ Workflow Executor (TypeScript + Wasm)"]
+            DAG["🔀 DAG Resolution"]
+            Pyodide["🐍 Pyodide Runtime<br/>(Python → Wasm)"]
+            ThreeJS["🎨 Three.js Runtime<br/>(3D graphics)"]
+            Ngspice["⚡ Ngspice.js Runtime<br/>(Circuit simulation)"]
+        end
+    end
+
+    subgraph API["🔌 API LAYER (FastAPI)"]
+        SessionsAPI["📝 Sessions API<br/>(CRUD operations)"]
+        SkillsAPI["🎯 Skills API<br/>(Load/Save skills)"]
+        ChatAPI["🤖 Chat API<br/>(LLM + context injection)"]
+
+        subgraph Storage["💼 Storage Client Abstraction"]
+            RedisClient["redis_client.py<br/>(Direct Redis)"]
+            KVClient["vercel_kv.py<br/>(KV REST API)"]
+            BlobClient["vercel_blob.py<br/>(Blob storage)"]
+        end
+    end
+
+    subgraph StorageLayer["💾 STORAGE LAYER"]
+        Redis["🔴 Redis / Vercel KV<br/>- Sessions<br/>- Messages<br/>- Metadata"]
+        Blob["📦 Vercel Blob<br/>- Skills (Markdown)<br/>- Workflows (JSON)<br/>- Files"]
+    end
+
+    ReactFlow --> Executor
+    ChatPanel --> Executor
+    NodeLib --> Executor
+
+    DAG --> Pyodide
+    DAG --> ThreeJS
+    DAG --> Ngspice
+
+    Executor -->|HTTP| SessionsAPI
+    Executor -->|HTTP| SkillsAPI
+    ChatPanel -->|HTTP| ChatAPI
+
+    SessionsAPI --> RedisClient
+    SkillsAPI --> BlobClient
+    ChatAPI --> BlobClient
+
+    RedisClient --> Redis
+    KVClient --> Redis
+    BlobClient --> Blob
+
+    style Frontend fill:#1a1a2e,stroke:#00ff00,stroke-width:3px,color:#00ff00
+    style Executor fill:#16213e,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
+    style API fill:#0f3460,stroke:#ff8800,stroke-width:3px,color:#ff8800
+    style Storage fill:#1a1a2e,stroke:#ff0080,stroke-width:2px,color:#ff0080
+    style StorageLayer fill:#1a1a1a,stroke:#ff0080,stroke-width:3px,color:#ff0080
+
+    style ReactFlow fill:#2d4a3e,stroke:#00ff00,color:#00ff00
+    style ChatPanel fill:#2d4a3e,stroke:#00ff00,color:#00ff00
+    style NodeLib fill:#2d4a3e,stroke:#00ff00,color:#00ff00
+    style DAG fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style Pyodide fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style ThreeJS fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style Ngspice fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style SessionsAPI fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style SkillsAPI fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style ChatAPI fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style RedisClient fill:#2d2d3e,stroke:#ff0080,color:#ff0080
+    style KVClient fill:#2d2d3e,stroke:#ff0080,color:#ff0080
+    style BlobClient fill:#2d2d3e,stroke:#ff0080,color:#ff0080
+    style Redis fill:#4a2d2d,stroke:#ff0080,color:#ff0080
+    style Blob fill:#2d4a4a,stroke:#00d9ff,color:#00d9ff
 ```
 
 ---
@@ -630,58 +658,99 @@ export async function executeWorkflow(nodes: WorkflowNode[]): Promise<Map<string
 
 ### Session Creation Flow
 
-```
-User Action (Frontend)
-  │
-  ├─> POST /api/sessions
-  │     ├─> Create session object
-  │     ├─> Generate session ID
-  │     ├─> Save to Redis: session:{id}
-  │     ├─> Add to index: {volume}:{volume_id}:sessions
-  │     └─> Return session object
-  │
-  └─> Update UI with new session
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API as Sessions API
+    participant Redis
+
+    User->>Frontend: Click "New Session"
+    Frontend->>API: POST /api/sessions<br/>{name, volume}
+    API->>API: Generate session ID
+    API->>API: Create session object
+    API->>Redis: SET session:{id}
+    API->>Redis: SADD {volume}:sessions
+    Redis-->>API: Success
+    API-->>Frontend: Return session object
+    Frontend->>Frontend: Update UI<br/>Show new session
+
+    Note over User,Redis: Session persisted to Redis
 ```
 
 ### Chat Message Flow
 
-```
-User sends message
-  │
-  ├─> POST /chat
-  │     ├─> Load skills from Blob (if include_skills=true)
-  │     ├─> Build system prompt with skill context
-  │     ├─> Call Anthropic API
-  │     ├─> Get LLM response
-  │     └─> Return response + skills_used
-  │
-  ├─> POST /api/sessions/{id}/messages (user message)
-  │     └─> Save to Redis: session:{id}:messages
-  │
-  └─> POST /api/sessions/{id}/messages (assistant message)
-        └─> Save to Redis: session:{id}:messages
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant ChatAPI as Chat API
+    participant Blob as Vercel Blob
+    participant LLM as Anthropic API
+    participant SessionsAPI as Sessions API
+    participant Redis
+
+    User->>Frontend: Send message
+    Frontend->>ChatAPI: POST /chat<br/>{message, include_skills}
+
+    alt Skills requested
+        ChatAPI->>Blob: List skills
+        Blob-->>ChatAPI: Return skill files
+        ChatAPI->>ChatAPI: Build system prompt<br/>+ skill context
+    end
+
+    ChatAPI->>LLM: Send prompt
+    LLM-->>ChatAPI: Return response
+    ChatAPI-->>Frontend: {response, skills_used}
+    Frontend->>Frontend: Display response
+
+    Frontend->>SessionsAPI: POST /sessions/{id}/messages<br/>(user message)
+    SessionsAPI->>Redis: RPUSH session:{id}:messages
+
+    Frontend->>SessionsAPI: POST /sessions/{id}/messages<br/>(assistant message)
+    SessionsAPI->>Redis: RPUSH session:{id}:messages
+
+    Note over User,Redis: Messages saved to session history
 ```
 
 ### Workflow Execution Flow
 
-```
-User clicks "Run Workflow"
-  │
-  ├─> Build DAG from React Flow nodes/edges
-  │     ├─> Validate connections
-  │     └─> Topological sort
-  │
-  ├─> For each node (in execution order):
-  │     ├─> Fetch skill from Blob
-  │     ├─> Resolve input values
-  │     ├─> Execute in appropriate runtime:
-  │     │     ├─> Python → Pyodide
-  │     │     ├─> JavaScript → eval in sandbox
-  │     │     └─> Three.js → WebGL context
-  │     ├─> Collect output
-  │     └─> Update node UI
-  │
-  └─> Display final results
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend as React Flow
+    participant Executor as Workflow Executor
+    participant Blob as Vercel Blob
+    participant Pyodide
+    participant ThreeJS as Three.js
+
+    User->>Frontend: Click "Run Workflow"
+    Frontend->>Executor: Execute workflow<br/>(nodes, edges)
+
+    Executor->>Executor: Build DAG
+    Executor->>Executor: Topological sort
+    Executor->>Executor: Validate connections
+
+    loop For each node
+        Executor->>Blob: Fetch skill by ID
+        Blob-->>Executor: Return skill code
+        Executor->>Executor: Resolve input values<br/>(from dependencies)
+
+        alt Python skill
+            Executor->>Pyodide: Execute code<br/>(inputs)
+            Pyodide-->>Executor: Return result
+        else JavaScript/3D skill
+            Executor->>ThreeJS: Execute code<br/>(inputs)
+            ThreeJS-->>Executor: Return result
+        end
+
+        Executor->>Frontend: Update node status<br/>(running → success)
+    end
+
+    Executor-->>Frontend: Workflow complete
+    Frontend->>Frontend: Display final results
+
+    Note over User,ThreeJS: All execution in browser (WebAssembly)
 ```
 
 ---

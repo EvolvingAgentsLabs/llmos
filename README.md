@@ -171,51 +171,82 @@ python test_redis.py
 
 ### System Overview
 
-```
-┌──────────────────────────────────────────────────────────┐
-│          PRESENTATION LAYER (Browser)                    │
-│  ┌──────────────┐  ┌────────────────┐                   │
-│  │ React Flow   │  │ Chat Interface │                   │
-│  │ Canvas       │  │ (Skill Context)│                   │
-│  └──────┬───────┘  └────────┬───────┘                   │
-└─────────┼──────────────────────┼────────────────────────┘
-          │                      │
-┌─────────▼─────────┐  ┌────────▼────────┐
-│ Workflow Executor │  │ Skills Manager  │
-│ (TypeScript/Wasm) │  │ (Load/Filter)   │
-└─────────┬─────────┘  └────────┬────────┘
-          │                     │
-┌─────────▼─────────────────────▼─────────┐
-│        INTERFACE LAYER (API)            │
-│  - FastAPI endpoints                    │
-│  - /api/sessions (persistence)          │
-│  - /api/skills (storage)                │
-│  - /chat (LLM + context)                │
-└─────────┬───────────────────────────────┘
-          │
-┌─────────▼─────────────────────────────────┐
-│         STORAGE LAYER                     │
-│  - Redis: Sessions + Messages             │
-│  - Blob: Skills + Files                   │
-│  - Git: Version control (future)          │
-└───────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Browser["🌐 PRESENTATION LAYER (Browser)"]
+        ReactFlow["⚡ React Flow<br/>Canvas"]
+        Chat["💬 Chat Interface<br/>(Skill Context)"]
+    end
+
+    subgraph Execution["⚙️ EXECUTION LAYER"]
+        Executor["🔧 Workflow Executor<br/>(TypeScript/Wasm)"]
+        SkillMgr["📚 Skills Manager<br/>(Load/Filter)"]
+    end
+
+    subgraph API["🔌 INTERFACE LAYER (FastAPI)"]
+        Sessions["📝 /api/sessions<br/>(persistence)"]
+        Skills["🎯 /api/skills<br/>(storage)"]
+        ChatAPI["🤖 /chat<br/>(LLM + context)"]
+    end
+
+    subgraph Storage["💾 STORAGE LAYER"]
+        Redis["🔴 Redis<br/>Sessions + Messages"]
+        Blob["📦 Vercel Blob<br/>Skills + Files"]
+        Git["📂 Git<br/>(future)"]
+    end
+
+    ReactFlow --> Executor
+    Chat --> SkillMgr
+    Executor --> Sessions
+    Executor --> Skills
+    SkillMgr --> ChatAPI
+    Sessions --> Redis
+    Skills --> Blob
+    ChatAPI --> Blob
+
+    style Browser fill:#1a1a2e,stroke:#00ff00,stroke-width:2px,color:#00ff00
+    style Execution fill:#16213e,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
+    style API fill:#0f3460,stroke:#ff8800,stroke-width:2px,color:#ff8800
+    style Storage fill:#1a1a1a,stroke:#ff0080,stroke-width:2px,color:#ff0080
+
+    style ReactFlow fill:#2d4a3e,stroke:#00ff00,color:#00ff00
+    style Chat fill:#2d4a3e,stroke:#00ff00,color:#00ff00
+    style Executor fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style SkillMgr fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
+    style Sessions fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style Skills fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style ChatAPI fill:#3e2d4a,stroke:#ff8800,color:#ff8800
+    style Redis fill:#4a2d2d,stroke:#ff0080,color:#ff0080
+    style Blob fill:#4a2d2d,stroke:#ff0080,color:#ff0080
+    style Git fill:#4a2d2d,stroke:#ff0080,color:#ff0080
 ```
 
 ### Storage Architecture
 
-**Redis (Sessions & Metadata):**
-```
-session:{session_id}              → Session JSON object
-session:{session_id}:messages     → List of messages
-{volume}:{volume_id}:sessions     → Set of session IDs per volume
-all:sessions                      → Set of all session IDs
-```
+```mermaid
+graph LR
+    subgraph Redis["🔴 Redis (Sessions & Metadata)"]
+        S1["session:{id}<br/>→ Session JSON"]
+        S2["session:{id}:messages<br/>→ Message list"]
+        S3["{volume}:{id}:sessions<br/>→ Session IDs set"]
+        S4["all:sessions<br/>→ All session IDs"]
+    end
 
-**Vercel Blob (Skills & Files):**
-```
-volumes/system/system/skills/{skill}.md → System skills
-volumes/user/{user_id}/skills/{skill}.md → User skills
-volumes/team/{team_id}/skills/{skill}.md → Team skills
+    subgraph Blob["📦 Vercel Blob (Skills & Files)"]
+        B1["volumes/system/<br/>system/skills/<br/>{skill}.md"]
+        B2["volumes/user/<br/>{user_id}/skills/<br/>{skill}.md"]
+        B3["volumes/team/<br/>{team_id}/skills/<br/>{skill}.md"]
+    end
+
+    style Redis fill:#1a1a1a,stroke:#ff0080,stroke-width:2px,color:#ff0080
+    style Blob fill:#1a1a1a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
+    style S1 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
+    style S2 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
+    style S3 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
+    style S4 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
+    style B1 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
+    style B2 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
+    style B3 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
 ```
 
 For detailed technical documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -264,8 +295,17 @@ def execute(inputs):
 Workflows are drag-and-drop computational graphs built with React Flow.
 
 **Example Workflow:**
-```
-[Hamiltonian] → [VQE Optimizer] → [Plot Convergence] → [Export Results]
+
+```mermaid
+graph LR
+    H["⚛️ Hamiltonian<br/>Builder"] --> V["🔬 VQE<br/>Optimizer"]
+    V --> P["📊 Plot<br/>Convergence"]
+    P --> E["💾 Export<br/>Results"]
+
+    style H fill:#2d4a3e,stroke:#00ff00,stroke-width:2px,color:#00ff00
+    style V fill:#3e2d4a,stroke:#ff0080,stroke-width:2px,color:#ff0080
+    style P fill:#2d3e4a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
+    style E fill:#4a3e2d,stroke:#ff8800,stroke-width:2px,color:#ff8800
 ```
 
 Each node is a skill that executes in the browser via WebAssembly.
@@ -280,11 +320,28 @@ Sessions store chat conversations with:
 
 ### 4. Volumes (Multi-Tenant Storage)
 
-```
-/volumes/
-  system/         # Global skills (read-only for users)
-  team/{team_id}/ # Shared team skills
-  user/{user_id}/ # Private user skills
+```mermaid
+graph TD
+    Root["📁 /volumes/"]
+    System["🌐 system/<br/>(Global skills)"]
+    Team["👥 team/{team_id}/<br/>(Shared skills)"]
+    User["👤 user/{user_id}/<br/>(Private skills)"]
+
+    Root --> System
+    Root --> Team
+    Root --> User
+
+    System --> SRead["✅ Users: Read Only"]
+    Team --> TRead["✅ Users: Read Only<br/>✅ Team: Read/Write"]
+    User --> UWrite["✅ User: Read/Write"]
+
+    style Root fill:#1a1a1a,stroke:#ffffff,stroke-width:2px,color:#ffffff
+    style System fill:#2d4a3e,stroke:#00ff00,stroke-width:2px,color:#00ff00
+    style Team fill:#3e2d4a,stroke:#ff0080,stroke-width:2px,color:#ff0080
+    style User fill:#2d3e4a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
+    style SRead fill:#1a2d1a,stroke:#00ff00,color:#00ff00
+    style TRead fill:#2d1a2d,stroke:#ff0080,color:#ff0080
+    style UWrite fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
 ```
 
 **Access Control:**
@@ -362,29 +419,45 @@ Sessions store chat conversations with:
 
 ### Quantum VQE Workflow
 
-```
-[Hamiltonian Node] → [VQE Node] → [Plot Node] → [Export Node]
+```mermaid
+graph LR
+    H["⚛️ Hamiltonian Node<br/>Define quantum system"]
+    V["🔬 VQE Node<br/>Run simulation (Pyodide)"]
+    P["📊 Plot Node<br/>Visualize convergence"]
+    E["💾 Export Node<br/>Save results"]
 
-1. Hamiltonian Node: Defines quantum system
-2. VQE Node: Runs simulation (Pyodide)
-3. Plot Node: Visualizes convergence (JavaScript)
-4. Export Node: Saves results (Canvas API)
+    H -->|"Hamiltonian<br/>matrix"| V
+    V -->|"Energy values<br/>convergence data"| P
+    P -->|"Chart<br/>image"| E
 
-Result: Instant, interactive, in-browser execution
+    style H fill:#2d4a3e,stroke:#00ff00,stroke-width:3px,color:#00ff00
+    style V fill:#3e2d4a,stroke:#ff0080,stroke-width:3px,color:#ff0080
+    style P fill:#2d3e4a,stroke:#00d9ff,stroke-width:3px,color:#00d9ff
+    style E fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
 ```
+
+**Result:** ⚡ Instant, interactive, in-browser execution via WebAssembly
 
 ### 3D Animation Workflow
 
-```
-[Model Node] → [Material Node] → [Scene Node] → [Render Node]
+```mermaid
+graph LR
+    M["🎨 Model Node<br/>Create 3D geometry"]
+    Mat["🖼️ Material Node<br/>Apply textures"]
+    S["🎬 Scene Node<br/>Position objects"]
+    R["🎮 Render Node<br/>WebGL rendering (60 FPS)"]
 
-1. Model Node: Creates 3D geometry (Three.js)
-2. Material Node: Applies textures
-3. Scene Node: Positions objects
-4. Render Node: WebGL rendering (60 FPS)
+    M -->|"Geometry<br/>data"| Mat
+    Mat -->|"Textured<br/>mesh"| S
+    S -->|"Scene<br/>graph"| R
 
-Result: Real-time 3D visualization in browser
+    style M fill:#2d4a3e,stroke:#00ff00,stroke-width:3px,color:#00ff00
+    style Mat fill:#4a2d3e,stroke:#ff00ff,stroke-width:3px,color:#ff00ff
+    style S fill:#2d3e4a,stroke:#00d9ff,stroke-width:3px,color:#00d9ff
+    style R fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
 ```
+
+**Result:** 🎨 Real-time 3D visualization in browser using Three.js
 
 ---
 
