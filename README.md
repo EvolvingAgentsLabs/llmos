@@ -74,14 +74,11 @@ OPENROUTER_API_KEY=sk-or-v1-xxx...
 **💡 Recommended Models:**
 
 **Free Models:**
-- `qwen/qwen2.5-7b-instruct:free` - Fast, capable, completely free
-- `meta-llama/llama-3.1-8b-instruct:free` - Great for general tasks
 - `tng/deepseek-r1t2-chimera:free` - DeepSeek R1T2 Chimera (reasoning model)
 
 **Premium Models (Paid):**
 - `anthropic/claude-opus-4.5` - Claude Opus 4.5 (best quality)
 - `openai/gpt-5.2` - GPT-5.2 (latest from OpenAI)
-- `anthropic/claude-3.5-sonnet` - Claude Sonnet 3.5 (balanced)
 
 [View all free models →](https://openrouter.ai/models/?q=free)
 
