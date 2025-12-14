@@ -28,7 +28,7 @@
 - 🔒 **Sandboxed & safe** - Code executes in browser, not servers
 - 💰 **Zero server costs** - Computation on user devices
 - 📦 **Production-ready** - Redis + Blob storage with graceful fallbacks
-- 🤖 **LLM-powered** - Chat assistant with computational skills
+- 🤖 **LLM-powered** - Chat via OpenRouter (100+ models, free tier available)
 
 ---
 
@@ -54,17 +54,28 @@ npm install
 Create a `.env` file in the root directory:
 
 ```bash
-# Required: Anthropic API key for LLM chat
-ANTHROPIC_API_KEY=sk-ant-api03-xxx...
+# Required: OpenRouter API key for LLM chat
+# Get your free API key from: https://openrouter.ai/keys
+OPENROUTER_API_KEY=sk-or-v1-xxx...
 
 # Optional: Vercel Blob storage (for skills/files)
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxx...
+# BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxx...
 
 # Optional: Redis storage (for sessions/messages)
-REDIS_URL=redis://default:password@host:port
+# REDIS_URL=redis://default:password@host:port
 ```
 
-**Note:** `.env` is gitignored and will never be committed.
+**Note:**
+- `.env` is gitignored and will never be committed
+- OpenRouter gives you access to 100+ models including Claude, GPT-4, and free models
+- Get your free API key at https://openrouter.ai/keys
+- Browse all free models: https://openrouter.ai/models/?q=free
+
+**💡 Recommended Free Models:**
+- `qwen/qwen2.5-7b-instruct:free` - Fast, capable, completely free
+- `meta-llama/llama-3.1-8b-instruct:free` - Great for general tasks
+- `anthropic/claude-3.5-sonnet` - Premium (paid per token)
+- [View all free models →](https://openrouter.ai/models/?q=free)
 
 ### 3. Run the App
 
@@ -86,11 +97,13 @@ npm run dev
 # Chat with computational skills
 curl -X POST "http://localhost:8000/chat" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $OPENROUTER_API_KEY" \
   -d '{
     "user_id": "alice",
     "team_id": "engineering",
     "message": "Create a quantum VQE circuit",
-    "include_skills": true
+    "include_skills": true,
+    "model": "anthropic/claude-3.5-sonnet"
   }'
 
 # Create a session
@@ -335,7 +348,9 @@ graph TD
 - `DELETE /api/skills/{id}` - Delete skill
 
 ### Chat
-- `POST /chat` - Chat with LLM (includes skills as context)
+- `POST /chat` - Chat with LLM via OpenRouter (includes skills as context)
+  - Headers: `X-API-Key` (your OpenRouter key), `X-Model` (optional model override)
+  - Supports 100+ models: Claude, GPT-4, Gemini, Llama, and free models
 
 ### Workflows
 - `GET /workflows/skills/executable` - List executable skills
@@ -374,8 +389,8 @@ graph TD
 
 ### Next Steps 🚧
 
-- [ ] Drag-drop from library → canvas
-- [ ] Workflow execution integration
+- [x] Drag-drop from library → canvas ✅
+- [x] Workflow execution integration ✅
 - [ ] Real-time collaboration
 
 ---
@@ -472,7 +487,9 @@ llmos-lite/
 ### Phase 3: React UI ✅ (Complete)
 - [x] React Flow canvas
 - [x] Node library panel
-- [x] Execution controls
+- [x] Drag-drop from library to canvas
+- [x] Workflow execution via API
+- [x] Execution controls & progress
 - [x] Storage integration (Redis + Blob)
 - [x] Chat interface
 - [x] Preview renderers (plots, 3D, circuits)
