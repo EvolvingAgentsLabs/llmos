@@ -1,31 +1,34 @@
-# LLMunix: WebAssembly-Powered Computational Workbench
+# llmos-lite: Browser-Native Computational Workbench
 
-> **llmos-lite** - Transform from Terminal OS to Browser-Native Computational Platform
+> Build, execute, and share computational workflows entirely in your browser
 
-[![Version](https://img.shields.io/badge/version-1.0.0--lite-blue.svg)](https://github.com/EvolvingAgentsLabs/llmunix/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/EvolvingAgentsLabs/llmos/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10+-yellow.svg)](https://python.org)
+[![React](https://img.shields.io/badge/react-18+-61dafb.svg)](https://reactjs.org)
 
 ---
 
-## 🚀 What is LLMunix?
+## 🚀 What is llmos-lite?
 
-**LLMunix** is a browser-native computational workbench where:
+**llmos-lite** is a modern web application for building and executing computational workflows directly in the browser. No servers required for execution—everything runs client-side via WebAssembly.
 
-1. **Skills are Markdown files** - Version-controlled capabilities that LLMs can use
-2. **Workflows are visual DAGs** - Drag-and-drop computational graphs using React Flow
-3. **Execution is browser-native** - WebAssembly (Pyodide, Three.js, SPICE)
-4. **Storage is production-ready** - Vercel Blob + Redis for persistence
-5. **Everything is Git-backed** - Version control for skills, workflows, traces
+### Core Concepts
+
+1. **Skills** - Reusable computational units stored as Markdown files
+2. **Workflows** - Visual DAGs built with drag-and-drop React Flow interface
+3. **Browser Execution** - WebAssembly runtimes (Pyodide, Three.js, SPICE)
+4. **Production Storage** - Vercel Blob + Redis for persistence
+5. **LLM Integration** - Chat interface with skill-aware context
 
 ### Key Features
 
-- ⚡ **Zero-latency execution** - Skills run instantly in browser via WebAssembly
-- 🎨 **Rich interactive previews** - 3D animations, quantum states, circuit diagrams
-- 🔒 **Sandboxed safety** - Generated code runs in browser, not on servers
-- 💰 **Zero server costs** - Execution happens on user devices
-- 📦 **Production storage** - Redis for sessions, Blob for skills/files
-- 📝 **Git-backed everything** - Version control for all artifacts
+- ⚡ **Zero-latency execution** - Skills run instantly via WebAssembly
+- 🎨 **Rich previews** - 3D graphics, charts, quantum circuits
+- 🔒 **Sandboxed & safe** - Code executes in browser, not servers
+- 💰 **Zero server costs** - Computation on user devices
+- 📦 **Production-ready** - Redis + Blob storage with graceful fallbacks
+- 🤖 **LLM-powered** - Chat assistant with computational skills
 
 ---
 
@@ -35,13 +38,13 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/EvolvingAgentsLabs/llmunix.git
-cd llmunix
+git clone https://github.com/EvolvingAgentsLabs/llmos.git
+cd llmos
 
-# Install Python dependencies
+# Install Python dependencies (API)
 pip install -r requirements.txt
 
-# Install Node.js dependencies (for UI)
+# Install Node.js dependencies (UI)
 cd llmos-lite/ui
 npm install
 ```
@@ -63,48 +66,38 @@ REDIS_URL=redis://default:password@host:port
 
 **Note:** `.env` is gitignored and will never be committed.
 
-### 3. Run the API
+### 3. Run the App
 
 ```bash
-# Start FastAPI backend
+# Terminal 1: Start FastAPI backend
 cd llmos-lite
 python api/main.py
+# → http://localhost:8000
 
-# Server starts at http://localhost:8000
-# API docs at http://localhost:8000/docs
-```
-
-### 4. Run the UI (Development)
-
-```bash
-# Start Next.js frontend
+# Terminal 2: Start Next.js frontend
 cd llmos-lite/ui
 npm run dev
-
-# Open http://localhost:3000
+# → http://localhost:3000
 ```
 
-### 5. Test the API
+### 4. Test the API
 
 ```bash
-# Chat with skills
+# Chat with computational skills
 curl -X POST "http://localhost:8000/chat" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "alice",
     "team_id": "engineering",
-    "message": "Write a Python function to calculate Fibonacci numbers",
+    "message": "Create a quantum VQE circuit",
     "include_skills": true
   }'
-
-# List sessions
-curl "http://localhost:8000/api/sessions?volume=user"
 
 # Create a session
 curl -X POST "http://localhost:8000/api/sessions" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "My Research Session",
+    "name": "Quantum Research",
     "volume": "user",
     "initial_message": "Hello!"
   }'
@@ -116,53 +109,32 @@ curl -X POST "http://localhost:8000/api/sessions" \
 
 ### Local Development (Mock Data)
 
-By default, the app works with mock data (no storage required). Perfect for testing!
+By default, llmos-lite works with mock data. No storage setup required for testing!
 
 ### Production Storage (Vercel)
 
-For production deployments, set up Vercel storage:
+For production deployments:
 
-#### Option 1: Vercel Blob (Skills & Files)
+#### Vercel Blob (Skills & Files)
 
 1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
-2. Select your project → **Storage** tab
-3. Click **Create Database** → Select **Blob**
-4. Name it: `llmos-files`
-5. Copy the `BLOB_READ_WRITE_TOKEN`
-6. Add to `.env` and Vercel environment variables
+2. Select project → **Storage** → **Create Database** → **Blob**
+3. Name: `llmos-files`
+4. Copy `BLOB_READ_WRITE_TOKEN`
+5. Add to `.env` and Vercel environment variables
 
-#### Option 2: Redis/Vercel KV (Sessions & Messages)
+#### Redis (Sessions & Messages)
 
-1. In Vercel dashboard → **Storage** tab
-2. Click **Create Database** → Select **Redis** (or KV if available)
-3. Copy the connection details:
-   - If Redis: `REDIS_URL`
-   - If KV: `KV_REST_API_URL` + `KV_REST_API_TOKEN`
-4. Add to `.env` and Vercel environment variables
+1. Vercel dashboard → **Storage** → **Create Database** → **Redis**
+2. Copy `REDIS_URL`
+3. Add to `.env` and Vercel environment variables
 
-#### Deploy to Vercel
+#### Deploy
 
 ```bash
-# Install Vercel CLI
 npm install -g vercel
-
-# Deploy
 vercel --prod
-
 # Your app is live! 🎉
-```
-
-### Test Storage Connection
-
-```bash
-# Test Redis connection
-python test_redis.py
-
-# Expected output:
-# ✅ Test 1: Set/Get key-value - PASSED
-# ✅ Test 2: JSON object storage - PASSED
-# ✅ Test 3: Set operations - PASSED
-# ✅ Test 4: List operations - PASSED
 ```
 
 ---
@@ -255,9 +227,9 @@ For detailed technical documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Key Concepts
 
-### 1. Skills (Markdown-Based Capabilities)
+### 1. Skills (Computational Units)
 
-Skills are version-controlled Markdown files that define capabilities.
+Skills are version-controlled Markdown files that define reusable computational capabilities.
 
 **Example Skill:**
 ```markdown
@@ -292,7 +264,7 @@ def execute(inputs):
 
 ### 2. Workflows (Visual DAGs)
 
-Workflows are drag-and-drop computational graphs built with React Flow.
+Drag-and-drop computational graphs built with React Flow.
 
 **Example Workflow:**
 
@@ -308,11 +280,11 @@ graph LR
     style E fill:#4a3e2d,stroke:#ff8800,stroke-width:2px,color:#ff8800
 ```
 
-Each node is a skill that executes in the browser via WebAssembly.
+Each node executes in the browser via WebAssembly.
 
 ### 3. Sessions (Chat History)
 
-Sessions store chat conversations with:
+Sessions store conversations with:
 - Messages (user + assistant)
 - Execution traces
 - Artifacts (generated files)
@@ -344,28 +316,21 @@ graph TD
     style UWrite fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
 ```
 
-**Access Control:**
-| Volume | User Can | Team Can | System Can |
-|--------|----------|----------|------------|
-| User   | R/W      | R        | R/W        |
-| Team   | R        | R/W      | R/W        |
-| System | R        | R        | R/W        |
-
 ---
 
 ## API Endpoints
 
 ### Sessions
-- `GET /api/sessions` - List sessions (with volume filter)
-- `GET /api/sessions/{id}` - Get session details
-- `POST /api/sessions` - Create new session
+- `GET /api/sessions` - List sessions
+- `GET /api/sessions/{id}` - Get session
+- `POST /api/sessions` - Create session
 - `POST /api/sessions/{id}/messages` - Add message
 - `PUT /api/sessions/{id}` - Update session
 - `DELETE /api/sessions/{id}` - Delete session
 
 ### Skills
-- `GET /api/skills` - List skills (with volume filter)
-- `GET /api/skills/{id}` - Get skill details
+- `GET /api/skills` - List skills
+- `GET /api/skills/{id}` - Get skill
 - `POST /api/skills` - Create skill
 - `DELETE /api/skills/{id}` - Delete skill
 
@@ -374,24 +339,24 @@ graph TD
 
 ### Workflows
 - `GET /workflows/skills/executable` - List executable skills
-- `POST /workflows/execute` - Prepare workflow for execution
-- `POST /workflows/save` - Save workflow to storage
-- `GET /workflows/categories` - List skill categories
+- `POST /workflows/execute` - Prepare workflow execution
+- `POST /workflows/save` - Save workflow
+- `GET /workflows/categories` - List categories
 
 ---
 
-## Phase 3 React UI (Current)
+## Features
 
-### Completed Features ✅
+### Completed ✅
 
-1. **React Flow Canvas** (`WorkflowCanvas.tsx`)
+1. **React Flow Canvas**
    - Drag-drop node positioning
    - Custom SkillNode components
    - MiniMap for navigation
    - Zoom controls + background grid
    - Run workflow button
 
-2. **Node Library Panel** (`NodeLibraryPanel.tsx`)
+2. **Node Library Panel**
    - 8 pre-loaded skills (Quantum, 3D, Electronics, Data, Code)
    - Category filtering
    - Search functionality
@@ -436,7 +401,7 @@ graph LR
     style E fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
 ```
 
-**Result:** ⚡ Instant, interactive, in-browser execution via WebAssembly
+**Result:** ⚡ Instant, interactive execution via WebAssembly
 
 ### 3D Animation Workflow
 
@@ -457,14 +422,14 @@ graph LR
     style R fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
 ```
 
-**Result:** 🎨 Real-time 3D visualization in browser using Three.js
+**Result:** 🎨 Real-time 3D visualization using Three.js
 
 ---
 
 ## Project Structure
 
 ```
-llmunix/
+llmos-lite/
 ├── api/                          # FastAPI backend
 │   ├── main.py                   # Main API server
 │   ├── sessions.py               # Session endpoints
@@ -475,23 +440,17 @@ llmunix/
 │       ├── vercel_kv.py          # Vercel KV client
 │       └── vercel_blob.py        # Blob storage client
 │
-├── llmos-lite/                   # Next.js frontend
-│   └── ui/
-│       ├── components/
-│       │   ├── panel3-artifacts/
-│       │   │   ├── WorkflowCanvas.tsx
-│       │   │   ├── NodeLibraryPanel.tsx
-│       │   │   ├── PlotRenderer.tsx
-│       │   │   ├── ThreeRenderer.tsx
-│       │   │   └── CircuitRenderer.tsx
-│       │   └── ...
-│       └── lib/
-│           ├── workflow-executor.ts
-│           └── pyodide-executor.ts
-│
-├── README.md                     # This file
-├── ARCHITECTURE.md               # Technical deep dive
-└── .env                          # Environment variables (gitignored)
+└── ui/                           # Next.js frontend
+    ├── components/
+    │   └── panel3-artifacts/
+    │       ├── WorkflowCanvas.tsx
+    │       ├── NodeLibraryPanel.tsx
+    │       ├── PlotRenderer.tsx
+    │       ├── ThreeRenderer.tsx
+    │       └── CircuitRenderer.tsx
+    └── lib/
+        ├── workflow-executor.ts
+        └── pyodide-executor.ts
 ```
 
 ---
@@ -501,8 +460,8 @@ llmunix/
 ### Phase 1: Core Infrastructure ✅ (Complete)
 - [x] FastAPI service
 - [x] Skills loader
-- [x] Git-backed volumes
-- [x] Evolution engine
+- [x] Storage clients
+- [x] Chat integration
 
 ### Phase 2: WebAssembly Workflows ✅ (Complete)
 - [x] Executable skill format
@@ -513,9 +472,9 @@ llmunix/
 ### Phase 3: React UI ✅ (Complete)
 - [x] React Flow canvas
 - [x] Node library panel
-- [x] Execution controls & progress
+- [x] Execution controls
 - [x] Storage integration (Redis + Blob)
-- [x] Chat interface integration
+- [x] Chat interface
 - [x] Preview renderers (plots, 3D, circuits)
 
 ### Phase 4: Advanced Features (Future)
@@ -523,7 +482,7 @@ llmunix/
 - [ ] Workflow marketplace
 - [ ] Collaborative editing
 - [ ] Mobile PWA
-- [ ] Evolution engine (auto-generate skills from patterns)
+- [ ] Auto-generate skills from patterns
 
 ---
 
@@ -532,96 +491,31 @@ llmunix/
 We welcome contributions!
 
 **Priority areas:**
-1. Workflow execution integration (connect UI → executor)
-2. New executable skills (domains: quantum, 3D, electronics, ML)
-3. Runtime integrations (WebGPU, WebR, etc.)
-4. Example workflows and templates
+1. Workflow execution integration
+2. New computational skills (quantum, 3D, ML, electronics)
+3. Runtime integrations (WebGPU, WebR)
+4. Example workflows
 
 **Development workflow:**
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests: `python test_redis.py`
-5. Submit a pull request
+4. Submit a pull request
 
 ---
 
 ## Security
 
-- ✅ API keys stored in `.env` (gitignored)
-- ✅ Environment variables for production secrets
-- ✅ No hardcoded credentials in code
-- ✅ Sandboxed execution (WebAssembly in browser)
+- ✅ API keys in `.env` (gitignored)
+- ✅ Environment variables for secrets
+- ✅ No hardcoded credentials
+- ✅ Sandboxed WebAssembly execution
 
 **Production checklist:**
-- [ ] Rotate API keys after initial setup
-- [ ] Add authentication layer (JWT/OAuth)
+- [ ] Rotate API keys
+- [ ] Add authentication (JWT/OAuth)
 - [ ] Enable CORS restrictions
 - [ ] Set up rate limiting
-
----
-
-## Troubleshooting
-
-### Redis Connection Issues
-
-```bash
-# Test connection
-python test_redis.py
-
-# Common fixes:
-# 1. Check REDIS_URL in .env
-# 2. Verify Redis server is running
-# 3. Check firewall/network settings
-```
-
-### Blob Storage Issues
-
-```bash
-# Verify token in .env
-echo $BLOB_READ_WRITE_TOKEN
-
-# Check Vercel dashboard for token
-# Re-create if expired
-```
-
-### API Not Starting
-
-```bash
-# Check Python version (3.10+ required)
-python --version
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Check for port conflicts
-lsof -i :8000
-```
-
----
-
-## Migration from Original llmos
-
-The original llmos architecture is **deprecated** but preserved in `/llmos` folder for reference.
-
-### What Changed
-
-| Aspect | Original llmos | llmos-lite |
-|--------|----------------|------------|
-| **Interface** | Terminal UI | Web UI (React Flow) |
-| **Execution** | Server (Python) | Browser (WebAssembly) |
-| **Storage** | In-memory | Redis + Blob |
-| **Latency** | 100-500ms | <50ms |
-| **Cost** | Server compute | Free (user devices) |
-| **Scalability** | Limited | Unlimited (P2P) |
-
-### Why the Change
-
-The original llmos was **over-engineered for a web app**. llmos-lite simplifies to essentials while adding:
-- Browser-native execution
-- Production-ready storage
-- Visual workflow editor
-- Real-time collaboration (future)
 
 ---
 
@@ -635,7 +529,7 @@ Apache 2.0
 
 Built by [Evolving Agents Labs](https://github.com/EvolvingAgentsLabs)
 
-**Core Innovation:** Treating capabilities as **version-controlled Markdown files** that execute as **WebAssembly workflows** in the browser.
+**Core Innovation:** Version-controlled Markdown skills that execute as WebAssembly workflows in the browser.
 
 Inspired by OpenAI/Anthropic's Skills paradigm for AI capabilities.
 
@@ -643,6 +537,6 @@ Inspired by OpenAI/Anthropic's Skills paradigm for AI capabilities.
 
 <div align="center">
 
-**[Architecture](ARCHITECTURE.md)** · **[GitHub](https://github.com/EvolvingAgentsLabs/llmunix)** · **[Issues](https://github.com/EvolvingAgentsLabs/llmunix/issues)**
+**[Architecture](ARCHITECTURE.md)** · **[GitHub](https://github.com/EvolvingAgentsLabs/llmos)** · **[Issues](https://github.com/EvolvingAgentsLabs/llmos/issues)**
 
 </div>
