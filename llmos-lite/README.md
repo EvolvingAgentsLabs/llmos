@@ -20,6 +20,8 @@ This migration enables:
 
 See [WASM_WORKFLOWS.md](WASM_WORKFLOWS.md) for the complete WebAssembly workflow guide.
 
+**🔌 NEW: Model Context Protocol (MCP)** - Skills can now access external services via MCP servers! See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for details.
+
 ## Key Concepts
 
 ### 1. Skills (Two Types)
@@ -271,15 +273,21 @@ llmos-lite/
 ├── ui/                            # ✨ Browser frontend (NEW)
 │   ├── lib/
 │   │   ├── pyodide-runner.ts      # Python → Wasm
-│   │   └── workflow-executor.ts   # DAG executor
+│   │   ├── workflow-executor.ts   # DAG executor
+│   │   ├── mcp-client.ts          # ✨ MCP client (NEW)
+│   │   ├── mcp-config.ts          # ✨ MCP config (NEW)
+│   │   └── execution-policy.ts    # ✨ Security policies (NEW)
 │   └── package.json               # React Flow deps
 ├── volumes/                       # Git repositories
 │   └── system/skills/
 │       ├── python-coding.md       # Context skill
 │       ├── quantum-vqe-node.md    # ✨ Executable skill
 │       ├── threejs-cube-node.md   # ✨ Executable skill
-│       └── circuit-rc-node.md     # ✨ Executable skill
+│       ├── circuit-rc-node.md     # ✨ Executable skill
+│       ├── database-query-node.md # ✨ MCP skill (NEW)
+│       └── weather-analysis-node.md # ✨ MCP skill (NEW)
 ├── WASM_WORKFLOWS.md              # ✨ WebAssembly guide (NEW)
+├── MCP_INTEGRATION.md             # ✨ MCP documentation (NEW)
 └── README.md
 ```
 
@@ -364,6 +372,8 @@ llmos-lite/
 - [x] Multi-runtime support (Python, JS, Three.js, SPICE)
 - [x] Example skills (Quantum VQE, 3D Cube, RC Circuit)
 - [x] Workflow API endpoints
+- [x] MCP integration (external service access)
+- [x] Execution policies (resource limits, security)
 
 ### Phase 3: React UI (Current)
 - [ ] React Flow canvas

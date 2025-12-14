@@ -10,6 +10,9 @@
  */
 
 import { executePythonSkill } from './pyodide-runner';
+import { ExecutionPolicy, ExecutionPolicyEnforcer, DEFAULT_POLICIES } from './execution-policy';
+import { mcpClient } from './mcp-client';
+import { MCPServerRegistry } from './mcp-config';
 
 export type NodeType = 'python-wasm' | 'javascript' | 'spice' | 'threejs' | 'qiskit';
 
@@ -41,6 +44,10 @@ export interface ExecutableSkill {
     estimatedTimeMs: number;
     memoryMb: number;
   };
+  // MCP configuration
+  mcpServers?: string[];
+  // Execution policy
+  executionPolicy?: ExecutionPolicy | 'strict' | 'standard' | 'relaxed';
 }
 
 export interface WorkflowNode {
@@ -69,6 +76,8 @@ export interface Workflow {
 export interface ExecutionContext {
   workflow: Workflow;
   skills: Record<string, ExecutableSkill>;
+  // MCP client is initialized from MCPServerRegistry
+  initializeMCP?: boolean;
 }
 
 export interface NodeExecutionResult {
@@ -80,7 +89,7 @@ export interface NodeExecutionResult {
 }
 
 /**
- * Execute a single node
+ * Execute a single node with execution policy enforcement
  */
 async function executeNode(
   node: WorkflowNode,
@@ -90,20 +99,58 @@ async function executeNode(
   const startTime = performance.now();
 
   try {
+    // Determine execution policy
+    let policy: ExecutionPolicy;
+    if (!skill.executionPolicy) {
+      // Default to standard policy
+      policy = DEFAULT_POLICIES.standard;
+    } else if (typeof skill.executionPolicy === 'string') {
+      // Use named policy
+      policy = DEFAULT_POLICIES[skill.executionPolicy] || DEFAULT_POLICIES.standard;
+    } else {
+      // Use custom policy
+      policy = skill.executionPolicy;
+    }
+
+    // Create policy enforcer
+    const enforcer = new ExecutionPolicyEnforcer(policy);
+    enforcer.start();
+
+    // Check MCP access if skill declares MCP servers
+    if (skill.mcpServers && skill.mcpServers.length > 0) {
+      for (const serverName of skill.mcpServers) {
+        const violation = enforcer.checkMCPAccess(serverName);
+        if (violation) {
+          enforcer.recordViolation(violation);
+          throw new Error(violation.message);
+        }
+      }
+    }
+
+    // Create execution context with MCP client and enforcer
+    const executionContext = {
+      inputs,
+      mcp: mcpClient,
+      enforcer,
+    };
+
     let result: any;
 
     switch (skill.type) {
       case 'python-wasm':
       case 'qiskit':
-        // Execute via Pyodide
-        result = await executePythonSkill(skill.code, inputs);
+        // Execute via Pyodide with execution context
+        result = await executePythonSkill(skill.code, executionContext);
         break;
 
       case 'javascript':
       case 'threejs':
-        // Execute native JavaScript
-        const executeFunc = new Function('inputs', skill.code + '\nreturn execute(inputs);');
-        result = executeFunc(inputs);
+        // Execute native JavaScript with execution context
+        const executeFunc = new Function(
+          'context',
+          skill.code + '\nreturn execute(context);'
+        );
+        result = executeFunc(executionContext);
         break;
 
       case 'spice':
@@ -112,6 +159,13 @@ async function executeNode(
 
       default:
         throw new Error(`Unsupported node type: ${skill.type}`);
+    }
+
+    // Check time limit after execution
+    const timeViolation = enforcer.checkTimeLimit();
+    if (timeViolation) {
+      enforcer.recordViolation(timeViolation);
+      throw new Error(timeViolation.message);
     }
 
     const executionTimeMs = performance.now() - startTime;
@@ -196,7 +250,18 @@ export async function executeWorkflow(
 ): Promise<Record<string, NodeExecutionResult>> {
   console.log('[Workflow] Starting execution...');
 
-  const { workflow, skills } = context;
+  const { workflow, skills, initializeMCP = true } = context;
+
+  // Initialize MCP client with configured servers
+  if (initializeMCP) {
+    console.log('[Workflow] Initializing MCP servers...');
+    const mcpServers = MCPServerRegistry.listServers();
+    mcpServers.forEach((config) => {
+      mcpClient.registerServer(config);
+      console.log(`[Workflow] Registered MCP server: ${config.name}`);
+    });
+  }
+
   const executionLevels = buildExecutionOrder(context);
 
   console.log('[Workflow] Execution order:', executionLevels);
