@@ -1,0 +1,157 @@
+'use client';
+
+import { useSessionContext } from '@/contexts/SessionContext';
+
+interface ContextPanelProps {
+  activeSession: string | null;
+  activeVolume: 'system' | 'team' | 'user';
+}
+
+export default function ContextPanel({
+  activeSession,
+  activeVolume,
+}: ContextPanelProps) {
+  const { sessions } = useSessionContext();
+  const currentSession = sessions.find((s) => s.id === activeSession);
+
+  if (!currentSession) {
+    return (
+      <div className="h-full flex flex-col bg-terminal-bg-secondary p-6 text-center">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-terminal-fg-tertiary text-sm space-y-2">
+            <div className="text-4xl mb-4">ℹ</div>
+            <p>Select or start a session to view context</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-terminal-bg-secondary overflow-y-auto">
+      {/* Session Info */}
+      <div className="p-4 border-b border-terminal-border">
+        <h2 className="terminal-heading text-xs mb-3">SESSION INFO</h2>
+        <div className="space-y-2 text-xs text-terminal-fg-secondary">
+          <div className="flex justify-between">
+            <span>Status:</span>
+            <span
+              className={
+                currentSession.status === 'uncommitted'
+                  ? 'text-terminal-accent-yellow'
+                  : 'text-terminal-accent-green'
+              }
+            >
+              {currentSession.status}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Volume:</span>
+            <span>{currentSession.volume}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Messages:</span>
+            <span>{currentSession.messages?.length || 0}</span>
+          </div>
+          {currentSession.traces > 0 && (
+            <div className="flex justify-between">
+              <span>Traces:</span>
+              <span>{currentSession.traces}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Artifacts */}
+      {currentSession.artifacts && currentSession.artifacts.length > 0 && (
+        <div className="p-4 border-b border-terminal-border">
+          <h2 className="terminal-heading text-xs mb-3">
+            ARTIFACTS ({currentSession.artifacts.length})
+          </h2>
+          <div className="space-y-2">
+            {currentSession.artifacts.map((artifact, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 p-2 rounded bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-blue transition-colors cursor-pointer"
+              >
+                <span className="text-terminal-fg-secondary">
+                  {artifact.type === 'skill' && '📄'}
+                  {artifact.type === 'code' && '💻'}
+                  {artifact.type === 'workflow' && '🔗'}
+                </span>
+                <span className="text-xs text-terminal-accent-blue flex-1 truncate">
+                  {artifact.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Evolution Status */}
+      {currentSession.evolution && currentSession.evolution.patternsDetected > 0 && (
+        <div className="p-4 border-b border-terminal-border bg-terminal-bg-tertiary">
+          <h2 className="terminal-heading text-xs mb-3">🧬 EVOLUTION</h2>
+          <div className="space-y-2">
+            <div className="text-sm text-terminal-accent-green">
+              {currentSession.evolution.patternName}
+            </div>
+            <div className="text-xs text-terminal-fg-secondary space-y-1">
+              <div className="flex justify-between">
+                <span>Occurrence:</span>
+                <span>
+                  {currentSession.evolution.occurrence}
+                  {currentSession.evolution.occurrence === 1
+                    ? 'st'
+                    : currentSession.evolution.occurrence === 2
+                    ? 'nd'
+                    : currentSession.evolution.occurrence === 3
+                    ? 'rd'
+                    : 'th'}{' '}
+                  time
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Confidence:</span>
+                <span>
+                  {(currentSession.evolution.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              <button className="btn-touch md:btn-terminal text-xs w-full">
+                Promote to Team
+              </button>
+              <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
+                View Pattern Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="p-4">
+        <h2 className="terminal-heading text-xs mb-3">ACTIONS</h2>
+        <div className="space-y-2">
+          {currentSession.status === 'uncommitted' && (
+            <>
+              <button className="btn-touch md:btn-terminal text-xs w-full">
+                Commit Session
+              </button>
+              <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
+                Share Session
+              </button>
+            </>
+          )}
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
+            Export Chat
+          </button>
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full text-terminal-accent-red">
+            Delete Session
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
