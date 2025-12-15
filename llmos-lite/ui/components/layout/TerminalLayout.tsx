@@ -10,7 +10,7 @@ type MobileTab = 'volumes' | 'chat' | 'workflow';
 
 export default function TerminalLayout() {
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
-  const [activeSession, setActiveSession] = useState<string | null>('quantum-research');
+  const [activeSession, setActiveSession] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'session' | 'cron'>('session');
   const [mobileTab, setMobileTab] = useState<MobileTab>('chat');
 

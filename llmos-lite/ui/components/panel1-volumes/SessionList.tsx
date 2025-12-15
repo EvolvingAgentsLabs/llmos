@@ -11,36 +11,11 @@ export default function SessionList({
   activeSession,
   onSessionChange,
 }: SessionListProps) {
-  // Static data for demo
+  // Start with empty sessions - users will create their own
+  // TODO: Load sessions from backend API or localStorage
   const sessions = {
-    user: [
-      {
-        id: 'quantum-research',
-        name: 'quantum-research',
-        traces: 48,
-        timeAgo: '3h ago',
-        status: 'uncommitted' as const,
-        patterns: 1,
-      },
-      {
-        id: 'data-pipeline',
-        name: 'data-pipeline',
-        traces: 12,
-        timeAgo: '2d ago',
-        status: 'committed' as const,
-        commitHash: 'b7e9a2f',
-      },
-    ],
-    team: [
-      {
-        id: 'graphql-opt',
-        name: 'graphql-opt (Bob)',
-        traces: 34,
-        timeAgo: '1d ago',
-        status: 'committed' as const,
-        commitHash: 'a1b2c3d',
-      },
-    ],
+    user: [],
+    team: [],
     system: [],
   };
 

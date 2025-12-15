@@ -11,7 +11,7 @@ interface APIKeySetupProps {
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('anthropic/claude-opus-4.5');
+  const [modelName, setModelName] = useState('tng/deepseek-r1t2-chimera:free');
 
   // User/team state
   const [email, setEmail] = useState('');
