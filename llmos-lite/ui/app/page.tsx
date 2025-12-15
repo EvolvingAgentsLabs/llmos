@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { LLMStorage } from '@/lib/llm-client';
 import { UserStorage } from '@/lib/user-storage';
+import { SessionProvider } from '@/contexts/SessionContext';
 
 // Dynamically import components with no SSR
-const TerminalLayout = dynamic(() => import('@/components/layout/TerminalLayout'), {
+const TerminalLayout = dynamic(() => import('@/components/layout/TerminalLayoutNew'), {
   ssr: false,
   loading: () => (
     <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
@@ -66,6 +67,10 @@ export default function Home() {
     return <APIKeySetup onComplete={() => setIsConfigured(true)} />;
   }
 
-  // Show main terminal interface
-  return <TerminalLayout />;
+  // Show main terminal interface wrapped in SessionProvider
+  return (
+    <SessionProvider>
+      <TerminalLayout />
+    </SessionProvider>
+  );
 }
