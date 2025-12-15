@@ -103,7 +103,7 @@ export default function SessionView({ activeSession, activeVolume }: SessionView
 
       {/* Chat Interface */}
       <div className="flex-1 overflow-hidden">
-        <ChatInterface messages={session.messages} />
+        <ChatInterface messages={session.messages} activeSession={activeSession} />
       </div>
 
       {/* Session Artifacts */}

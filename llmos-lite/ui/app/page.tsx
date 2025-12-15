@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { LLMStorage } from '@/lib/llm-client';
+import { UserStorage } from '@/lib/user-storage';
 
 // Dynamically import components with no SSR
 const TerminalLayout = dynamic(() => import('@/components/layout/TerminalLayout'), {
@@ -33,8 +34,9 @@ export default function Home() {
 
   useEffect(() => {
     setIsMounted(true);
-    // Check if API key is configured
-    setIsConfigured(LLMStorage.isConfigured());
+    // Check if both LLM config AND user/team are configured
+    const configured = LLMStorage.isConfigured() && UserStorage.isUserConfigured();
+    setIsConfigured(configured);
   }, []);
 
   // Don't render anything until mounted (client-side only)
