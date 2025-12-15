@@ -82,8 +82,37 @@ export default function SessionView({ activeSession, activeVolume }: SessionView
 
   if (!session) {
     return (
-      <div className="h-full flex items-center justify-center text-terminal-fg-tertiary">
-        Select a session to view
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-4">
+          <div className="text-6xl mb-4">💬</div>
+          <h2 className="terminal-heading text-lg">Welcome to LLMos-Lite!</h2>
+          <div className="text-sm text-terminal-fg-secondary space-y-2">
+            <p>Start your first conversation by typing a message below.</p>
+            <p className="text-xs">A new session will be created automatically when you send your first message.</p>
+          </div>
+          <div className="mt-6 p-4 bg-terminal-bg-tertiary border border-terminal-border rounded text-left">
+            <div className="terminal-heading text-xs mb-2">💡 TRY THESE EXAMPLES:</div>
+            <ul className="text-xs text-terminal-fg-secondary space-y-1">
+              <li>• "Help me create a Python script to analyze CSV data"</li>
+              <li>• "Explain quantum computing basics"</li>
+              <li>• "Build a REST API with FastAPI"</li>
+              <li>• "Create a React component for a todo list"</li>
+            </ul>
+          </div>
+          <div className="mt-4 p-3 bg-terminal-accent-green/10 border border-terminal-accent-green rounded text-left">
+            <div className="text-xs text-terminal-accent-green">
+              📚 <span className="font-semibold">New user?</span> Check out the{' '}
+              <a
+                href="https://github.com/EvolvingAgentsLabs/llmos/blob/main/llmos-lite/GETTING_STARTED.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-terminal-fg-primary"
+              >
+                Getting Started Guide
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
