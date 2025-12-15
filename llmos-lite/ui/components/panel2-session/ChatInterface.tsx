@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { UserStorage } from '@/lib/user-storage';
+import { createLLMClient } from '@/lib/llm-client';
 
 interface Message {
   id: string;
@@ -17,10 +19,12 @@ interface Message {
 
 interface ChatInterfaceProps {
   messages: Message[];
+  activeSession: string | null;
 }
 
-export default function ChatInterface({ messages }: ChatInterfaceProps) {
+export default function ChatInterface({ messages, activeSession }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,11 +35,60 @@ export default function ChatInterface({ messages }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
-    // TODO: Send message to backend
-    console.log('Sending:', inputValue);
+  const handleSend = async () => {
+    if (!inputValue.trim() || isLoading) return;
+
+    const messageText = inputValue.trim();
     setInputValue('');
+    setIsLoading(true);
+
+    try {
+      // Get user and team from storage
+      const user = UserStorage.getUser();
+      const team = UserStorage.getTeam();
+
+      if (!user || !team) {
+        console.error('User or team not configured');
+        alert('Please complete your profile setup');
+        return;
+      }
+
+      // Create LLM client
+      const client = createLLMClient();
+      if (!client) {
+        console.error('LLM client not configured');
+        alert('Please configure your API key');
+        return;
+      }
+
+      // Send message with real user/team IDs
+      console.log('Sending message:', {
+        user_id: user.id,
+        team_id: team.id,
+        message: messageText,
+        session_id: activeSession || 'default',
+      });
+
+      const response = await client.chat({
+        user_id: user.id,
+        team_id: team.id,
+        message: messageText,
+        session_id: activeSession || 'default',
+        include_skills: true,
+        max_skills: 5,
+      });
+
+      console.log('Response:', response);
+
+      // TODO: Add message to messages array
+      // This would require lifting state up or using a context provider
+
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      alert('Failed to send message. Please check your API key and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -90,17 +143,21 @@ export default function ChatInterface({ messages }: ChatInterfaceProps) {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type your message..."
-            className="flex-1 terminal-input"
+            className="flex-1 terminal-input min-h-[44px]"
           />
-          <button onClick={handleSend} className="btn-terminal px-4">
-            Send
+          <button
+            onClick={handleSend}
+            disabled={isLoading || !inputValue.trim()}
+            className="btn-touch md:btn-terminal px-4"
+          >
+            {isLoading ? 'Sending...' : 'Send'}
           </button>
         </div>
         <div className="flex gap-2 mt-2">
-          <button className="btn-terminal-secondary text-xs py-1 px-2">
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs flex-1 md:flex-none">
             Attach Workflow
           </button>
-          <button className="btn-terminal-secondary text-xs py-1 px-2">
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs flex-1 md:flex-none">
             Settings
           </button>
         </div>

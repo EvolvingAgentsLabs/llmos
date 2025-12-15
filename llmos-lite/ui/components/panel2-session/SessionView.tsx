@@ -103,7 +103,7 @@ export default function SessionView({ activeSession, activeVolume }: SessionView
 
       {/* Chat Interface */}
       <div className="flex-1 overflow-hidden">
-        <ChatInterface messages={session.messages} />
+        <ChatInterface messages={session.messages} activeSession={activeSession} />
       </div>
 
       {/* Session Artifacts */}
@@ -120,7 +120,7 @@ export default function SessionView({ activeSession, activeVolume }: SessionView
               <span className="text-terminal-accent-blue cursor-pointer hover:underline">
                 {artifact.name}
               </span>
-              <button className="btn-terminal text-xs py-0 px-1 ml-auto">
+              <button className="btn-touch-secondary md:btn-terminal text-xs py-0 px-2 ml-auto md:py-0 md:px-1">
                 View
               </button>
             </div>
@@ -144,10 +144,10 @@ export default function SessionView({ activeSession, activeVolume }: SessionView
               </div>
             </div>
             <div className="flex gap-2 mt-2">
-              <button className="btn-terminal text-xs py-1 px-2 flex-1">
+              <button className="btn-touch md:btn-terminal text-xs flex-1">
                 Promote to Team
               </button>
-              <button className="btn-terminal-secondary text-xs py-1 px-2">
+              <button className="btn-touch-secondary md:btn-terminal-secondary text-xs">
                 Ignore
               </button>
             </div>

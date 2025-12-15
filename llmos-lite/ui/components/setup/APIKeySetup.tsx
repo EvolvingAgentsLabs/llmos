@@ -2,14 +2,23 @@
 
 import { useState } from 'react';
 import { LLMStorage, AVAILABLE_MODELS, type ModelId } from '@/lib/llm-client';
+import { UserStorage, User, Team } from '@/lib/user-storage';
 
 interface APIKeySetupProps {
   onComplete: () => void;
 }
 
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
+  // LLM config state
   const [apiKey, setApiKey] = useState('');
   const [modelName, setModelName] = useState('anthropic/claude-opus-4.5');
+
+  // User/team state
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [teamName, setTeamName] = useState('');
+
+  // UI state
   const [error, setError] = useState('');
   const [isValid, setIsValid] = useState(false);
 
@@ -21,20 +30,55 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   };
 
   const handleSave = () => {
+    // Validate API key
     if (!isValid) {
       setError('Invalid OpenRouter API key format. Key should start with "sk-or-v1-"');
       return;
     }
 
+    // Validate model
     if (!modelName.trim()) {
       setError('Please enter a model name');
       return;
     }
 
-    // Save to localStorage (always using OpenRouter)
+    // Validate user info
+    if (!email.trim() || !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    if (!name.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+
+    if (!teamName.trim()) {
+      setError('Please enter a team name');
+      return;
+    }
+
+    // Save LLM config to localStorage
     LLMStorage.saveProvider('openrouter');
     LLMStorage.saveApiKey(apiKey);
     LLMStorage.saveModel(modelName as ModelId);
+
+    // Save user/team to localStorage
+    const user: User = {
+      id: `user_${Date.now()}`,
+      email: email.trim(),
+      name: name.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    const team: Team = {
+      id: teamName.toLowerCase().replace(/\s+/g, '-'),
+      name: teamName.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    UserStorage.saveUser(user);
+    UserStorage.saveTeam(team);
 
     // Complete setup
     onComplete();
@@ -46,8 +90,57 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
         <div className="mb-6">
           <h1 className="terminal-heading text-lg mb-2">Welcome to LLMos-Lite</h1>
           <p className="text-terminal-fg-secondary text-sm">
-            Enter your OpenRouter API key to get started
+            Set up your profile and API key to get started
           </p>
+        </div>
+
+        {/* User Information */}
+        <div className="mb-6 p-4 bg-terminal-bg-tertiary border border-terminal-border rounded">
+          <h2 className="terminal-heading text-xs mb-3">YOUR INFORMATION</h2>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-terminal-fg-secondary mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="terminal-input w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-terminal-fg-secondary mb-1">
+                Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your Name"
+                className="terminal-input w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-terminal-fg-secondary mb-1">
+                Team Name
+              </label>
+              <input
+                type="text"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="engineering, research, personal, etc."
+                className="terminal-input w-full"
+              />
+              <p className="mt-1 text-xs text-terminal-fg-tertiary">
+                This helps organize your work and sessions
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* API Key Input */}
@@ -112,11 +205,20 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
           </div>
         </div>
 
+        {/* Error display */}
+        {error && (
+          <div className="mb-6 p-3 bg-terminal-accent-red/10 border border-terminal-accent-red rounded">
+            <div className="text-xs text-terminal-accent-red">
+              {error}
+            </div>
+          </div>
+        )}
+
         {/* Privacy Notice */}
         <div className="mb-6 p-3 bg-terminal-bg-tertiary border border-terminal-border rounded">
           <div className="text-xs text-terminal-fg-secondary">
-            🔒 <span className="text-terminal-accent-green">Privacy:</span> Your API key is stored locally in your browser
-            and never sent to our servers. All LLM requests go directly to OpenRouter.
+            🔒 <span className="text-terminal-accent-green">Privacy:</span> All data is stored locally in your browser.
+            Your API key and personal information never leave your device.
           </div>
         </div>
 
@@ -127,7 +229,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
             disabled={!isValid}
             className="btn-terminal flex-1 py-2"
           >
-            Save Configuration
+            Complete Setup
           </button>
         </div>
       </div>
