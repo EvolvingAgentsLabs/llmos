@@ -1,5 +1,15 @@
 'use client';
 
+interface Session {
+  id: string;
+  name: string;
+  status: 'uncommitted' | 'committed';
+  traces: number;
+  timeAgo: string;
+  patterns?: number;
+  commitHash?: string;
+}
+
 interface SessionListProps {
   activeVolume: 'system' | 'team' | 'user';
   activeSession: string | null;
@@ -13,7 +23,7 @@ export default function SessionList({
 }: SessionListProps) {
   // Start with empty sessions - users will create their own
   // TODO: Load sessions from backend API or localStorage
-  const sessions = {
+  const sessions: Record<'user' | 'team' | 'system', Session[]> = {
     user: [],
     team: [],
     system: [],
