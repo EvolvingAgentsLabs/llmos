@@ -143,21 +143,21 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type your message..."
-            className="flex-1 terminal-input"
+            className="flex-1 terminal-input min-h-[44px]"
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !inputValue.trim()}
-            className="btn-terminal px-4"
+            className="btn-touch md:btn-terminal px-4"
           >
             {isLoading ? 'Sending...' : 'Send'}
           </button>
         </div>
         <div className="flex gap-2 mt-2">
-          <button className="btn-terminal-secondary text-xs py-1 px-2">
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs flex-1 md:flex-none">
             Attach Workflow
           </button>
-          <button className="btn-terminal-secondary text-xs py-1 px-2">
+          <button className="btn-touch-secondary md:btn-terminal-secondary text-xs flex-1 md:flex-none">
             Settings
           </button>
         </div>

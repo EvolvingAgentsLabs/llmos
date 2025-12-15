@@ -86,6 +86,38 @@
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* Touch-friendly button (44px minimum tap target) */
+  .btn-touch {
+    @apply bg-transparent border border-terminal-accent-green text-terminal-accent-green;
+    @apply font-mono px-4 py-3 cursor-pointer transition-all duration-200;
+    @apply hover:bg-terminal-accent-green hover:text-terminal-bg-primary;
+    @apply hover:shadow-glow-green;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent;
+    @apply touch-manipulation;
+    min-height: 44px;
+  }
+
+  .btn-touch-secondary {
+    @apply bg-transparent border border-terminal-fg-secondary text-terminal-fg-secondary;
+    @apply font-mono px-4 py-3 cursor-pointer transition-all duration-200;
+    @apply hover:bg-terminal-fg-secondary hover:text-terminal-bg-primary;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply touch-manipulation;
+    min-height: 44px;
+  }
+
+  /* Touch-friendly icon button */
+  .btn-touch-icon {
+    @apply bg-transparent border border-terminal-border text-terminal-fg-secondary;
+    @apply cursor-pointer transition-all duration-200;
+    @apply hover:bg-terminal-bg-tertiary hover:text-terminal-accent-green hover:border-terminal-accent-green;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply touch-manipulation;
+    @apply flex items-center justify-center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   /* Terminal input */
   .terminal-input {
     @apply bg-terminal-bg-tertiary border border-terminal-border;

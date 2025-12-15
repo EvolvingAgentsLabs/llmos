@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import VolumeTree from './VolumeTree';
 import SessionList from './SessionList';
 import CronList from './CronList';
@@ -20,6 +21,9 @@ export default function VolumesPanel({
   onSessionChange,
   onCronClick,
 }: VolumesPanelProps) {
+  const [cronExpanded, setCronExpanded] = useState(false);
+  const [gitExpanded, setGitExpanded] = useState(false);
+
   return (
     <div className="h-full flex flex-col bg-terminal-bg-secondary">
       {/* Volume Tree */}
@@ -43,16 +47,40 @@ export default function VolumesPanel({
         />
       </div>
 
-      {/* Cron Updates */}
-      <div className="p-4 border-b border-terminal-border">
-        <h2 className="terminal-heading text-xs mb-3">CRON UPDATES</h2>
-        <CronList onCronClick={onCronClick} />
+      {/* Cron Updates - Collapsible */}
+      <div className="border-b border-terminal-border">
+        <button
+          onClick={() => setCronExpanded(!cronExpanded)}
+          className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
+        >
+          <h2 className="terminal-heading text-xs">CRON UPDATES</h2>
+          <span className="text-terminal-fg-secondary text-xs">
+            {cronExpanded ? '▼' : '▶'}
+          </span>
+        </button>
+        {cronExpanded && (
+          <div className="px-4 pb-4">
+            <CronList onCronClick={onCronClick} />
+          </div>
+        )}
       </div>
 
-      {/* Git Status */}
-      <div className="p-4">
-        <h2 className="terminal-heading text-xs mb-3">GIT STATUS</h2>
-        <GitStatus activeVolume={activeVolume} />
+      {/* Git Status - Collapsible */}
+      <div>
+        <button
+          onClick={() => setGitExpanded(!gitExpanded)}
+          className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
+        >
+          <h2 className="terminal-heading text-xs">GIT STATUS</h2>
+          <span className="text-terminal-fg-secondary text-xs">
+            {gitExpanded ? '▼' : '▶'}
+          </span>
+        </button>
+        {gitExpanded && (
+          <div className="px-4 pb-4">
+            <GitStatus activeVolume={activeVolume} />
+          </div>
+        )}
       </div>
     </div>
   );
