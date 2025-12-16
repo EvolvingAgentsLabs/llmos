@@ -43,6 +43,14 @@ export const AVAILABLE_MODELS = {
     outputCost: '$75/M tokens',
     contextWindow: '200K tokens',
   },
+  'claude-sonnet-4.5': {
+    id: 'anthropic/claude-sonnet-4.5',
+    name: 'Claude Sonnet 4.5',
+    provider: 'Anthropic',
+    inputCost: '$3/M tokens',
+    outputCost: '$15/M tokens',
+    contextWindow: '200K tokens',
+  },
   'claude-sonnet-4': {
     id: 'anthropic/claude-sonnet-4',
     name: 'Claude Sonnet 4',
@@ -77,6 +85,14 @@ export const AVAILABLE_MODELS = {
     outputCost: '$0/M tokens',
     contextWindow: '128K tokens',
   },
+  'deepseek-r1t2-chimera-free': {
+    id: 'tng/deepseek-r1t2-chimera:free',
+    name: 'DeepSeek R1T2 Chimera (Free)',
+    provider: 'TNG',
+    inputCost: '$0/M tokens',
+    outputCost: '$0/M tokens',
+    contextWindow: '128K tokens',
+  },
 } as const;
 
 export type ModelId = keyof typeof AVAILABLE_MODELS;
@@ -89,7 +105,12 @@ export class LLMClient {
   }
 
   /**
-   * Chat with LLM through Vercel API proxy
+   * Chat with LLM through Vercel API proxy (NOT RECOMMENDED for multi-user apps)
+   *
+   * WARNING: This method sends your API key to the Vercel server.
+   * For hosted apps where users bring their own keys, use chatDirect() instead.
+   *
+   * @deprecated Use chatDirect() to keep API keys client-side only
    */
   async chat(request: ChatRequest): Promise<ChatResponse> {
     const response = await fetch('/api/chat', {
@@ -111,7 +132,15 @@ export class LLMClient {
   }
 
   /**
-   * Direct OpenRouter call (for testing/debugging)
+   * Direct client-side OpenRouter call (RECOMMENDED)
+   *
+   * This method calls OpenRouter directly from the browser.
+   * Your API key never leaves the client - it goes straight to OpenRouter.
+   *
+   * Perfect for hosted apps where each user brings their own API key.
+   *
+   * @param messages - Array of conversation messages with role and content
+   * @returns The assistant's response text
    */
   async chatDirect(messages: Message[]): Promise<string> {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -232,13 +261,15 @@ export function createLLMClient(): LLMClient | null {
     return null;
   }
 
+  // Check if model exists in AVAILABLE_MODELS
   const model = AVAILABLE_MODELS[modelId];
-  if (!model) {
-    return null;
-  }
+
+  // Use the model ID from AVAILABLE_MODELS if it exists,
+  // otherwise use the custom model ID directly
+  const actualModelId = model ? model.id : modelId;
 
   return new LLMClient({
     apiKey,
-    model: model.id,
+    model: actualModelId,
   });
 }
