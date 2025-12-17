@@ -10,12 +10,16 @@ interface ChatPanelProps {
   activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
   onSessionCreated: (sessionId: string) => void;
+  pendingPrompt?: string | null;
+  onPromptProcessed?: () => void;
 }
 
 export default function ChatPanel({
   activeSession,
   activeVolume,
   onSessionCreated,
+  pendingPrompt,
+  onPromptProcessed,
 }: ChatPanelProps) {
   const { sessions, addSession, addMessage } = useSessionContext();
   const [inputValue, setInputValue] = useState('');
@@ -32,6 +36,18 @@ export default function ChatPanel({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Handle pending prompt from onboarding
+  useEffect(() => {
+    if (pendingPrompt && !isLoading) {
+      setInputValue(pendingPrompt);
+      onPromptProcessed?.();
+      // Auto-send the prompt
+      setTimeout(() => {
+        handleSend();
+      }, 100);
+    }
+  }, [pendingPrompt]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;

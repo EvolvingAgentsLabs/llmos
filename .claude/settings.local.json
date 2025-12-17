@@ -20,7 +20,9 @@
       "Bash(cat:*)",
       "Bash(findstr:*)",
       "Bash(git branch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(npm run build)",
+      "Bash(npm install)"
     ],
     "deny": [],
     "ask": []
