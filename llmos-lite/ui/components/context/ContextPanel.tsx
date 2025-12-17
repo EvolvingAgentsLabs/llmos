@@ -1,6 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { GitService } from '@/lib/git-service';
+import { GitHubAuth } from '@/lib/github-auth';
+import GitHubConnect from '@/components/settings/GitHubConnect';
 
 interface ContextPanelProps {
   activeSession: string | null;
@@ -11,8 +15,47 @@ export default function ContextPanel({
   activeSession,
   activeVolume,
 }: ContextPanelProps) {
-  const { sessions } = useSessionContext();
+  const { sessions, updateSession } = useSessionContext();
   const currentSession = sessions.find((s) => s.id === activeSession);
+  const [isCommitting, setIsCommitting] = useState(false);
+
+  const handleCommitSession = async () => {
+    if (!currentSession) return;
+
+    setIsCommitting(true);
+
+    try {
+      // Check if GitHub is connected
+      const isGitHubConnected = GitHubAuth.isAuthenticated();
+
+      let commitHash: string;
+
+      if (isGitHubConnected) {
+        // Real Git commit via GitHub API
+        commitHash = await GitService.commitSession(activeVolume, {
+          id: currentSession.id,
+          name: currentSession.name,
+          messages: currentSession.messages,
+          artifacts: currentSession.artifacts,
+          traces: currentSession.traces ? [currentSession.traces] : undefined,
+        });
+      } else {
+        // Fallback to local-only commit
+        commitHash = `local-${Math.random().toString(36).substring(2, 9)}`;
+      }
+
+      // Update session status to committed
+      updateSession(currentSession.id, {
+        status: 'committed',
+        commitHash,
+      });
+    } catch (error) {
+      console.error('Failed to commit session:', error);
+      alert(`Failed to commit: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCommitting(false);
+    }
+  };
 
   if (!currentSession) {
     return (
@@ -142,19 +185,39 @@ export default function ContextPanel({
         </div>
       )}
 
+      {/* GitHub Connection */}
+      <div className="p-4 border-b border-terminal-border">
+        <h2 className="terminal-heading text-xs mb-3">GITHUB</h2>
+        <GitHubConnect />
+      </div>
+
       {/* Actions */}
       <div className="p-4">
         <h2 className="terminal-heading text-xs mb-3">ACTIONS</h2>
         <div className="space-y-2">
           {currentSession.status === 'uncommitted' && (
             <>
-              <button className="btn-touch md:btn-terminal text-xs w-full">
-                Commit Session
+              <button
+                onClick={handleCommitSession}
+                disabled={isCommitting}
+                className="btn-touch md:btn-terminal text-xs w-full"
+              >
+                {isCommitting ? 'Committing...' : 'Commit Session'}
               </button>
               <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
                 Share Session
               </button>
             </>
+          )}
+          {currentSession.status === 'committed' && currentSession.commitHash && (
+            <div className="p-2 bg-terminal-bg-tertiary rounded border border-terminal-border">
+              <div className="text-xs text-terminal-fg-secondary mb-1">
+                Committed
+              </div>
+              <div className="font-mono text-xs text-terminal-accent-green">
+                {currentSession.commitHash}
+              </div>
+            </div>
           )}
           <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
             Export Chat

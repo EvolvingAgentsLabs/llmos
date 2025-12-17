@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 
 interface FirstTimeGuideProps {
   onDismiss: () => void;
+  onSendPrompt?: (prompt: string) => void;
 }
 
-export default function FirstTimeGuide({ onDismiss }: FirstTimeGuideProps) {
+export default function FirstTimeGuide({ onDismiss, onSendPrompt }: FirstTimeGuideProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   const steps = [
@@ -71,6 +72,16 @@ export default function FirstTimeGuide({ onDismiss }: FirstTimeGuideProps) {
     navigator.clipboard.writeText(prompt);
   };
 
+  const handleSendPrompt = (prompt: string) => {
+    if (onSendPrompt) {
+      onSendPrompt(prompt);
+      onDismiss(); // Close the guide after sending
+    } else {
+      // Fallback to copy if no send handler
+      handleCopyPrompt(prompt);
+    }
+  };
+
   const step = steps[currentStep];
 
   return (
@@ -95,8 +106,7 @@ export default function FirstTimeGuide({ onDismiss }: FirstTimeGuideProps) {
             {step.samplePrompts.map((sample, index) => (
               <div
                 key={index}
-                className="p-3 rounded border border-terminal-border bg-terminal-bg-secondary hover:border-terminal-accent-green transition-colors cursor-pointer group"
-                onClick={() => handleCopyPrompt(sample.prompt)}
+                className="p-3 rounded border border-terminal-border bg-terminal-bg-secondary hover:border-terminal-accent-green transition-colors group"
               >
                 <div className="flex items-start gap-3">
                   <span className="text-2xl flex-shrink-0">{sample.icon}</span>
@@ -105,19 +115,30 @@ export default function FirstTimeGuide({ onDismiss }: FirstTimeGuideProps) {
                       <h4 className={`text-sm font-medium text-terminal-${sample.color}`}>
                         {sample.title}
                       </h4>
-                      <span className="text-[10px] text-terminal-fg-tertiary opacity-0 group-hover:opacity-100 transition-opacity">
-                        Click to copy
-                      </span>
                     </div>
-                    <p className="text-xs text-terminal-fg-secondary leading-relaxed">
+                    <p className="text-xs text-terminal-fg-secondary leading-relaxed mb-2">
                       {sample.prompt}
                     </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSendPrompt(sample.prompt)}
+                        className="btn-terminal text-xs py-1 px-3"
+                      >
+                        Try Now
+                      </button>
+                      <button
+                        onClick={() => handleCopyPrompt(sample.prompt)}
+                        className="btn-terminal-secondary text-xs py-1 px-3"
+                      >
+                        Copy
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
             <p className="text-[10px] text-terminal-fg-tertiary text-center mt-2">
-              💡 Click any example to copy it to your clipboard
+              💡 Click "Try Now" to send the prompt directly, or "Copy" to use it later
             </p>
           </div>
         )}

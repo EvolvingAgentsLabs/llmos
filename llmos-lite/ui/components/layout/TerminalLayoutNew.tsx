@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
 import dynamic from 'next/dynamic';
 import Header from './Header';
@@ -17,6 +17,7 @@ export default function TerminalLayoutNew() {
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [mobileTab, setMobileTab] = useState<MobileTab>('chat');
   const [showGuide, setShowGuide] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     // Check if this is the first time the user is seeing the app
@@ -29,6 +30,11 @@ export default function TerminalLayoutNew() {
   const handleDismissGuide = () => {
     localStorage.setItem('llmos_has_seen_guide', 'true');
     setShowGuide(false);
+  };
+
+  const handleSendPromptFromGuide = (prompt: string) => {
+    setPendingPrompt(prompt);
+    setMobileTab('chat'); // Switch to chat tab on mobile
   };
 
   return (
@@ -54,6 +60,8 @@ export default function TerminalLayoutNew() {
             activeSession={activeSession}
             activeVolume={activeVolume}
             onSessionCreated={(sessionId) => setActiveSession(sessionId)}
+            pendingPrompt={pendingPrompt}
+            onPromptProcessed={() => setPendingPrompt(null)}
           />
         </div>
 
@@ -88,6 +96,8 @@ export default function TerminalLayoutNew() {
               activeSession={activeSession}
               activeVolume={activeVolume}
               onSessionCreated={(sessionId) => setActiveSession(sessionId)}
+              pendingPrompt={pendingPrompt}
+              onPromptProcessed={() => setPendingPrompt(null)}
             />
           ) : (
             <ContextPanel
@@ -140,6 +150,8 @@ export default function TerminalLayoutNew() {
             activeSession={activeSession}
             activeVolume={activeVolume}
             onSessionCreated={(sessionId) => setActiveSession(sessionId)}
+            pendingPrompt={pendingPrompt}
+            onPromptProcessed={() => setPendingPrompt(null)}
           />
         )}
         {mobileTab === 'context' && (
@@ -196,7 +208,12 @@ export default function TerminalLayoutNew() {
       </nav>
 
       {/* First-time user guide */}
-      {showGuide && <FirstTimeGuide onDismiss={handleDismissGuide} />}
+      {showGuide && (
+        <FirstTimeGuide
+          onDismiss={handleDismissGuide}
+          onSendPrompt={handleSendPromptFromGuide}
+        />
+      )}
     </div>
   );
 }
