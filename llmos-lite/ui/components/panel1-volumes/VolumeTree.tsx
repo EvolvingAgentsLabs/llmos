@@ -1,34 +1,47 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { UserStorage } from '@/lib/user-storage';
+
 interface VolumeTreeProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
 }
 
 export default function VolumeTree({ activeVolume, onVolumeChange }: VolumeTreeProps) {
+  const [userName, setUserName] = useState<string>('');
+  const [teamName, setTeamName] = useState<string>('');
+
+  useEffect(() => {
+    // Load real user data from localStorage
+    const user = UserStorage.getUser();
+    const team = UserStorage.getTeam();
+
+    if (user) {
+      setUserName(user.email.split('@')[0]);
+    }
+    if (team) {
+      setTeamName(team.name);
+    }
+  }, []);
+
   const volumes = [
     {
       id: 'system' as const,
       label: 'System',
       icon: '📁',
-      skills: 23,
-      traces: 0,
       readonly: true,
     },
     {
       id: 'team' as const,
-      label: 'Team: engineering',
+      label: teamName ? `Team: ${teamName}` : 'Team',
       icon: '📁',
-      skills: 15,
-      traces: 234,
       readonly: false,
     },
     {
       id: 'user' as const,
-      label: 'User: alice',
+      label: userName ? `User: ${userName}` : 'User',
       icon: '📁',
-      skills: 3,
-      traces: 48,
       readonly: false,
     },
   ];
@@ -55,10 +68,6 @@ export default function VolumeTree({ activeVolume, onVolumeChange }: VolumeTreeP
             {volume.readonly && (
               <span className="text-xs text-terminal-fg-tertiary">readonly</span>
             )}
-          </div>
-          <div className="ml-6 mt-1 text-xs text-terminal-fg-secondary">
-            <div>{volume.skills} skills</div>
-            <div>{volume.traces} traces</div>
           </div>
         </div>
       ))}

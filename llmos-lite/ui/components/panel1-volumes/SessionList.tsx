@@ -1,14 +1,6 @@
 'use client';
 
-interface Session {
-  id: string;
-  name: string;
-  status: 'uncommitted' | 'committed';
-  traces: number;
-  timeAgo: string;
-  patterns?: number;
-  commitHash?: string;
-}
+import { useSessionContext } from '@/contexts/SessionContext';
 
 interface SessionListProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -21,27 +13,23 @@ export default function SessionList({
   activeSession,
   onSessionChange,
 }: SessionListProps) {
-  // Start with empty sessions - users will create their own
-  // TODO: Load sessions from backend API or localStorage
-  const sessions: Record<'user' | 'team' | 'system', Session[]> = {
-    user: [],
-    team: [],
-    system: [],
-  };
+  const { activeSessions } = useSessionContext();
+  const sessions = activeSessions[activeVolume];
 
-  const currentSessions = sessions[activeVolume];
-
-  if (currentSessions.length === 0) {
+  if (sessions.length === 0) {
     return (
-      <div className="text-terminal-fg-tertiary text-xs italic">
-        No active sessions
+      <div className="text-terminal-fg-tertiary text-xs">
+        <p className="mb-2">No active sessions</p>
+        <p className="text-terminal-fg-quaternary">
+          Start a chat to create your first session
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      {currentSessions.map((session) => (
+      {sessions.map((session) => (
         <div
           key={session.id}
           onClick={() => onSessionChange(session.id)}
@@ -57,29 +45,11 @@ export default function SessionList({
             <span className="text-sm font-medium">{session.name}</span>
           </div>
           <div className="ml-6 text-xs text-terminal-fg-secondary space-y-0.5">
-            <div>{session.traces} traces</div>
+            {session.messages.length > 0 && (
+              <div>{session.messages.length} message{session.messages.length !== 1 ? 's' : ''}</div>
+            )}
             <div>{session.timeAgo}</div>
-            {session.status === 'uncommitted' && session.patterns && (
-              <div className="text-terminal-accent-yellow">
-                {session.patterns} pattern{session.patterns > 1 ? 's' : ''} detected
-              </div>
-            )}
-            {session.status === 'committed' && (
-              <div className="git-badge git-badge-committed">
-                {session.commitHash}
-              </div>
-            )}
           </div>
-          {session.status === 'uncommitted' && (
-            <div className="ml-6 mt-2 flex gap-2">
-              <button className="btn-terminal text-xs py-0.5 px-2">
-                Commit
-              </button>
-              <button className="btn-terminal-secondary text-xs py-0.5 px-2">
-                Share
-              </button>
-            </div>
-          )}
         </div>
       ))}
     </div>

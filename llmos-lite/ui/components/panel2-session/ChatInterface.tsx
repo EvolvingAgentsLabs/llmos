@@ -61,24 +61,22 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
         return;
       }
 
-      // Send message with real user/team IDs
-      console.log('Sending message:', {
-        user_id: user.id,
-        team_id: team.id,
-        message: messageText,
-        session_id: activeSession || 'default',
+      // Send message directly to OpenRouter (client-side only)
+      // API key goes: Browser → OpenRouter (never touches our server)
+      const conversationHistory = messages.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      }));
+
+      // Add current user message to history
+      conversationHistory.push({
+        role: 'user' as const,
+        content: messageText,
       });
 
-      const response = await client.chat({
-        user_id: user.id,
-        team_id: team.id,
-        message: messageText,
-        session_id: activeSession || 'default',
-        include_skills: true,
-        max_skills: 5,
-      });
+      const assistantResponse = await client.chatDirect(conversationHistory);
 
-      console.log('Response:', response);
+      console.log('Response:', assistantResponse);
 
       // TODO: Add message to messages array
       // This would require lifting state up or using a context provider
