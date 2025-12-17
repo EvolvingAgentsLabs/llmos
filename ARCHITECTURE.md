@@ -45,43 +45,55 @@
 
 ### Four-Layer Stack
 
-```
-┌──────────────────────────────────────────────────┐
-│  LAYER 1: PRESENTATION (Browser/React)          │
-│  ┌──────────────────┐  ┌────────────────┐       │
-│  │ Chat Interface   │  │ Workflow Canvas│       │
-│  │ + Artifacts      │  │ (React Flow)   │       │
-│  └──────┬───────────┘  └───────┬────────┘       │
-└─────────┼──────────────────────┼─────────────────┘
-          │                      │
-┌─────────▼──────────┐  ┌───────▼────────────┐
-│  LLM Client        │  │  GitHub Service    │
-│  (lib/llm-client)  │  │  (lib/git-service) │
-└─────────┬──────────┘  └───────┬────────────┘
-          │                     │
-┌─────────▼──────────────────────▼───────────────┐
-│  LAYER 2: INTERFACE (APIs)                     │
-│  ┌──────────────┐  ┌──────────────────┐        │
-│  │ Anthropic    │  │ GitHub REST API  │        │
-│  │ Claude API   │  │ (v3)             │        │
-│  └──────────────┘  └──────────────────┘        │
-└──────────────────────────┬──────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────┐
-│  LAYER 3: LOGIC (State Management)             │
-│  ┌────────────────────┐  ┌──────────────────┐  │
-│  │ SessionContext     │  │ CronAnalyzer     │  │
-│  │ (React Context)    │  │ (Pattern Detect) │  │
-│  └────────────────────┘  └──────────────────┘  │
-└──────────────────────────┬──────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────┐
-│  LAYER 4: STORAGE (Git/Local)                  │
-│  ┌────────────────┐  ┌─────────────────────┐   │
-│  │ localStorage   │  │ GitHub Repos        │   │
-│  │ (sessions)     │  │ (volumes)           │   │
-│  └────────────────┘  └─────────────────────┘   │
-└─────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Layer1["LAYER 1: PRESENTATION (Browser/React)"]
+        A1[Chat Interface<br/>+ Artifacts]
+        A2[Workflow Canvas<br/>React Flow]
+    end
+
+    subgraph Services["Client Services"]
+        B1[LLM Client<br/>lib/llm-client]
+        B2[GitHub Service<br/>lib/git-service]
+    end
+
+    subgraph Layer2["LAYER 2: INTERFACE (APIs)"]
+        C1[Anthropic<br/>Claude API]
+        C2[GitHub REST API<br/>v3]
+    end
+
+    subgraph Layer3["LAYER 3: LOGIC (State Management)"]
+        D1[SessionContext<br/>React Context]
+        D2[CronAnalyzer<br/>Pattern Detect]
+    end
+
+    subgraph Layer4["LAYER 4: STORAGE (Git/Local)"]
+        E1[localStorage<br/>sessions]
+        E2[GitHub Repos<br/>volumes]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    A1 --> B2
+    A2 --> B2
+
+    B1 --> C1
+    B2 --> C2
+
+    B1 --> D1
+    B1 --> D2
+    B2 --> D1
+    B2 --> D2
+
+    D1 --> E1
+    D2 --> E2
+    B2 --> E2
+
+    style Layer1 fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style Services fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style Layer2 fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style Layer3 fill:#0a0e14,stroke:#a78bfa,color:#a78bfa
+    style Layer4 fill:#0a0e14,stroke:#ff6b6b,color:#ff6b6b
 ```
 
 ### Key Components
@@ -126,27 +138,29 @@
 
 ### OAuth Flow
 
-```
-1. User clicks "Connect with GitHub"
-   ↓
-2. Frontend: GitHubAuth.startOAuthFlow()
-   ↓
-3. Opens popup: github.com/login/oauth/authorize?client_id=...
-   ↓
-4. User authorizes
-   ↓
-5. GitHub redirects: localhost:3000/api/auth/github/callback?code=...
-   ↓
-6. Backend (Next.js API Route):
-   - Exchange code for access_token
-   - Fetch user profile
-   ↓
-7. Return HTML with postMessage:
-   window.opener.postMessage({type: 'github_auth_success', user})
-   ↓
-8. Frontend: Save user to localStorage
-   ↓
-9. GitHub connected!
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend<br/>(GitHubAuth)
+    participant G as GitHub
+    participant B as Backend<br/>(Next.js API)
+
+    U->>F: 1. Click "Connect with GitHub"
+    F->>F: 2. startOAuthFlow()
+    F->>G: 3. Open popup<br/>github.com/login/oauth/authorize
+    G->>U: 4. Show authorization page
+    U->>G: 5. Approve access
+    G->>B: 6. Redirect with code<br/>localhost:3000/api/auth/github/callback?code=...
+    B->>G: 7. Exchange code for access_token
+    G->>B: 8. Return access_token
+    B->>G: 9. Fetch user profile
+    G->>B: 10. Return user data
+    B->>F: 11. postMessage({type: 'github_auth_success', user})
+    F->>F: 12. Save user to localStorage
+    F->>U: 13. GitHub connected!
+
+    Note over F,B: Client secret never exposed to browser
+    Note over F: Token stored in localStorage
 ```
 
 **Files:**
@@ -235,42 +249,19 @@ const sessions = await GitService.pullLatestSessions(volume);
 
 ### Cron Analysis Pipeline
 
-```
-┌─────────────────────────────────────────────────┐
-│  1. FETCH COMMITS                               │
-│  GitService.fetchCommitHistory(volume, {since})│
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  2. PARSE COMMIT MESSAGES                       │
-│  Extract: prompts, artifacts, traces            │
-│  CronAnalyzer.extractContext(commit)            │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  3. DETECT PATTERNS (LLM)                       │
-│  Send prompts to Claude for analysis            │
-│  CronAnalyzer.detectPatterns(contexts)          │
-│  → Returns: patterns with confidence scores     │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  4. FILTER HIGH-CONFIDENCE (>85%)               │
-│  Keep patterns with: occurrences ≥ 2,           │
-│  confidence ≥ 0.85                              │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  5. GENERATE SKILLS                             │
-│  For each pattern, send to LLM:                 │
-│  "Create reusable skill for {pattern}..."       │
-│  CronAnalyzer.generateSkills(patterns)          │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  6. COMMIT SKILLS TO REPO                       │
-│  (Future: auto-commit generated skills)         │
-└─────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[1. FETCH COMMITS] --> |GitService.fetchCommitHistory<br/>volume, since| B[2. PARSE COMMIT MESSAGES]
+    B --> |Extract: prompts,<br/>artifacts, traces<br/>CronAnalyzer.extractContext| C[3. DETECT PATTERNS]
+    C --> |Send prompts to Claude<br/>CronAnalyzer.detectPatterns<br/>Returns: patterns + confidence| D[4. FILTER HIGH-CONFIDENCE]
+    D --> |Keep patterns with:<br/>occurrences ≥ 2<br/>confidence ≥ 0.85| E[5. GENERATE SKILLS]
+    E --> |For each pattern:<br/>Create reusable skill<br/>CronAnalyzer.generateSkills| F[6. COMMIT SKILLS TO REPO]
+    F --> |Future: auto-commit<br/>generated skills| G[✓ Complete]
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style C fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style E fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style G fill:#0a0e14,stroke:#00ff88,color:#00ff88
 ```
 
 ### Pattern Detection Algorithm
@@ -355,123 +346,81 @@ const sessions = await GitService.pullLatestSessions(volume);
 
 ### Session Lifecycle
 
-```
-┌─────────────────────────────────────────────────┐
-│  1. USER STARTS CHAT                            │
-│  - Onboarding complete                          │
-│  - Click "Try Now" on sample prompt             │
-│  - Or type message manually                     │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  2. AUTO-CREATE SESSION                         │
-│  SessionContext.addSession({                    │
-│    name, status: 'uncommitted', volume          │
-│  })                                             │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  3. CHAT LOOP                                   │
-│  For each message:                              │
-│  - Add to session messages                      │
-│  - Send to LLM (with skills context)            │
-│  - Get response                                 │
-│  - Update session (artifacts, traces)           │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  4. COMMIT SESSION                              │
-│  User clicks "Commit Session"                   │
-│  If GitHub connected:                           │
-│    → GitService.commitSession()                 │
-│    → Real commit to GitHub repo                 │
-│  Else:                                          │
-│    → Local commit (generate hash)               │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  5. UPDATE SESSION STATUS                       │
-│  session.status = 'committed'                   │
-│  session.commitHash = returned hash             │
-│  UI shows commit hash                           │
-└─────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[1. USER STARTS CHAT] --> |Onboarding complete<br/>Click 'Try Now' or<br/>Type manually| B[2. AUTO-CREATE SESSION]
+    B --> |SessionContext.addSession<br/>name, status: 'uncommitted'<br/>volume| C[3. CHAT LOOP]
+    C --> |For each message:<br/>• Add to session<br/>• Send to LLM with skills<br/>• Get response<br/>• Update artifacts/traces| C
+    C --> |User clicks<br/>'Commit Session'| D{GitHub<br/>Connected?}
+    D -->|Yes| E[GitService.commitSession<br/>Real GitHub commit]
+    D -->|No| F[Local commit<br/>Generate hash]
+    E --> G[5. UPDATE SESSION STATUS]
+    F --> G
+    G --> |session.status = 'committed'<br/>session.commitHash = hash<br/>UI shows commit hash| H[✓ Session Committed]
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style C fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style D fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style H fill:#0a0e14,stroke:#00ff88,color:#00ff88
 ```
 
 ### Cron Execution Flow
 
-```
-┌─────────────────────────────────────────────────┐
-│  TRIGGER: Manual "Run Now" or Auto (24h timer) │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  1. CHECK AUTHENTICATION                        │
-│  If !GitHubAuth.isAuthenticated():              │
-│    → Show error, exit                           │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  2. DETERMINE VOLUME                            │
-│  cron-id → volume mapping:                      │
-│  - evolution-user → user                        │
-│  - evolution-team → team                        │
-│  - evolution-system → system                    │
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  3. RUN ANALYZER                                │
-│  const result = await CronAnalyzer.analyzeVolume│
-│  (volume, {minOccurrences: 2, minConfidence: .7})│
-└───────────────┬─────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────┐
-│  4. DISPLAY RESULTS                             │
-│  Alert with:                                    │
-│  - Patterns detected: N                         │
-│  - Skills generated: M                          │
-│  - Commits analyzed: X                          │
-│  - Pattern details (name, occurrences, %)       │
-└─────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[TRIGGER] --> |Manual 'Run Now' or<br/>Auto 24h timer| B{Authenticated?}
+    B -->|No| C[Show error<br/>Exit]
+    B -->|Yes| D[2. DETERMINE VOLUME]
+    D --> |Cron ID → Volume mapping:<br/>• evolution-user → user<br/>• evolution-team → team<br/>• evolution-system → system| E[3. RUN ANALYZER]
+    E --> |CronAnalyzer.analyzeVolume<br/>minOccurrences: 2<br/>minConfidence: 0.7| F[4. DISPLAY RESULTS]
+    F --> |Alert with:<br/>• Patterns detected: N<br/>• Skills generated: M<br/>• Commits analyzed: X<br/>• Pattern details| G[✓ Complete]
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style B fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style C fill:#0a0e14,stroke:#ff6b6b,color:#ff6b6b
+    style E fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style G fill:#0a0e14,stroke:#00ff88,color:#00ff88
 ```
 
 ### Collaboration Workflow
 
-```
-ALICE (Developer)
-  ├─> Creates 5 quantum circuit sessions
-  ├─> Commits all to user volume
-  ├─> Runs user cron
-  ├─> Pattern detected: "Quantum Circuit Design" (5x, 92%)
-  ├─> Skill generated: quantum-circuit-design.md
-  ├─> (Future) Promotes skill to team volume
-  │
-  ↓
-TEAM VOLUME (Shared Repo)
-  ├─> Skill: quantum-circuit-design.md (from Alice)
-  │
-  ↓
-BOB (Developer)
-  ├─> Pulls latest from team volume
-  ├─> Sees Alice's quantum skill
-  ├─> Uses skill in his workflows
-  ├─> Creates 3 more quantum sessions
-  ├─> Commits to team volume
-  │
-  ↓
-TEAM CRON (Weekly)
-  ├─> Analyzes team volume
-  ├─> Detects cross-user pattern (Alice + Bob)
-  ├─> Strengthens pattern confidence (98%)
-  ├─> Updates skill with more examples
-  │
-  ↓
-SYSTEM ADMIN
-  ├─> Reviews highly-used team skills
-  ├─> Promotes to system volume
-  │
-  ↓
-ALL USERS
-  └─> Benefit from evolved system skill
+```mermaid
+flowchart TD
+    A1[ALICE: Developer] --> A2[Creates 5 quantum<br/>circuit sessions]
+    A2 --> A3[Commits all to<br/>user volume]
+    A3 --> A4[Runs user cron]
+    A4 --> A5[Pattern detected:<br/>Quantum Circuit Design<br/>5x, 92% confidence]
+    A5 --> A6[Skill generated:<br/>quantum-circuit-design.md]
+    A6 --> T1[TEAM VOLUME]
+
+    T1[Team Volume<br/>Shared Repo] --> T2[Skill:<br/>quantum-circuit-design.md<br/>from Alice]
+
+    T2 --> B1[BOB: Developer]
+    B1 --> B2[Pulls latest from<br/>team volume]
+    B2 --> B3[Sees Alice's<br/>quantum skill]
+    B3 --> B4[Uses skill in<br/>his workflows]
+    B4 --> B5[Creates 3 more<br/>quantum sessions]
+    B5 --> B6[Commits to<br/>team volume]
+
+    B6 --> C1[TEAM CRON]
+    C1 --> C2[Analyzes team volume<br/>Weekly trigger]
+    C2 --> C3[Detects cross-user<br/>pattern: Alice + Bob]
+    C3 --> C4[Strengthens confidence<br/>98%]
+    C4 --> C5[Updates skill with<br/>more examples]
+
+    C5 --> S1[SYSTEM ADMIN]
+    S1 --> S2[Reviews highly-used<br/>team skills]
+    S2 --> S3[Promotes to<br/>system volume]
+
+    S3 --> U1[ALL USERS]
+    U1 --> U2[Benefit from<br/>evolved system skill]
+
+    style A1 fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style T1 fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style B1 fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style C1 fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style S1 fill:#0a0e14,stroke:#a78bfa,color:#a78bfa
+    style U1 fill:#0a0e14,stroke:#00ff88,color:#00ff88
 ```
 
 ---
@@ -480,52 +429,69 @@ ALL USERS
 
 ### Component Hierarchy
 
-```
-App (page.tsx)
-├─> APIKeySetup (if not configured)
-│   ├─> User/Team info form
-│   └─> FirstTimeGuide (onboarding wizard)
-│       └─> Sample prompts with "Try Now"
-│
-└─> TerminalLayoutNew (main app)
-    ├─> Header
-    │   ├─> Logo
-    │   └─> Settings button
-    │
-    ├─> SidebarPanel (left)
-    │   ├─> VolumeTree (System/Team/User)
-    │   ├─> SessionList
-    │   │   └─> Session cards (status, messages, time)
-    │   ├─> CronList
-    │   │   └─> Cron cards with:
-    │   │       ├─> Countdown timer (live)
-    │   │       ├─> Progress bar (animated)
-    │   │       └─> "Run Now" button
-    │   └─> ActivitySection
-    │
-    ├─> ChatPanel (center)
-    │   ├─> Session header
-    │   ├─> Message list
-    │   │   ├─> User messages
-    │   │   └─> Assistant messages
-    │   │       └─> Artifact previews
-    │   └─> Input + Send button
-    │
-    └─> ContextPanel (right)
-        ├─> Session info
-        │   ├─> Status (committed/uncommitted)
-        │   ├─> Message count
-        │   └─> Trace count
-        ├─> Artifacts list
-        │   └─> Artifact cards (type, name)
-        ├─> GitHub section
-        │   └─> GitHubConnect widget
-        │       ├─> If connected: Avatar + name
-        │       └─> If not: "Connect" button
-        └─> Actions section
-            ├─> "Commit Session" button
-            ├─> "Share Session" button
-            └─> "Export Chat" button
+```mermaid
+graph TD
+    A[App<br/>page.tsx] --> B{Configured?}
+    B -->|No| C[APIKeySetup]
+    B -->|Yes| D[TerminalLayoutNew<br/>main app]
+
+    C --> C1[User/Team info form]
+    C --> C2[FirstTimeGuide<br/>onboarding wizard]
+    C2 --> C3[Sample prompts<br/>with 'Try Now']
+
+    D --> D1[Header]
+    D --> D2[SidebarPanel<br/>left]
+    D --> D3[ChatPanel<br/>center]
+    D --> D4[ContextPanel<br/>right]
+
+    D1 --> D1a[Logo]
+    D1 --> D1b[Settings button]
+
+    D2 --> D2a[VolumeTree<br/>System/Team/User]
+    D2 --> D2b[SessionList]
+    D2 --> D2c[CronList]
+    D2 --> D2d[ActivitySection]
+
+    D2b --> D2b1[Session cards<br/>status, messages, time]
+
+    D2c --> D2c1[Cron cards]
+    D2c1 --> D2c1a[Countdown timer<br/>live]
+    D2c1 --> D2c1b[Progress bar<br/>animated]
+    D2c1 --> D2c1c['Run Now' button]
+
+    D3 --> D3a[Session header]
+    D3 --> D3b[Message list]
+    D3 --> D3c[Input + Send button]
+
+    D3b --> D3b1[User messages]
+    D3b --> D3b2[Assistant messages]
+    D3b2 --> D3b2a[Artifact previews]
+
+    D4 --> D4a[Session info]
+    D4 --> D4b[Artifacts list]
+    D4 --> D4c[GitHub section]
+    D4 --> D4d[Actions section]
+
+    D4a --> D4a1[Status<br/>committed/uncommitted]
+    D4a --> D4a2[Message count]
+    D4a --> D4a3[Trace count]
+
+    D4b --> D4b1[Artifact cards<br/>type, name]
+
+    D4c --> D4c1[GitHubConnect widget]
+    D4c1 --> D4c1a{Connected?}
+    D4c1a -->|Yes| D4c1b[Avatar + name]
+    D4c1a -->|No| D4c1c['Connect' button]
+
+    D4d --> D4d1['Commit Session']
+    D4d --> D4d2['Share Session']
+    D4d --> D4d3['Export Chat']
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style D fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style D2 fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style D3 fill:#0a0e14,stroke:#a78bfa,color:#a78bfa
+    style D4 fill:#0a0e14,stroke:#ff6b6b,color:#ff6b6b
 ```
 
 ### State Management
