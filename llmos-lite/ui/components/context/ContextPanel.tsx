@@ -72,16 +72,28 @@ export default function ContextPanel({
             {currentSession.artifacts.map((artifact, index) => (
               <div
                 key={index}
-                className="flex items-center gap-2 p-2 rounded bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-blue transition-colors cursor-pointer"
+                className="p-2 rounded bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-blue transition-colors cursor-pointer group"
               >
-                <span className="text-terminal-fg-secondary">
-                  {artifact.type === 'skill' && '📄'}
-                  {artifact.type === 'code' && '💻'}
-                  {artifact.type === 'workflow' && '🔗'}
-                </span>
-                <span className="text-xs text-terminal-accent-blue flex-1 truncate">
-                  {artifact.name}
-                </span>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-terminal-fg-secondary">
+                    {artifact.type === 'skill' && '📄'}
+                    {artifact.type === 'code' && '💻'}
+                    {artifact.type === 'workflow' && '🔗'}
+                    {!['skill', 'code', 'workflow'].includes(artifact.type) && '⚛️'}
+                  </span>
+                  <span className="text-xs text-terminal-accent-blue flex-1 truncate">
+                    {artifact.name}
+                  </span>
+                  <button className="text-[10px] text-terminal-fg-tertiary hover:text-terminal-accent-green opacity-0 group-hover:opacity-100 transition-opacity">
+                    View →
+                  </button>
+                </div>
+                {/* Mini preview for visual artifacts */}
+                {!['skill', 'code', 'workflow'].includes(artifact.type) && (
+                  <div className="h-16 bg-terminal-bg-secondary rounded border border-terminal-border flex items-center justify-center text-[10px] text-terminal-fg-tertiary">
+                    Preview available in Artifacts tab
+                  </div>
+                )}
               </div>
             ))}
           </div>
