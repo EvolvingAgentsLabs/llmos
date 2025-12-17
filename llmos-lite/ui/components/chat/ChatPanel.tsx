@@ -77,28 +77,51 @@ export default function ChatPanel({
       const client = createLLMClient();
       if (!client) {
         console.error('LLM client not configured');
+
+        // Provide specific error message
+        const { LLMStorage } = await import('@/lib/llm-client');
+        const apiKey = LLMStorage.getApiKey();
+        const model = LLMStorage.getModel();
+
+        let errorMsg = 'Error: LLM client not configured. ';
+        if (!apiKey) {
+          errorMsg += 'Missing API key. ';
+        }
+        if (!model) {
+          errorMsg += 'Missing model selection. ';
+        }
+        if (apiKey && model) {
+          errorMsg += 'Invalid model configuration. ';
+        }
+        errorMsg += 'Please complete the setup process.';
+
         addMessage(sessionId, {
           role: 'assistant',
-          content: 'Error: LLM client not configured. Please check your API key.',
+          content: errorMsg,
         });
         return;
       }
 
-      // Send message to LLM
-      const response = await client.chat({
-        user_id: user.id,
-        team_id: team.id,
-        message: messageText,
-        session_id: sessionId,
-        include_skills: true,
-        max_skills: 5,
+      // Send message directly to OpenRouter (client-side only)
+      // API key goes: Browser → OpenRouter (never touches our server)
+      // This is the recommended approach for hosted apps with user-owned keys
+      const conversationHistory = messages.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      }));
+
+      // Add current user message to history
+      conversationHistory.push({
+        role: 'user' as const,
+        content: messageText,
       });
+
+      const assistantResponse = await client.chatDirect(conversationHistory);
 
       // Add assistant response
       addMessage(sessionId, {
         role: 'assistant',
-        content: response.response || 'No response from assistant.',
-        traces: response.trace_id ? [parseInt(response.trace_id)] : undefined,
+        content: assistantResponse || 'No response from assistant.',
       });
     } catch (error) {
       console.error('Failed to send message:', error);

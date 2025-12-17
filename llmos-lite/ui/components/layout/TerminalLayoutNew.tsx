@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
+import dynamic from 'next/dynamic';
 import Header from './Header';
 import SidebarPanel from '../sidebar/SidebarPanel';
 import ChatPanel from '../chat/ChatPanel';
 import ContextPanel from '../context/ContextPanel';
+
+const FirstTimeGuide = dynamic(() => import('../onboarding/FirstTimeGuide'), { ssr: false });
 
 type MobileTab = 'sidebar' | 'chat' | 'context';
 
@@ -13,6 +16,20 @@ export default function TerminalLayoutNew() {
   const { activeSession, setActiveSession } = useSessionContext();
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [mobileTab, setMobileTab] = useState<MobileTab>('chat');
+  const [showGuide, setShowGuide] = useState(false);
+
+  useEffect(() => {
+    // Check if this is the first time the user is seeing the app
+    const hasSeenGuide = localStorage.getItem('llmos_has_seen_guide');
+    if (!hasSeenGuide) {
+      setShowGuide(true);
+    }
+  }, []);
+
+  const handleDismissGuide = () => {
+    localStorage.setItem('llmos_has_seen_guide', 'true');
+    setShowGuide(false);
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
@@ -177,6 +194,9 @@ export default function TerminalLayoutNew() {
           </button>
         </div>
       </nav>
+
+      {/* First-time user guide */}
+      {showGuide && <FirstTimeGuide onDismiss={handleDismissGuide} />}
     </div>
   );
 }
