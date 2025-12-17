@@ -6,6 +6,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+import json
+import os
+
+# Import Redis client
+try:
+    from lib.redis_client import get_redis
+    REDIS_ENABLED = os.getenv("REDIS_URL") is not None
+except ImportError:
+    REDIS_ENABLED = False
+    print("⚠️  Redis not available - using mock data")
 
 app = FastAPI()
 
@@ -37,13 +47,33 @@ class SessionCreateRequest(BaseModel):
 
 
 @app.get("/")
-async def list_sessions(volume: Optional[str] = None):
+async def list_sessions(volume: Optional[str] = None, volume_id: str = "default"):
     """
     List all sessions, optionally filtered by volume
 
-    TODO: Load from Vercel KV storage
-    For now, return mock data
+    Uses Redis when available, falls back to mock data.
     """
+    # Try Redis first
+    if REDIS_ENABLED:
+        try:
+            redis = get_redis()
+
+            # Get session IDs for this volume
+            key = f"{volume}:{volume_id}:sessions" if volume else "all:sessions"
+            session_ids = await redis.smembers(key)
+
+            # Load each session
+            sessions = []
+            for session_id in session_ids:
+                session_data = await redis.get(f"session:{session_id}")
+                if session_data:
+                    sessions.append(session_data)
+
+            return JSONResponse({"sessions": sessions})
+        except Exception as e:
+            print(f"⚠️  Redis error: {e}, falling back to mock data")
+
+    # Fallback: mock data
     mock_sessions = [
         {
             "id": "sess_quantum_research",
@@ -137,13 +167,13 @@ async def get_session(session_id: str):
 
 
 @app.post("/")
-async def create_session(session_req: SessionCreateRequest):
+async def create_session(session_req: SessionCreateRequest, volume_id: str = "default"):
     """
     Create a new session
 
-    TODO: Save to Vercel KV storage
+    Saves to Vercel KV when available.
     """
-    session_id = f"sess_{session_req.name.lower().replace(' ', '_')}"
+    session_id = f"sess_{session_req.name.lower().replace(' ', '_')}_{int(datetime.utcnow().timestamp())}"
     now = datetime.utcnow().isoformat() + "Z"
 
     messages = []
@@ -156,17 +186,39 @@ async def create_session(session_req: SessionCreateRequest):
             "artifacts": None
         })
 
-    return JSONResponse({
+    session_data = {
         "id": session_id,
         "name": session_req.name,
         "volume": session_req.volume,
+        "volume_id": volume_id,
         "status": "active",
         "messages": messages,
         "traces_count": 0,
         "created_at": now,
         "updated_at": now,
         "metadata": {}
-    }, status_code=201)
+    }
+
+    # Save to Redis if available
+    if REDIS_ENABLED:
+        try:
+            redis = get_redis()
+
+            # Save session data
+            await redis.set(f"session:{session_id}", session_data)
+
+            # Add to volume's session set
+            await redis.sadd(f"{session_req.volume}:{volume_id}:sessions", session_id)
+            await redis.sadd("all:sessions", session_id)
+
+            # Save messages list
+            if messages:
+                await redis.rpush(f"session:{session_id}:messages", *[json.dumps(m) for m in messages])
+
+        except Exception as e:
+            print(f"⚠️  Redis save error: {e}")
+
+    return JSONResponse(session_data, status_code=201)
 
 
 @app.post("/{session_id}/messages")
@@ -174,8 +226,25 @@ async def add_message(session_id: str, message: Message):
     """
     Add a message to a session
 
-    TODO: Update in Vercel KV storage
+    Saves to Redis when available.
     """
+    # Save to Redis if available
+    if REDIS_ENABLED:
+        try:
+            redis = get_redis()
+
+            # Add message to list
+            await redis.rpush(f"session:{session_id}:messages", json.dumps(message.dict()))
+
+            # Update session timestamp
+            session_data = await redis.get(f"session:{session_id}")
+            if session_data:
+                session_data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+                await redis.set(f"session:{session_id}", session_data)
+
+        except Exception as e:
+            print(f"⚠️  Redis message save error: {e}")
+
     return JSONResponse({
         "message": "Message added to session",
         "session_id": session_id

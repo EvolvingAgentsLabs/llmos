@@ -10,6 +10,13 @@ import json
 import httpx
 from datetime import datetime
 
+# Import storage clients
+try:
+    from lib.vercel_blob import get_blob
+    BLOB_ENABLED = os.getenv("BLOB_READ_WRITE_TOKEN") is not None
+except ImportError:
+    BLOB_ENABLED = False
+
 app = FastAPI()
 
 
@@ -103,10 +110,41 @@ async def chat_handler(request: Request):
         system_message = "You are a helpful AI assistant for LLMos-Lite."
 
         if chat_req.include_skills:
-            # TODO: Load relevant skills from Vercel Blob
-            # For now, use placeholder
-            skills_used = ["python-coding", "data-analysis"]
-            system_message += "\n\nAvailable skills:\n- Python Coding Best Practices\n- Data Analysis Workflows"
+            # Load relevant skills from Vercel Blob
+            skill_context = []
+
+            if BLOB_ENABLED:
+                try:
+                    blob = get_blob()
+
+                    # List skills from system volume
+                    prefix = f"volumes/system/system/skills/"
+                    blobs = await blob.list(prefix=prefix, limit=chat_req.max_skills)
+
+                    for blob_obj in blobs[:chat_req.max_skills]:
+                        if blob_obj.pathname.endswith('.md'):
+                            content = await blob.get(blob_obj.pathname)
+                            if content:
+                                skill_name = blob_obj.pathname.split('/')[-1].replace('.md', '')
+                                skills_used.append(skill_name)
+                                # Extract first 500 chars as context
+                                skill_context.append(f"**{skill_name}**:\n{content[:500]}")
+
+                    if skill_context:
+                        system_message += "\n\n## Available Skills\n\n" + "\n\n".join(skill_context)
+                    else:
+                        # Fallback if no skills loaded
+                        skills_used = ["python-coding", "data-analysis"]
+                        system_message += "\n\nAvailable skills:\n- Python Coding Best Practices\n- Data Analysis Workflows"
+
+                except Exception as e:
+                    print(f"⚠️  Blob skill loading error: {e}")
+                    skills_used = ["python-coding"]
+                    system_message += "\n\nAvailable skills:\n- Python Coding Best Practices"
+            else:
+                # Fallback when Blob not available
+                skills_used = ["python-coding", "data-analysis"]
+                system_message += "\n\nAvailable skills:\n- Python Coding Best Practices\n- Data Analysis Workflows"
 
         # Build messages for OpenRouter
         messages = [
