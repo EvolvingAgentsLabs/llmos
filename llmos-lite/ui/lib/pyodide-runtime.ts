@@ -46,15 +46,33 @@ class PyodideRuntime {
     }
   }
 
+  private async _loadPyodideScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js';
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load Pyodide script'));
+      document.head.appendChild(script);
+    });
+  }
+
   private async _loadPyodide(): Promise<void> {
     try {
       console.log('Loading Pyodide...');
 
-      // Dynamic import to avoid SSR issues
-      const { loadPyodide } = await import('pyodide');
+      // Load Pyodide from CDN using script tag approach
+      // This is more reliable than the npm package in Next.js
+      if (typeof window !== 'undefined' && !(window as any).loadPyodide) {
+        await this._loadPyodideScript();
+      }
+
+      const loadPyodide = (window as any).loadPyodide;
+      if (!loadPyodide) {
+        throw new Error('Failed to load Pyodide loader');
+      }
 
       this.pyodide = await loadPyodide({
-        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/',
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
       });
 
       // Set up stdout/stderr capture and matplotlib image capture
@@ -174,9 +192,15 @@ _setup_matplotlib_capture()
         throw new Error('Pyodide not initialized');
       }
 
-      // Auto-detect if matplotlib is needed
+      // Auto-detect packages needed based on code content
       const needsMatplotlib = code.includes('matplotlib') || code.includes('plt.');
       const needsNumpy = code.includes('numpy') || code.includes('np.');
+      const needsScipy = code.includes('scipy') || code.includes('from scipy');
+      const needsNetworkx = code.includes('networkx') || code.includes('nx.');
+
+      // Detect quantum computing code (we'll inject MicroQiskit for compatibility)
+      const isQuantumCode = code.includes('qiskit') || code.includes('QuantumCircuit') ||
+                            code.includes('from qiskit') || code.includes('import qiskit');
 
       const packagesToLoad = [...(options.packages || [])];
       if (needsMatplotlib && !packagesToLoad.includes('matplotlib')) {
@@ -184,6 +208,17 @@ _setup_matplotlib_capture()
       }
       if (needsNumpy && !packagesToLoad.includes('numpy')) {
         packagesToLoad.push('numpy');
+      }
+      if (needsScipy && !packagesToLoad.includes('scipy')) {
+        packagesToLoad.push('scipy');
+      }
+      if (needsNetworkx && !packagesToLoad.includes('networkx')) {
+        packagesToLoad.push('networkx');
+      }
+
+      // Auto-load matplotlib for quantum visualization
+      if (isQuantumCode && !packagesToLoad.includes('matplotlib')) {
+        packagesToLoad.push('matplotlib');
       }
 
       // Load additional packages
@@ -194,6 +229,11 @@ _setup_matplotlib_capture()
         if (packagesToLoad.includes('matplotlib')) {
           await this.pyodide.runPythonAsync('_setup_matplotlib_capture()');
         }
+      }
+
+      // Inject MicroQiskit for quantum computing code
+      if (isQuantumCode) {
+        await this._loadMicroQiskit();
       }
 
       // Set global variables
@@ -268,6 +308,71 @@ _setup_matplotlib_capture()
         setTimeout(() => reject(new Error('Execution timeout')), timeoutMs)
       ),
     ]);
+  }
+
+  private async _loadMicroQiskit(): Promise<void> {
+    if (!this.pyodide) return;
+
+    // Check if already loaded
+    try {
+      await this.pyodide.runPythonAsync('import qiskit');
+      return; // Already loaded
+    } catch {
+      // Not loaded, continue
+    }
+
+    // Fetch MicroQiskit code
+    const response = await fetch('/lib/microqiskit.py');
+    const microqiskitCode = await response.text();
+
+    // Create qiskit module structure
+    await this.pyodide.runPythonAsync(`
+import sys
+import types
+
+# Create qiskit module
+qiskit = types.ModuleType('qiskit')
+sys.modules['qiskit'] = qiskit
+
+# Create qiskit.circuit submodule
+qiskit_circuit = types.ModuleType('qiskit.circuit')
+sys.modules['qiskit.circuit'] = qiskit_circuit
+qiskit.circuit = qiskit_circuit
+
+# Create qiskit.circuit.library submodule
+qiskit_circuit_library = types.ModuleType('qiskit.circuit.library')
+sys.modules['qiskit.circuit.library'] = qiskit_circuit_library
+qiskit_circuit.library = qiskit_circuit_library
+
+# Create qiskit_aer module
+qiskit_aer = types.ModuleType('qiskit_aer')
+sys.modules['qiskit_aer'] = qiskit_aer
+    `);
+
+    // Load MicroQiskit implementation
+    await this.pyodide.runPythonAsync(microqiskitCode);
+
+    // Inject into qiskit namespace
+    await this.pyodide.runPythonAsync(`
+# Import from microqiskit module
+qiskit.QuantumCircuit = QuantumCircuit
+qiskit.QuantumRegister = type('QuantumRegister', (), {})
+qiskit.ClassicalRegister = type('ClassicalRegister', (), {})
+qiskit.execute = execute
+
+# Add to circuit submodule
+qiskit_circuit.QuantumCircuit = QuantumCircuit
+qiskit_circuit.QuantumRegister = type('QuantumRegister', (), {})
+qiskit_circuit.ClassicalRegister = type('ClassicalRegister', (), {})
+
+# Add QFT to library
+qiskit_circuit_library.QFT = QFT
+
+# Add Aer backend
+qiskit_aer.Aer = Aer
+
+print("✓ MicroQiskit loaded (lightweight quantum simulator for browser)")
+    `);
   }
 
   /**

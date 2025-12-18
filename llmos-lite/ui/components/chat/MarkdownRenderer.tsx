@@ -34,10 +34,25 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [showOutput, setShowOutput] = useState(false);
+  const [showCode, setShowCode] = useState(false); // Default: show visual output, hide code
+  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
+  const [validationResult, setValidationResult] = useState<any>(null);
 
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : '';
-  const codeString = String(children).replace(/\n$/, '');
+
+  // Fix: Properly extract text content from React children
+  const extractTextContent = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(extractTextContent).join('');
+    if (node && typeof node === 'object' && 'props' in node) {
+      return extractTextContent((node as any).props.children);
+    }
+    return '';
+  };
+
+  const codeString = extractTextContent(children).replace(/\n$/, '');
 
   // Check if this is an executable language
   const isExecutable = enableExecution && (language === 'python' || language === 'py');
@@ -47,10 +62,38 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
     setShowOutput(true);
 
     try {
+      // Validate code before execution
+      const { validateCode } = await import('@/lib/runtime-capabilities');
+      const validation = validateCode(codeString);
+      setValidationResult(validation);
+
+      if (!validation.valid) {
+        // Show validation errors without executing
+        setResult({
+          success: false,
+          error: `Code validation failed:\n\n${validation.errors.join('\n')}\n\n${
+            validation.suggestions.length > 0
+              ? `Suggestions:\n${validation.suggestions.join('\n')}`
+              : ''
+          }`,
+          executionTime: 0,
+        });
+        setIsExecuting(false);
+        return;
+      }
+
       // Dynamic import to avoid SSR/bundling issues
       const { executePython } = await import('@/lib/pyodide-runtime');
       const execResult = await executePython(codeString);
       setResult(execResult);
+
+      // Show warnings even on success
+      if (validation.warnings.length > 0 && execResult.success) {
+        const warningMessage = `Warnings:\n${validation.warnings.join('\n')}`;
+        execResult.stderr = execResult.stderr
+          ? `${execResult.stderr}\n\n${warningMessage}`
+          : warningMessage;
+      }
     } catch (error: any) {
       setResult({
         success: false,
@@ -62,17 +105,54 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
     }
   };
 
+  // Auto-execute Python code blocks on mount
+  useEffect(() => {
+    if (isExecutable && !hasAutoExecuted && !isExecuting) {
+      setHasAutoExecuted(true);
+      handleExecute();
+    }
+  }, [isExecutable, hasAutoExecuted, isExecuting]);
+
   if (inline) {
     return <code className={className}>{children}</code>;
   }
 
+  // Determine if we have visual output to show
+  const hasVisualOutput = result?.success && (result?.images?.length || 0) > 0;
+
   return (
     <div className="my-4 rounded-lg overflow-hidden border border-border-primary">
-      {/* Code header with language and run button */}
+      {/* Header with controls */}
       <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary border-b border-border-primary">
-        <span className="text-xs font-mono text-fg-tertiary uppercase">
-          {language || 'code'}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono text-fg-tertiary uppercase">
+            {language || 'code'}
+          </span>
+          {isExecutable && hasVisualOutput && (
+            <div className="flex items-center gap-1 bg-bg-tertiary rounded px-2 py-0.5">
+              <button
+                onClick={() => setShowCode(false)}
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                  !showCode
+                    ? 'bg-accent-primary text-white'
+                    : 'text-fg-tertiary hover:text-fg-primary'
+                }`}
+              >
+                Visual
+              </button>
+              <button
+                onClick={() => setShowCode(true)}
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                  showCode
+                    ? 'bg-accent-primary text-white'
+                    : 'text-fg-tertiary hover:text-fg-primary'
+                }`}
+              >
+                Code
+              </button>
+            </div>
+          )}
+        </div>
         {isExecutable && (
           <button
             onClick={handleExecute}
@@ -91,23 +171,50 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
             ) : (
               <>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Run Code
+                Re-run
               </>
             )}
           </button>
         )}
       </div>
 
-      {/* Code content */}
-      <pre className="!my-0 !bg-bg-primary overflow-x-auto">
-        <code className={className}>{children}</code>
-      </pre>
+      {/* Visual output or code based on toggle */}
+      {isExecutable && hasVisualOutput && !showCode ? (
+        // Show visual output by default
+        <div className="p-4 bg-bg-primary space-y-3">
+          {result.images && result.images.length > 0 && (
+            <div className="space-y-3">
+              {result.images.map((img, idx) => (
+                <div key={idx} className="bg-bg-secondary p-3 rounded-lg">
+                  <img
+                    src={`data:image/png;base64,${img}`}
+                    alt={`Output ${idx + 1}`}
+                    className="max-w-full h-auto rounded border border-border-primary mx-auto"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {isExecuting && (
+            <div className="flex items-center justify-center py-8 text-fg-tertiary">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm">Generating visualization...</span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Show code when toggled or no visual output
+        <pre className="!my-0 !bg-bg-primary overflow-x-auto">
+          <code className={className}>{children}</code>
+        </pre>
+      )}
 
-      {/* Output panel */}
-      {showOutput && result && (
+      {/* Additional output details (console, return values, errors) - shown when in visual mode or when explicitly showing output */}
+      {showOutput && result && !hasVisualOutput && (
         <div className="border-t border-border-primary bg-bg-tertiary">
           <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary border-b border-border-primary">
             <div className="flex items-center gap-2 text-xs">
@@ -140,24 +247,6 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
           <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
             {result.success ? (
               <>
-                {/* Captured images */}
-                {result.images && result.images.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-accent-info">Generated Images:</div>
-                    <div className="space-y-3">
-                      {result.images.map((img, idx) => (
-                        <div key={idx} className="bg-bg-primary p-3 rounded-lg">
-                          <img
-                            src={`data:image/png;base64,${img}`}
-                            alt={`Output ${idx + 1}`}
-                            className="max-w-full h-auto rounded border border-border-primary"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Return value */}
                 {result.output !== undefined && result.output !== null && (
                   <div className="space-y-1">
@@ -212,6 +301,43 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Show additional metadata in visual mode (console output, return values) */}
+      {hasVisualOutput && !showCode && result && (result.stdout || result.stderr || (result.output !== undefined && result.output !== null)) && (
+        <div className="border-t border-border-primary bg-bg-tertiary p-4 space-y-2">
+          {/* Return value */}
+          {result.output !== undefined && result.output !== null && (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-accent-info">Return Value:</div>
+              <pre className="text-xs text-fg-primary bg-bg-primary p-2 rounded overflow-auto">
+                {typeof result.output === 'object'
+                  ? JSON.stringify(result.output, null, 2)
+                  : String(result.output)}
+              </pre>
+            </div>
+          )}
+
+          {/* Console output */}
+          {result.stdout && (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-accent-info">Console Output:</div>
+              <pre className="text-xs text-fg-secondary bg-bg-primary p-2 rounded overflow-auto whitespace-pre-wrap">
+                {result.stdout}
+              </pre>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {result.stderr && (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-accent-warning">Warnings:</div>
+              <pre className="text-xs text-accent-warning bg-bg-primary p-2 rounded overflow-auto whitespace-pre-wrap">
+                {result.stderr}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>

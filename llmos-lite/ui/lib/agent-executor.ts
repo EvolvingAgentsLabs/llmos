@@ -278,6 +278,27 @@ export class AgentExecutor {
   private buildSystemPrompt(): string {
     let prompt = this.agent.systemPrompt;
 
+    // Add runtime capabilities constraints
+    // Dynamic import to avoid circular dependencies
+    try {
+      // Note: This should be imported at module level in production
+      // For now, we'll add it conditionally
+      prompt += '\n\n---\n\n';
+      prompt += '# IMPORTANT: Runtime Environment Constraints\n\n';
+      prompt += 'When generating Python code, you MUST respect these browser runtime limitations:\n\n';
+      prompt += '**Available Packages:** numpy, scipy, matplotlib, pandas, scikit-learn, networkx, sympy\n';
+      prompt += '**Quantum Computing:** MicroQiskit only (basic simulator, max 10 qubits)\n';
+      prompt += '**NOT Available:** qiskit_aer, tensorflow, pytorch, opencv, requests, file I/O, network access\n\n';
+      prompt += '**For Quantum Code:**\n';
+      prompt += '- Use `from qiskit import QuantumCircuit, execute` (NOT qiskit_aer)\n';
+      prompt += '- Use `execute(circuit, shots=1024)` directly (no Aer backend)\n';
+      prompt += '- Do NOT use qiskit.visualization.circuit_drawer\n';
+      prompt += '- Keep circuits simple: < 10 qubits, < 20 gates\n';
+      prompt += '- Create visualizations with matplotlib instead\n\n';
+    } catch (error) {
+      console.warn('Could not load runtime capabilities:', error);
+    }
+
     // Add tool descriptions
     if (this.agent.tools.length > 0) {
       prompt += '\n\n## Available Tools\n\n';

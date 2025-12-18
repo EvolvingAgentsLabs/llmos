@@ -33,6 +33,18 @@ const nextConfig = {
       callback();
     }];
 
+    // Handle Pyodide WebAssembly and data files
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'asset/resource',
+    });
+
+    // Allow importing .data files from Pyodide
+    config.module.rules.push({
+      test: /\.data$/,
+      type: 'asset/resource',
+    });
+
     return config;
   },
 };
