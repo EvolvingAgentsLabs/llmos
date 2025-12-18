@@ -383,34 +383,56 @@ graph TD
     B --> B2[lib/]
     B --> B3[app/]
 
-    B1 --> B1a[onboarding/<br/>Sample Prompts]
-    B1 --> B1b[settings/<br/>GitHub Connection]
-    B1 --> B1c[context/<br/>Commit Sessions]
-    B1 --> B1d[panel1-volumes/<br/>Cron Timers]
-    B1 --> B1e[chat/<br/>Main Interface]
-    B1 --> B1f[panel3-artifacts/<br/>Visualizations]
+    B1 --> B1a["onboarding/
+    Sample Prompts"]
+    B1 --> B1b["settings/
+    GitHub Connection"]
+    B1 --> B1c["context/
+    Commit Sessions"]
+    B1 --> B1d["panel1-volumes/
+    Cron Timers"]
+    B1 --> B1e["chat/
+    Main Interface"]
+    B1 --> B1f["panel3-artifacts/
+    Visualizations"]
 
-    B2 --> B2a[github-auth.ts<br/>OAuth]
-    B2 --> B2b[git-service.ts<br/>Git Ops]
-    B2 --> B2c[cron-analyzer.ts<br/>Pattern Detection]
-    B2 --> B2d[llm-client.ts<br/>LLM API]
+    B2 --> B2a["github-auth.ts
+    OAuth"]
+    B2 --> B2b["git-service.ts
+    Git Ops"]
+    B2 --> B2c["cron-analyzer.ts
+    Pattern Detection"]
+    B2 --> B2d["llm-client.ts
+    LLM API"]
 
-    B3 --> B3a[api/auth/github/<br/>OAuth Callback]
+    B3 --> B3a["api/auth/github/
+    OAuth Callback"]
 
-    C --> C1[skills.py<br/>FastAPI Endpoints]
-    C --> C2[sessions.py<br/>Session Management]
-    C --> C3[chat.py<br/>Chat Proxy]
+    C --> C1["skills.py
+    FastAPI Endpoints"]
+    C --> C2["sessions.py
+    Session Management"]
+    C --> C3["chat.py
+    Chat Proxy"]
 
-    D --> D1[volumes.py<br/>Git Storage]
-    D --> D2[skills.py<br/>Skills Loader]
-    D --> D3[evolution.py<br/>Pattern Detection]
+    D --> D1["volumes.py
+    Git Storage"]
+    D --> D2["skills.py
+    Skills Loader"]
+    D --> D3["evolution.py
+    Pattern Detection"]
 
-    E --> E1[system/skills/<br/>Global Skills]
-    E --> E2[teams/{id}/skills/<br/>Team Skills]
-    E --> E3[users/{id}/<br/>User Data]
+    E --> E1["system/skills/
+    Global Skills"]
+    E --> E2["teams/ID/skills/
+    Team Skills"]
+    E --> E3["users/ID/
+    User Data"]
 
-    E3 --> E3a[sessions/<br/>Session JSON]
-    E3 --> E3b[skills/<br/>Auto-Generated]
+    E3 --> E3a["sessions/
+    Session JSON"]
+    E3 --> E3b["skills/
+    Auto-Generated"]
 
     style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
     style B fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
