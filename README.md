@@ -1,8 +1,10 @@
 # LLMos-Lite
 
-> **A Self-Improving AI Workbench with GitHub-Backed Context Memory**
+> **The Operating System for Professional Knowledge Work**
 
-LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable skills - automatically.
+LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable methodologies - automatically.
+
+**Works across industries**: Legal • Financial Services • Management Consulting • Biology Research • Robotics • Audit & Assurance • Software Development
 
 ## Table of Contents
 
@@ -48,6 +50,54 @@ You → Chat → Generate artifacts → Commit to workspace
 - **Team learning**: Share team skills and patterns
 - **Version control**: Full history of your AI's evolution
 - **Collaboration**: Team crons learn from collective work
+
+---
+
+## Multi-Domain Knowledge Platform
+
+**LLMos-Lite adapts to your industry**, not the other way around.
+
+### How It Works Across Domains
+
+The core insight: **Artifacts are not just deliverables—they're living memory of how to create them.**
+
+Whether you're drafting legal contracts, analyzing financial models, or developing campaign strategies, the system:
+1. **Learns your patterns** (contract clauses, valuation methods, messaging frameworks)
+2. **Auto-generates playbooks** (reusable workflows specific to your domain)
+3. **Evolves with your team** (collective intelligence that compounds over time)
+
+### Industry Applications
+
+| Industry | Workspace | Playbooks | AI Specialists | Example Use Case |
+|----------|-----------|-----------|----------------|------------------|
+| **Legal** | Matters | Legal Procedures | Legal Assistants | "Analyze M&A contract for red flags, generate term sheet" |
+| **Financial** | Portfolios | Investment Strategies | Analysts | "DCF valuation for tech startup, sensitivity analysis" |
+| **Consulting** | Engagements | Frameworks | Consultants | "Market sizing for SaaS product, competitive landscape" |
+| **Biology** | Experiments | Research Protocols | Research Assistants | "CRISPR gene editing protocol, protein structure prediction" |
+| **Robotics** | Projects | Control Strategies | Simulation Agents | "Path planning for autonomous drone, PID tuning" |
+| **Audit** | Audits | Audit Procedures | Auditors | "Inventory testing, control deficiency documentation" |
+| **Development** | Volumes | Skills | Agents | "Build quantum circuit simulator, optimize algorithm" |
+
+### What Changes Per Industry
+
+**UI & Language**
+- Professional themes (not just terminal green)
+- Domain-specific terminology (e.g., "Matter" for legal, "Portfolio" for finance)
+- Industry-appropriate sample prompts
+
+**Templates & Workflows**
+- Pre-loaded methodologies from your field
+- Industry-standard frameworks
+- Firm-specific best practices
+
+**AI Specialists**
+- Legal assistants for contract review
+- Financial analysts for valuation
+- Research assistants for experiment design
+- Simulation agents for robotics control
+- Audit specialists for compliance testing
+
+**See**: [DOMAIN_ANALYSIS.md](./DOMAIN_ANALYSIS.md) for detailed requirements by industry.
 
 ---
 
@@ -383,34 +433,56 @@ graph TD
     B --> B2[lib/]
     B --> B3[app/]
 
-    B1 --> B1a[onboarding/<br/>Sample Prompts]
-    B1 --> B1b[settings/<br/>GitHub Connection]
-    B1 --> B1c[context/<br/>Commit Sessions]
-    B1 --> B1d[panel1-volumes/<br/>Cron Timers]
-    B1 --> B1e[chat/<br/>Main Interface]
-    B1 --> B1f[panel3-artifacts/<br/>Visualizations]
+    B1 --> B1a["onboarding/
+    Sample Prompts"]
+    B1 --> B1b["settings/
+    GitHub Connection"]
+    B1 --> B1c["context/
+    Commit Sessions"]
+    B1 --> B1d["panel1-volumes/
+    Cron Timers"]
+    B1 --> B1e["chat/
+    Main Interface"]
+    B1 --> B1f["panel3-artifacts/
+    Visualizations"]
 
-    B2 --> B2a[github-auth.ts<br/>OAuth]
-    B2 --> B2b[git-service.ts<br/>Git Ops]
-    B2 --> B2c[cron-analyzer.ts<br/>Pattern Detection]
-    B2 --> B2d[llm-client.ts<br/>LLM API]
+    B2 --> B2a["github-auth.ts
+    OAuth"]
+    B2 --> B2b["git-service.ts
+    Git Ops"]
+    B2 --> B2c["cron-analyzer.ts
+    Pattern Detection"]
+    B2 --> B2d["llm-client.ts
+    LLM API"]
 
-    B3 --> B3a[api/auth/github/<br/>OAuth Callback]
+    B3 --> B3a["api/auth/github/
+    OAuth Callback"]
 
-    C --> C1[skills.py<br/>FastAPI Endpoints]
-    C --> C2[sessions.py<br/>Session Management]
-    C --> C3[chat.py<br/>Chat Proxy]
+    C --> C1["skills.py
+    FastAPI Endpoints"]
+    C --> C2["sessions.py
+    Session Management"]
+    C --> C3["chat.py
+    Chat Proxy"]
 
-    D --> D1[volumes.py<br/>Git Storage]
-    D --> D2[skills.py<br/>Skills Loader]
-    D --> D3[evolution.py<br/>Pattern Detection]
+    D --> D1["volumes.py
+    Git Storage"]
+    D --> D2["skills.py
+    Skills Loader"]
+    D --> D3["evolution.py
+    Pattern Detection"]
 
-    E --> E1[system/skills/<br/>Global Skills]
-    E --> E2[teams/{id}/skills/<br/>Team Skills]
-    E --> E3[users/{id}/<br/>User Data]
+    E --> E1["system/skills/
+    Global Skills"]
+    E --> E2["teams/ID/skills/
+    Team Skills"]
+    E --> E3["users/ID/
+    User Data"]
 
-    E3 --> E3a[sessions/<br/>Session JSON]
-    E3 --> E3b[skills/<br/>Auto-Generated]
+    E3 --> E3a["sessions/
+    Session JSON"]
+    E3 --> E3b["skills/
+    Auto-Generated"]
 
     style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
     style B fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
@@ -723,11 +795,16 @@ We cannot see:
 - [x] **Multi-agent collaboration** - Agents can delegate tasks to other agents
 - [x] **Workflow parsing** - Parse skill workflows from markdown (tools, agents, LLM calls, conditionals, loops)
 
-### 🔄 In Progress (v0.3)
+### 🔄 In Progress (v0.3 - Domain Adaptation)
 
-- [ ] React Flow workflow canvas
-- [ ] Drag-and-drop node editor
-- [ ] Package preloading optimization (Next.js SSR compatibility)
+- [x] **Multi-domain analysis** - Requirements for legal, financial, consulting, political, audit domains
+- [x] **Theme system** - Configurable themes (Terminal, Professional, Financial, Campaign)
+- [x] **Terminology system** - Domain-specific language (Matters, Portfolios, Engagements, etc.)
+- [x] **Industry onboarding** - Select industry, auto-configure theme and terminology
+- [ ] Integrate industry selection into onboarding flow
+- [ ] Professional theme CSS implementation
+- [ ] Domain-specific sample prompts
+- [ ] Industry template library
 
 ### 📋 Planned (v0.4)
 
