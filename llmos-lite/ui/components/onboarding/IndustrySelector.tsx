@@ -14,25 +14,42 @@ interface IndustrySelectorProps {
 }
 
 const industries: Industry[] = [
-  'developer',
-  'legal',
-  'financial',
-  'consulting',
-  'biology',
+  'developer', // For quantum computing
   'robotics',
-  'audit',
-  'general',
+  'biology', // Will be repurposed for 3D animation
 ];
 
 const industryIcons: Record<Industry, string> = {
-  developer: '💻',
+  developer: '⚛️', // Quantum computing
   legal: '⚖️',
   financial: '📊',
   consulting: '📈',
-  biology: '🧬',
+  biology: '🎬', // 3D animation
   robotics: '🤖',
   audit: '🔍',
   general: '📋',
+};
+
+const industryLabels: Record<Industry, string> = {
+  developer: 'Quantum Computing',
+  legal: 'Legal',
+  financial: 'Financial',
+  consulting: 'Consulting',
+  biology: '3D Animation',
+  robotics: 'Robotic Simulation',
+  audit: 'Audit',
+  general: 'General',
+};
+
+const industryDetails: Record<Industry, string> = {
+  developer: 'Build and simulate quantum circuits, explore quantum algorithms and visualize quantum states',
+  legal: 'Legal research and documentation',
+  financial: 'Financial analysis and reporting',
+  consulting: 'Business consulting and strategy',
+  biology: 'Create stunning 3D animations, model complex scenes, and render interactive experiences in the browser',
+  robotics: 'Simulate robots, plan movements, and visualize 3D trajectories in real-time',
+  audit: 'Audit and compliance workflows',
+  general: 'General purpose workflows',
 };
 
 /**
@@ -75,14 +92,14 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
           Welcome to LLMos-Lite
         </h1>
         <p className="text-lg text-terminal-fg-secondary mb-2">
-          Select your industry to customize your experience
+          Choose your domain
         </p>
         <p className="text-sm text-terminal-fg-tertiary">
-          We'll adapt the interface, terminology, and templates to match your workflow
+          Create amazing visualizations and simulations powered by AI
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-4xl mx-auto">
         {industries.map((industry, index) => (
           <button
             key={industry}
@@ -104,10 +121,10 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
               <span className="text-3xl">{industryIcons[industry]}</span>
               <div className="flex-1">
                 <h3 className="text-lg font-medium text-terminal-fg-primary mb-1">
-                  {industryNames[industry]}
+                  {industryLabels[industry]}
                 </h3>
                 <p className="text-sm text-terminal-fg-secondary">
-                  {industryDescriptions[industry]}
+                  {industryDetails[industry]}
                 </p>
               </div>
             </div>
@@ -125,31 +142,31 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
       {selected && (
         <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-6 mb-6">
           <h3 className="text-lg font-medium text-terminal-fg-primary mb-3">
-            What you'll get for {industryNames[selected]}:
+            What you'll get for {industryLabels[selected]}:
           </h3>
           <ul className="space-y-2 text-terminal-fg-secondary">
             <li className="flex items-start gap-2">
               <span className="text-terminal-accent-green mt-1">✓</span>
               <span>
-                <strong>Customized UI:</strong> Professional theme optimized for your industry
+                <strong>Interactive Visualizations:</strong> Real-time rendering in the browser
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-terminal-accent-green mt-1">✓</span>
               <span>
-                <strong>Industry Terminology:</strong> {getIndustryTermExample(selected)}
+                <strong>Advanced Simulations:</strong> {getIndustryCapability(selected)}
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-terminal-accent-green mt-1">✓</span>
               <span>
-                <strong>Sample Templates:</strong> Industry-specific workflows and methodologies
+                <strong>Planning & Analysis:</strong> Step-by-step execution with 3D feedback
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-terminal-accent-green mt-1">✓</span>
               <span>
-                <strong>AI Specialists:</strong> Pre-configured assistants for your domain
+                <strong>AI Assistants:</strong> Specialized agents for your domain
               </span>
             </li>
           </ul>
@@ -175,7 +192,7 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
 
       <div className="mt-8 text-center">
         <p className="text-xs text-terminal-fg-tertiary">
-          You can change your industry selection anytime in Settings
+          You can change your domain selection anytime in Settings
         </p>
       </div>
     </div>
@@ -183,19 +200,19 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
 }
 
 /**
- * Get example of industry-specific terminology
+ * Get industry-specific capability description
  */
-function getIndustryTermExample(industry: Industry): string {
-  const examples: Record<Industry, string> = {
-    developer: 'Volumes, Skills, Agents, Tools',
-    legal: 'Matters, Procedures, Legal Assistants, Research Tools',
-    financial: 'Portfolios, Methodologies, Analysts, Analytical Tools',
-    consulting: 'Engagements, Frameworks, Consultants, Analysis Tools',
-    biology: 'Experiments, Research Methods, Research Assistants, Analysis Tools',
-    robotics: 'Projects, Control Strategies, Simulation Agents, Simulation Tools',
-    audit: 'Audits, Procedures, Auditors, Test Tools',
-    general: 'Workspaces, Playbooks, Assistants, Tools',
+function getIndustryCapability(industry: Industry): string {
+  const capabilities: Record<Industry, string> = {
+    developer: 'Quantum circuit simulation with state vector visualization',
+    legal: 'Legal research and case analysis',
+    financial: 'Financial modeling and forecasting',
+    consulting: 'Strategic framework development',
+    biology: '3D scene composition with physics and lighting',
+    robotics: 'Robot kinematics, path planning, and collision detection',
+    audit: 'Compliance testing and verification',
+    general: 'General purpose automation',
   };
 
-  return examples[industry];
+  return capabilities[industry];
 }
