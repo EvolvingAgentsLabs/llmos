@@ -4,6 +4,7 @@ import { useState } from 'react';
 import ThreeRenderer, { ThreeScene } from './ThreeRenderer';
 import CircuitRenderer, { QuantumCircuit } from './CircuitRenderer';
 import PlotRenderer, { PlotData } from './PlotRenderer';
+import CodeExecutor from './CodeExecutor';
 
 export type ViewMode = 'graphical' | 'code' | 'split';
 
@@ -11,7 +12,7 @@ export type ArtifactData =
   | { type: '3d-scene'; data: ThreeScene }
   | { type: 'quantum-circuit'; data: QuantumCircuit }
   | { type: 'plot'; data: PlotData }
-  | { type: 'code'; data: { language: string; code: string; title?: string } };
+  | { type: 'code'; data: { language: string; code: string; title?: string; executable?: boolean } };
 
 interface ArtifactViewerProps {
   artifact: ArtifactData;
@@ -74,8 +75,34 @@ export default function ArtifactViewer({
     }
   };
 
+  const getLanguage = (): string => {
+    if (artifact.type === 'code') {
+      return artifact.data.language;
+    }
+    // Quantum circuits and plots use Python
+    if (artifact.type === 'quantum-circuit' || artifact.type === 'plot') {
+      return 'python';
+    }
+    // 3D scenes use JavaScript
+    if (artifact.type === '3d-scene') {
+      return 'javascript';
+    }
+    return 'javascript';
+  };
+
+  const canExecute = (): boolean => {
+    // Code artifacts can opt-in to execution
+    if (artifact.type === 'code') {
+      return artifact.data.executable !== false;
+    }
+    // Generated code is always executable
+    return artifact.type === 'quantum-circuit' || artifact.type === 'plot';
+  };
+
   const code = getCodeRepresentation();
   const title = getTitle();
+  const language = getLanguage();
+  const isExecutable = canExecute();
 
   return (
     <div className="h-full flex flex-col bg-terminal-bg-secondary border border-terminal-border rounded overflow-hidden">
@@ -130,25 +157,35 @@ export default function ArtifactViewer({
         )}
 
         {viewMode === 'code' && (
-          <div className="h-full overflow-auto">
-            <pre className="code-block text-xs p-4 h-full">
-              <code className="text-terminal-accent-blue">{code}</code>
-            </pre>
-          </div>
-        )}
-
-        {viewMode === 'split' && (
-          <div className="h-full flex flex-col md:flex-row">
-            {/* Graphical view */}
-            <div className="flex-1 border-b md:border-b-0 md:border-r border-terminal-border p-4 overflow-auto">
-              {renderGraphical()}
-            </div>
-            {/* Code view */}
+          <div className="h-full flex flex-col">
             <div className="flex-1 overflow-auto">
               <pre className="code-block text-xs p-4 h-full">
                 <code className="text-terminal-accent-blue">{code}</code>
               </pre>
             </div>
+            {isExecutable && (
+              <CodeExecutor code={code} language={language as 'python' | 'javascript'} />
+            )}
+          </div>
+        )}
+
+        {viewMode === 'split' && (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              {/* Graphical view */}
+              <div className="flex-1 border-b md:border-b-0 md:border-r border-terminal-border p-4 overflow-auto">
+                {renderGraphical()}
+              </div>
+              {/* Code view */}
+              <div className="flex-1 overflow-auto">
+                <pre className="code-block text-xs p-4 h-full">
+                  <code className="text-terminal-accent-blue">{code}</code>
+                </pre>
+              </div>
+            </div>
+            {isExecutable && (
+              <CodeExecutor code={code} language={language as 'python' | 'javascript'} />
+            )}
           </div>
         )}
       </div>

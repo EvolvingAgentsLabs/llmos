@@ -170,12 +170,15 @@ No more copy-paste. Click **"Try Now"** to send quantum/3D prompts directly to c
 - **Auto-generates skills** from recurring patterns (>85% confidence)
 - **Live countdown timers** show next evolution cycle
 
-### 4. Interactive Artifacts
+### 4. Interactive Artifacts with WebAssembly Execution
 
-- **Quantum Circuits**: Qiskit visualizations
-- **3D Graphics**: Three.js renders
-- **Data Plots**: Convergence graphs
-- **Code Execution**: Python/JS in browser (WebAssembly)
+- **Quantum Circuits**: Qiskit code generation, visualization, and execution
+- **3D Graphics**: Three.js interactive renders with executable code
+- **Data Plots**: Matplotlib/Plotly visualizations with execution
+- **Dual View Mode**: See both graphical output and generated code
+- **Run Button**: Execute Python/JavaScript code directly in browser
+- **Safe Execution**: Pyodide WebAssembly sandbox (no server needed)
+- **Output Capture**: See stdout, stderr, results, and errors
 
 ### 5. Multi-Volume Workspace Architecture
 
@@ -198,10 +201,15 @@ graph TD
 
 **Each volume is a GitHub repository containing:**
 - **Skills** (`skills/`) - Markdown documents with reusable workflows
-- **Agents** (`agents/`) - Sub-agent definitions and configurations
-- **Tools** (`tools/`) - Custom tool implementations
+- **Agents** (`agents/`) - Sub-agent definitions that run client-side with LLM access
+- **Tools** (`tools/`) - Python/JavaScript tools that execute in browser via WebAssembly
 - **Traces** (`traces/`) - Decision history, prompts, context, agent communication
 - **Sessions** (`sessions/`) - Chat sessions with artifacts
+
+**Tools and Agents execute client-side:**
+- Tools: Python/JS code in markdown → Pyodide WebAssembly execution
+- Agents: Can call LLMs and use tools autonomously
+- Everything runs in your browser, nothing on our servers
 
 ---
 
@@ -287,6 +295,78 @@ volumes/
 - **Skill Generation**: "Generate reusable skill from pattern"
 - **Team Learning**: "3 team members using similar workflow → promote to team skill"
 - **System Evolution**: "Highly-used team skill → promote to system volume"
+
+### Tools and Agents Execute in Browser
+
+**Define a tool** (in `volumes/user-{username}/tools/calculator.md`):
+```markdown
+---
+name: Calculator
+description: Evaluate mathematical expressions
+language: python
+inputs:
+  - name: expression
+    type: string
+    required: true
+outputs:
+  - name: result
+    type: number
+---
+
+## Code
+
+\`\`\`python
+def main(expression):
+    """Safely evaluate math expression"""
+    import ast
+    import operator
+
+    # Safe operators only
+    ops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+    }
+
+    # Parse and evaluate
+    tree = ast.parse(expression, mode='eval')
+    # ... safety checks ...
+    return result
+\`\`\`
+```
+
+**Define an agent** (in `volumes/user-{username}/agents/researcher.md`):
+```markdown
+---
+name: Research Agent
+description: Autonomous researcher with web search and analysis
+model: anthropic/claude-sonnet-4.5
+tools:
+  - web-search
+  - data-analyzer
+  - report-generator
+maxIterations: 10
+---
+
+## System Prompt
+
+You are an expert research assistant. Use the available tools to:
+1. Search for information
+2. Analyze data
+3. Generate comprehensive reports
+
+When you need data, use \`\`\`tool blocks to call tools.
+```
+
+**Agent execution flow:**
+1. User: "Research quantum computing trends"
+2. Agent calls `web-search` tool → Gets articles
+3. Agent calls `data-analyzer` tool → Extracts insights
+4. Agent calls `report-generator` tool → Creates markdown report
+5. Returns final report to user
+
+All execution happens in your browser via WebAssembly!
 
 ---
 
@@ -591,12 +671,31 @@ npm run build
 - Access tokens stored in localStorage (client-side only)
 - Private repos by default
 
-### Execution Safety
+### Zero-Trust Data Architecture
 
-- Python/JS code runs in browser via WebAssembly (Pyodide)
-- Sandboxed execution environment
-- No server-side code execution
-- Resource limits enforced
+**Your data never touches our servers:**
+- **OpenRouter API calls**: Browser → OpenRouter (direct)
+- **GitHub operations**: Browser → GitHub (direct)
+- **Session storage**: Browser localStorage only
+- **Workspace volumes**: Your GitHub repos only
+- **Code execution**: Browser WebAssembly only
+
+We cannot see:
+- Your OpenRouter API key
+- Your chat sessions
+- Your workspace artifacts
+- Your GitHub data
+- Your tool/agent execution
+
+### WebAssembly Execution Safety
+
+**All code runs in your browser:**
+- **Python**: Pyodide (Python 3.11 in WebAssembly)
+- **JavaScript**: Sandboxed execution context
+- **No file system access**: Cannot read/write files
+- **No network access**: Except explicit fetch() calls
+- **Resource limits**: 30-second timeout, memory limits
+- **Output capture**: Separate stdout/stderr streams
 
 ---
 
@@ -611,19 +710,25 @@ npm run build
 - [x] AI pattern detection
 - [x] Auto skill generation
 - [x] Multi-volume architecture
+- [x] **WebAssembly code execution** - Python via Pyodide, JavaScript sandboxed
+- [x] **Artifact execution** - Run generated quantum/3D/plot code in browser
+- [x] **Tool execution system** - Parse and execute tools from markdown
+- [x] **Agent execution engine** - Sub-agents with LLM + tool access
 
 ### 🔄 In Progress (v0.2)
 
+- [ ] Load tools/agents from GitHub volumes automatically
+- [ ] Agent communication protocol
 - [ ] React Flow workflow canvas
 - [ ] Drag-and-drop node editor
-- [ ] Real-time collaboration
-- [ ] Mobile PWA
+- [ ] Skill execution (skills that use tools/agents)
 
 ### 📋 Planned (v0.3)
 
+- [ ] Real-time collaboration
+- [ ] Mobile PWA
 - [ ] Vector DB for semantic skill search
 - [ ] Skill marketplace
-- [ ] Multi-LLM support (GPT-4, Gemini)
 - [ ] Webhook integration for GitHub
 - [ ] Advanced analytics dashboard
 
