@@ -1,543 +1,584 @@
-# llmos-lite: Browser-Native Computational Workbench
+# LLMos-Lite
 
-> Build, execute, and share computational workflows entirely in your browser
+> **A Self-Improving AI Workbench with GitHub-Backed Context Memory**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/EvolvingAgentsLabs/llmos/releases)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-yellow.svg)](https://python.org)
-[![React](https://img.shields.io/badge/react-18+-61dafb.svg)](https://reactjs.org)
+LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable skills - automatically.
 
----
+## Table of Contents
 
-## 🚀 What is llmos-lite?
-
-**llmos-lite** is a modern web application for building and executing computational workflows directly in the browser. No servers required for execution—everything runs client-side via WebAssembly.
-
-### Core Concepts
-
-1. **Skills** - Reusable computational units stored as Markdown files
-2. **Workflows** - Visual DAGs built with drag-and-drop React Flow interface
-3. **Browser Execution** - WebAssembly runtimes (Pyodide, Three.js, SPICE)
-4. **Production Storage** - Vercel Blob + Redis for persistence
-5. **LLM Integration** - Chat interface with skill-aware context
-
-### Key Features
-
-- ⚡ **Zero-latency execution** - Skills run instantly via WebAssembly
-- 🎨 **Rich previews** - 3D graphics, charts, quantum circuits
-- 🔒 **Sandboxed & safe** - Code executes in browser, not servers
-- 💰 **Zero server costs** - Computation on user devices
-- 📦 **Production-ready** - Redis + Blob storage with graceful fallbacks
-- 🤖 **LLM-powered** - Chat via OpenRouter (100+ models, free tier available)
+- [What Makes This Different](#what-makes-this-different)
+- [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Key Features](#key-features)
+- [How It Works](#how-it-works)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
+- [Developer Guide](#developer-guide)
+- [Quick Reference](#quick-reference)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## Quick Start
+## What Makes This Different
 
-### 1. Installation
+Traditional Git commits are for humans. **LLMos-Lite commits are for AI.**
+
+```
+session: Quantum Circuit Design
+
+Prompt: Create a Bell state circuit with 2 qubits...
+
+Stats:
+- 8 messages
+- 3 artifacts generated
+- 5 traces executed
+
+🤖 LLMunix Context Memory
+```
+
+**Your AI analyzes these commits → Detects patterns → Generates skills → You get smarter workflows**
+
+---
+
+## Quick Start (5 Minutes)
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- GitHub account (optional, for persistence)
+
+### Setup
 
 ```bash
-# Clone repository
-git clone https://github.com/EvolvingAgentsLabs/llmos.git
-cd llmos
-
-# Install Python dependencies (API)
-pip install -r requirements.txt
-
-# Install Node.js dependencies (UI)
+# 1. Navigate to the UI directory
 cd llmos-lite/ui
+
+# 2. Install dependencies
 npm install
+
+# 3. Configure environment
+cp .env.local.example .env.local
 ```
 
-### 2. Environment Setup
+### Get Your API Keys
 
-Create a `.env` file in the root directory:
+#### Required: Anthropic API Key
+
+Add your key during onboarding in the UI, or set it as an environment variable:
 
 ```bash
-# Required: OpenRouter API key for LLM chat
-# Get your free API key from: https://openrouter.ai/keys
-OPENROUTER_API_KEY=sk-or-v1-xxx...
-
-# Optional: Vercel Blob storage (for skills/files)
-# BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxx...
-
-# Optional: Redis storage (for sessions/messages)
-# REDIS_URL=redis://default:password@host:port
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Note:**
-- `.env` is gitignored and will never be committed
-- OpenRouter gives you access to 100+ models including Claude, GPT-4, and free models
-- Get your free API key at https://openrouter.ai/keys
-- Browse all free models: https://openrouter.ai/models/?q=free
+#### Optional: GitHub OAuth (for persistence)
 
-**💡 Recommended Models:**
+1. **Create OAuth App** at [GitHub Developer Settings](https://github.com/settings/developers)
+   - **Application name**: `LLMos-Lite Dev`
+   - **Homepage URL**: `http://localhost:3000`
+   - **Authorization callback URL**: `http://localhost:3000/api/auth/github/callback`
 
-**Free Models:**
-- `tng/deepseek-r1t2-chimera:free` - DeepSeek R1T2 Chimera (reasoning model)
+2. **Add credentials to `.env.local`**:
+   ```env
+   GITHUB_CLIENT_ID=your_github_client_id
+   GITHUB_CLIENT_SECRET=your_github_client_secret
+   NEXT_PUBLIC_GITHUB_CLIENT_ID=your_github_client_id
+   NEXTAUTH_SECRET=$(openssl rand -base64 32)
+   NEXTAUTH_URL=http://localhost:3000
+   ```
 
-**Premium Models (Paid):**
-- `anthropic/claude-opus-4.5` - Claude Opus 4.5 (best quality)
-- `openai/gpt-5.2` - GPT-5.2 (latest from OpenAI)
-
-[View all free models →](https://openrouter.ai/models/?q=free)
-
-### 3. Run the App
+### Run
 
 ```bash
-# Terminal 1: Start FastAPI backend
-cd llmos-lite
-python api/main.py
-# → http://localhost:8000
-
-# Terminal 2: Start Next.js frontend
-cd llmos-lite/ui
 npm run dev
-# → http://localhost:3000
 ```
 
-### 4. Test the API
+Open [http://localhost:3000](http://localhost:3000)
 
-```bash
-# Chat with computational skills
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $OPENROUTER_API_KEY" \
-  -d '{
-    "user_id": "alice",
-    "team_id": "engineering",
-    "message": "Create a quantum VQE circuit",
-    "include_skills": true,
-    "model": "anthropic/claude-3.5-sonnet"
-  }'
+### Try It Out
 
-# Create a session
-curl -X POST "http://localhost:8000/api/sessions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Quantum Research",
-    "volume": "user",
-    "initial_message": "Hello!"
-  }'
-```
+1. Complete onboarding (add Anthropic API key)
+2. **Click "Try Now"** on quantum/3D sample prompts
+3. Chat with AI, create sessions
+4. **Connect GitHub** (right sidebar → GITHUB section)
+5. **Commit Session** (right sidebar → ACTIONS)
+6. **Run Evolution Cron** (left sidebar → CRONS → "Run Now")
 
 ---
 
-## Storage Setup
+## Key Features
 
-### Local Development (Mock Data)
+### 1. Clickable Sample Prompts
 
-By default, llmos-lite works with mock data. No storage setup required for testing!
+No more copy-paste. Click **"Try Now"** to send quantum/3D prompts directly to chat.
 
-### Production Storage (Vercel)
+### 2. GitHub Integration (Optional)
 
-For production deployments:
+- **Real Git Commits**: Sessions → GitHub repos
+- **Cross-Device Sync**: Access anywhere
+- **Team Collaboration**: Shared team volumes
+- **Context Memory**: Commits embed prompts for AI analysis
 
-#### Vercel Blob (Skills & Files)
+### 3. Intelligent Cron Analysis
 
-1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
-2. Select project → **Storage** → **Create Database** → **Blob**
-3. Name: `llmos-files`
-4. Copy `BLOB_READ_WRITE_TOKEN`
-5. Add to `.env` and Vercel environment variables
+- Analyzes your commit history
+- Detects recurring patterns (e.g., "quantum circuits" × 5 times)
+- **Auto-generates skills** from patterns
+- Live countdown timers show next execution
 
-#### Redis (Sessions & Messages)
+### 4. Interactive Artifacts
 
-1. Vercel dashboard → **Storage** → **Create Database** → **Redis**
-2. Copy `REDIS_URL`
-3. Add to `.env` and Vercel environment variables
+- **Quantum Circuits**: Qiskit visualizations
+- **3D Graphics**: Three.js renders
+- **Data Plots**: Convergence graphs
+- **Code Execution**: Python/JS in browser (WebAssembly)
 
-#### Deploy
-
-```bash
-npm install -g vercel
-vercel --prod
-# Your app is live! 🎉
-```
-
----
-
-## Architecture
-
-### System Overview
-
-```mermaid
-graph TB
-    subgraph Browser["🌐 PRESENTATION LAYER (Browser)"]
-        ReactFlow["⚡ React Flow<br/>Canvas"]
-        Chat["💬 Chat Interface<br/>(Skill Context)"]
-    end
-
-    subgraph Execution["⚙️ EXECUTION LAYER"]
-        Executor["🔧 Workflow Executor<br/>(TypeScript/Wasm)"]
-        SkillMgr["📚 Skills Manager<br/>(Load/Filter)"]
-    end
-
-    subgraph API["🔌 INTERFACE LAYER (FastAPI)"]
-        Sessions["📝 /api/sessions<br/>(persistence)"]
-        Skills["🎯 /api/skills<br/>(storage)"]
-        ChatAPI["🤖 /chat<br/>(LLM + context)"]
-    end
-
-    subgraph Storage["💾 STORAGE LAYER"]
-        Redis["🔴 Redis<br/>Sessions + Messages"]
-        Blob["📦 Vercel Blob<br/>Skills + Files"]
-        Git["📂 Git<br/>(future)"]
-    end
-
-    ReactFlow --> Executor
-    Chat --> SkillMgr
-    Executor --> Sessions
-    Executor --> Skills
-    SkillMgr --> ChatAPI
-    Sessions --> Redis
-    Skills --> Blob
-    ChatAPI --> Blob
-
-    style Browser fill:#1a1a2e,stroke:#00ff00,stroke-width:2px,color:#00ff00
-    style Execution fill:#16213e,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
-    style API fill:#0f3460,stroke:#ff8800,stroke-width:2px,color:#ff8800
-    style Storage fill:#1a1a1a,stroke:#ff0080,stroke-width:2px,color:#ff0080
-
-    style ReactFlow fill:#2d4a3e,stroke:#00ff00,color:#00ff00
-    style Chat fill:#2d4a3e,stroke:#00ff00,color:#00ff00
-    style Executor fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
-    style SkillMgr fill:#2d3e4a,stroke:#00d9ff,color:#00d9ff
-    style Sessions fill:#3e2d4a,stroke:#ff8800,color:#ff8800
-    style Skills fill:#3e2d4a,stroke:#ff8800,color:#ff8800
-    style ChatAPI fill:#3e2d4a,stroke:#ff8800,color:#ff8800
-    style Redis fill:#4a2d2d,stroke:#ff0080,color:#ff0080
-    style Blob fill:#4a2d2d,stroke:#ff0080,color:#ff0080
-    style Git fill:#4a2d2d,stroke:#ff0080,color:#ff0080
-```
-
-### Storage Architecture
-
-```mermaid
-graph LR
-    subgraph Redis["🔴 Redis (Sessions & Metadata)"]
-        S1["session:{id}<br/>→ Session JSON"]
-        S2["session:{id}:messages<br/>→ Message list"]
-        S3["{volume}:{id}:sessions<br/>→ Session IDs set"]
-        S4["all:sessions<br/>→ All session IDs"]
-    end
-
-    subgraph Blob["📦 Vercel Blob (Skills & Files)"]
-        B1["volumes/system/<br/>system/skills/<br/>{skill}.md"]
-        B2["volumes/user/<br/>{user_id}/skills/<br/>{skill}.md"]
-        B3["volumes/team/<br/>{team_id}/skills/<br/>{skill}.md"]
-    end
-
-    style Redis fill:#1a1a1a,stroke:#ff0080,stroke-width:2px,color:#ff0080
-    style Blob fill:#1a1a1a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
-    style S1 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
-    style S2 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
-    style S3 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
-    style S4 fill:#2d1a1a,stroke:#ff0080,color:#ff0080
-    style B1 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
-    style B2 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
-    style B3 fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
-```
-
-For detailed technical documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
----
-
-## Key Concepts
-
-### 1. Skills (Computational Units)
-
-Skills are version-controlled Markdown files that define reusable computational capabilities.
-
-**Example Skill:**
-```markdown
----
-name: VQE Optimizer
-skill_id: quantum-vqe-node
-type: qiskit
-category: quantum
-execution_mode: browser-wasm
-inputs:
-  - name: hamiltonian
-    type: object
-  - name: iterations
-    type: number
-outputs:
-  - name: eigenvalue
-    type: number
----
-
-# Skill: VQE Optimizer
-
-Variational Quantum Eigensolver implementation.
-
-\`\`\`python
-def execute(inputs):
-    # Runs in browser via Pyodide
-    from qiskit import QuantumCircuit
-    # ... VQE implementation
-    return {"eigenvalue": -1.137}
-\`\`\`
-```
-
-### 2. Workflows (Visual DAGs)
-
-Drag-and-drop computational graphs built with React Flow.
-
-**Example Workflow:**
-
-```mermaid
-graph LR
-    H["⚛️ Hamiltonian<br/>Builder"] --> V["🔬 VQE<br/>Optimizer"]
-    V --> P["📊 Plot<br/>Convergence"]
-    P --> E["💾 Export<br/>Results"]
-
-    style H fill:#2d4a3e,stroke:#00ff00,stroke-width:2px,color:#00ff00
-    style V fill:#3e2d4a,stroke:#ff0080,stroke-width:2px,color:#ff0080
-    style P fill:#2d3e4a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
-    style E fill:#4a3e2d,stroke:#ff8800,stroke-width:2px,color:#ff8800
-```
-
-Each node executes in the browser via WebAssembly.
-
-### 3. Sessions (Chat History)
-
-Sessions store conversations with:
-- Messages (user + assistant)
-- Execution traces
-- Artifacts (generated files)
-- Volume-scoped access (user/team/system)
-
-### 4. Volumes (Multi-Tenant Storage)
+### 5. Multi-Volume Architecture
 
 ```mermaid
 graph TD
-    Root["📁 /volumes/"]
-    System["🌐 system/<br/>(Global skills)"]
-    Team["👥 team/{team_id}/<br/>(Shared skills)"]
-    User["👤 user/{user_id}/<br/>(Private skills)"]
+    A[System Volume<br/>Read-Only<br/>Global Best Practices] --> B[Team Volume<br/>Shared<br/>Team Collaboration]
+    B --> C[User Volume<br/>Private<br/>Your Experiments]
 
-    Root --> System
-    Root --> Team
-    Root --> User
-
-    System --> SRead["✅ Users: Read Only"]
-    Team --> TRead["✅ Users: Read Only<br/>✅ Team: Read/Write"]
-    User --> UWrite["✅ User: Read/Write"]
-
-    style Root fill:#1a1a1a,stroke:#ffffff,stroke-width:2px,color:#ffffff
-    style System fill:#2d4a3e,stroke:#00ff00,stroke-width:2px,color:#00ff00
-    style Team fill:#3e2d4a,stroke:#ff0080,stroke-width:2px,color:#ff0080
-    style User fill:#2d3e4a,stroke:#00d9ff,stroke-width:2px,color:#00d9ff
-    style SRead fill:#1a2d1a,stroke:#00ff00,color:#00ff00
-    style TRead fill:#2d1a2d,stroke:#ff0080,color:#ff0080
-    style UWrite fill:#1a2d2d,stroke:#00d9ff,color:#00d9ff
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style B fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style C fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
 ```
 
 ---
 
-## API Endpoints
+## How It Works
 
-### Sessions
-- `GET /api/sessions` - List sessions
-- `GET /api/sessions/{id}` - Get session
-- `POST /api/sessions` - Create session
-- `POST /api/sessions/{id}/messages` - Add message
-- `PUT /api/sessions/{id}` - Update session
-- `DELETE /api/sessions/{id}` - Delete session
-
-### Skills
-- `GET /api/skills` - List skills
-- `GET /api/skills/{id}` - Get skill
-- `POST /api/skills` - Create skill
-- `DELETE /api/skills/{id}` - Delete skill
-
-### Chat
-- `POST /chat` - Chat with LLM via OpenRouter (includes skills as context)
-  - Headers: `X-API-Key` (your OpenRouter key), `X-Model` (optional model override)
-  - Supports 100+ models: Claude, GPT-4, Gemini, Llama, and free models
-
-### Workflows
-- `GET /workflows/skills/executable` - List executable skills
-- `POST /workflows/execute` - Prepare workflow execution
-- `POST /workflows/save` - Save workflow
-- `GET /workflows/categories` - List categories
-
----
-
-## Features
-
-### Completed ✅
-
-1. **React Flow Canvas**
-   - Drag-drop node positioning
-   - Custom SkillNode components
-   - MiniMap for navigation
-   - Zoom controls + background grid
-   - Run workflow button
-
-2. **Node Library Panel**
-   - 8 pre-loaded skills (Quantum, 3D, Electronics, Data, Code)
-   - Category filtering
-   - Search functionality
-   - Draggable skill cards
-
-3. **Storage Integration**
-   - Redis client for sessions/messages
-   - Blob client for skills/files
-   - Graceful fallbacks to mock data
-
-4. **Preview Renderers**
-   - PlotRenderer (line, scatter, bar charts via Recharts)
-   - ThreeRenderer (3D visualizations via Three.js + WebGL)
-   - CircuitRenderer (quantum circuit diagrams via SVG)
-
-### Next Steps 🚧
-
-- [x] Drag-drop from library → canvas ✅
-- [x] Workflow execution integration ✅
-- [ ] Real-time collaboration
-
----
-
-## Examples
-
-### Quantum VQE Workflow
+### The Self-Improvement Loop
 
 ```mermaid
 graph LR
-    H["⚛️ Hamiltonian Node<br/>Define quantum system"]
-    V["🔬 VQE Node<br/>Run simulation (Pyodide)"]
-    P["📊 Plot Node<br/>Visualize convergence"]
-    E["💾 Export Node<br/>Save results"]
+    A[Day 1-7: You Work] --> B[Create Sessions]
+    B --> C[Commit to GitHub]
+    C --> D[Prompts Embedded]
 
-    H -->|"Hamiltonian<br/>matrix"| V
-    V -->|"Energy values<br/>convergence data"| P
-    P -->|"Chart<br/>image"| E
+    D --> E[Night 7: AI Evolves]
+    E --> F[Cron Analyzes History]
+    F --> G[Detects Patterns]
+    G --> H[Generates Skills]
 
-    style H fill:#2d4a3e,stroke:#00ff00,stroke-width:3px,color:#00ff00
-    style V fill:#3e2d4a,stroke:#ff0080,stroke-width:3px,color:#ff0080
-    style P fill:#2d3e4a,stroke:#00d9ff,stroke-width:3px,color:#00d9ff
-    style E fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
+    H --> I[Day 8+: You Benefit]
+    I --> J[Skills Auto-Loaded]
+    J --> K[Better AI Guidance]
+    K --> L[Faster Workflows]
+
+    L -.->|Continuous Improvement| B
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style E fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style I fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
 ```
 
-**Result:** ⚡ Instant, interactive execution via WebAssembly
+#### Phase 1: You Work (Day 1-7)
 
-### 3D Animation Workflow
+- Create sessions (chat, code, analyze)
+- Each session committed to GitHub
+- Commit messages embed prompts + artifacts
 
-```mermaid
-graph LR
-    M["🎨 Model Node<br/>Create 3D geometry"]
-    Mat["🖼️ Material Node<br/>Apply textures"]
-    S["🎬 Scene Node<br/>Position objects"]
-    R["🎮 Render Node<br/>WebGL rendering (60 FPS)"]
+#### Phase 2: AI Evolves (Night 7)
 
-    M -->|"Geometry<br/>data"| Mat
-    Mat -->|"Textured<br/>mesh"| S
-    S -->|"Scene<br/>graph"| R
+- Cron runs (or manual trigger)
+- Fetches commit history from GitHub
+- Extracts prompts: "quantum circuit" × 5
+- LLM detects pattern (92% confidence)
+- Generates skill: `quantum-circuit-design.md`
 
-    style M fill:#2d4a3e,stroke:#00ff00,stroke-width:3px,color:#00ff00
-    style Mat fill:#4a2d3e,stroke:#ff00ff,stroke-width:3px,color:#ff00ff
-    style S fill:#2d3e4a,stroke:#00d9ff,stroke-width:3px,color:#00d9ff
-    style R fill:#4a3e2d,stroke:#ff8800,stroke-width:3px,color:#ff8800
+#### Phase 3: You Benefit (Day 8+)
+
+- New skill auto-loaded in context
+- AI gives better guidance
+- Faster workflows
+
+### Commit as Context Memory
+
+Every commit you make:
+
+```
+session: VQE Optimization
+
+Prompt: Create VQE circuit for H2 molecule...
+
+Stats:
+- 12 messages
+- 3 artifacts: code, circuit, plot
+- 8 traces executed
+
+Artifacts:
+- quantum-circuit: bell_state
+- code: vqe_h2.py
+- skill: quantum-optimization.md
+
+🤖 LLMunix Context Memory
 ```
 
-**Result:** 🎨 Real-time 3D visualization using Three.js
+This structured format enables:
+- **Pattern Detection**: "User created 5 quantum circuits → pattern"
+- **Skill Generation**: "Generate skill from pattern"
+- **Team Learning**: "Team created 20 API endpoints → team skill"
 
 ---
 
 ## Project Structure
 
+```mermaid
+graph TD
+    A[llmos-lite/] --> B[ui/]
+    A --> C[api/]
+    A --> D[core/]
+    A --> E[volumes/]
+
+    B --> B1[components/]
+    B --> B2[lib/]
+    B --> B3[app/]
+
+    B1 --> B1a[onboarding/<br/>Sample Prompts]
+    B1 --> B1b[settings/<br/>GitHub Connection]
+    B1 --> B1c[context/<br/>Commit Sessions]
+    B1 --> B1d[panel1-volumes/<br/>Cron Timers]
+    B1 --> B1e[chat/<br/>Main Interface]
+    B1 --> B1f[panel3-artifacts/<br/>Visualizations]
+
+    B2 --> B2a[github-auth.ts<br/>OAuth]
+    B2 --> B2b[git-service.ts<br/>Git Ops]
+    B2 --> B2c[cron-analyzer.ts<br/>Pattern Detection]
+    B2 --> B2d[llm-client.ts<br/>LLM API]
+
+    B3 --> B3a[api/auth/github/<br/>OAuth Callback]
+
+    C --> C1[skills.py<br/>FastAPI Endpoints]
+    C --> C2[sessions.py<br/>Session Management]
+    C --> C3[chat.py<br/>Chat Proxy]
+
+    D --> D1[volumes.py<br/>Git Storage]
+    D --> D2[skills.py<br/>Skills Loader]
+    D --> D3[evolution.py<br/>Pattern Detection]
+
+    E --> E1[system/skills/<br/>Global Skills]
+    E --> E2[teams/{id}/skills/<br/>Team Skills]
+    E --> E3[users/{id}/<br/>User Data]
+
+    E3 --> E3a[sessions/<br/>Session JSON]
+    E3 --> E3b[skills/<br/>Auto-Generated]
+
+    style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style B fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style C fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style D fill:#0a0e14,stroke:#ff6b6b,color:#ff6b6b
+    style E fill:#0a0e14,stroke:#a78bfa,color:#a78bfa
 ```
-llmos-lite/
-├── api/                          # FastAPI backend
-│   ├── main.py                   # Main API server
-│   ├── sessions.py               # Session endpoints
-│   ├── skills.py                 # Skill endpoints
-│   ├── chat.py                   # Chat endpoint
-│   └── lib/                      # Storage clients
-│       ├── redis_client.py       # Redis adapter
-│       ├── vercel_kv.py          # Vercel KV client
-│       └── vercel_blob.py        # Blob storage client
-│
-└── ui/                           # Next.js frontend
-    ├── components/
-    │   └── panel3-artifacts/
-    │       ├── WorkflowCanvas.tsx
-    │       ├── NodeLibraryPanel.tsx
-    │       ├── PlotRenderer.tsx
-    │       ├── ThreeRenderer.tsx
-    │       └── CircuitRenderer.tsx
-    └── lib/
-        ├── workflow-executor.ts
-        └── pyodide-executor.ts
+
+### Key Directories
+
+#### `ui/` - Next.js Web App (THE MAIN EVENT)
+
+- **`components/onboarding/`** - Sample prompts with "Try Now" buttons
+- **`components/settings/`** - GitHub connection UI
+- **`components/context/`** - Commit session functionality
+- **`components/panel1-volumes/`** - Cron countdown timers
+- **`lib/github-auth.ts`** - GitHub OAuth client
+- **`lib/git-service.ts`** - Git operations via REST API
+- **`lib/cron-analyzer.ts`** - AI pattern detection engine
+- **`app/api/auth/github/`** - OAuth callback handler
+
+#### `api/` - FastAPI Backend (Optional)
+
+- **`skills.py`** - Skills CRUD endpoints
+- **`sessions.py`** - Session management
+- **`chat.py`** - Chat proxy with OpenRouter
+
+#### `core/` - Python Backend Logic
+
+- **`volumes.py`** - Git-backed storage
+- **`skills.py`** - Skills loader
+- **`evolution.py`** - Pattern detection
+
+#### `volumes/` - Git Repositories (Auto-Created)
+
+- **`system/skills/`** - Global skills
+- **`teams/{id}/skills/`** - Team skills
+- **`users/{id}/`** - User sessions + skills
+
+---
+
+## Configuration
+
+### Environment Variables
+
+#### UI (`.env.local`)
+
+```env
+# Required for chat (or set during onboarding)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: GitHub Integration
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_secret
+NEXT_PUBLIC_GITHUB_CLIENT_ID=your_client_id
+NEXTAUTH_SECRET=$(openssl rand -base64 32)
+NEXTAUTH_URL=http://localhost:3000
+```
+
+#### Backend (if using Python API)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export LLMOS_VOLUMES_PATH=./volumes
 ```
 
 ---
 
-## Roadmap
+## Developer Guide
 
-### Phase 1: Core Infrastructure ✅ (Complete)
-- [x] FastAPI service
-- [x] Skills loader
-- [x] Storage clients
-- [x] Chat integration
+### System Architecture
 
-### Phase 2: WebAssembly Workflows ✅ (Complete)
-- [x] Executable skill format
-- [x] Workflow engine (DAG execution)
-- [x] Pyodide integration
-- [x] Multi-runtime support
+```mermaid
+graph TB
+    subgraph Browser["Browser (Next.js + React)"]
+        A1[Chat UI<br/>+ Artifacts]
+        A2[Workflow Canvas<br/>React Flow]
+    end
 
-### Phase 3: React UI ✅ (Complete)
-- [x] React Flow canvas
-- [x] Node library panel
-- [x] Drag-drop from library to canvas
-- [x] Workflow execution via API
-- [x] Execution controls & progress
-- [x] Storage integration (Redis + Blob)
-- [x] Chat interface
-- [x] Preview renderers (plots, 3D, circuits)
+    subgraph Services["Client Services"]
+        B1[LLM Client]
+        B2[GitHub Service]
+        B3[Cron Analyzer]
+    end
 
-### Phase 4: Advanced Features (Future)
-- [ ] GPU acceleration (WebGPU)
-- [ ] Workflow marketplace
-- [ ] Collaborative editing
-- [ ] Mobile PWA
-- [ ] Auto-generate skills from patterns
+    subgraph External["External APIs"]
+        C1[Anthropic Claude API]
+        C2[GitHub REST API]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    A1 --> B2
+    A2 --> B2
+
+    B1 --> C1
+    B2 --> C2
+    B3 --> C1
+    B3 --> C2
+
+    style Browser fill:#0a0e14,stroke:#00ff88,color:#00ff88
+    style Services fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
+    style External fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+```
+
+**Key Components:**
+
+- `lib/llm-client.ts` - Anthropic/OpenRouter client
+- `lib/github-auth.ts` - OAuth flow
+- `lib/git-service.ts` - Commit/fetch operations
+- `lib/cron-analyzer.ts` - Pattern detection engine
+- `contexts/SessionContext.tsx` - Session state management
+
+### Adding Features
+
+#### 1. Add a New Artifact Type
+
+```typescript
+// components/panel3-artifacts/ArtifactViewer.tsx
+
+// Define type
+type MyArtifact = {
+  type: 'my-artifact';
+  data: { /* your data */ };
+};
+
+// Add renderer
+case 'my-artifact':
+  return <MyArtifactRenderer data={artifact.data} />;
+```
+
+#### 2. Customize Evolution Pattern
+
+```typescript
+// lib/cron-analyzer.ts
+
+// Adjust thresholds
+CronAnalyzer.analyzeVolume(volume, {
+  minOccurrences: 3,    // Pattern needs 3+ instances
+  minConfidence: 0.85,   // 85% confidence required
+});
+```
+
+#### 3. Add Custom Cron Job
+
+```typescript
+// components/panel1-volumes/CronList.tsx
+
+const crons: CronJob[] = [
+  {
+    id: 'my-custom-cron',
+    name: 'My Analysis',
+    status: 'scheduled',
+    nextRunSeconds: 3600,  // 1 hour
+    intervalSeconds: 86400, // 24 hours
+  },
+  // ...
+];
+```
+
+### Testing
+
+```bash
+# Run tests (when available)
+npm test
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+
+# Build for production
+npm run build
+```
+
+### UI Theme
+
+**Terminal Color Palette:**
+
+- **Background**: `#0a0e14` (dark)
+- **Accent Green**: `#00ff88` (success, active)
+- **Accent Blue**: `#00d4ff` (info)
+- **Accent Yellow**: `#ffcc00` (warning)
+- **Font**: JetBrains Mono (monospace)
 
 ---
 
-## Contributing
+## Quick Reference
 
-We welcome contributions!
+| Want to... | Do this... |
+|-----------|-----------|
+| Start dev server | `cd llmos-lite/ui && npm run dev` |
+| Try sample prompts | Onboarding wizard → "Try Now" |
+| Connect GitHub | Right sidebar → GITHUB → "Connect" |
+| Commit session | Right sidebar → ACTIONS → "Commit" |
+| Run evolution | Left sidebar → CRONS → "Run Now" |
+| Add API key | Settings (gear icon) |
+| View artifacts | Chat panel → artifact previews |
+| Check cron status | Left sidebar → countdown timers |
 
-**Priority areas:**
-1. Workflow execution integration
-2. New computational skills (quantum, 3D, ML, electronics)
-3. Runtime integrations (WebGPU, WebR)
-4. Example workflows
+---
 
-**Development workflow:**
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+## Troubleshooting
+
+### "OAuth popup blocked"
+
+**Solution**: Allow popups for localhost in browser settings
+
+### "Not authenticated with GitHub"
+
+**Solutions**:
+- Click "Connect with GitHub" in right sidebar
+- Check `.env.local` has correct credentials
+- Restart dev server after adding env vars
+
+### "Commit failed"
+
+**Solutions**:
+- Check browser console for errors
+- Verify GitHub token still valid
+- Ensure repo exists and is accessible
+
+### "No patterns detected"
+
+**Solutions**:
+- Need at least 2 similar sessions committed
+- Check commit messages include prompts
+- Try manually running cron with "Run Now"
+
+### "Cron countdown stuck"
+
+**Solution**: Refresh page (client-side timer resets) - this is expected behavior
 
 ---
 
 ## Security
 
-- ✅ API keys in `.env` (gitignored)
-- ✅ Environment variables for secrets
-- ✅ No hardcoded credentials
-- ✅ Sandboxed WebAssembly execution
+### GitHub OAuth
 
-**Production checklist:**
-- [ ] Rotate API keys
-- [ ] Add authentication (JWT/OAuth)
-- [ ] Enable CORS restrictions
-- [ ] Set up rate limiting
+- Client secret **never exposed** to browser
+- OAuth callback handled server-side (Next.js API route)
+- Access tokens stored in localStorage (client-side only)
+- Private repos by default
+
+### Execution Safety
+
+- Python/JS code runs in browser via WebAssembly (Pyodide)
+- Sandboxed execution environment
+- No server-side code execution
+- Resource limits enforced
+
+---
+
+## Roadmap
+
+### ✅ Completed (v0.1)
+
+- [x] Sample prompts with "Try Now" buttons
+- [x] GitHub OAuth integration
+- [x] Real Git commits with context
+- [x] Cron countdown timers
+- [x] AI pattern detection
+- [x] Auto skill generation
+- [x] Multi-volume architecture
+
+### 🔄 In Progress (v0.2)
+
+- [ ] React Flow workflow canvas
+- [ ] Drag-and-drop node editor
+- [ ] Real-time collaboration
+- [ ] Mobile PWA
+
+### 📋 Planned (v0.3)
+
+- [ ] Vector DB for semantic skill search
+- [ ] Skill marketplace
+- [ ] Multi-LLM support (GPT-4, Gemini)
+- [ ] Webhook integration for GitHub
+- [ ] Advanced analytics dashboard
+
+---
+
+## Contributing
+
+We welcome contributions! Here's how:
+
+1. **Fork the repo**
+2. **Create a feature branch**: `git checkout -b feature/my-feature`
+3. **Make your changes** (follow existing code style)
+4. **Test thoroughly** (ensure `npm run build` succeeds)
+5. **Commit with context**: Use descriptive messages
+6. **Push and create PR**
+
+### Code Style
+
+- TypeScript for UI code
+- Functional React components
+- Terminal-themed design
+- Clear variable names
+- Comments for complex logic
+
+### Where to Contribute
+
+- **New artifact types** (quantum, ML, data viz)
+- **Evolution algorithms** (better pattern detection)
+- **UI improvements** (mobile, accessibility)
+- **Documentation** (tutorials, examples)
+- **Tests** (unit, integration, E2E)
+
+---
+
+## Documentation
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical deep-dive
+- **[.env.local.example](./llmos-lite/ui/.env.local.example)** - Configuration template
 
 ---
 
@@ -549,16 +590,23 @@ Apache 2.0
 
 ## Credits
 
-Built by [Evolving Agents Labs](https://github.com/EvolvingAgentsLabs)
+Built on insights from the original `llmos` architecture, reimagined for the GitHub-native AI era.
 
-**Core Innovation:** Version-controlled Markdown skills that execute as WebAssembly workflows in the browser.
-
-Inspired by OpenAI/Anthropic's Skills paradigm for AI capabilities.
+**Core Innovation**: Treating Git commits as AI training data, enabling:
+- Self-improving workflows
+- Team knowledge sharing
+- Automated skill evolution
+- Zero-cost execution (browser-based)
 
 ---
 
-<div align="center">
+## Getting Help
 
-**[Architecture](ARCHITECTURE.md)** · **[GitHub](https://github.com/EvolvingAgentsLabs/llmos)** · **[Issues](https://github.com/EvolvingAgentsLabs/llmos/issues)**
+- **Issues**: [GitHub Issues](https://github.com/llmunix/llmos-lite/issues)
+- **Discord**: (coming soon)
+- **Docs**: See [ARCHITECTURE.md](./ARCHITECTURE.md) for technical details
+- **Browser console**: Check for error messages
 
-</div>
+---
+
+**Remember**: The more you use it, the smarter it gets. Commit early, commit often! 🚀
