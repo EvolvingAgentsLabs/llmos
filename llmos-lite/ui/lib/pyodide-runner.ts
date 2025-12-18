@@ -5,17 +5,15 @@
  * Used for running Python skills (Quantum, Data Science, etc.) client-side.
  */
 
-import type { PyodideInterface } from 'pyodide';
-
 class PyodideRunner {
-  private pyodide: PyodideInterface | null = null;
+  private pyodide: any | null = null;
   private loading: boolean = false;
-  private loadPromise: Promise<PyodideInterface> | null = null;
+  private loadPromise: Promise<any> | null = null;
 
   /**
    * Initialize Pyodide (lazy loading)
    */
-  async init(): Promise<PyodideInterface> {
+  async init(): Promise<any> {
     if (this.pyodide) {
       return this.pyodide;
     }
@@ -30,11 +28,14 @@ class PyodideRunner {
     return this.loadPromise;
   }
 
-  private async loadPyodide(): Promise<PyodideInterface> {
+  private async loadPyodide(): Promise<any> {
     console.log('[Pyodide] Loading...');
 
+    // Dynamic import to avoid SSR issues
+    const { loadPyodide } = await import('pyodide');
+
     // Load Pyodide from CDN
-    const pyodide = await (globalThis as any).loadPyodide({
+    const pyodide = await loadPyodide({
       indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/',
     });
 
@@ -90,7 +91,7 @@ class PyodideRunner {
   /**
    * Get Pyodide instance
    */
-  async getInstance(): Promise<PyodideInterface> {
+  async getInstance(): Promise<any> {
     return this.init();
   }
 }

@@ -5,8 +5,6 @@
  * No file system access, no network access (except explicit fetch)
  */
 
-import { PyodideInterface, loadPyodide } from 'pyodide';
-
 export interface ExecutionResult {
   success: boolean;
   output?: any;
@@ -23,7 +21,7 @@ export interface ExecutionOptions {
 }
 
 class PyodideRuntime {
-  private pyodide: PyodideInterface | null = null;
+  private pyodide: any | null = null;
   private isLoading = false;
   private loadPromise: Promise<void> | null = null;
 
@@ -50,6 +48,10 @@ class PyodideRuntime {
   private async _loadPyodide(): Promise<void> {
     try {
       console.log('Loading Pyodide...');
+
+      // Dynamic import to avoid SSR issues
+      const { loadPyodide } = await import('pyodide');
+
       this.pyodide = await loadPyodide({
         indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/',
       });
@@ -262,6 +264,21 @@ _output_capture = OutputCapture()
         executionTime,
       };
     }
+  }
+
+  /**
+   * Load a single package
+   */
+  async loadPackage(packageName: string): Promise<void> {
+    if (!this.pyodide) {
+      await this.initialize();
+    }
+
+    if (!this.pyodide) {
+      throw new Error('Pyodide not initialized');
+    }
+
+    await this.pyodide.loadPackage(packageName);
   }
 
   /**

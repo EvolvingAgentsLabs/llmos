@@ -715,15 +715,21 @@ We cannot see:
 - [x] **Tool execution system** - Parse and execute tools from markdown
 - [x] **Agent execution engine** - Sub-agents with LLM + tool access
 
-### 🔄 In Progress (v0.2)
+### ✅ Completed (v0.2)
 
-- [ ] Load tools/agents from GitHub volumes automatically
-- [ ] Agent communication protocol
+- [x] **Auto-load tools/agents/skills from GitHub volumes** - VolumeLoader system
+- [x] **Agent communication protocol** - Inter-agent messaging and task delegation
+- [x] **Skill execution engine** - Skills that orchestrate tools and agents
+- [x] **Multi-agent collaboration** - Agents can delegate tasks to other agents
+- [x] **Workflow parsing** - Parse skill workflows from markdown (tools, agents, LLM calls, conditionals, loops)
+
+### 🔄 In Progress (v0.3)
+
 - [ ] React Flow workflow canvas
 - [ ] Drag-and-drop node editor
-- [ ] Skill execution (skills that use tools/agents)
+- [ ] Package preloading optimization (Next.js SSR compatibility)
 
-### 📋 Planned (v0.3)
+### 📋 Planned (v0.4)
 
 - [ ] Real-time collaboration
 - [ ] Mobile PWA
