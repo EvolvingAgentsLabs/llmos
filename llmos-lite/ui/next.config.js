@@ -14,12 +14,24 @@ const nextConfig = {
       tls: false,
       zlib: false,
       stream: false,
+      buffer: false,
+      url: false,
+      child_process: false,
+      worker_threads: false,
     };
 
     // Exclude pyodide from server-side bundles
     if (isServer) {
       config.externals = [...(config.externals || []), 'pyodide'];
     }
+
+    // Ignore node: protocol imports
+    config.externals = [...(config.externals || []), ({ request }, callback) => {
+      if (request && request.startsWith('node:')) {
+        return callback(null, `commonjs ${request}`);
+      }
+      callback();
+    }];
 
     return config;
   },

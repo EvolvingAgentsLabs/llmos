@@ -4,44 +4,44 @@
 
 @layer base {
   :root {
-    /* Modern color palette - Inspired by Linear, Vercel, Arc */
+    /* VS Code Dark+ color palette */
 
-    /* Backgrounds - Subtle gradients */
-    --bg-primary: 18 18 20; /* Deep slate */
-    --bg-secondary: 24 24 27; /* Slightly lighter */
-    --bg-tertiary: 30 30 35; /* Elevated surfaces */
-    --bg-elevated: 36 36 42; /* Hover states */
+    /* Backgrounds - VS Code style */
+    --bg-primary: 30 30 30; /* #1e1e1e - Editor background */
+    --bg-secondary: 37 37 38; /* #252526 - Sidebar background */
+    --bg-tertiary: 45 45 45; /* #2d2d2d - Input backgrounds */
+    --bg-elevated: 51 51 51; /* #333333 - Hover states */
 
-    /* Foreground - Optimized for readability */
-    --fg-primary: 250 250 250; /* Almost white */
-    --fg-secondary: 161 161 170; /* Muted text */
-    --fg-tertiary: 113 113 122; /* Subtle text */
-    --fg-muted: 82 82 91; /* Very subtle */
+    /* Foreground - VS Code text colors */
+    --fg-primary: 212 212 212; /* #d4d4d4 - Main text */
+    --fg-secondary: 153 153 153; /* #999999 - Secondary text */
+    --fg-tertiary: 106 106 106; /* #6a6a6a - Subtle text */
+    --fg-muted: 85 85 85; /* #555555 - Very subtle */
 
-    /* Accent colors - Vibrant but professional */
-    --accent-primary: 139 92 246; /* Purple */
-    --accent-secondary: 59 130 246; /* Blue */
-    --accent-success: 34 197 94; /* Green */
-    --accent-warning: 251 191 36; /* Amber */
-    --accent-error: 239 68 68; /* Red */
-    --accent-info: 56 189 248; /* Sky */
+    /* Accent colors - VS Code inspired */
+    --accent-primary: 0 122 204; /* #007acc - VS Code blue */
+    --accent-secondary: 75 166 251; /* #4ba6fb - Lighter blue */
+    --accent-success: 106 153 85; /* #6a9955 - Green */
+    --accent-warning: 206 145 120; /* #ce9178 - Orange/amber */
+    --accent-error: 244 71 71; /* #f44747 - Red */
+    --accent-info: 86 156 214; /* #569cd6 - Info blue */
 
     /* Borders */
-    --border-primary: 39 39 42; /* Subtle */
-    --border-secondary: 63 63 70; /* More visible */
-    --border-focus: 139 92 246; /* Accent on focus */
+    --border-primary: 51 51 51; /* #333333 - Subtle borders */
+    --border-secondary: 69 69 69; /* #454545 - More visible */
+    --border-focus: 0 122 204; /* #007acc - Focus highlight */
 
     /* Overlays */
     --overlay: 0 0 0 / 0.5;
-    --glass-bg: 24 24 27 / 0.8;
-    --glass-border: 255 255 255 / 0.1;
+    --glass-bg: 37 37 38 / 0.9;
+    --glass-border: 255 255 255 / 0.08;
 
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-    --shadow-glow: 0 0 20px rgb(139 92 246 / 0.3);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.1);
+    --shadow-md: 0 2px 4px 0 rgb(0 0 0 / 0.2);
+    --shadow-lg: 0 4px 8px 0 rgb(0 0 0 / 0.3);
+    --shadow-xl: 0 8px 16px 0 rgb(0 0 0 / 0.4);
+    --shadow-glow: 0 0 10px rgb(0 122 204 / 0.3);
   }
 
   * {
@@ -464,4 +464,197 @@
 
 .xterm .xterm-selection {
   background-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Syntax highlighting for code blocks (highlight.js) */
+.hljs {
+  @apply bg-bg-primary text-fg-primary;
+  @apply rounded-lg p-4 overflow-x-auto;
+  @apply font-mono text-sm;
+}
+
+/* VS Code Dark+ inspired syntax highlighting */
+.hljs-comment,
+.hljs-quote {
+  @apply text-accent-success italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  @apply text-accent-info;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr {
+  @apply text-[rgb(181,206,168)]; /* Light green */
+}
+
+.hljs-string,
+.hljs-doctag {
+  @apply text-accent-warning;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id {
+  @apply text-[rgb(220,220,170)]; /* Light yellow */
+}
+
+.hljs-type,
+.hljs-class .hljs-title {
+  @apply text-[rgb(78,201,176)]; /* Teal */
+}
+
+.hljs-tag,
+.hljs-name,
+.hljs-attribute {
+  @apply text-accent-info;
+}
+
+.hljs-regexp,
+.hljs-link {
+  @apply text-[rgb(209,105,105)]; /* Light red */
+}
+
+.hljs-symbol,
+.hljs-bullet {
+  @apply text-accent-secondary;
+}
+
+.hljs-built_in,
+.hljs-builtin-name {
+  @apply text-[rgb(220,220,170)]; /* Light yellow */
+}
+
+.hljs-meta {
+  @apply text-fg-tertiary;
+}
+
+.hljs-deletion {
+  @apply bg-accent-error/20;
+}
+
+.hljs-addition {
+  @apply bg-accent-success/20;
+}
+
+.hljs-emphasis {
+  @apply italic;
+}
+
+.hljs-strong {
+  @apply font-bold;
+}
+
+/* Markdown content styles */
+.markdown-content {
+  @apply text-fg-primary leading-relaxed;
+}
+
+.markdown-content h1 {
+  @apply text-2xl font-bold text-fg-primary mt-6 mb-4 pb-2 border-b border-border-primary;
+}
+
+.markdown-content h2 {
+  @apply text-xl font-bold text-fg-primary mt-5 mb-3 pb-2 border-b border-border-primary;
+}
+
+.markdown-content h3 {
+  @apply text-lg font-semibold text-fg-primary mt-4 mb-2;
+}
+
+.markdown-content h4 {
+  @apply text-base font-semibold text-fg-primary mt-3 mb-2;
+}
+
+.markdown-content h5,
+.markdown-content h6 {
+  @apply text-sm font-semibold text-fg-secondary mt-2 mb-1;
+}
+
+.markdown-content p {
+  @apply my-3 text-fg-secondary leading-relaxed;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply my-3 ml-6 space-y-1 text-fg-secondary;
+}
+
+.markdown-content ul {
+  @apply list-disc;
+}
+
+.markdown-content ol {
+  @apply list-decimal;
+}
+
+.markdown-content li {
+  @apply pl-1;
+}
+
+.markdown-content a {
+  @apply text-accent-primary hover:text-accent-secondary underline;
+  @apply transition-colors duration-200;
+}
+
+.markdown-content code {
+  @apply bg-bg-tertiary text-accent-warning px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+  @apply my-4 rounded-lg overflow-hidden;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent text-fg-primary p-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-accent-primary pl-4 py-2 my-4;
+  @apply bg-accent-primary/5 text-fg-secondary italic;
+}
+
+.markdown-content table {
+  @apply w-full my-4 border border-border-primary rounded-lg overflow-hidden;
+}
+
+.markdown-content thead {
+  @apply bg-bg-tertiary;
+}
+
+.markdown-content th {
+  @apply px-4 py-2 text-left text-sm font-semibold text-fg-primary border-b border-border-primary;
+}
+
+.markdown-content td {
+  @apply px-4 py-2 text-sm text-fg-secondary border-b border-border-primary;
+}
+
+.markdown-content tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.markdown-content tbody tr:hover {
+  @apply bg-bg-tertiary/50;
+}
+
+.markdown-content hr {
+  @apply my-6 border-t border-border-primary;
+}
+
+.markdown-content img {
+  @apply max-w-full h-auto rounded-lg my-4;
+}
+
+.markdown-content strong {
+  @apply text-fg-primary font-semibold;
+}
+
+.markdown-content em {
+  @apply text-fg-secondary italic;
 }

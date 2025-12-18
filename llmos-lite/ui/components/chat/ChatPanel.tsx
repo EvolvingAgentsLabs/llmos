@@ -5,6 +5,7 @@ import { useSessionContext } from '@/contexts/SessionContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
+import MarkdownRenderer from './MarkdownRenderer';
 import type { Message } from '@/contexts/SessionContext';
 
 interface ChatPanelProps {
@@ -316,13 +317,17 @@ export default function ChatPanel({
 
               {/* Message content */}
               <div
-                className={`ml-8 p-3 rounded-lg whitespace-pre-wrap ${
+                className={`ml-8 p-3 rounded-lg ${
                   message.role === 'user'
-                    ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary'
+                    ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary whitespace-pre-wrap'
                     : 'bg-bg-tertiary border border-border-primary text-fg-secondary'
                 }`}
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <MarkdownRenderer content={message.content} enableCodeExecution={true} />
+                ) : (
+                  message.content
+                )}
               </div>
 
               {/* Metadata */}

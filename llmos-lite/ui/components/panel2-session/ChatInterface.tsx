@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
+import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
 
 interface Message {
   id: string;
@@ -104,11 +105,15 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
             <div className={`
               p-3 rounded
               ${message.role === 'user'
-                ? 'bg-terminal-bg-tertiary text-terminal-fg-primary'
+                ? 'bg-terminal-bg-tertiary text-terminal-fg-primary whitespace-pre-wrap'
                 : 'bg-terminal-bg-primary text-terminal-fg-secondary border border-terminal-border'
               }
             `}>
-              {message.content}
+              {message.role === 'assistant' ? (
+                <MarkdownRenderer content={message.content} enableCodeExecution={true} />
+              ) : (
+                message.content
+              )}
             </div>
 
             {/* Metadata */}

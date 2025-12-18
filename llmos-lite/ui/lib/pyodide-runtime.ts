@@ -12,6 +12,7 @@ export interface ExecutionResult {
   stderr?: string;
   error?: string;
   executionTime: number;
+  images?: string[]; // Base64 encoded images from matplotlib
 }
 
 export interface ExecutionOptions {
@@ -56,10 +57,11 @@ class PyodideRuntime {
         indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/',
       });
 
-      // Set up stdout/stderr capture
+      // Set up stdout/stderr capture and matplotlib image capture
       await this.pyodide.runPythonAsync(`
 import sys
-from io import StringIO
+from io import StringIO, BytesIO
+import base64
 
 class OutputCapture:
     def __init__(self):
@@ -67,21 +69,76 @@ class OutputCapture:
         self.stderr = StringIO()
         self._stdout = sys.stdout
         self._stderr = sys.stderr
+        self.images = []
 
     def start(self):
         sys.stdout = self.stdout
         sys.stderr = self.stderr
+        self.images = []
 
     def stop(self):
         sys.stdout = self._stdout
         sys.stderr = self._stderr
         stdout_val = self.stdout.getvalue()
         stderr_val = self.stderr.getvalue()
+        images = self.images.copy()
         self.stdout = StringIO()
         self.stderr = StringIO()
-        return stdout_val, stderr_val
+        self.images = []
+        return stdout_val, stderr_val, images
+
+    def add_image(self, img_data):
+        """Add a base64 encoded image"""
+        self.images.append(img_data)
 
 _output_capture = OutputCapture()
+
+# Monkey-patch matplotlib to capture figures
+def _setup_matplotlib_capture():
+    """Setup matplotlib to automatically capture figures"""
+    try:
+        import matplotlib
+        import matplotlib.pyplot as plt
+
+        # Use Agg backend (no display, good for image generation)
+        matplotlib.use('Agg')
+
+        # Override plt.show() to capture figures
+        _original_show = plt.show
+
+        def _custom_show(*args, **kwargs):
+            """Capture all open figures when plt.show() is called"""
+            for fig_num in plt.get_fignums():
+                fig = plt.figure(fig_num)
+                buf = BytesIO()
+                fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+                _output_capture.add_image(img_base64)
+                plt.close(fig)
+
+        plt.show = _custom_show
+
+        # Also override savefig to capture
+        _original_savefig = plt.savefig
+
+        def _custom_savefig(fname, *args, **kwargs):
+            """Capture figure when savefig is called"""
+            # Get current figure
+            fig = plt.gcf()
+            buf = BytesIO()
+            fig.savefig(buf, format='png', dpi=kwargs.get('dpi', 100), bbox_inches='tight')
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            _output_capture.add_image(img_base64)
+
+        plt.savefig = _custom_savefig
+
+    except ImportError:
+        pass  # matplotlib not available yet
+
+# Try to setup matplotlib capture (will work if matplotlib is loaded)
+_setup_matplotlib_capture()
       `);
 
       console.log('✓ Pyodide loaded successfully');
@@ -117,9 +174,26 @@ _output_capture = OutputCapture()
         throw new Error('Pyodide not initialized');
       }
 
+      // Auto-detect if matplotlib is needed
+      const needsMatplotlib = code.includes('matplotlib') || code.includes('plt.');
+      const needsNumpy = code.includes('numpy') || code.includes('np.');
+
+      const packagesToLoad = [...(options.packages || [])];
+      if (needsMatplotlib && !packagesToLoad.includes('matplotlib')) {
+        packagesToLoad.push('matplotlib');
+      }
+      if (needsNumpy && !packagesToLoad.includes('numpy')) {
+        packagesToLoad.push('numpy');
+      }
+
       // Load additional packages
-      if (options.packages && options.packages.length > 0) {
-        await this.pyodide.loadPackage(options.packages);
+      if (packagesToLoad.length > 0) {
+        await this.pyodide.loadPackage(packagesToLoad);
+
+        // Re-setup matplotlib capture after loading
+        if (packagesToLoad.includes('matplotlib')) {
+          await this.pyodide.runPythonAsync('_setup_matplotlib_capture()');
+        }
       }
 
       // Set global variables
@@ -140,15 +214,19 @@ _output_capture = OutputCapture()
       const captureResult = await this.pyodide.runPythonAsync(
         '_output_capture.stop()'
       );
-      const [stdout, stderr] = captureResult.toJs();
+      const [stdout, stderr, images] = captureResult.toJs();
 
       const executionTime = performance.now() - startTime;
+
+      // Convert images array to JS array and ensure it's string[]
+      const imageArray: string[] = images ? Array.from(images).map(String) : [];
 
       return {
         success: true,
         output: result,
         stdout: stdout || undefined,
         stderr: stderr || undefined,
+        images: imageArray.length > 0 ? imageArray : undefined,
         executionTime,
       };
     } catch (error: any) {
