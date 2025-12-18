@@ -11,7 +11,8 @@ export type Industry =
   | 'legal'
   | 'financial'
   | 'consulting'
-  | 'political'
+  | 'biology'
+  | 'robotics'
   | 'audit'
   | 'general';
 
@@ -205,40 +206,77 @@ const consultingTerms: Terminology = {
 };
 
 /**
- * Political Terminology
+ * Biology Research Terminology
  */
-const politicalTerms: Terminology = {
-  workspace: 'Campaign',
-  workspaces: 'Campaigns',
-  artifact: 'Brief',
-  artifacts: 'Briefs',
-  skill: 'Playbook',
-  skills: 'Playbooks',
-  tool: 'Research Tool',
-  tools: 'Research Tools',
-  agent: 'Strategist',
-  agents: 'Strategists',
-  cron: 'Strategic Review',
-  crons: 'Strategic Reviews',
-  commit: 'Publish',
-  committing: 'Publishing',
-  evolve: 'Adapt',
-  evolving: 'Adapting',
-  execute: 'Deploy',
-  executing: 'Deploying',
-  learningCycle: 'Campaign Review',
-  methodology: 'Strategy',
-  methodologies: 'Strategies',
-  deliverable: 'Talking Point',
-  deliverables: 'Talking Points',
-  specialist: 'Policy Expert',
-  specialists: 'Policy Experts',
-  utility: 'Opposition Research',
-  utilities: 'Opposition Research',
-  patternDetection: 'Voter Trend Analysis',
-  knowledgeEvolution: 'Message Refinement',
-  contextMemory: 'Campaign History',
-  workflowAutomation: 'Rapid Response',
+const biologyTerms: Terminology = {
+  workspace: 'Experiment',
+  workspaces: 'Experiments',
+  artifact: 'Protocol',
+  artifacts: 'Protocols',
+  skill: 'Research Method',
+  skills: 'Research Methods',
+  tool: 'Analysis Tool',
+  tools: 'Analysis Tools',
+  agent: 'Research Assistant',
+  agents: 'Research Assistants',
+  cron: 'Literature Review',
+  crons: 'Literature Reviews',
+  commit: 'Document',
+  committing: 'Documenting',
+  evolve: 'Refine',
+  evolving: 'Refining',
+  execute: 'Run',
+  executing: 'Running',
+  learningCycle: 'Research Review',
+  methodology: 'Experimental Protocol',
+  methodologies: 'Experimental Protocols',
+  deliverable: 'Finding',
+  deliverables: 'Findings',
+  specialist: 'Domain Expert',
+  specialists: 'Domain Experts',
+  utility: 'Computational Tool',
+  utilities: 'Computational Tools',
+  patternDetection: 'Pattern Recognition',
+  knowledgeEvolution: 'Method Optimization',
+  contextMemory: 'Research History',
+  workflowAutomation: 'Pipeline Automation',
+};
+
+/**
+ * Robotics Terminology
+ */
+const roboticsTerms: Terminology = {
+  workspace: 'Project',
+  workspaces: 'Projects',
+  artifact: 'Simulation',
+  artifacts: 'Simulations',
+  skill: 'Control Strategy',
+  skills: 'Control Strategies',
+  tool: 'Simulation Tool',
+  tools: 'Simulation Tools',
+  agent: 'Simulation Agent',
+  agents: 'Simulation Agents',
+  cron: 'System Optimization',
+  crons: 'System Optimizations',
+  commit: 'Snapshot',
+  committing: 'Snapshotting',
+  evolve: 'Optimize',
+  evolving: 'Optimizing',
+  execute: 'Simulate',
+  executing: 'Simulating',
+  learningCycle: 'Performance Analysis',
+  methodology: 'Control Algorithm',
+  methodologies: 'Control Algorithms',
+  deliverable: 'Controller',
+  deliverables: 'Controllers',
+  specialist: 'Control Expert',
+  specialists: 'Control Experts',
+  utility: 'Kinematic Solver',
+  utilities: 'Kinematic Solvers',
+  patternDetection: 'Behavior Analysis',
+  knowledgeEvolution: 'Controller Tuning',
+  contextMemory: 'Simulation History',
+  workflowAutomation: 'Automated Testing',
 };
 
 /**
@@ -323,7 +361,8 @@ export const terminologies: Record<Industry, Terminology> = {
   legal: legalTerms,
   financial: financialTerms,
   consulting: consultingTerms,
-  political: politicalTerms,
+  biology: biologyTerms,
+  robotics: roboticsTerms,
   audit: auditTerms,
   general: generalTerms,
 };
@@ -370,7 +409,8 @@ export const industryNames: Record<Industry, string> = {
   legal: 'Legal Practice',
   financial: 'Financial Services',
   consulting: 'Management Consulting',
-  political: 'Political Campaigns',
+  biology: 'Biology Research',
+  robotics: 'Robotics & Control',
   audit: 'Audit & Assurance',
   general: 'General Professional',
 };
@@ -383,7 +423,8 @@ export const industryDescriptions: Record<Industry, string> = {
   legal: 'Legal research, contract analysis, case management',
   financial: 'Financial analysis, investment research, portfolio management',
   consulting: 'Strategic planning, market analysis, business transformation',
-  political: 'Campaign strategy, policy research, voter outreach',
+  biology: 'Experimental protocols, data analysis, computational biology',
+  robotics: 'Robot simulation, control systems, autonomous navigation',
   audit: 'Financial audits, compliance testing, risk assessment',
   general: 'General knowledge work and professional services',
 };

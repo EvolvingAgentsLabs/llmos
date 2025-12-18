@@ -18,7 +18,8 @@ const industries: Industry[] = [
   'legal',
   'financial',
   'consulting',
-  'political',
+  'biology',
+  'robotics',
   'audit',
   'general',
 ];
@@ -28,7 +29,8 @@ const industryIcons: Record<Industry, string> = {
   legal: '⚖️',
   financial: '📊',
   consulting: '📈',
-  political: '🗳️',
+  biology: '🧬',
+  robotics: '🤖',
   audit: '🔍',
   general: '📋',
 };
@@ -189,7 +191,8 @@ function getIndustryTermExample(industry: Industry): string {
     legal: 'Matters, Procedures, Legal Assistants, Research Tools',
     financial: 'Portfolios, Methodologies, Analysts, Analytical Tools',
     consulting: 'Engagements, Frameworks, Consultants, Analysis Tools',
-    political: 'Campaigns, Playbooks, Strategists, Research Tools',
+    biology: 'Experiments, Research Methods, Research Assistants, Analysis Tools',
+    robotics: 'Projects, Control Strategies, Simulation Agents, Simulation Tools',
     audit: 'Audits, Procedures, Auditors, Test Tools',
     general: 'Workspaces, Playbooks, Assistants, Tools',
   };

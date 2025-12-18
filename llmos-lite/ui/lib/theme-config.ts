@@ -386,10 +386,12 @@ export const industryThemes: Record<string, ThemeName> = {
   'financial-services': 'financial',
   audit: 'financial',
   investment: 'financial',
-  political: 'campaign',
-  'public-affairs': 'campaign',
-  advocacy: 'campaign',
-  government: 'campaign',
+  biology: 'professional',
+  'biology-research': 'professional',
+  research: 'professional',
+  robotics: 'terminal',
+  'robotics-control': 'terminal',
+  simulation: 'terminal',
 };
 
 /**

@@ -4,7 +4,7 @@
 
 LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable methodologies - automatically.
 
-**Works across industries**: Legal • Financial Services • Management Consulting • Political Campaigns • Audit & Assurance • Software Development
+**Works across industries**: Legal • Financial Services • Management Consulting • Biology Research • Robotics • Audit & Assurance • Software Development
 
 ## Table of Contents
 
@@ -73,7 +73,8 @@ Whether you're drafting legal contracts, analyzing financial models, or developi
 | **Legal** | Matters | Legal Procedures | Legal Assistants | "Analyze M&A contract for red flags, generate term sheet" |
 | **Financial** | Portfolios | Investment Strategies | Analysts | "DCF valuation for tech startup, sensitivity analysis" |
 | **Consulting** | Engagements | Frameworks | Consultants | "Market sizing for SaaS product, competitive landscape" |
-| **Political** | Campaigns | Playbooks | Strategists | "Opposition research synthesis, messaging strategy" |
+| **Biology** | Experiments | Research Protocols | Research Assistants | "CRISPR gene editing protocol, protein structure prediction" |
+| **Robotics** | Projects | Control Strategies | Simulation Agents | "Path planning for autonomous drone, PID tuning" |
 | **Audit** | Audits | Audit Procedures | Auditors | "Inventory testing, control deficiency documentation" |
 | **Development** | Volumes | Skills | Agents | "Build quantum circuit simulator, optimize algorithm" |
 
@@ -92,7 +93,8 @@ Whether you're drafting legal contracts, analyzing financial models, or developi
 **AI Specialists**
 - Legal assistants for contract review
 - Financial analysts for valuation
-- Political strategists for campaign planning
+- Research assistants for experiment design
+- Simulation agents for robotics control
 - Audit specialists for compliance testing
 
 **See**: [DOMAIN_ANALYSIS.md](./DOMAIN_ANALYSIS.md) for detailed requirements by industry.

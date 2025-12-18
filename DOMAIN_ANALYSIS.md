@@ -136,49 +136,91 @@ LLMos-Lite's core innovation—treating versioned artifacts as evolving knowledg
 
 ---
 
-### 4. Political Campaigns
+### 4. Biology Research
 
 **Use Cases:**
-- Policy research and position development
-- Opposition research and response
-- Messaging and communication strategy
-- Voter targeting and outreach
-- Debate preparation
+- Experimental protocol design
+- Data analysis and visualization
+- Computational biology workflows
+- Literature review and synthesis
+- Grant proposal development
 
 **Required Adaptations:**
 
 #### Artifacts
-- **Policy Briefs** (research + talking points)
-- **Opposition Files** (structured research)
-- **Message Maps** (audience-tailored messaging)
-- **Debate Prep Books** (anticipated questions + responses)
-- **Voter Profiles** (demographic + psychographic segments)
+- **Research Protocols** (step-by-step procedures)
+- **Data Visualizations** (plots, heatmaps, phylogenetic trees)
+- **Analysis Pipelines** (bioinformatics workflows)
+- **Literature Reviews** (systematic synthesis)
+- **Grant Proposals** (research plans + budgets)
 
 #### Skills
-- `policy-research.md` - Issue analysis, precedent review
-- `opposition-research.md` - Systematic candidate/issue research
-- `message-development.md` - Frame issues for target audiences
-- `debate-prep.md` - Anticipate questions, craft responses
+- `protocol-design.md` - Experimental design, controls, variables
+- `sequence-analysis.md` - DNA/protein sequence analysis workflows
+- `statistical-analysis.md` - Hypothesis testing, significance
+- `literature-synthesis.md` - Systematic review methodology
 
 #### Agents
-- `policy-analyst.md` - Research issues, draft position papers
-- `communications-strategist.md` - Message testing, media strategy
-- `debate-coach.md` - Question anticipation, response refinement
+- `research-assistant.md` - Protocol design, literature search
+- `data-analyst.md` - Statistical analysis, visualization
+- `bioinformatics-specialist.md` - Sequence analysis, structure prediction
 
 #### Tools
-- `fact-checker` - Verify claims, identify misinformation
-- `sentiment-analyzer` - Gauge public opinion from social media
-- `message-tester` - A/B test messaging with focus groups
-- `press-release-generator` - Auto-draft communications
+- `sequence-aligner` - Multiple sequence alignment (BLAST, Clustal)
+- `structure-predictor` - Protein structure prediction (AlphaFold)
+- `stats-calculator` - T-tests, ANOVA, regression analysis
+- `plot-generator` - Publication-ready scientific figures
 
 #### Cron Learning Patterns
-- "Prepared for 5 debates → create debate-prep skill"
-- "Team used same messaging framework → standardize approach"
-- "Policy research follows pattern → auto-generate research skill"
+- "Designed 8 CRISPR protocols → create CRISPR template skill"
+- "Team used same analysis pipeline → standardize workflow"
+- "Literature reviews follow format → auto-generate review skill"
 
 ---
 
-### 5. Auditing & Assurance
+### 5. Robotics & Control Systems
+
+**Use Cases:**
+- Robot simulation and modeling
+- Control algorithm development
+- Path planning and navigation
+- Sensor fusion and perception
+- System testing and validation
+
+**Required Adaptations:**
+
+#### Artifacts
+- **Simulation Models** (URDF, robot descriptions)
+- **Control Strategies** (PID, MPC, reinforcement learning)
+- **Path Plans** (trajectory optimization)
+- **Test Reports** (performance validation)
+- **System Diagrams** (block diagrams, state machines)
+
+#### Skills
+- `robot-modeling.md` - URDF creation, kinematic chains
+- `pid-tuning.md` - Controller parameter optimization
+- `path-planning.md` - A*, RRT, trajectory optimization
+- `sensor-fusion.md` - Kalman filters, SLAM algorithms
+
+#### Agents
+- `simulation-agent.md` - Run simulations, analyze results
+- `control-engineer.md` - Design and tune controllers
+- `navigation-specialist.md` - Path planning, obstacle avoidance
+
+#### Tools
+- `urdf-builder` - Robot description generator
+- `pid-tuner` - Automatic controller tuning
+- `path-planner` - Trajectory optimization
+- `sim-runner` - Gazebo/PyBullet simulation executor
+
+#### Cron Learning Patterns
+- "Tuned PID for 10 systems → create auto-tuning skill"
+- "Team used same navigation approach → standardize strategy"
+- "Simulations follow pattern → auto-generate test suite"
+
+---
+
+### 6. Auditing & Assurance
 
 **Use Cases:**
 - Financial statement audits
@@ -396,8 +438,9 @@ LLMos-Lite's core innovation—treating versioned artifacts as evolving knowledg
 1. **Law Firms** (small to mid-size)
 2. **Financial Advisory Firms** (RIAs, boutiques)
 3. **Consulting Firms** (independent, small)
-4. **Political Campaigns** (local to national)
-5. **Audit Firms** (internal audit departments)
+4. **Research Institutions** (universities, biotech labs)
+5. **Robotics Companies** (autonomous systems, simulation)
+6. **Audit Firms** (internal audit departments)
 
 ### Pricing Tiers
 - **Individual**: $29/month (solo practitioners)
@@ -408,7 +451,8 @@ LLMos-Lite's core innovation—treating versioned artifacts as evolving knowledg
 - **Legal**: "Never research the same case twice. Your firm's expertise, always accessible."
 - **Finance**: "Standardize your analysis. Accelerate deal reviews. Reduce errors."
 - **Consulting**: "Deliver faster. Reuse frameworks. Scale your impact."
-- **Politics**: "Win with data. Message consistency. Rapid response."
+- **Biology**: "Reproduce experiments reliably. Build on past protocols. Accelerate discovery."
+- **Robotics**: "Optimize controllers faster. Reuse validated strategies. Scale simulations."
 - **Audit**: "Test smarter. Document better. Defend your work."
 
 ---
