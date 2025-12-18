@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono } from 'next/font/google';
 import '../styles/globals.css';
+import { ThemeProvider } from '@/lib/theme-provider';
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -20,7 +21,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={jetbrainsMono.className}>
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { LLMStorage, AVAILABLE_MODELS, type ModelId } from '@/lib/llm-client';
 import { UserStorage, User, Team } from '@/lib/user-storage';
+import IndustrySelector from '@/components/onboarding/IndustrySelector';
+import { Industry } from '@/lib/terminology-config';
 
 interface APIKeySetupProps {
   onComplete: () => void;
 }
 
-type SetupStep = 'welcome' | 'profile' | 'api-key' | 'model';
+type SetupStep = 'welcome' | 'industry' | 'profile' | 'api-key' | 'model';
 
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
@@ -19,6 +21,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [selectedIndustry, setSelectedIndustry] = useState<Industry | null>(null);
 
   // UI state
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
@@ -122,7 +125,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
           </div>
         </div>
       </div>
-      <button onClick={() => setCurrentStep('profile')} className="btn-terminal w-full py-3">
+      <button onClick={() => setCurrentStep('industry')} className="btn-terminal w-full py-3">
         Get Started
       </button>
       <div className="mt-6 p-3 bg-terminal-bg-tertiary border border-terminal-border rounded">
@@ -254,7 +257,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => setCurrentStep('profile')} className="btn-terminal-secondary flex-1 py-2">
+        <button onClick={() => setCurrentStep('industry')} className="btn-terminal-secondary flex-1 py-2">
           Back
         </button>
         <button onClick={handleApiKeyNext} className="btn-terminal flex-1 py-2">
@@ -323,14 +326,23 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     </>
   );
 
+  const handleIndustrySelect = (industry: Industry) => {
+    setSelectedIndustry(industry);
+    setCurrentStep('profile');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary p-4">
-      <div className="terminal-panel max-w-2xl w-full">
-        {currentStep === 'welcome' && renderWelcome()}
-        {currentStep === 'profile' && renderProfile()}
-        {currentStep === 'api-key' && renderApiKey()}
-        {currentStep === 'model' && renderModel()}
-      </div>
+      {currentStep === 'industry' ? (
+        <IndustrySelector onSelect={handleIndustrySelect} />
+      ) : (
+        <div className="terminal-panel max-w-2xl w-full">
+          {currentStep === 'welcome' && renderWelcome()}
+          {currentStep === 'profile' && renderProfile()}
+          {currentStep === 'api-key' && renderApiKey()}
+          {currentStep === 'model' && renderModel()}
+        </div>
+      )}
     </div>
   );
 }
