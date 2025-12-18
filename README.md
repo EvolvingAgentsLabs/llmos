@@ -20,22 +20,34 @@ LLMos-Lite transforms your GitHub commits into AI training data. Every session y
 
 ## What Makes This Different
 
-Traditional Git commits are for humans. **LLMos-Lite commits are for AI.**
+**LLMos-Lite is a self-improving AI workbench that learns from your work.**
 
+Your workspace (skills, agents, tools, traces) lives in GitHub repos. As you work, the system analyzes your patterns to auto-generate reusable skills - like an OS that evolves with you.
+
+**Traditional Setup:**
 ```
-session: Quantum Circuit Design
-
-Prompt: Create a Bell state circuit with 2 qubits...
-
-Stats:
-- 8 messages
-- 3 artifacts generated
-- 5 traces executed
-
-🤖 LLMunix Context Memory
+You → Chat with AI → Session ends → Context lost
 ```
 
-**Your AI analyzes these commits → Detects patterns → Generates skills → You get smarter workflows**
+**LLMos-Lite:**
+```
+You → Chat → Generate artifacts → Commit to workspace
+     → Crons analyze patterns → Auto-generate skills
+     → Skills enhance future chats → Smarter over time
+```
+
+**Example workflow:**
+1. You create 5 quantum circuit sessions (stored as traces)
+2. User Cron detects pattern: "quantum circuits" (92% confidence)
+3. Auto-generates skill: `quantum-circuit-design.md`
+4. Next time you chat about quantum, AI has your skill loaded
+5. Better suggestions, faster results
+
+**Why GitHub volumes?**
+- **Cross-device**: Your workspace syncs everywhere
+- **Team learning**: Share team skills and patterns
+- **Version control**: Full history of your AI's evolution
+- **Collaboration**: Team crons learn from collective work
 
 ---
 
@@ -44,8 +56,8 @@ Stats:
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Anthropic API key ([Get one here](https://console.anthropic.com/))
-- GitHub account (optional, for persistence)
+- OpenRouter API key ([Get one here](https://openrouter.ai/keys)) - Use any LLM (Claude, GPT-4, Gemini, etc.)
+- GitHub account (recommended, for workspace persistence)
 
 ### Setup
 
@@ -56,23 +68,49 @@ cd llmos-lite/ui
 # 2. Install dependencies
 npm install
 
-# 3. Configure environment
+# 3. (Optional) Configure GitHub OAuth for server-side token exchange
 cp .env.local.example .env.local
+# Edit .env.local with your GitHub OAuth credentials (see below)
 ```
 
 ### Get Your API Keys
 
-#### Required: Anthropic API Key
+#### Required: OpenRouter API Key
 
-Add your key during onboarding in the UI, or set it as an environment variable:
+**LLMos-Lite uses OpenRouter**, giving you access to any LLM:
+- Claude (Opus, Sonnet, Haiku)
+- GPT-4 (Turbo, Vision)
+- Gemini Pro
+- Llama 3, Mistral, and more
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+**Setup during onboarding:**
+1. Get your key at [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Open http://localhost:3000
+3. Complete onboarding wizard
+4. Enter your OpenRouter API key
+5. Select your preferred default model
 
-#### Optional: GitHub OAuth (for persistence)
+**Why OpenRouter?** One key, many models. Switch between Claude, GPT-4, and others without code changes.
 
-1. **Create OAuth App** at [GitHub Developer Settings](https://github.com/settings/developers)
+#### Recommended: GitHub OAuth (for workspace persistence)
+
+**Why connect GitHub?**
+- **Persistent Volumes**: Your workspace (skills, tools, agents, traces) stored in GitHub repos
+- **Cross-Device Access**: Work from anywhere
+- **Team Collaboration**: Shared team volumes for collaboration
+- **Learning System**: Crons analyze your commit history to auto-generate skills
+
+**Setup (two options):**
+
+**Option 1: Connect from UI (easiest)**
+1. Open http://localhost:3000
+2. Complete onboarding
+3. Right sidebar → GITHUB section → "Connect with GitHub"
+4. Authorize the app
+5. Done! Your volumes are now backed by GitHub repos
+
+**Option 2: Configure OAuth for local development**
+1. **Create GitHub OAuth App** at [GitHub Developer Settings](https://github.com/settings/developers)
    - **Application name**: `LLMos-Lite Dev`
    - **Homepage URL**: `http://localhost:3000`
    - **Authorization callback URL**: `http://localhost:3000/api/auth/github/callback`
@@ -86,6 +124,11 @@ export ANTHROPIC_API_KEY=sk-ant-...
    NEXTAUTH_URL=http://localhost:3000
    ```
 
+**What gets stored in GitHub?**
+- **User Volume**: `llmunix-user-{username}` - Your skills, agents, tools, session traces
+- **Team Volume**: `llmunix-team-volumes` - Shared team artifacts
+- **System Volume**: `llmunix/system-volumes` - Global templates (read-only)
+
 ### Run
 
 ```bash
@@ -96,12 +139,12 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ### Try It Out
 
-1. Complete onboarding (add Anthropic API key)
+1. **Complete onboarding** (add OpenRouter API key, select model)
 2. **Click "Try Now"** on quantum/3D sample prompts
-3. Chat with AI, create sessions
-4. **Connect GitHub** (right sidebar → GITHUB section)
-5. **Commit Session** (right sidebar → ACTIONS)
-6. **Run Evolution Cron** (left sidebar → CRONS → "Run Now")
+3. **Chat with AI**, create sessions, generate artifacts
+4. **Connect GitHub** (right sidebar → GITHUB section) to persist your workspace
+5. **Commit Session** (right sidebar → ACTIONS) to save to GitHub
+6. **Run Evolution Cron** (left sidebar → CRONS → "Run Now") to analyze patterns and generate skills
 
 ---
 
@@ -111,38 +154,62 @@ Open [http://localhost:3000](http://localhost:3000)
 
 No more copy-paste. Click **"Try Now"** to send quantum/3D prompts directly to chat.
 
-### 2. GitHub Integration (Optional)
+### 2. GitHub-Backed Workspace Volumes
 
-- **Real Git Commits**: Sessions → GitHub repos
-- **Cross-Device Sync**: Access anywhere
-- **Team Collaboration**: Shared team volumes
-- **Context Memory**: Commits embed prompts for AI analysis
+- **Persistent Storage**: Skills, agents, tools, traces stored in GitHub repos
+- **Learning System**: Crons analyze commit history to detect patterns
+- **Cross-Device Access**: Your workspace available anywhere
+- **Team Collaboration**: Shared team volumes for collective learning
+- **Version Control**: Full history of artifacts and decisions
 
-### 3. Intelligent Cron Analysis
+### 3. Intelligent Cron-Based Learning
 
-- Analyzes your commit history
-- Detects recurring patterns (e.g., "quantum circuits" × 5 times)
-- **Auto-generates skills** from patterns
-- Live countdown timers show next execution
+- **User Cron**: Analyzes your personal workspace to detect your workflow patterns
+- **Team Cron**: Identifies team-wide patterns across shared volumes
+- **System Cron**: Refines global skills from collective usage
+- **Auto-generates skills** from recurring patterns (>85% confidence)
+- **Live countdown timers** show next evolution cycle
 
-### 4. Interactive Artifacts
+### 4. Interactive Artifacts with WebAssembly Execution
 
-- **Quantum Circuits**: Qiskit visualizations
-- **3D Graphics**: Three.js renders
-- **Data Plots**: Convergence graphs
-- **Code Execution**: Python/JS in browser (WebAssembly)
+- **Quantum Circuits**: Qiskit code generation, visualization, and execution
+- **3D Graphics**: Three.js interactive renders with executable code
+- **Data Plots**: Matplotlib/Plotly visualizations with execution
+- **Dual View Mode**: See both graphical output and generated code
+- **Run Button**: Execute Python/JavaScript code directly in browser
+- **Safe Execution**: Pyodide WebAssembly sandbox (no server needed)
+- **Output Capture**: See stdout, stderr, results, and errors
 
-### 5. Multi-Volume Architecture
+### 5. Multi-Volume Workspace Architecture
 
 ```mermaid
 graph TD
-    A[System Volume<br/>Read-Only<br/>Global Best Practices] --> B[Team Volume<br/>Shared<br/>Team Collaboration]
-    B --> C[User Volume<br/>Private<br/>Your Experiments]
+    A[System Volume<br/>Read-Only<br/>Global Skills, Tools, Agents<br/>Refined by System Cron] --> B[Team Volume<br/>Shared<br/>Team Skills & Traces<br/>Learned by Team Cron]
+    B --> C[User Volume<br/>Private<br/>Your Artifacts & Sessions<br/>Evolved by User Cron]
+
+    A1[System Cron<br/>Refines global patterns] -.->|Updates| A
+    B1[Team Cron<br/>Learns team patterns] -.->|Updates| B
+    C1[User Cron<br/>Detects your patterns] -.->|Updates| C
 
     style A fill:#0a0e14,stroke:#00ff88,color:#00ff88
     style B fill:#0a0e14,stroke:#00d4ff,color:#00d4ff
     style C fill:#0a0e14,stroke:#ffcc00,color:#ffcc00
+    style A1 fill:#0a0e14,stroke:#00ff88,color:#00ff88,stroke-dasharray: 5 5
+    style B1 fill:#0a0e14,stroke:#00d4ff,color:#00d4ff,stroke-dasharray: 5 5
+    style C1 fill:#0a0e14,stroke:#ffcc00,color:#ffcc00,stroke-dasharray: 5 5
 ```
+
+**Each volume is a GitHub repository containing:**
+- **Skills** (`skills/`) - Markdown documents with reusable workflows
+- **Agents** (`agents/`) - Sub-agent definitions that run client-side with LLM access
+- **Tools** (`tools/`) - Python/JavaScript tools that execute in browser via WebAssembly
+- **Traces** (`traces/`) - Decision history, prompts, context, agent communication
+- **Sessions** (`sessions/`) - Chat sessions with artifacts
+
+**Tools and Agents execute client-side:**
+- Tools: Python/JS code in markdown → Pyodide WebAssembly execution
+- Agents: Can call LLMs and use tools autonomously
+- Everything runs in your browser, nothing on our servers
 
 ---
 
@@ -175,50 +242,131 @@ graph LR
 
 #### Phase 1: You Work (Day 1-7)
 
-- Create sessions (chat, code, analyze)
-- Each session committed to GitHub
-- Commit messages embed prompts + artifacts
+- Create sessions, generate artifacts (skills, agents, tools)
+- Commit to your User Volume (GitHub repo)
+- Traces capture prompts, decisions, agent interactions
 
-#### Phase 2: AI Evolves (Night 7)
+#### Phase 2: Cron Learns (Night 7)
 
-- Cron runs (or manual trigger)
-- Fetches commit history from GitHub
-- Extracts prompts: "quantum circuit" × 5
+- **User Cron** analyzes your commit history
+- Extracts patterns from traces: "quantum circuit" × 5
 - LLM detects pattern (92% confidence)
-- Generates skill: `quantum-circuit-design.md`
+- Auto-generates skill: `quantum-circuit-design.md`
+- Commits skill back to User Volume
 
 #### Phase 3: You Benefit (Day 8+)
 
-- New skill auto-loaded in context
-- AI gives better guidance
-- Faster workflows
+- New skill auto-loaded when you chat
+- AI has better context and guidance
+- Faster workflows, smarter suggestions
+- Skill can be promoted to Team/System volumes
 
-### Commit as Context Memory
+### Workspace Artifacts as Learning Data
 
-Every commit you make:
+**What gets stored in your GitHub volumes:**
 
 ```
-session: VQE Optimization
-
-Prompt: Create VQE circuit for H2 molecule...
-
-Stats:
-- 12 messages
-- 3 artifacts: code, circuit, plot
-- 8 traces executed
-
-Artifacts:
-- quantum-circuit: bell_state
-- code: vqe_h2.py
-- skill: quantum-optimization.md
-
-🤖 LLMunix Context Memory
+volumes/
+├── user-{username}/           # Your private workspace
+│   ├── skills/                # Auto-generated from your patterns
+│   │   └── quantum-vqe-optimization.md
+│   ├── agents/                # Sub-agents you define
+│   │   └── circuit-analyzer-agent.md
+│   ├── tools/                 # Custom tools
+│   │   └── qiskit-wrapper.py
+│   ├── traces/                # Decision history & context
+│   │   └── 2025-12-18-quantum-session.json
+│   └── sessions/              # Chat sessions
+│       └── vqe-h2-molecule.json
+├── team-{id}/                 # Team shared workspace
+│   └── skills/                # Team-learned patterns
+└── system/                    # Global workspace (read-only)
+    └── skills/                # Refined best practices
 ```
 
-This structured format enables:
-- **Pattern Detection**: "User created 5 quantum circuits → pattern"
-- **Skill Generation**: "Generate skill from pattern"
-- **Team Learning**: "Team created 20 API endpoints → team skill"
+**Each trace captures:**
+- User prompts and LLM responses
+- Artifacts generated (skills, agents, tools)
+- Decision context and reasoning
+- Inter-agent communication
+
+**Crons analyze traces to detect patterns:**
+- **Pattern Detection**: "User created 5 quantum circuits → pattern detected"
+- **Skill Generation**: "Generate reusable skill from pattern"
+- **Team Learning**: "3 team members using similar workflow → promote to team skill"
+- **System Evolution**: "Highly-used team skill → promote to system volume"
+
+### Tools and Agents Execute in Browser
+
+**Define a tool** (in `volumes/user-{username}/tools/calculator.md`):
+```markdown
+---
+name: Calculator
+description: Evaluate mathematical expressions
+language: python
+inputs:
+  - name: expression
+    type: string
+    required: true
+outputs:
+  - name: result
+    type: number
+---
+
+## Code
+
+\`\`\`python
+def main(expression):
+    """Safely evaluate math expression"""
+    import ast
+    import operator
+
+    # Safe operators only
+    ops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+    }
+
+    # Parse and evaluate
+    tree = ast.parse(expression, mode='eval')
+    # ... safety checks ...
+    return result
+\`\`\`
+```
+
+**Define an agent** (in `volumes/user-{username}/agents/researcher.md`):
+```markdown
+---
+name: Research Agent
+description: Autonomous researcher with web search and analysis
+model: anthropic/claude-sonnet-4.5
+tools:
+  - web-search
+  - data-analyzer
+  - report-generator
+maxIterations: 10
+---
+
+## System Prompt
+
+You are an expert research assistant. Use the available tools to:
+1. Search for information
+2. Analyze data
+3. Generate comprehensive reports
+
+When you need data, use \`\`\`tool blocks to call tools.
+```
+
+**Agent execution flow:**
+1. User: "Research quantum computing trends"
+2. Agent calls `web-search` tool → Gets articles
+3. Agent calls `data-analyzer` tool → Extracts insights
+4. Agent calls `report-generator` tool → Creates markdown report
+5. Returns final report to user
+
+All execution happens in your browser via WebAssembly!
 
 ---
 
@@ -298,9 +446,23 @@ graph TD
 
 #### `volumes/` - Git Repositories (Auto-Created)
 
-- **`system/skills/`** - Global skills
-- **`teams/{id}/skills/`** - Team skills
-- **`users/{id}/`** - User sessions + skills
+**User Volume** (`llmunix-user-{username}` GitHub repo):
+- `skills/` - Auto-generated skills from your patterns
+- `agents/` - Sub-agent definitions
+- `tools/` - Custom tool implementations
+- `traces/` - Decision history, prompts, context
+- `sessions/` - Chat sessions with artifacts
+
+**Team Volume** (`llmunix-team-volumes` GitHub repo):
+- `skills/` - Team-learned patterns
+- `agents/` - Shared team agents
+- `tools/` - Team tools
+- `traces/` - Cross-team collaboration history
+
+**System Volume** (`llmunix/system-volumes` GitHub repo, read-only):
+- `skills/` - Global best practices
+- `agents/` - System agents
+- `tools/` - Core tools
 
 ---
 
@@ -308,24 +470,25 @@ graph TD
 
 ### Environment Variables
 
-#### UI (`.env.local`)
+#### UI (`.env.local`) - Optional for Local Development
 
 ```env
-# Required for chat (or set during onboarding)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Optional: GitHub Integration
+# GitHub OAuth (for server-side token exchange)
+# Users can also connect via UI without these
 GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_secret
+GITHUB_CLIENT_SECRET=your_client_secret
 NEXT_PUBLIC_GITHUB_CLIENT_ID=your_client_id
 NEXTAUTH_SECRET=$(openssl rand -base64 32)
 NEXTAUTH_URL=http://localhost:3000
 ```
 
+**Note:** Users configure their OpenRouter API key during onboarding in the UI. No server-side API keys needed.
+
 #### Backend (if using Python API)
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Users provide their own keys via UI
+# Backend doesn't store keys
 export LLMOS_VOLUMES_PATH=./volumes
 ```
 
@@ -370,11 +533,11 @@ graph TB
 
 **Key Components:**
 
-- `lib/llm-client.ts` - Anthropic/OpenRouter client
-- `lib/github-auth.ts` - OAuth flow
-- `lib/git-service.ts` - Commit/fetch operations
-- `lib/cron-analyzer.ts` - Pattern detection engine
-- `contexts/SessionContext.tsx` - Session state management
+- `lib/llm-client.ts` - OpenRouter client (supports Claude, GPT-4, Gemini, etc.)
+- `lib/github-auth.ts` - GitHub OAuth flow for workspace persistence
+- `lib/git-service.ts` - Git operations (commit artifacts, fetch traces)
+- `lib/cron-analyzer.ts` - Pattern detection and skill generation engine
+- `contexts/SessionContext.tsx` - Session and artifact state management
 
 ### Adding Features
 
@@ -508,12 +671,31 @@ npm run build
 - Access tokens stored in localStorage (client-side only)
 - Private repos by default
 
-### Execution Safety
+### Zero-Trust Data Architecture
 
-- Python/JS code runs in browser via WebAssembly (Pyodide)
-- Sandboxed execution environment
-- No server-side code execution
-- Resource limits enforced
+**Your data never touches our servers:**
+- **OpenRouter API calls**: Browser → OpenRouter (direct)
+- **GitHub operations**: Browser → GitHub (direct)
+- **Session storage**: Browser localStorage only
+- **Workspace volumes**: Your GitHub repos only
+- **Code execution**: Browser WebAssembly only
+
+We cannot see:
+- Your OpenRouter API key
+- Your chat sessions
+- Your workspace artifacts
+- Your GitHub data
+- Your tool/agent execution
+
+### WebAssembly Execution Safety
+
+**All code runs in your browser:**
+- **Python**: Pyodide (Python 3.11 in WebAssembly)
+- **JavaScript**: Sandboxed execution context
+- **No file system access**: Cannot read/write files
+- **No network access**: Except explicit fetch() calls
+- **Resource limits**: 30-second timeout, memory limits
+- **Output capture**: Separate stdout/stderr streams
 
 ---
 
@@ -528,19 +710,31 @@ npm run build
 - [x] AI pattern detection
 - [x] Auto skill generation
 - [x] Multi-volume architecture
+- [x] **WebAssembly code execution** - Python via Pyodide, JavaScript sandboxed
+- [x] **Artifact execution** - Run generated quantum/3D/plot code in browser
+- [x] **Tool execution system** - Parse and execute tools from markdown
+- [x] **Agent execution engine** - Sub-agents with LLM + tool access
 
-### 🔄 In Progress (v0.2)
+### ✅ Completed (v0.2)
+
+- [x] **Auto-load tools/agents/skills from GitHub volumes** - VolumeLoader system
+- [x] **Agent communication protocol** - Inter-agent messaging and task delegation
+- [x] **Skill execution engine** - Skills that orchestrate tools and agents
+- [x] **Multi-agent collaboration** - Agents can delegate tasks to other agents
+- [x] **Workflow parsing** - Parse skill workflows from markdown (tools, agents, LLM calls, conditionals, loops)
+
+### 🔄 In Progress (v0.3)
 
 - [ ] React Flow workflow canvas
 - [ ] Drag-and-drop node editor
+- [ ] Package preloading optimization (Next.js SSR compatibility)
+
+### 📋 Planned (v0.4)
+
 - [ ] Real-time collaboration
 - [ ] Mobile PWA
-
-### 📋 Planned (v0.3)
-
 - [ ] Vector DB for semantic skill search
 - [ ] Skill marketplace
-- [ ] Multi-LLM support (GPT-4, Gemini)
 - [ ] Webhook integration for GitHub
 - [ ] Advanced analytics dashboard
 

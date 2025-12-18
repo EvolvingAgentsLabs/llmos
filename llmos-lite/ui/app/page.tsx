@@ -38,6 +38,9 @@ export default function Home() {
     // Check if both LLM config AND user/team are configured
     const configured = LLMStorage.isConfigured() && UserStorage.isUserConfigured();
     setIsConfigured(configured);
+
+    // TODO: Re-enable Pyodide preloading once Next.js compatibility is resolved
+    // The preloader is implemented but conflicts with Next.js SSR
   }, []);
 
   // Don't render anything until mounted (client-side only)
