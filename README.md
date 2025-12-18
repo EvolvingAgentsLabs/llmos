@@ -806,14 +806,26 @@ We cannot see:
 - [x] **Domain-specific sample prompts** - 3 curated prompts per industry (24 total)
 - [x] **Industry template library** - Pre-configured skills, tools, agents for each domain
 
-### 📋 Planned (v0.4)
+### ✅ Completed (v0.4 - Collaboration & Scale)
 
-- [ ] Real-time collaboration
-- [ ] Mobile PWA
-- [ ] Vector DB for semantic skill search
-- [ ] Skill marketplace
-- [ ] Webhook integration for GitHub
-- [ ] Advanced analytics dashboard
+- [x] **Real-time collaboration** - WebSocket-based synchronization across users and devices
+- [x] **Mobile PWA** - Progressive Web App with offline support, service workers, and install prompts
+- [x] **Vector DB for semantic search** - Embedding-based skill discovery with cosine similarity
+- [x] **Skill marketplace** - Community sharing, ratings, versioning, and dependency management
+- [x] **GitHub webhook integration** - Automated reindexing, evolution triggers, and notifications
+- [x] **Advanced analytics dashboard** - Usage metrics, trends, and evolution insights
+
+**See**: [V0.4_FEATURES.md](./V0.4_FEATURES.md) for comprehensive documentation.
+
+### 📋 Planned (v0.5)
+
+- [ ] Operational Transform for concurrent editing
+- [ ] Voice/video chat integration
+- [ ] Advanced vector backends (Pinecone, Weaviate)
+- [ ] Marketplace payments and revenue sharing
+- [ ] Predictive analytics with ML
+- [ ] Mobile native apps (React Native)
+- [ ] Desktop apps (Electron)
 
 ---
 
