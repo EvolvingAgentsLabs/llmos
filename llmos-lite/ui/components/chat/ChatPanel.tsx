@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
+import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
 import type { Message } from '@/contexts/SessionContext';
 
 interface ChatPanelProps {
@@ -154,10 +155,12 @@ export default function ChatPanel({
 
   // Welcome state when no session
   if (!activeSession || !currentSession) {
+    const samplePrompts = getCurrentSamplePrompts();
+
     return (
       <div className="h-full flex flex-col bg-terminal-bg-secondary">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="max-w-md space-y-4">
+          <div className="max-w-2xl space-y-4">
             <div className="text-6xl mb-4">💬</div>
             <h2 className="terminal-heading text-lg">Welcome to LLMos-Lite!</h2>
             <div className="text-sm text-terminal-fg-secondary space-y-2">
@@ -169,12 +172,22 @@ export default function ChatPanel({
             </div>
             <div className="mt-6 p-4 bg-terminal-bg-tertiary border border-terminal-border rounded text-left">
               <div className="terminal-heading text-xs mb-2">💡 TRY THESE:</div>
-              <ul className="text-xs text-terminal-fg-secondary space-y-1">
-                <li>• "Help me create a Python script to analyze CSV data"</li>
-                <li>• "Explain quantum computing basics"</li>
-                <li>• "Build a REST API with FastAPI"</li>
-                <li>• "Create a React component for a todo list"</li>
-              </ul>
+              <div className="space-y-2">
+                {samplePrompts.slice(0, 3).map((sample, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setInputValue(sample.prompt)}
+                    className="w-full text-left p-2 rounded terminal-hover transition-all"
+                  >
+                    <div className="text-xs font-medium text-terminal-fg-primary">
+                      {sample.title}
+                    </div>
+                    <div className="text-xs text-terminal-fg-tertiary mt-0.5">
+                      {sample.description}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

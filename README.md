@@ -795,16 +795,16 @@ We cannot see:
 - [x] **Multi-agent collaboration** - Agents can delegate tasks to other agents
 - [x] **Workflow parsing** - Parse skill workflows from markdown (tools, agents, LLM calls, conditionals, loops)
 
-### 🔄 In Progress (v0.3 - Domain Adaptation)
+### ✅ Completed (v0.3 - Domain Adaptation)
 
-- [x] **Multi-domain analysis** - Requirements for legal, financial, consulting, political, audit domains
-- [x] **Theme system** - Configurable themes (Terminal, Professional, Financial, Campaign)
-- [x] **Terminology system** - Domain-specific language (Matters, Portfolios, Engagements, etc.)
+- [x] **Multi-domain analysis** - Requirements for legal, financial, consulting, biology, robotics, audit domains
+- [x] **Theme system** - Configurable themes (Terminal, Professional, Financial) with light/dark modes
+- [x] **Terminology system** - Domain-specific language (Matters, Portfolios, Engagements, Experiments, Projects, etc.)
 - [x] **Industry onboarding** - Select industry, auto-configure theme and terminology
-- [ ] Integrate industry selection into onboarding flow
-- [ ] Professional theme CSS implementation
-- [ ] Domain-specific sample prompts
-- [ ] Industry template library
+- [x] **Integrated industry selection** - Industry selector as first onboarding step
+- [x] **Professional theme CSS** - ThemeProvider with dynamic CSS variable application
+- [x] **Domain-specific sample prompts** - 3 curated prompts per industry (24 total)
+- [x] **Industry template library** - Pre-configured skills, tools, agents for each domain
 
 ### 📋 Planned (v0.4)
 
