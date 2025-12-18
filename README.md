@@ -1,8 +1,10 @@
 # LLMos-Lite
 
-> **A Self-Improving AI Workbench with GitHub-Backed Context Memory**
+> **The Operating System for Professional Knowledge Work**
 
-LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable skills - automatically.
+LLMos-Lite transforms your GitHub commits into AI training data. Every session you create, every prompt you write, becomes context memory that evolves into reusable methodologies - automatically.
+
+**Works across industries**: Legal • Financial Services • Management Consulting • Political Campaigns • Audit & Assurance • Software Development
 
 ## Table of Contents
 
@@ -48,6 +50,52 @@ You → Chat → Generate artifacts → Commit to workspace
 - **Team learning**: Share team skills and patterns
 - **Version control**: Full history of your AI's evolution
 - **Collaboration**: Team crons learn from collective work
+
+---
+
+## Multi-Domain Knowledge Platform
+
+**LLMos-Lite adapts to your industry**, not the other way around.
+
+### How It Works Across Domains
+
+The core insight: **Artifacts are not just deliverables—they're living memory of how to create them.**
+
+Whether you're drafting legal contracts, analyzing financial models, or developing campaign strategies, the system:
+1. **Learns your patterns** (contract clauses, valuation methods, messaging frameworks)
+2. **Auto-generates playbooks** (reusable workflows specific to your domain)
+3. **Evolves with your team** (collective intelligence that compounds over time)
+
+### Industry Applications
+
+| Industry | Workspace | Playbooks | AI Specialists | Example Use Case |
+|----------|-----------|-----------|----------------|------------------|
+| **Legal** | Matters | Legal Procedures | Legal Assistants | "Analyze M&A contract for red flags, generate term sheet" |
+| **Financial** | Portfolios | Investment Strategies | Analysts | "DCF valuation for tech startup, sensitivity analysis" |
+| **Consulting** | Engagements | Frameworks | Consultants | "Market sizing for SaaS product, competitive landscape" |
+| **Political** | Campaigns | Playbooks | Strategists | "Opposition research synthesis, messaging strategy" |
+| **Audit** | Audits | Audit Procedures | Auditors | "Inventory testing, control deficiency documentation" |
+| **Development** | Volumes | Skills | Agents | "Build quantum circuit simulator, optimize algorithm" |
+
+### What Changes Per Industry
+
+**UI & Language**
+- Professional themes (not just terminal green)
+- Domain-specific terminology (e.g., "Matter" for legal, "Portfolio" for finance)
+- Industry-appropriate sample prompts
+
+**Templates & Workflows**
+- Pre-loaded methodologies from your field
+- Industry-standard frameworks
+- Firm-specific best practices
+
+**AI Specialists**
+- Legal assistants for contract review
+- Financial analysts for valuation
+- Political strategists for campaign planning
+- Audit specialists for compliance testing
+
+**See**: [DOMAIN_ANALYSIS.md](./DOMAIN_ANALYSIS.md) for detailed requirements by industry.
 
 ---
 
@@ -745,11 +793,16 @@ We cannot see:
 - [x] **Multi-agent collaboration** - Agents can delegate tasks to other agents
 - [x] **Workflow parsing** - Parse skill workflows from markdown (tools, agents, LLM calls, conditionals, loops)
 
-### 🔄 In Progress (v0.3)
+### 🔄 In Progress (v0.3 - Domain Adaptation)
 
-- [ ] React Flow workflow canvas
-- [ ] Drag-and-drop node editor
-- [ ] Package preloading optimization (Next.js SSR compatibility)
+- [x] **Multi-domain analysis** - Requirements for legal, financial, consulting, political, audit domains
+- [x] **Theme system** - Configurable themes (Terminal, Professional, Financial, Campaign)
+- [x] **Terminology system** - Domain-specific language (Matters, Portfolios, Engagements, etc.)
+- [x] **Industry onboarding** - Select industry, auto-configure theme and terminology
+- [ ] Integrate industry selection into onboarding flow
+- [ ] Professional theme CSS implementation
+- [ ] Domain-specific sample prompts
+- [ ] Industry template library
 
 ### 📋 Planned (v0.4)
 
