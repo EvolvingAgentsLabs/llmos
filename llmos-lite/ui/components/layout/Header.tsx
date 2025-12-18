@@ -18,29 +18,62 @@ export default function Header() {
 
   return (
     <>
-      <header className="h-12 md:h-14 bg-terminal-bg-secondary border-b border-terminal-border flex items-center justify-between px-3 md:px-4">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="text-terminal-accent-green font-bold text-base md:text-lg">
-            LLMos-Lite
-          </div>
-          <div className="hidden md:block text-terminal-fg-tertiary text-xs">
-            Web Terminal
+      <header className="h-14 md:h-16 bg-bg-secondary/50 backdrop-blur-xl border-b border-border-primary/50 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+        {/* Logo and branding */}
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2">
+            {/* Logo icon */}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-glow">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            {/* Brand name */}
+            <div>
+              <h1 className="text-gradient font-semibold text-lg md:text-xl tracking-tight">
+                LLMos-Lite
+              </h1>
+              <p className="hidden md:block text-fg-tertiary text-xs -mt-0.5">
+                AI Operating System
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4">
+        {/* Right side: User info and status */}
+        <div className="flex items-center gap-3 md:gap-4">
+          {/* User profile button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="text-terminal-fg-secondary text-xs md:text-sm hover:text-terminal-accent-green transition-colors cursor-pointer touch-manipulation min-h-[44px] flex items-center"
-            title="Click to open profile settings"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:bg-bg-tertiary group"
+            title="Open profile settings"
           >
-            <span className="md:hidden">⚙️</span>
-            <span className="hidden md:inline">{userDisplay}</span>
+            {/* User avatar */}
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white text-xs font-semibold shadow-sm">
+              {userDisplay.charAt(0).toUpperCase()}
+            </div>
+            {/* User name - hidden on mobile */}
+            <span className="hidden md:inline text-sm font-medium text-fg-primary group-hover:text-accent-primary transition-colors">
+              {userDisplay}
+            </span>
+            {/* Settings icon - visible on mobile */}
+            <svg className="w-4 h-4 text-fg-secondary group-hover:text-accent-primary transition-colors md:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
           </button>
-          <div className="w-2 h-2 rounded-full bg-terminal-accent-green animate-pulse-slow" />
+
+          {/* Status indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-success/10 border border-accent-success/30">
+            <div className="status-active" />
+            <span className="hidden md:inline text-xs font-medium text-accent-success">
+              Online
+            </span>
+          </div>
         </div>
       </header>
 
+      {/* Settings modal */}
       {showSettings && (
         <ProfileSettings onClose={() => setShowSettings(false)} />
       )}

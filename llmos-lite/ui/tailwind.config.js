@@ -8,50 +8,109 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Terminal color scheme
-        terminal: {
-          bg: {
-            primary: '#0a0e14',
-            secondary: '#131721',
-            tertiary: '#1c212b',
-          },
-          fg: {
-            primary: '#e6e6e6',
-            secondary: '#8a8a8a',
-            tertiary: '#4a4a4a',
-          },
-          accent: {
-            green: '#00ff88',
-            blue: '#00d4ff',
-            yellow: '#ffcc00',
-            red: '#ff4444',
-            purple: '#bb00ff',
-          },
-          border: '#2a2e3a',
-          'border-focus': '#00ff88',
-          cursor: '#00ff88',
-          selection: 'rgba(0, 255, 136, 0.3)',
+        // Modern color system using RGB for opacity support
+        bg: {
+          primary: 'rgb(var(--bg-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--bg-secondary) / <alpha-value>)',
+          tertiary: 'rgb(var(--bg-tertiary) / <alpha-value>)',
+          elevated: 'rgb(var(--bg-elevated) / <alpha-value>)',
         },
+        fg: {
+          primary: 'rgb(var(--fg-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--fg-secondary) / <alpha-value>)',
+          tertiary: 'rgb(var(--fg-tertiary) / <alpha-value>)',
+          muted: 'rgb(var(--fg-muted) / <alpha-value>)',
+        },
+        accent: {
+          primary: 'rgb(var(--accent-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--accent-secondary) / <alpha-value>)',
+          success: 'rgb(var(--accent-success) / <alpha-value>)',
+          warning: 'rgb(var(--accent-warning) / <alpha-value>)',
+          error: 'rgb(var(--accent-error) / <alpha-value>)',
+          info: 'rgb(var(--accent-info) / <alpha-value>)',
+        },
+        border: {
+          DEFAULT: 'rgb(var(--border-primary) / <alpha-value>)',
+          primary: 'rgb(var(--border-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--border-secondary) / <alpha-value>)',
+          focus: 'rgb(var(--border-focus) / <alpha-value>)',
+        },
+        'glass-bg': 'rgb(var(--glass-bg))',
+        'glass-border': 'rgb(var(--glass-border))',
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'monospace'],
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'SF Mono', 'Menlo', 'Monaco', 'monospace'],
+      },
+      fontSize: {
+        xs: ['0.75rem', { lineHeight: '1rem' }],
+        sm: ['0.875rem', { lineHeight: '1.25rem' }],
+        base: ['1rem', { lineHeight: '1.5rem' }],
+        lg: ['1.125rem', { lineHeight: '1.75rem' }],
+        xl: ['1.25rem', { lineHeight: '1.75rem' }],
+        '2xl': ['1.5rem', { lineHeight: '2rem' }],
+        '3xl': ['1.875rem', { lineHeight: '2.25rem' }],
+        '4xl': ['2.25rem', { lineHeight: '2.5rem' }],
+      },
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '128': '32rem',
       },
       animation: {
-        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'cursor-blink': 'blink 1s step-end infinite',
+        'pulse-smooth': 'pulse-smooth 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in': 'fade-in 0.3s ease-out',
+        'slide-in-from-right': 'slide-in-from-right 0.3s ease-out',
+        'slide-in-from-left': 'slide-in-from-left 0.3s ease-out',
+        'scale-in': 'scale-in 0.2s ease-out',
       },
       keyframes: {
-        blink: {
+        'pulse-smooth': {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0' },
+          '50%': { opacity: '0.5' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-in-from-right': {
+          from: { transform: 'translateX(100%)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
+        'slide-in-from-left': {
+          from: { transform: 'translateX(-100%)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
+        'scale-in': {
+          from: { transform: 'scale(0.9)', opacity: '0' },
+          to: { transform: 'scale(1)', opacity: '1' },
         },
       },
       boxShadow: {
-        'glow-green': '0 0 10px rgba(0, 255, 136, 0.5)',
-        'glow-blue': '0 0 10px rgba(0, 212, 255, 0.5)',
+        'glow': '0 0 20px rgb(var(--accent-primary) / 0.3)',
+        'glow-lg': '0 0 30px rgb(var(--accent-primary) / 0.4)',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    // Custom plugin for utilities
+    function({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+        },
+        '.scrollbar-thin': {
+          'scrollbar-width': 'thin',
+        },
+      });
+    },
+  ],
 }

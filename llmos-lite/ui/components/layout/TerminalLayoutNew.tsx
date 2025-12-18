@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
 import dynamic from 'next/dynamic';
 import Header from './Header';
@@ -20,7 +20,6 @@ export default function TerminalLayoutNew() {
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if this is the first time the user is seeing the app
     const hasSeenGuide = localStorage.getItem('llmos_has_seen_guide');
     if (!hasSeenGuide) {
       setShowGuide(true);
@@ -34,18 +33,18 @@ export default function TerminalLayoutNew() {
 
   const handleSendPromptFromGuide = (prompt: string) => {
     setPendingPrompt(prompt);
-    setMobileTab('chat'); // Switch to chat tab on mobile
+    setMobileTab('chat');
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {/* Header */}
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary">
+      {/* Modern Header - Fixed height */}
       <Header />
 
-      {/* Desktop: 2 main panels + optional context sidebar (lg+) */}
+      {/* Desktop Layout: 3-panel design (lg+) */}
       <div className="hidden lg:flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Navigation & Sessions */}
-        <div className="w-80 flex-shrink-0 border-r border-terminal-border overflow-hidden">
+        {/* Left Sidebar: Navigation & Sessions - Fixed width */}
+        <div className="w-72 flex-shrink-0 border-r border-border-primary/50 flex flex-col overflow-hidden bg-bg-secondary/30">
           <SidebarPanel
             activeVolume={activeVolume}
             onVolumeChange={setActiveVolume}
@@ -54,8 +53,8 @@ export default function TerminalLayoutNew() {
           />
         </div>
 
-        {/* Center: Chat/Main Content */}
-        <div className="flex-1 border-r border-terminal-border overflow-hidden">
+        {/* Center: Chat/Main Content - Flexible */}
+        <div className="flex-1 border-r border-border-primary/50 flex flex-col overflow-hidden">
           <ChatPanel
             activeSession={activeSession}
             activeVolume={activeVolume}
@@ -65,8 +64,8 @@ export default function TerminalLayoutNew() {
           />
         </div>
 
-        {/* Right: Context Panel (Artifacts, Evolution) */}
-        <div className="w-80 flex-shrink-0 overflow-hidden">
+        {/* Right: Context Panel - Fixed width */}
+        <div className="w-80 flex-shrink-0 flex flex-col overflow-hidden bg-bg-secondary/30">
           <ContextPanel
             activeSession={activeSession}
             activeVolume={activeVolume}
@@ -74,10 +73,10 @@ export default function TerminalLayoutNew() {
         </div>
       </div>
 
-      {/* Tablet: 2 panels (md-lg) */}
+      {/* Tablet Layout: 2-panel design (md-lg) */}
       <div className="hidden md:flex lg:hidden flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-64 flex-shrink-0 border-r border-terminal-border overflow-hidden">
+        {/* Sidebar - Fixed width */}
+        <div className="w-64 flex-shrink-0 border-r border-border-primary/50 flex flex-col overflow-hidden bg-bg-secondary/30">
           <SidebarPanel
             activeVolume={activeVolume}
             onVolumeChange={setActiveVolume}
@@ -89,8 +88,8 @@ export default function TerminalLayoutNew() {
           />
         </div>
 
-        {/* Chat or Context */}
-        <div className="flex-1 overflow-hidden">
+        {/* Chat or Context - Flexible */}
+        <div className="flex-1 flex flex-col overflow-hidden">
           {mobileTab === 'chat' ? (
             <ChatPanel
               activeSession={activeSession}
@@ -107,102 +106,106 @@ export default function TerminalLayoutNew() {
           )}
         </div>
 
-        {/* Tablet Toggle */}
-        <div className="absolute bottom-4 right-4 z-10 flex gap-2">
+        {/* Floating Tablet Toggle */}
+        <div className="absolute bottom-6 right-6 z-10 flex gap-2 glass-panel p-1">
           <button
             onClick={() => setMobileTab('chat')}
-            className={`px-3 py-2 rounded text-xs font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               mobileTab === 'chat'
-                ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                : 'bg-terminal-bg-secondary text-terminal-fg-secondary border border-terminal-border hover:border-terminal-accent-green'
+                ? 'bg-accent-primary text-white shadow-glow'
+                : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
             }`}
           >
             Chat
           </button>
           <button
             onClick={() => setMobileTab('context')}
-            className={`px-3 py-2 rounded text-xs font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               mobileTab === 'context'
-                ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                : 'bg-terminal-bg-secondary text-terminal-fg-secondary border border-terminal-border hover:border-terminal-accent-green'
+                ? 'bg-accent-primary text-white shadow-glow'
+                : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
             }`}
           >
-            Info
+            Context
           </button>
         </div>
       </div>
 
-      {/* Mobile: Single panel with tabs (< md) */}
+      {/* Mobile Layout: Single panel with tabs (< md) */}
       <div className="flex md:hidden flex-1 overflow-hidden">
-        {mobileTab === 'sidebar' && (
-          <SidebarPanel
-            activeVolume={activeVolume}
-            onVolumeChange={setActiveVolume}
-            activeSession={activeSession}
-            onSessionChange={(sessionId) => {
-              setActiveSession(sessionId);
-              setMobileTab('chat');
-            }}
-          />
-        )}
-        {mobileTab === 'chat' && (
-          <ChatPanel
-            activeSession={activeSession}
-            activeVolume={activeVolume}
-            onSessionCreated={(sessionId) => setActiveSession(sessionId)}
-            pendingPrompt={pendingPrompt}
-            onPromptProcessed={() => setPendingPrompt(null)}
-          />
-        )}
-        {mobileTab === 'context' && (
-          <ContextPanel
-            activeSession={activeSession}
-            activeVolume={activeVolume}
-          />
-        )}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {mobileTab === 'sidebar' && (
+            <SidebarPanel
+              activeVolume={activeVolume}
+              onVolumeChange={setActiveVolume}
+              activeSession={activeSession}
+              onSessionChange={(sessionId) => {
+                setActiveSession(sessionId);
+                setMobileTab('chat');
+              }}
+            />
+          )}
+          {mobileTab === 'chat' && (
+            <ChatPanel
+              activeSession={activeSession}
+              activeVolume={activeVolume}
+              onSessionCreated={(sessionId) => setActiveSession(sessionId)}
+              pendingPrompt={pendingPrompt}
+              onPromptProcessed={() => setPendingPrompt(null)}
+            />
+          )}
+          {mobileTab === 'context' && (
+            <ContextPanel
+              activeSession={activeSession}
+              activeVolume={activeVolume}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Mobile Bottom Navigation (< md) */}
-      <nav className="md:hidden border-t border-terminal-border bg-terminal-bg-secondary">
-        <div className="flex justify-around">
+      {/* Modern Mobile Bottom Navigation (< md) */}
+      <nav className="md:hidden border-t border-border-primary bg-bg-secondary/80 backdrop-blur-xl">
+        <div className="flex justify-around items-center h-16">
           <button
             onClick={() => setMobileTab('sidebar')}
-            className={`flex-1 py-3 text-xs font-medium transition-colors touch-manipulation ${
+            className={`flex-1 h-full flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               mobileTab === 'sidebar'
-                ? 'text-terminal-accent-green bg-terminal-bg-tertiary'
-                : 'text-terminal-fg-secondary hover:text-terminal-fg-primary'
+                ? 'text-accent-primary bg-bg-tertiary/50'
+                : 'text-fg-secondary active:scale-95'
             }`}
           >
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-base">≡</span>
-              <span>Menu</span>
-            </div>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span className="text-xs font-medium">Menu</span>
           </button>
+
           <button
             onClick={() => setMobileTab('chat')}
-            className={`flex-1 py-3 text-xs font-medium transition-colors touch-manipulation ${
+            className={`flex-1 h-full flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               mobileTab === 'chat'
-                ? 'text-terminal-accent-green bg-terminal-bg-tertiary'
-                : 'text-terminal-fg-secondary hover:text-terminal-fg-primary'
+                ? 'text-accent-primary bg-bg-tertiary/50'
+                : 'text-fg-secondary active:scale-95'
             }`}
           >
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-base">💬</span>
-              <span>Chat</span>
-            </div>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span className="text-xs font-medium">Chat</span>
           </button>
+
           <button
             onClick={() => setMobileTab('context')}
-            className={`flex-1 py-3 text-xs font-medium transition-colors touch-manipulation ${
+            className={`flex-1 h-full flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               mobileTab === 'context'
-                ? 'text-terminal-accent-green bg-terminal-bg-tertiary'
-                : 'text-terminal-fg-secondary hover:text-terminal-fg-primary'
+                ? 'text-accent-primary bg-bg-tertiary/50'
+                : 'text-fg-secondary active:scale-95'
             }`}
           >
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-base">ℹ</span>
-              <span>Info</span>
-            </div>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-xs font-medium">Info</span>
           </button>
         </div>
       </nav>

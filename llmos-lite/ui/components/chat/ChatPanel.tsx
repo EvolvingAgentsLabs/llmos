@@ -120,8 +120,6 @@ export default function ChatPanel({
       }
 
       // Send message directly to OpenRouter (client-side only)
-      // API key goes: Browser → OpenRouter (never touches our server)
-      // This is the recommended approach for hosted apps with user-owned keys
       const conversationHistory = messages.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
@@ -158,31 +156,60 @@ export default function ChatPanel({
     const samplePrompts = getCurrentSamplePrompts();
 
     return (
-      <div className="h-full flex flex-col bg-terminal-bg-secondary">
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="max-w-2xl space-y-4">
-            <div className="text-6xl mb-4">💬</div>
-            <h2 className="terminal-heading text-lg">Welcome to LLMos-Lite!</h2>
-            <div className="text-sm text-terminal-fg-secondary space-y-2">
-              <p>Start a conversation by typing a message below.</p>
-              <p className="text-xs">
-                A new session will be created automatically when you send your first
-                message.
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
+          <div className="max-w-2xl space-y-6 animate-fade-in">
+            {/* Welcome Icon */}
+            <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-glow-lg">
+              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+
+            {/* Welcome Message */}
+            <div className="space-y-2">
+              <h2 className="heading-1 text-gradient">Welcome to LLMos-Lite</h2>
+              <p className="text-fg-secondary">
+                Your AI-powered operating system for intelligent workflows
               </p>
             </div>
-            <div className="mt-6 p-4 bg-terminal-bg-tertiary border border-terminal-border rounded text-left">
-              <div className="terminal-heading text-xs mb-2">💡 TRY THESE:</div>
+
+            {/* Instructions */}
+            <div className="glass-panel p-4 text-left space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-md bg-accent-primary/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-accent-primary text-sm">1</span>
+                </div>
+                <div>
+                  <p className="text-sm text-fg-primary font-medium">Start a conversation</p>
+                  <p className="text-xs text-fg-tertiary mt-0.5">Type a message below to begin</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-md bg-accent-primary/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-accent-primary text-sm">2</span>
+                </div>
+                <div>
+                  <p className="text-sm text-fg-primary font-medium">Try a sample prompt</p>
+                  <p className="text-xs text-fg-tertiary mt-0.5">Click any suggestion below to get started</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sample Prompts */}
+            <div className="w-full space-y-3">
+              <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wider">Try These</h3>
               <div className="space-y-2">
                 {samplePrompts.slice(0, 3).map((sample, idx) => (
                   <button
                     key={idx}
                     onClick={() => setInputValue(sample.prompt)}
-                    className="w-full text-left p-2 rounded terminal-hover transition-all"
+                    className="w-full text-left p-3 rounded-lg bg-bg-tertiary border border-border-primary hover:border-accent-primary/50 hover:bg-bg-elevated transition-all duration-200 group"
                   >
-                    <div className="text-xs font-medium text-terminal-fg-primary">
+                    <div className="text-sm font-medium text-fg-primary group-hover:text-accent-primary transition-colors">
                       {sample.title}
                     </div>
-                    <div className="text-xs text-terminal-fg-tertiary mt-0.5">
+                    <div className="text-xs text-fg-tertiary mt-1">
                       {sample.description}
                     </div>
                   </button>
@@ -192,8 +219,8 @@ export default function ChatPanel({
           </div>
         </div>
 
-        {/* Input at bottom even when no session */}
-        <div className="p-4 border-t border-terminal-border">
+        {/* Input at bottom */}
+        <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl">
           <div className="flex gap-2">
             <input
               type="text"
@@ -201,14 +228,26 @@ export default function ChatPanel({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Type your message to start..."
-              className="flex-1 terminal-input min-h-[44px]"
+              className="input flex-1"
             />
             <button
               onClick={handleSend}
               disabled={isLoading || !inputValue.trim()}
-              className="btn-touch md:btn-terminal px-4"
+              className="btn-primary px-6"
             >
-              {isLoading ? 'Sending...' : 'Send'}
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Sending...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  <span>Send</span>
+                </div>
+              )}
             </button>
           </div>
         </div>
@@ -218,60 +257,92 @@ export default function ChatPanel({
 
   // Active session view
   return (
-    <div className="h-full flex flex-col bg-terminal-bg-secondary">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Session Header */}
-      <div className="p-4 border-b border-terminal-border">
-        <h2 className="terminal-heading text-sm mb-1">{currentSession.name}</h2>
-        <div className="text-xs text-terminal-fg-secondary">
-          {messages.length} messages · {currentSession.timeAgo}
+      <div className="px-4 py-3 border-b border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-fg-primary">{currentSession.name}</h2>
+            <div className="flex items-center gap-2 text-xs text-fg-tertiary mt-0.5">
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                {messages.length} messages
+              </span>
+              <span>·</span>
+              <span>{currentSession.timeAgo}</span>
+            </div>
+          </div>
+          <div className={currentSession.status === 'uncommitted' ? 'badge-warning' : 'badge-success'}>
+            {currentSession.status === 'uncommitted' ? 'Uncommitted' : 'Committed'}
+          </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
         {messages.length === 0 ? (
-          <div className="text-center text-terminal-fg-tertiary text-sm py-8">
-            No messages yet. Start the conversation!
+          <div className="empty-state h-full">
+            <svg className="empty-state-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            <h3 className="empty-state-title">No messages yet</h3>
+            <p className="empty-state-description">
+              Start the conversation with a message below
+            </p>
           </div>
         ) : (
-          messages.map((message) => (
-            <div key={message.id} className="space-y-1">
+          messages.map((message, idx) => (
+            <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
               {/* Message header */}
-              <div className="text-xs text-terminal-fg-tertiary">
-                [{message.timestamp}]{' '}
-                {message.role === 'user' ? 'You' : 'Assistant'}:
+              <div className="flex items-center gap-2 mb-2">
+                {message.role === 'user' ? (
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-secondary to-accent-info flex items-center justify-center text-white text-xs font-semibold">
+                    U
+                  </div>
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                )}
+                <span className="text-xs font-medium text-fg-secondary">
+                  {message.role === 'user' ? 'You' : 'Assistant'}
+                </span>
+                <span className="text-xs text-fg-muted">{message.timestamp}</span>
               </div>
 
               {/* Message content */}
               <div
-                className={`
-                  p-3 rounded whitespace-pre-wrap
-                  ${
-                    message.role === 'user'
-                      ? 'bg-terminal-bg-tertiary text-terminal-fg-primary'
-                      : 'bg-terminal-bg-primary text-terminal-fg-secondary border border-terminal-border'
-                  }
-                `}
+                className={`ml-8 p-3 rounded-lg whitespace-pre-wrap ${
+                  message.role === 'user'
+                    ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary'
+                    : 'bg-bg-tertiary border border-border-primary text-fg-secondary'
+                }`}
               >
                 {message.content}
               </div>
 
               {/* Metadata */}
-              {message.traces && message.traces.length > 0 && (
-                <div className="text-xs text-terminal-fg-tertiary ml-3">
-                  ✓ Trace #{message.traces[0]}-
-                  {message.traces[message.traces.length - 1]} executed
-                </div>
-              )}
-              {message.artifact && (
-                <div className="text-xs text-terminal-accent-blue ml-3">
-                  ✓ Artifact: {message.artifact}
-                </div>
-              )}
-              {message.pattern && (
-                <div className="text-xs text-terminal-accent-yellow ml-3">
-                  ✓ Pattern: {message.pattern.name} (
-                  {(message.pattern.confidence * 100).toFixed(0)}%)
+              {(message.traces || message.artifact || message.pattern) && (
+                <div className="ml-8 mt-2 space-y-1">
+                  {message.traces && message.traces.length > 0 && (
+                    <div className="badge badge-success text-xs">
+                      Trace #{message.traces[0]}-{message.traces[message.traces.length - 1]} executed
+                    </div>
+                  )}
+                  {message.artifact && (
+                    <div className="badge badge-info text-xs">
+                      Artifact: {message.artifact}
+                    </div>
+                  )}
+                  {message.pattern && (
+                    <div className="badge badge-warning text-xs">
+                      Pattern: {message.pattern.name} ({(message.pattern.confidence * 100).toFixed(0)}%)
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -281,23 +352,36 @@ export default function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-terminal-border">
+      <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl flex-shrink-0">
         <div className="flex gap-2">
-          <input
-            type="text"
+          <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Type your message..."
-            className="flex-1 terminal-input min-h-[44px]"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="Type your message... (Shift+Enter for new line)"
+            className="textarea flex-1 min-h-[44px] max-h-32"
+            rows={1}
             disabled={isLoading}
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !inputValue.trim()}
-            className="btn-touch md:btn-terminal px-4"
+            className="btn-primary px-6 flex-shrink-0"
           >
-            {isLoading ? 'Sending...' : 'Send'}
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

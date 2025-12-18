@@ -4,237 +4,448 @@
 
 @layer base {
   :root {
-    /* Terminal color palette */
-    --bg-primary: #0a0e14;
-    --bg-secondary: #131721;
-    --bg-tertiary: #1c212b;
+    /* Modern color palette - Inspired by Linear, Vercel, Arc */
 
-    --fg-primary: #e6e6e6;
-    --fg-secondary: #8a8a8a;
-    --fg-tertiary: #4a4a4a;
+    /* Backgrounds - Subtle gradients */
+    --bg-primary: 18 18 20; /* Deep slate */
+    --bg-secondary: 24 24 27; /* Slightly lighter */
+    --bg-tertiary: 30 30 35; /* Elevated surfaces */
+    --bg-elevated: 36 36 42; /* Hover states */
 
-    --accent-green: #00ff88;
-    --accent-blue: #00d4ff;
-    --accent-yellow: #ffcc00;
-    --accent-red: #ff4444;
-    --accent-purple: #bb00ff;
+    /* Foreground - Optimized for readability */
+    --fg-primary: 250 250 250; /* Almost white */
+    --fg-secondary: 161 161 170; /* Muted text */
+    --fg-tertiary: 113 113 122; /* Subtle text */
+    --fg-muted: 82 82 91; /* Very subtle */
 
-    --border: #2a2e3a;
-    --border-focus: #00ff88;
+    /* Accent colors - Vibrant but professional */
+    --accent-primary: 139 92 246; /* Purple */
+    --accent-secondary: 59 130 246; /* Blue */
+    --accent-success: 34 197 94; /* Green */
+    --accent-warning: 251 191 36; /* Amber */
+    --accent-error: 239 68 68; /* Red */
+    --accent-info: 56 189 248; /* Sky */
 
-    --terminal-cursor: #00ff88;
-    --terminal-selection: rgba(0, 255, 136, 0.3);
+    /* Borders */
+    --border-primary: 39 39 42; /* Subtle */
+    --border-secondary: 63 63 70; /* More visible */
+    --border-focus: 139 92 246; /* Accent on focus */
+
+    /* Overlays */
+    --overlay: 0 0 0 / 0.5;
+    --glass-bg: 24 24 27 / 0.8;
+    --glass-border: 255 255 255 / 0.1;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+    --shadow-glow: 0 0 20px rgb(139 92 246 / 0.3);
   }
 
   * {
-    @apply border-terminal-border;
+    @apply border-border;
   }
 
   body {
-    @apply bg-terminal-bg-primary text-terminal-fg-primary;
-    @apply font-mono text-sm leading-relaxed;
+    @apply bg-gradient-to-br from-bg-primary via-bg-secondary to-bg-primary;
+    @apply text-fg-primary;
+    @apply font-sans text-sm leading-relaxed antialiased;
     @apply overflow-hidden;
+    background-attachment: fixed;
   }
 
-  /* Custom scrollbar */
+  /* Modern scrollbar */
   ::-webkit-scrollbar {
-    @apply w-2 h-2;
+    @apply w-1.5 h-1.5;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-terminal-bg-primary;
+    @apply bg-transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-terminal-border rounded;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-terminal-accent-green;
+    @apply bg-fg-muted/30 rounded-full;
+    @apply hover:bg-fg-muted/50;
+    @apply transition-colors duration-200;
   }
 
   /* Selection */
   ::selection {
-    @apply bg-terminal-selection text-terminal-fg-primary;
+    @apply bg-accent-primary/30 text-fg-primary;
   }
 }
 
 @layer components {
-  /* Terminal panel */
-  .terminal-panel {
-    @apply bg-terminal-bg-secondary border border-terminal-border rounded;
-    @apply p-4 overflow-auto;
+  /* Glass panel effect */
+  .glass-panel {
+    @apply bg-glass-bg backdrop-blur-xl;
+    @apply border border-glass-border rounded-xl;
+    @apply shadow-lg;
   }
 
-  .terminal-panel:focus-within {
-    @apply border-terminal-border-focus;
+  /* Card component */
+  .card {
+    @apply bg-bg-secondary border border-border-primary rounded-xl;
+    @apply p-4 transition-all duration-200;
+    @apply hover:border-border-secondary hover:shadow-md;
   }
 
-  /* Terminal button */
-  .btn-terminal {
-    @apply bg-transparent border border-terminal-accent-green text-terminal-accent-green;
-    @apply font-mono px-3 py-1.5 cursor-pointer transition-all duration-200;
-    @apply hover:bg-terminal-accent-green hover:text-terminal-bg-primary;
-    @apply hover:shadow-glow-green;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent;
+  .card-elevated {
+    @apply bg-bg-tertiary border border-border-secondary rounded-xl;
+    @apply p-4 shadow-md;
   }
 
-  .btn-terminal-secondary {
-    @apply bg-transparent border border-terminal-fg-secondary text-terminal-fg-secondary;
-    @apply font-mono px-3 py-1.5 cursor-pointer transition-all duration-200;
-    @apply hover:bg-terminal-fg-secondary hover:text-terminal-bg-primary;
+  /* Modern button - Primary */
+  .btn-primary {
+    @apply bg-accent-primary text-white font-medium;
+    @apply px-4 py-2 rounded-lg;
+    @apply transition-all duration-200;
+    @apply hover:bg-accent-primary/90 hover:shadow-glow;
+    @apply active:scale-[0.98];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-accent-primary;
+  }
+
+  /* Modern button - Secondary */
+  .btn-secondary {
+    @apply bg-bg-tertiary text-fg-primary font-medium;
+    @apply px-4 py-2 rounded-lg border border-border-secondary;
+    @apply transition-all duration-200;
+    @apply hover:bg-bg-elevated hover:border-accent-primary/50;
+    @apply active:scale-[0.98];
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  /* Touch-friendly button (44px minimum tap target) */
-  .btn-touch {
-    @apply bg-transparent border border-terminal-accent-green text-terminal-accent-green;
-    @apply font-mono px-4 py-3 cursor-pointer transition-all duration-200;
-    @apply hover:bg-terminal-accent-green hover:text-terminal-bg-primary;
-    @apply hover:shadow-glow-green;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent;
-    @apply touch-manipulation;
-    min-height: 44px;
+  /* Modern button - Ghost */
+  .btn-ghost {
+    @apply bg-transparent text-fg-secondary font-medium;
+    @apply px-4 py-2 rounded-lg;
+    @apply transition-all duration-200;
+    @apply hover:bg-bg-tertiary hover:text-fg-primary;
+    @apply active:scale-[0.98];
   }
 
-  .btn-touch-secondary {
-    @apply bg-transparent border border-terminal-fg-secondary text-terminal-fg-secondary;
-    @apply font-mono px-4 py-3 cursor-pointer transition-all duration-200;
-    @apply hover:bg-terminal-fg-secondary hover:text-terminal-bg-primary;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply touch-manipulation;
-    min-height: 44px;
-  }
-
-  /* Touch-friendly icon button */
-  .btn-touch-icon {
-    @apply bg-transparent border border-terminal-border text-terminal-fg-secondary;
-    @apply cursor-pointer transition-all duration-200;
-    @apply hover:bg-terminal-bg-tertiary hover:text-terminal-accent-green hover:border-terminal-accent-green;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply touch-manipulation;
+  /* Icon button */
+  .btn-icon {
+    @apply bg-bg-tertiary text-fg-secondary;
+    @apply w-9 h-9 rounded-lg;
     @apply flex items-center justify-center;
-    min-width: 44px;
-    min-height: 44px;
+    @apply transition-all duration-200;
+    @apply hover:bg-bg-elevated hover:text-accent-primary;
+    @apply active:scale-[0.95];
   }
 
-  /* Terminal input */
-  .terminal-input {
-    @apply bg-terminal-bg-tertiary border border-terminal-border;
-    @apply text-terminal-fg-primary font-mono px-3 py-2;
-    @apply focus:outline-none focus:border-terminal-border-focus focus:shadow-glow-green;
-    @apply placeholder:text-terminal-fg-tertiary;
+  /* Input field */
+  .input {
+    @apply bg-bg-tertiary border border-border-primary;
+    @apply text-fg-primary px-3 py-2 rounded-lg;
+    @apply focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20;
+    @apply placeholder:text-fg-tertiary;
+    @apply transition-all duration-200;
   }
 
-  /* Terminal heading */
-  .terminal-heading {
-    @apply text-terminal-accent-green font-mono font-semibold uppercase tracking-wide;
+  /* Textarea */
+  .textarea {
+    @apply bg-bg-tertiary border border-border-primary;
+    @apply text-fg-primary px-3 py-2 rounded-lg;
+    @apply focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20;
+    @apply placeholder:text-fg-tertiary;
+    @apply resize-none;
+    @apply transition-all duration-200;
   }
 
-  /* Status indicators */
-  .status-active::before {
-    content: '●';
-    @apply text-terminal-accent-green mr-2;
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5;
+    @apply bg-bg-tertiary border border-border-primary rounded-md;
+    @apply text-xs font-medium text-fg-secondary;
   }
 
-  .status-success::before {
-    content: '✓';
-    @apply text-terminal-accent-green mr-2;
+  .badge-success {
+    @apply bg-accent-success/10 border-accent-success/30 text-accent-success;
   }
 
-  .status-error::before {
-    content: '✗';
-    @apply text-terminal-accent-red mr-2;
+  .badge-warning {
+    @apply bg-accent-warning/10 border-accent-warning/30 text-accent-warning;
   }
 
-  .status-warning::before {
-    content: '⚠';
-    @apply text-terminal-accent-yellow mr-2;
+  .badge-error {
+    @apply bg-accent-error/10 border-accent-error/30 text-accent-error;
   }
 
-  .status-pending::before {
-    content: '⏸';
-    @apply text-terminal-fg-secondary mr-2;
+  .badge-info {
+    @apply bg-accent-info/10 border-accent-info/30 text-accent-info;
   }
 
-  /* Terminal cursor */
-  .terminal-cursor {
-    @apply inline-block w-2 h-4 bg-terminal-cursor;
-    animation: blink 1s step-end infinite;
+  /* Heading styles */
+  .heading-1 {
+    @apply text-2xl font-semibold text-fg-primary tracking-tight;
+  }
+
+  .heading-2 {
+    @apply text-xl font-semibold text-fg-primary tracking-tight;
+  }
+
+  .heading-3 {
+    @apply text-lg font-semibold text-fg-primary;
+  }
+
+  .heading-4 {
+    @apply text-base font-semibold text-fg-primary;
+  }
+
+  /* Status indicators with smooth animations */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+    @apply animate-pulse-smooth;
+  }
+
+  .status-active {
+    @apply status-dot bg-accent-success;
+  }
+
+  .status-pending {
+    @apply status-dot bg-accent-warning;
+  }
+
+  .status-error {
+    @apply status-dot bg-accent-error;
+  }
+
+  .status-inactive {
+    @apply status-dot bg-fg-muted;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-border-primary;
+  }
+
+  .divider-vertical {
+    @apply border-l border-border-primary h-full;
+  }
+
+  /* Hover effects */
+  .hover-lift {
+    @apply transition-all duration-200;
+    @apply hover:translate-y-[-2px] hover:shadow-lg;
+  }
+
+  .hover-glow {
+    @apply transition-all duration-300;
+    @apply hover:shadow-glow;
+  }
+
+  /* Active/Selected state */
+  .active-item {
+    @apply bg-bg-elevated border-l-2 border-l-accent-primary;
+    @apply text-fg-primary;
   }
 
   /* Code block */
   .code-block {
-    @apply bg-terminal-bg-primary border border-terminal-border;
-    @apply p-3 rounded font-mono text-xs overflow-x-auto;
+    @apply bg-bg-primary border border-border-primary;
+    @apply p-3 rounded-lg font-mono text-xs overflow-x-auto;
   }
 
-  /* Git status badge */
-  .git-badge {
-    @apply inline-flex items-center px-2 py-0.5;
-    @apply bg-terminal-bg-tertiary border border-terminal-border rounded;
-    @apply text-xs text-terminal-fg-secondary;
+  /* Skeleton loader */
+  .skeleton {
+    @apply bg-bg-tertiary rounded animate-pulse;
   }
 
-  .git-badge-uncommitted {
-    @apply border-terminal-accent-yellow text-terminal-accent-yellow;
+  /* Toast/notification */
+  .toast {
+    @apply glass-panel p-4 min-w-[300px] max-w-md;
+    @apply animate-slide-in-from-right;
   }
 
-  .git-badge-committed {
-    @apply border-terminal-accent-green text-terminal-accent-green;
+  /* Tabs */
+  .tab {
+    @apply px-4 py-2 text-sm font-medium text-fg-secondary;
+    @apply border-b-2 border-transparent;
+    @apply transition-all duration-200;
+    @apply hover:text-fg-primary hover:border-border-secondary;
   }
 
-  /* Panel dividers */
-  .panel-divider {
-    @apply border-l border-terminal-border h-full;
+  .tab-active {
+    @apply tab text-fg-primary border-accent-primary;
   }
 
-  /* Hover effects */
-  .terminal-hover {
-    @apply transition-colors duration-150;
-    @apply hover:bg-terminal-bg-tertiary cursor-pointer;
+  /* Sidebar navigation item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg;
+    @apply text-fg-secondary text-sm font-medium;
+    @apply transition-all duration-200;
+    @apply hover:bg-bg-tertiary hover:text-fg-primary;
+    @apply cursor-pointer;
   }
 
-  /* Active item */
-  .terminal-active {
-    @apply bg-terminal-bg-tertiary border-l-2 border-l-terminal-accent-green;
+  .nav-item-active {
+    @apply nav-item bg-bg-tertiary text-fg-primary;
+    @apply border-l-2 border-l-accent-primary;
+  }
+
+  /* Panel header */
+  .panel-header {
+    @apply flex items-center justify-between px-4 py-3;
+    @apply border-b border-border-primary;
+    @apply bg-bg-secondary/50 backdrop-blur-sm;
+  }
+
+  /* Empty state */
+  .empty-state {
+    @apply flex flex-col items-center justify-center;
+    @apply text-center py-12 px-4;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 mb-4 text-fg-muted;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-medium text-fg-primary mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-sm text-fg-secondary max-w-sm;
   }
 }
 
 @layer utilities {
   /* Animations */
-  .animate-pulse-slow {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  .animate-pulse-smooth {
+    animation: pulse-smooth 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
-  .animate-cursor-blink {
-    animation: blink 1s step-end infinite;
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .animate-slide-in-from-right {
+    animation: slide-in-from-right 0.3s ease-out;
+  }
+
+  .animate-slide-in-from-left {
+    animation: slide-in-from-left 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
   }
 
   /* Text utilities */
-  .text-mono {
-    @apply font-mono;
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent-primary to-accent-secondary;
+    @apply bg-clip-text text-transparent;
   }
 
-  /* Glow effects */
-  .glow-green {
-    @apply shadow-glow-green;
+  /* Truncate with tooltip */
+  .truncate-line-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
-  .glow-blue {
-    @apply shadow-glow-blue;
+  .truncate-line-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
 
-/* Keyframes */
-@keyframes blink {
+/* Keyframe animations */
+@keyframes pulse-smooth {
   0%, 100% {
     opacity: 1;
   }
   50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes fade-in {
+  from {
     opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* React Flow custom styles */
+.react-flow {
+  @apply bg-bg-primary;
+}
+
+.react-flow__node {
+  @apply bg-bg-secondary border border-border-primary rounded-lg;
+  @apply font-sans text-sm;
+}
+
+.react-flow__node.selected {
+  @apply border-accent-primary shadow-glow;
+}
+
+.react-flow__edge {
+  stroke: rgb(var(--accent-primary));
+}
+
+.react-flow__edge.selected {
+  stroke: rgb(var(--accent-secondary));
+}
+
+.react-flow__controls {
+  @apply bg-bg-secondary border border-border-primary rounded-lg;
+}
+
+.react-flow__controls button {
+  @apply bg-transparent border-none text-fg-primary;
+  @apply hover:bg-bg-tertiary;
+}
+
+/* Monaco Editor custom styles */
+.monaco-editor {
+  @apply font-mono;
+}
+
+.monaco-editor .margin {
+  @apply bg-bg-primary;
 }
 
 /* xterm.js terminal styles */
@@ -244,53 +455,13 @@
 }
 
 .xterm-viewport {
-  @apply bg-terminal-bg-primary;
+  @apply bg-bg-primary;
 }
 
 .xterm .xterm-cursor-layer .xterm-cursor {
-  @apply bg-terminal-cursor;
+  @apply bg-accent-primary;
 }
 
 .xterm .xterm-selection {
-  @apply bg-terminal-selection;
-}
-
-/* React Flow custom styles */
-.react-flow {
-  @apply bg-terminal-bg-primary;
-}
-
-.react-flow__node {
-  @apply bg-terminal-bg-secondary border border-terminal-border rounded;
-  @apply font-mono text-sm;
-}
-
-.react-flow__node.selected {
-  @apply border-terminal-accent-green shadow-glow-green;
-}
-
-.react-flow__edge {
-  stroke: var(--accent-green);
-}
-
-.react-flow__edge.selected {
-  stroke: var(--accent-blue);
-}
-
-.react-flow__controls {
-  @apply bg-terminal-bg-secondary border border-terminal-border rounded;
-}
-
-.react-flow__controls button {
-  @apply bg-transparent border-none text-terminal-fg-primary;
-  @apply hover:bg-terminal-bg-tertiary;
-}
-
-/* Monaco Editor custom styles */
-.monaco-editor {
-  @apply font-mono;
-}
-
-.monaco-editor .margin {
-  @apply bg-terminal-bg-primary;
+  background-color: rgba(139, 92, 246, 0.3) !important;
 }
