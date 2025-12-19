@@ -9,13 +9,14 @@ import { ArtifactData } from './ArtifactViewer';
 import { QuantumCircuit } from './CircuitRenderer';
 import { ThreeScene } from './ThreeRenderer';
 import { PlotData } from './PlotRenderer';
+import QuantumCircuitDesigner from './QuantumCircuitDesigner';
 
 interface ArtifactPanelProps {
   activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
 }
 
-type ViewTab = 'workflow' | 'artifacts' | 'library';
+type ViewTab = 'workflow' | 'artifacts' | 'library' | 'quantum-designer';
 
 export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactPanelProps) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -137,6 +138,16 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
               >
                 📚 Library
               </button>
+              <button
+                onClick={() => setActiveTab('quantum-designer')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  activeTab === 'quantum-designer'
+                    ? 'bg-terminal-accent-green text-terminal-bg-primary'
+                    : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
+                }`}
+              >
+                ⚛️ Quantum Designer
+              </button>
             </div>
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
@@ -185,6 +196,12 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
           {activeTab === 'library' && (
             <div className="h-full lg:hidden">
               <NodeLibraryPanel />
+            </div>
+          )}
+
+          {activeTab === 'quantum-designer' && (
+            <div className="h-full p-4">
+              <QuantumCircuitDesigner />
             </div>
           )}
         </div>
