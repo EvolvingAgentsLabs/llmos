@@ -1,6 +1,18 @@
 // Test OpenRouter API with quantum prompt
-const apiKey = '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';
+//
+// Usage:
+// 1. Set your OpenRouter API key as an environment variable:
+//    export OPENROUTER_API_KEY="sk-or-v1-your-key-here"
+// 2. Run: node test-openrouter.js
+
+const apiKey = process.env.OPENROUTER_API_KEY;
 const model = 'anthropic/claude-sonnet-4.5';
+
+if (!apiKey) {
+  console.error('Error: OPENROUTER_API_KEY environment variable not set');
+  console.log('Usage: export OPENROUTER_API_KEY="sk-or-v1-your-key-here"');
+  process.exit(1);
+}
 
 const messages = [
   {
