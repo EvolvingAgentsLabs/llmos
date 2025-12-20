@@ -4,7 +4,7 @@
  * Handles persistence of artifacts to GitHub repositories
  */
 
-import { Artifact, ArtifactType, ArtifactVolume } from './types';
+import { Artifact, ArtifactType, ArtifactVolume, CodeArtifact } from './types';
 
 export interface StorageConfig {
   githubToken?: string;
@@ -73,7 +73,9 @@ export class ArtifactStorage {
               directory += '/misc';
           }
         }
-        extension = artifact.language || 'py';
+        // Type guard for code artifacts
+        const codeArtifact = artifact as CodeArtifact;
+        extension = codeArtifact.language || 'py';
         break;
       default:
         directory = 'artifacts';

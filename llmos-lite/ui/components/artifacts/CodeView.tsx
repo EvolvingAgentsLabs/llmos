@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Artifact } from '@/lib/artifacts/types';
+import { Artifact, CodeArtifact } from '@/lib/artifacts/types';
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
@@ -39,8 +39,12 @@ export default function CodeView({
   };
 
   const getLanguage = () => {
-    if (artifact.type === 'code' && artifact.language) {
-      return artifact.language;
+    // Type guard and language detection for code artifacts
+    if (artifact.type === 'code') {
+      const codeArtifact = artifact as CodeArtifact;
+      if (codeArtifact.language) {
+        return codeArtifact.language;
+      }
     }
 
     // Infer from artifact type

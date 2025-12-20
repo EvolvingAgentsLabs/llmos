@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Session } from '@/contexts/SessionContext';
-import { artifactManager, Artifact } from '@/lib/artifacts';
+import { artifactManager, Artifact, CodeArtifact } from '@/lib/artifacts';
 
 interface SaveSessionDialogProps {
   isOpen: boolean;
@@ -94,13 +94,19 @@ export default function SaveSessionDialog({
       code: 'code-artifacts',
     }[artifact.type];
 
-    const extension = {
-      agent: 'json',
-      tool: 'py',
-      skill: 'md',
-      workflow: 'json',
-      code: artifact.language || 'py',
-    }[artifact.type];
+    // Get extension with type guard for code artifacts
+    let extension: string;
+    if (artifact.type === 'code') {
+      const codeArtifact = artifact as CodeArtifact;
+      extension = codeArtifact.language || 'py';
+    } else {
+      extension = {
+        agent: 'json',
+        tool: 'py',
+        skill: 'md',
+        workflow: 'json',
+      }[artifact.type as 'agent' | 'tool' | 'skill' | 'workflow'];
+    }
 
     const safeName = artifact.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     return `${typeDir}/${safeName}.${extension}`;

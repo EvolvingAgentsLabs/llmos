@@ -11,7 +11,7 @@ interface NewSessionDialogProps {
     type: SessionType;
     goal?: string;
   }) => void;
-  defaultVolume: 'user' | 'team';
+  defaultVolume: 'system' | 'user' | 'team';
 }
 
 export default function NewSessionDialog({

@@ -33,19 +33,19 @@ export default function RenderView({ artifact }: RenderViewProps) {
       {/* Render based on type */}
       {type === 'quantum-circuit' && (
         <div className="max-w-4xl mx-auto">
-          <CircuitRenderer circuit={data} />
+          <CircuitRenderer circuitData={data} />
         </div>
       )}
 
       {type === '3d-scene' && (
         <div className="h-full">
-          <ThreeRenderer scene={data} />
+          <ThreeRenderer sceneData={data} />
         </div>
       )}
 
       {type === 'plot' && (
         <div className="max-w-4xl mx-auto">
-          <PlotRenderer data={data} />
+          <PlotRenderer plotData={data} />
         </div>
       )}
 

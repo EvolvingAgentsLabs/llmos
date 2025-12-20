@@ -228,14 +228,14 @@ export class ArtifactManager {
     const original = this.get(id);
     if (!original) return undefined;
 
+    // Omit fields that are excluded from CreateArtifactParams
+    const { id: _id, createdAt, updatedAt, status: _status, commitHash: _commitHash, ...baseParams } = original;
+
     const forked = this.create({
-      ...original,
+      ...baseParams,
       name: `${original.name} (fork)`,
       volume: targetVolume,
-      status: 'temporal',
       parentId: original.id,
-      commitHash: undefined,
-      filePath: undefined,
     });
 
     return forked;

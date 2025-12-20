@@ -14,7 +14,7 @@ interface TreeNode {
   name: string;
   type: 'folder' | 'artifact';
   children?: TreeNode[];
-  artifactType?: 'skill' | 'code' | 'workflow' | 'data';
+  artifactType?: 'agent' | 'tool' | 'skill' | 'code' | 'workflow';
 }
 
 export default function VolumeFileTree({
@@ -23,17 +23,18 @@ export default function VolumeFileTree({
   onSelectArtifact,
 }: VolumeFileTreeProps) {
   const { artifacts } = useArtifactStore();
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['skills', 'code', 'workflows', 'data']));
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['skills', 'code', 'workflows', 'agents', 'tools']));
 
   // Filter artifacts by volume
   const volumeArtifacts = artifacts.filter((a) => a.volume === volume);
 
   // Group artifacts by type
   const artifactsByType = {
+    agents: volumeArtifacts.filter((a) => a.type === 'agent'),
+    tools: volumeArtifacts.filter((a) => a.type === 'tool'),
     skills: volumeArtifacts.filter((a) => a.type === 'skill'),
     code: volumeArtifacts.filter((a) => a.type === 'code'),
     workflows: volumeArtifacts.filter((a) => a.type === 'workflow'),
-    data: volumeArtifacts.filter((a) => a.type === 'data'),
   };
 
   const toggleFolder = (folderId: string) => {
@@ -65,14 +66,16 @@ export default function VolumeFileTree({
 
   const getArtifactIcon = (type: string) => {
     switch (type) {
+      case 'agent':
+        return '🤖';
+      case 'tool':
+        return '🔧';
       case 'skill':
         return '⚡';
       case 'code':
         return '📄';
       case 'workflow':
         return '🔄';
-      case 'data':
-        return '📊';
       default:
         return '📄';
     }
@@ -92,6 +95,86 @@ export default function VolumeFileTree({
 
       {/* File tree */}
       <div className="space-y-1">
+        {/* Agents folder */}
+        {(artifactsByType.agents.length > 0 || volume === 'system') && (
+          <div>
+            <button
+              onClick={() => toggleFolder('agents')}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary/50 transition-colors text-fg-secondary hover:text-fg-primary group"
+            >
+              {getFolderIcon('agents', expandedFolders.has('agents'))}
+              <span className="text-sm font-medium">🤖 Agents</span>
+              <span className="ml-auto text-xs text-fg-tertiary">
+                {artifactsByType.agents.length}
+              </span>
+            </button>
+            {expandedFolders.has('agents') && (
+              <div className="ml-6 mt-1 space-y-0.5">
+                {artifactsByType.agents.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-fg-tertiary italic">
+                    No agents yet
+                  </div>
+                ) : (
+                  artifactsByType.agents.map((artifact) => (
+                    <button
+                      key={artifact.id}
+                      onClick={() => onSelectArtifact(artifact.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 text-left ${
+                        selectedArtifact === artifact.id
+                          ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/50'
+                          : 'hover:bg-bg-tertiary/50 text-fg-secondary hover:text-fg-primary'
+                      }`}
+                    >
+                      <span className="text-sm">{getArtifactIcon('agent')}</span>
+                      <span className="text-sm truncate flex-1">{artifact.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tools folder */}
+        {(artifactsByType.tools.length > 0 || volume === 'system') && (
+          <div>
+            <button
+              onClick={() => toggleFolder('tools')}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary/50 transition-colors text-fg-secondary hover:text-fg-primary group"
+            >
+              {getFolderIcon('tools', expandedFolders.has('tools'))}
+              <span className="text-sm font-medium">🔧 Tools</span>
+              <span className="ml-auto text-xs text-fg-tertiary">
+                {artifactsByType.tools.length}
+              </span>
+            </button>
+            {expandedFolders.has('tools') && (
+              <div className="ml-6 mt-1 space-y-0.5">
+                {artifactsByType.tools.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-fg-tertiary italic">
+                    No tools yet
+                  </div>
+                ) : (
+                  artifactsByType.tools.map((artifact) => (
+                    <button
+                      key={artifact.id}
+                      onClick={() => onSelectArtifact(artifact.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 text-left ${
+                        selectedArtifact === artifact.id
+                          ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/50'
+                          : 'hover:bg-bg-tertiary/50 text-fg-secondary hover:text-fg-primary'
+                      }`}
+                    >
+                      <span className="text-sm">{getArtifactIcon('tool')}</span>
+                      <span className="text-sm truncate flex-1">{artifact.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Skills folder */}
         {(artifactsByType.skills.length > 0 || volume === 'system') && (
           <div>
@@ -203,46 +286,6 @@ export default function VolumeFileTree({
                       }`}
                     >
                       <span className="text-sm">{getArtifactIcon('workflow')}</span>
-                      <span className="text-sm truncate flex-1">{artifact.name}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Data folder */}
-        {(artifactsByType.data.length > 0 || volume === 'system') && (
-          <div>
-            <button
-              onClick={() => toggleFolder('data')}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary/50 transition-colors text-fg-secondary hover:text-fg-primary group"
-            >
-              {getFolderIcon('data', expandedFolders.has('data'))}
-              <span className="text-sm font-medium">📊 Data</span>
-              <span className="ml-auto text-xs text-fg-tertiary">
-                {artifactsByType.data.length}
-              </span>
-            </button>
-            {expandedFolders.has('data') && (
-              <div className="ml-6 mt-1 space-y-0.5">
-                {artifactsByType.data.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-fg-tertiary italic">
-                    No data files yet
-                  </div>
-                ) : (
-                  artifactsByType.data.map((artifact) => (
-                    <button
-                      key={artifact.id}
-                      onClick={() => onSelectArtifact(artifact.id)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 text-left ${
-                        selectedArtifact === artifact.id
-                          ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/50'
-                          : 'hover:bg-bg-tertiary/50 text-fg-secondary hover:text-fg-primary'
-                      }`}
-                    >
-                      <span className="text-sm">{getArtifactIcon('data')}</span>
                       <span className="text-sm truncate flex-1">{artifact.name}</span>
                     </button>
                   ))
