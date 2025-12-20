@@ -103,6 +103,11 @@ export default function CanvasView({ volume, selectedArtifact, selectedNode }: C
     );
   }
 
+  // If no artifact at this point, return null (shouldn't happen due to earlier checks)
+  if (!artifact) {
+    return null;
+  }
+
   return (
     <div className="h-full flex flex-col bg-bg-primary">
       {/* Artifact header */}
