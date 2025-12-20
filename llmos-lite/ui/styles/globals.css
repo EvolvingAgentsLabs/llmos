@@ -4,44 +4,44 @@
 
 @layer base {
   :root {
-    /* VS Code Dark+ color palette */
+    /* Claude Code color palette - Warm, minimal, sophisticated */
 
-    /* Backgrounds - VS Code style */
-    --bg-primary: 30 30 30; /* #1e1e1e - Editor background */
-    --bg-secondary: 37 37 38; /* #252526 - Sidebar background */
-    --bg-tertiary: 45 45 45; /* #2d2d2d - Input backgrounds */
-    --bg-elevated: 51 51 51; /* #333333 - Hover states */
+    /* Backgrounds - Claude's warm neutrals */
+    --bg-primary: 244 243 238; /* #F4F3EE - Pampas (main background) */
+    --bg-secondary: 255 255 255; /* #FFFFFF - Pure white for cards */
+    --bg-tertiary: 238 236 228; /* Slightly darker warm gray */
+    --bg-elevated: 249 248 244; /* Elevated surfaces */
 
-    /* Foreground - VS Code text colors */
-    --fg-primary: 212 212 212; /* #d4d4d4 - Main text */
-    --fg-secondary: 153 153 153; /* #999999 - Secondary text */
-    --fg-tertiary: 106 106 106; /* #6a6a6a - Subtle text */
-    --fg-muted: 85 85 85; /* #555555 - Very subtle */
+    /* Foreground - Text colors */
+    --fg-primary: 31 31 31; /* #1f1f1f - Nearly black for main text */
+    --fg-secondary: 82 82 82; /* #525252 - Medium gray for secondary */
+    --fg-tertiary: 133 133 133; /* #858585 - Light gray for subtle text */
+    --fg-muted: 177 173 161; /* #B1ADA1 - Cloudy (very subtle) */
 
-    /* Accent colors - VS Code inspired */
-    --accent-primary: 0 122 204; /* #007acc - VS Code blue */
-    --accent-secondary: 75 166 251; /* #4ba6fb - Lighter blue */
-    --accent-success: 106 153 85; /* #6a9955 - Green */
-    --accent-warning: 206 145 120; /* #ce9178 - Orange/amber */
-    --accent-error: 244 71 71; /* #f44747 - Red */
-    --accent-info: 86 156 214; /* #569cd6 - Info blue */
+    /* Accent colors - Claude's signature warmth */
+    --accent-primary: 193 95 60; /* #C15F3C - Crail (primary accent) */
+    --accent-secondary: 214 123 89; /* Lighter warm orange */
+    --accent-success: 76 153 89; /* Warm green */
+    --accent-warning: 214 145 89; /* Warm amber */
+    --accent-error: 220 85 75; /* Warm red */
+    --accent-info: 89 145 214; /* Warm blue */
 
     /* Borders */
-    --border-primary: 51 51 51; /* #333333 - Subtle borders */
-    --border-secondary: 69 69 69; /* #454545 - More visible */
-    --border-focus: 0 122 204; /* #007acc - Focus highlight */
+    --border-primary: 228 225 217; /* #E4E1D9 - Very subtle warm border */
+    --border-secondary: 210 206 196; /* #D2CEC4 - More visible border */
+    --border-focus: 193 95 60; /* #C15F3C - Focus highlight (Crail) */
 
     /* Overlays */
-    --overlay: 0 0 0 / 0.5;
-    --glass-bg: 37 37 38 / 0.9;
-    --glass-border: 255 255 255 / 0.08;
+    --overlay: 31 31 31 / 0.4;
+    --glass-bg: 255 255 255 / 0.85;
+    --glass-border: 193 95 60 / 0.12;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.1);
-    --shadow-md: 0 2px 4px 0 rgb(0 0 0 / 0.2);
-    --shadow-lg: 0 4px 8px 0 rgb(0 0 0 / 0.3);
-    --shadow-xl: 0 8px 16px 0 rgb(0 0 0 / 0.4);
-    --shadow-glow: 0 0 10px rgb(0 122 204 / 0.3);
+    /* Shadows - Softer, warmer shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(193 95 60 / 0.06);
+    --shadow-md: 0 2px 6px 0 rgb(193 95 60 / 0.08);
+    --shadow-lg: 0 4px 12px 0 rgb(193 95 60 / 0.1);
+    --shadow-xl: 0 8px 24px 0 rgb(193 95 60 / 0.12);
+    --shadow-glow: 0 0 16px rgb(193 95 60 / 0.25);
   }
 
   * {
@@ -49,16 +49,16 @@
   }
 
   body {
-    @apply bg-gradient-to-br from-bg-primary via-bg-secondary to-bg-primary;
+    @apply bg-bg-primary;
     @apply text-fg-primary;
     @apply font-sans text-sm leading-relaxed antialiased;
     @apply overflow-hidden;
-    background-attachment: fixed;
+    /* Clean, minimal background - no gradients */
   }
 
-  /* Modern scrollbar */
+  /* Minimal scrollbar - Claude style */
   ::-webkit-scrollbar {
-    @apply w-1.5 h-1.5;
+    @apply w-2 h-2;
   }
 
   ::-webkit-scrollbar-track {
@@ -66,116 +66,116 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-fg-muted/30 rounded-full;
-    @apply hover:bg-fg-muted/50;
-    @apply transition-colors duration-200;
+    @apply bg-fg-muted/40 rounded-full;
+    @apply hover:bg-fg-muted/60;
+    @apply transition-colors duration-150;
   }
 
-  /* Selection */
+  /* Selection - Warm accent */
   ::selection {
-    @apply bg-accent-primary/30 text-fg-primary;
+    @apply bg-accent-primary/20 text-fg-primary;
   }
 }
 
 @layer components {
-  /* Glass panel effect */
+  /* Glass panel effect - Claude minimal style */
   .glass-panel {
-    @apply bg-glass-bg backdrop-blur-xl;
-    @apply border border-glass-border rounded-xl;
-    @apply shadow-lg;
+    @apply bg-glass-bg backdrop-blur-lg;
+    @apply border border-glass-border rounded-2xl;
+    @apply shadow-md;
   }
 
-  /* Card component */
+  /* Card component - Clean and minimal */
   .card {
     @apply bg-bg-secondary border border-border-primary rounded-xl;
-    @apply p-4 transition-all duration-200;
-    @apply hover:border-border-secondary hover:shadow-md;
+    @apply p-5 transition-all duration-150;
+    @apply hover:border-border-secondary hover:shadow-sm;
   }
 
   .card-elevated {
-    @apply bg-bg-tertiary border border-border-secondary rounded-xl;
-    @apply p-4 shadow-md;
+    @apply bg-bg-secondary border border-border-primary rounded-xl;
+    @apply p-5 shadow-md;
   }
 
-  /* Modern button - Primary */
+  /* Button - Primary (Claude style) */
   .btn-primary {
     @apply bg-accent-primary text-white font-medium;
-    @apply px-4 py-2 rounded-lg;
-    @apply transition-all duration-200;
-    @apply hover:bg-accent-primary/90 hover:shadow-glow;
+    @apply px-5 py-2.5 rounded-lg;
+    @apply transition-all duration-150;
+    @apply hover:bg-accent-secondary hover:shadow-md;
     @apply active:scale-[0.98];
-    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-accent-primary;
+    @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent-primary;
   }
 
-  /* Modern button - Secondary */
+  /* Button - Secondary */
   .btn-secondary {
-    @apply bg-bg-tertiary text-fg-primary font-medium;
-    @apply px-4 py-2 rounded-lg border border-border-secondary;
-    @apply transition-all duration-200;
-    @apply hover:bg-bg-elevated hover:border-accent-primary/50;
+    @apply bg-bg-secondary text-fg-primary font-medium;
+    @apply px-5 py-2.5 rounded-lg border border-border-primary;
+    @apply transition-all duration-150;
+    @apply hover:border-border-secondary hover:shadow-sm;
     @apply active:scale-[0.98];
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
-  /* Modern button - Ghost */
+  /* Button - Ghost */
   .btn-ghost {
     @apply bg-transparent text-fg-secondary font-medium;
-    @apply px-4 py-2 rounded-lg;
-    @apply transition-all duration-200;
+    @apply px-5 py-2.5 rounded-lg;
+    @apply transition-all duration-150;
     @apply hover:bg-bg-tertiary hover:text-fg-primary;
     @apply active:scale-[0.98];
   }
 
-  /* Icon button */
+  /* Icon button - Subtle and minimal */
   .btn-icon {
-    @apply bg-bg-tertiary text-fg-secondary;
+    @apply bg-transparent text-fg-secondary;
     @apply w-9 h-9 rounded-lg;
     @apply flex items-center justify-center;
-    @apply transition-all duration-200;
-    @apply hover:bg-bg-elevated hover:text-accent-primary;
+    @apply transition-all duration-150;
+    @apply hover:bg-bg-tertiary hover:text-accent-primary;
     @apply active:scale-[0.95];
   }
 
-  /* Input field */
+  /* Input field - Clean with subtle borders */
   .input {
-    @apply bg-bg-tertiary border border-border-primary;
-    @apply text-fg-primary px-3 py-2 rounded-lg;
-    @apply focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20;
+    @apply bg-bg-secondary border border-border-primary;
+    @apply text-fg-primary px-4 py-2.5 rounded-lg;
+    @apply focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/30;
     @apply placeholder:text-fg-tertiary;
-    @apply transition-all duration-200;
+    @apply transition-all duration-150;
   }
 
-  /* Textarea */
+  /* Textarea - Consistent with inputs */
   .textarea {
-    @apply bg-bg-tertiary border border-border-primary;
-    @apply text-fg-primary px-3 py-2 rounded-lg;
-    @apply focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20;
+    @apply bg-bg-secondary border border-border-primary;
+    @apply text-fg-primary px-4 py-3 rounded-lg;
+    @apply focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/30;
     @apply placeholder:text-fg-tertiary;
     @apply resize-none;
-    @apply transition-all duration-200;
+    @apply transition-all duration-150;
   }
 
-  /* Badge */
+  /* Badge - Subtle and refined */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5;
-    @apply bg-bg-tertiary border border-border-primary rounded-md;
+    @apply inline-flex items-center px-3 py-1;
+    @apply bg-bg-tertiary border border-border-primary rounded-full;
     @apply text-xs font-medium text-fg-secondary;
   }
 
   .badge-success {
-    @apply bg-accent-success/10 border-accent-success/30 text-accent-success;
+    @apply bg-accent-success/8 border-accent-success/20 text-accent-success;
   }
 
   .badge-warning {
-    @apply bg-accent-warning/10 border-accent-warning/30 text-accent-warning;
+    @apply bg-accent-warning/8 border-accent-warning/20 text-accent-warning;
   }
 
   .badge-error {
-    @apply bg-accent-error/10 border-accent-error/30 text-accent-error;
+    @apply bg-accent-error/8 border-accent-error/20 text-accent-error;
   }
 
   .badge-info {
-    @apply bg-accent-info/10 border-accent-info/30 text-accent-info;
+    @apply bg-accent-info/8 border-accent-info/20 text-accent-info;
   }
 
   /* Heading styles */
@@ -226,45 +226,45 @@
     @apply border-l border-border-primary h-full;
   }
 
-  /* Hover effects */
+  /* Hover effects - Subtle Claude style */
   .hover-lift {
-    @apply transition-all duration-200;
-    @apply hover:translate-y-[-2px] hover:shadow-lg;
+    @apply transition-all duration-150;
+    @apply hover:translate-y-[-1px] hover:shadow-md;
   }
 
   .hover-glow {
-    @apply transition-all duration-300;
+    @apply transition-all duration-200;
     @apply hover:shadow-glow;
   }
 
-  /* Active/Selected state */
+  /* Active/Selected state - Minimal accent */
   .active-item {
-    @apply bg-bg-elevated border-l-2 border-l-accent-primary;
+    @apply bg-bg-tertiary border-l-2 border-l-accent-primary;
     @apply text-fg-primary;
   }
 
-  /* Code block */
+  /* Code block - Clean with warm tones */
   .code-block {
-    @apply bg-bg-primary border border-border-primary;
-    @apply p-3 rounded-lg font-mono text-xs overflow-x-auto;
+    @apply bg-bg-secondary border border-border-primary;
+    @apply p-4 rounded-xl font-mono text-sm overflow-x-auto;
   }
 
-  /* Skeleton loader */
+  /* Skeleton loader - Subtle animation */
   .skeleton {
-    @apply bg-bg-tertiary rounded animate-pulse;
+    @apply bg-bg-tertiary rounded-lg animate-pulse;
   }
 
-  /* Toast/notification */
+  /* Toast/notification - Refined appearance */
   .toast {
-    @apply glass-panel p-4 min-w-[300px] max-w-md;
+    @apply glass-panel p-5 min-w-[320px] max-w-md;
     @apply animate-slide-in-from-right;
   }
 
-  /* Tabs */
+  /* Tabs - Minimal with warm accents */
   .tab {
-    @apply px-4 py-2 text-sm font-medium text-fg-secondary;
+    @apply px-5 py-3 text-sm font-medium text-fg-secondary;
     @apply border-b-2 border-transparent;
-    @apply transition-all duration-200;
+    @apply transition-all duration-150;
     @apply hover:text-fg-primary hover:border-border-secondary;
   }
 
@@ -272,25 +272,25 @@
     @apply tab text-fg-primary border-accent-primary;
   }
 
-  /* Sidebar navigation item */
+  /* Sidebar navigation item - Minimal hover states */
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg;
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg;
     @apply text-fg-secondary text-sm font-medium;
-    @apply transition-all duration-200;
+    @apply transition-all duration-150;
     @apply hover:bg-bg-tertiary hover:text-fg-primary;
     @apply cursor-pointer;
   }
 
   .nav-item-active {
     @apply nav-item bg-bg-tertiary text-fg-primary;
-    @apply border-l-2 border-l-accent-primary;
+    @apply border-l-2 border-l-accent-primary pl-[14px];
   }
 
-  /* Panel header */
+  /* Panel header - Clean separation */
   .panel-header {
-    @apply flex items-center justify-between px-4 py-3;
+    @apply flex items-center justify-between px-5 py-4;
     @apply border-b border-border-primary;
-    @apply bg-bg-secondary/50 backdrop-blur-sm;
+    @apply bg-bg-secondary;
   }
 
   /* Empty state */
@@ -408,22 +408,23 @@
   }
 }
 
-/* React Flow custom styles */
+/* React Flow custom styles - Claude theme */
 .react-flow {
   @apply bg-bg-primary;
 }
 
 .react-flow__node {
-  @apply bg-bg-secondary border border-border-primary rounded-lg;
-  @apply font-sans text-sm;
+  @apply bg-bg-secondary border border-border-primary rounded-xl;
+  @apply font-sans text-sm shadow-sm;
 }
 
 .react-flow__node.selected {
-  @apply border-accent-primary shadow-glow;
+  @apply border-accent-primary shadow-md;
 }
 
 .react-flow__edge {
   stroke: rgb(var(--accent-primary));
+  stroke-width: 2;
 }
 
 .react-flow__edge.selected {
@@ -431,31 +432,32 @@
 }
 
 .react-flow__controls {
-  @apply bg-bg-secondary border border-border-primary rounded-lg;
+  @apply bg-bg-secondary border border-border-primary rounded-xl shadow-md;
 }
 
 .react-flow__controls button {
-  @apply bg-transparent border-none text-fg-primary;
-  @apply hover:bg-bg-tertiary;
+  @apply bg-transparent border-none text-fg-secondary;
+  @apply hover:bg-bg-tertiary hover:text-accent-primary;
+  @apply transition-colors duration-150;
 }
 
-/* Monaco Editor custom styles */
+/* Monaco Editor custom styles - Light theme */
 .monaco-editor {
   @apply font-mono;
 }
 
 .monaco-editor .margin {
-  @apply bg-bg-primary;
+  @apply bg-bg-secondary;
 }
 
-/* xterm.js terminal styles */
+/* xterm.js terminal styles - Warm theme */
 .xterm {
   @apply font-mono;
   padding: 0;
 }
 
 .xterm-viewport {
-  @apply bg-bg-primary;
+  @apply bg-bg-secondary;
 }
 
 .xterm .xterm-cursor-layer .xterm-cursor {
@@ -463,26 +465,26 @@
 }
 
 .xterm .xterm-selection {
-  background-color: rgba(139, 92, 246, 0.3) !important;
+  background-color: rgba(193, 95, 60, 0.25) !important;
 }
 
-/* Syntax highlighting for code blocks (highlight.js) */
+/* Syntax highlighting for code blocks (highlight.js) - Light theme */
 .hljs {
-  @apply bg-bg-primary text-fg-primary;
-  @apply rounded-lg p-4 overflow-x-auto;
-  @apply font-mono text-sm;
+  @apply bg-bg-secondary text-fg-primary;
+  @apply rounded-xl p-4 overflow-x-auto;
+  @apply font-mono text-sm border border-border-primary;
 }
 
-/* VS Code Dark+ inspired syntax highlighting */
+/* Warm, sophisticated syntax highlighting */
 .hljs-comment,
 .hljs-quote {
-  @apply text-accent-success italic;
+  @apply text-fg-tertiary italic;
 }
 
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-subst {
-  @apply text-accent-info;
+  @apply text-[rgb(166,65,145)]; /* Warm purple */
 }
 
 .hljs-number,
@@ -490,44 +492,44 @@
 .hljs-variable,
 .hljs-template-variable,
 .hljs-tag .hljs-attr {
-  @apply text-[rgb(181,206,168)]; /* Light green */
+  @apply text-[rgb(76,153,89)]; /* Warm green */
 }
 
 .hljs-string,
 .hljs-doctag {
-  @apply text-accent-warning;
+  @apply text-[rgb(193,95,60)]; /* Crail - primary accent */
 }
 
 .hljs-title,
 .hljs-section,
 .hljs-selector-id {
-  @apply text-[rgb(220,220,170)]; /* Light yellow */
+  @apply text-[rgb(140,109,49)]; /* Warm gold */
 }
 
 .hljs-type,
 .hljs-class .hljs-title {
-  @apply text-[rgb(78,201,176)]; /* Teal */
+  @apply text-[rgb(89,145,214)]; /* Warm blue */
 }
 
 .hljs-tag,
 .hljs-name,
 .hljs-attribute {
-  @apply text-accent-info;
+  @apply text-[rgb(89,145,214)]; /* Warm blue */
 }
 
 .hljs-regexp,
 .hljs-link {
-  @apply text-[rgb(209,105,105)]; /* Light red */
+  @apply text-accent-error;
 }
 
 .hljs-symbol,
 .hljs-bullet {
-  @apply text-accent-secondary;
+  @apply text-accent-primary;
 }
 
 .hljs-built_in,
 .hljs-builtin-name {
-  @apply text-[rgb(220,220,170)]; /* Light yellow */
+  @apply text-[rgb(140,109,49)]; /* Warm gold */
 }
 
 .hljs-meta {
@@ -535,11 +537,11 @@
 }
 
 .hljs-deletion {
-  @apply bg-accent-error/20;
+  @apply bg-accent-error/10;
 }
 
 .hljs-addition {
-  @apply bg-accent-success/20;
+  @apply bg-accent-success/10;
 }
 
 .hljs-emphasis {
@@ -547,42 +549,42 @@
 }
 
 .hljs-strong {
-  @apply font-bold;
+  @apply font-semibold;
 }
 
-/* Markdown content styles */
+/* Markdown content styles - Claude's clean typography */
 .markdown-content {
   @apply text-fg-primary leading-relaxed;
 }
 
 .markdown-content h1 {
-  @apply text-2xl font-bold text-fg-primary mt-6 mb-4 pb-2 border-b border-border-primary;
+  @apply text-2xl font-semibold text-fg-primary mt-8 mb-4 pb-3 border-b border-border-primary;
 }
 
 .markdown-content h2 {
-  @apply text-xl font-bold text-fg-primary mt-5 mb-3 pb-2 border-b border-border-primary;
+  @apply text-xl font-semibold text-fg-primary mt-6 mb-3 pb-2 border-b border-border-primary;
 }
 
 .markdown-content h3 {
-  @apply text-lg font-semibold text-fg-primary mt-4 mb-2;
+  @apply text-lg font-semibold text-fg-primary mt-5 mb-2;
 }
 
 .markdown-content h4 {
-  @apply text-base font-semibold text-fg-primary mt-3 mb-2;
+  @apply text-base font-semibold text-fg-primary mt-4 mb-2;
 }
 
 .markdown-content h5,
 .markdown-content h6 {
-  @apply text-sm font-semibold text-fg-secondary mt-2 mb-1;
+  @apply text-sm font-semibold text-fg-secondary mt-3 mb-1;
 }
 
 .markdown-content p {
-  @apply my-3 text-fg-secondary leading-relaxed;
+  @apply my-4 text-fg-secondary leading-relaxed;
 }
 
 .markdown-content ul,
 .markdown-content ol {
-  @apply my-3 ml-6 space-y-1 text-fg-secondary;
+  @apply my-4 ml-6 space-y-2 text-fg-secondary;
 }
 
 .markdown-content ul {
@@ -594,20 +596,20 @@
 }
 
 .markdown-content li {
-  @apply pl-1;
+  @apply pl-2;
 }
 
 .markdown-content a {
-  @apply text-accent-primary hover:text-accent-secondary underline;
-  @apply transition-colors duration-200;
+  @apply text-accent-primary hover:text-accent-secondary underline decoration-1 underline-offset-2;
+  @apply transition-colors duration-150;
 }
 
 .markdown-content code {
-  @apply bg-bg-tertiary text-accent-warning px-1.5 py-0.5 rounded text-sm font-mono;
+  @apply bg-bg-tertiary text-accent-primary px-2 py-0.5 rounded-md text-sm font-mono;
 }
 
 .markdown-content pre {
-  @apply my-4 rounded-lg overflow-hidden;
+  @apply my-5 rounded-xl overflow-hidden;
 }
 
 .markdown-content pre code {
@@ -615,12 +617,12 @@
 }
 
 .markdown-content blockquote {
-  @apply border-l-4 border-accent-primary pl-4 py-2 my-4;
-  @apply bg-accent-primary/5 text-fg-secondary italic;
+  @apply border-l-3 border-accent-primary/40 pl-5 py-2 my-5;
+  @apply bg-accent-primary/5 text-fg-secondary;
 }
 
 .markdown-content table {
-  @apply w-full my-4 border border-border-primary rounded-lg overflow-hidden;
+  @apply w-full my-5 border border-border-primary rounded-xl overflow-hidden;
 }
 
 .markdown-content thead {
@@ -628,11 +630,11 @@
 }
 
 .markdown-content th {
-  @apply px-4 py-2 text-left text-sm font-semibold text-fg-primary border-b border-border-primary;
+  @apply px-5 py-3 text-left text-sm font-semibold text-fg-primary border-b border-border-primary;
 }
 
 .markdown-content td {
-  @apply px-4 py-2 text-sm text-fg-secondary border-b border-border-primary;
+  @apply px-5 py-3 text-sm text-fg-secondary border-b border-border-primary;
 }
 
 .markdown-content tbody tr:last-child td {
@@ -640,15 +642,15 @@
 }
 
 .markdown-content tbody tr:hover {
-  @apply bg-bg-tertiary/50;
+  @apply bg-bg-tertiary/30;
 }
 
 .markdown-content hr {
-  @apply my-6 border-t border-border-primary;
+  @apply my-8 border-t border-border-primary;
 }
 
 .markdown-content img {
-  @apply max-w-full h-auto rounded-lg my-4;
+  @apply max-w-full h-auto rounded-xl my-5;
 }
 
 .markdown-content strong {

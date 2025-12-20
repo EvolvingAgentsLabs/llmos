@@ -1,16 +1,10 @@
 import type { Metadata } from 'next';
-import { JetBrains_Mono } from 'next/font/google';
 import '../styles/globals.css';
 import { ThemeProvider } from '@/lib/theme-provider';
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-});
-
 export const metadata: Metadata = {
-  title: 'LLMos-Lite Terminal',
-  description: 'Git-aware terminal interface for LLMos-Lite',
+  title: 'LLMos-Lite',
+  description: 'An Evolving Operating System for AI-Native Development',
 };
 
 export default function RootLayout({
@@ -19,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={jetbrainsMono.className}>
+    <html lang="en">
+      <body>
         <ThemeProvider>
           {children}
         </ThemeProvider>

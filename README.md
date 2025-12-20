@@ -987,7 +987,7 @@ A: It has volumes (file systems), agents (processes), skills (libraries), and se
 - **Qiskit** - Quantum computing
 - **OpenRouter** - LLM API gateway
 - **GitHub API** - Git operations
-- **Claude 3.5** - Primary AI model
+- **Claude 4.5** - Primary AI model
 
 ---
 
