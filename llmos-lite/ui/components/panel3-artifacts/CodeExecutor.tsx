@@ -2,27 +2,39 @@
  * CodeExecutor - Execute Python/JavaScript code in artifacts
  *
  * Adds "Run" button to execute generated code safely in browser
+ * Now with supervised execution and self-correction!
  */
 
 'use client';
 
 import { useState } from 'react';
 import { executeArtifact, ExecutionResult, isKernelReady } from '@/lib/artifact-executor';
+import { executeWithSupervision, SupervisedExecutionResult } from '@/lib/kernel/supervised-execution';
+import RefinementProgress from '@/components/kernel/RefinementProgress';
 
 interface CodeExecutorProps {
   code: string;
   language: 'python' | 'javascript';
+  enableSelfCorrection?: boolean;
   onResult?: (result: ExecutionResult) => void;
 }
 
-export default function CodeExecutor({ code, language, onResult }: CodeExecutorProps) {
+export default function CodeExecutor({ code, language, enableSelfCorrection = true, onResult }: CodeExecutorProps) {
   const [isExecuting, setIsExecuting] = useState(false);
-  const [result, setResult] = useState<ExecutionResult | null>(null);
+  const [result, setResult] = useState<SupervisedExecutionResult | null>(null);
   const [showOutput, setShowOutput] = useState(false);
+
+  // Refinement state
+  const [isRefining, setIsRefining] = useState(false);
+  const [refinementStatus, setRefinementStatus] = useState('');
+  const [currentAttempt, setCurrentAttempt] = useState(0);
+  const [maxAttempts, setMaxAttempts] = useState(3);
 
   const handleExecute = async () => {
     setIsExecuting(true);
     setShowOutput(true);
+    setIsRefining(false);
+    setCurrentAttempt(0);
 
     try {
       // Check if kernel is ready for JavaScript execution
@@ -31,26 +43,55 @@ export default function CodeExecutor({ code, language, onResult }: CodeExecutorP
           success: false,
           error: 'Kernel not ready. Please wait for system to boot.',
           executionTime: 0,
+          wasRefined: false,
+          refinementAttempts: 0,
         });
         setIsExecuting(false);
         return;
       }
 
-      // Execute using artifact executor
-      const execResult = await executeArtifact(
-        code,
-        language,
-        `artifact-${Date.now()}` // Generate unique artifact ID
-      );
+      const artifactId = `artifact-${Date.now()}`;
+
+      // Execute with supervision if enabled
+      let execResult: SupervisedExecutionResult;
+
+      if (enableSelfCorrection) {
+        execResult = await executeWithSupervision(
+          code,
+          language,
+          artifactId,
+          {
+            enableSelfCorrection: true,
+            maxRetries: maxAttempts,
+            onProgress: (status, attempt, total) => {
+              setCurrentAttempt(attempt);
+              setRefinementStatus(status);
+              setIsRefining(attempt > 1 && attempt < total);
+            },
+          }
+        );
+      } else {
+        // Non-supervised execution
+        const basicResult = await executeArtifact(code, language, artifactId);
+        execResult = {
+          ...basicResult,
+          wasRefined: false,
+          refinementAttempts: 0,
+        };
+      }
 
       setResult(execResult);
+      setIsRefining(false);
       onResult?.(execResult);
     } catch (error: any) {
       setResult({
         success: false,
         error: error.message || String(error),
         executionTime: 0,
+        wasRefined: false,
+        refinementAttempts: 0,
       });
+      setIsRefining(false);
     } finally {
       setIsExecuting(false);
     }
@@ -72,17 +113,22 @@ export default function CodeExecutor({ code, language, onResult }: CodeExecutorP
           {isExecuting ? (
             <>
               <span className="animate-spin">⚙️</span>
-              Running...
+              {isRefining ? 'Refining...' : 'Running...'}
             </>
           ) : (
             <>
-              ▶️ Run Code
+              ▶️ Run Code {enableSelfCorrection && '(with Self-Correction)'}
             </>
           )}
         </button>
 
         {result && (
           <div className="flex items-center gap-2 text-xs">
+            {result.wasRefined && (
+              <span className="text-terminal-accent-purple">
+                🔧 Refined
+              </span>
+            )}
             <span className={result.success ? 'text-terminal-accent-green' : 'text-red-400'}>
               {result.success ? '✓ Success' : '✗ Error'}
             </span>
@@ -98,6 +144,19 @@ export default function CodeExecutor({ code, language, onResult }: CodeExecutorP
           </div>
         )}
       </div>
+
+      {/* Refinement progress */}
+      {(isRefining || (result?.wasRefined && result?.refinementHistory)) && (
+        <div className="p-3 border-t border-terminal-border">
+          <RefinementProgress
+            isRefining={isRefining}
+            currentAttempt={currentAttempt}
+            maxAttempts={maxAttempts}
+            status={refinementStatus}
+            refinementHistory={result?.refinementHistory}
+          />
+        </div>
+      )}
 
       {/* Output panel */}
       {showOutput && result && (
@@ -137,7 +196,7 @@ export default function CodeExecutor({ code, language, onResult }: CodeExecutorP
             <div>
               <div className="text-xs text-red-400 mb-1">Error:</div>
               <pre className="text-xs text-red-300 bg-terminal-bg-tertiary p-2 rounded overflow-auto max-h-40">
-                {result.error}
+                {result.error || 'Unknown error'}
               </pre>
 
               {result.stdout && (
