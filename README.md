@@ -860,7 +860,16 @@ We welcome contributions! Here's how:
 
 ## Documentation
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical deep-dive
+### Technical Documentation
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - **Comprehensive technical documentation** covering:
+  - Kernel runtime system and boot sequence
+  - WASM sandboxed execution (QuickJS-WASM + Pyodide)
+  - Self-correction system with LLM-powered refinement
+  - GitHub integration and evolution engine
+  - Frontend architecture and state management
+  - Security model and performance optimization
+
 - **[.env.local.example](./llmos-lite/ui/.env.local.example)** - Configuration template
 
 ---
