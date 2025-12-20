@@ -244,19 +244,38 @@ export class KernelBootLoader {
    * Stage 3: Load WASM runtime (QuickJS)
    */
   private async loadWASMRuntime(): Promise<void> {
-    // Future: Load QuickJS-WASM from system volume
-    // For now, prepare for future integration
+    console.log('[Kernel] Initializing QuickJS-WASM runtime...');
 
-    console.log('[Kernel] Preparing WASM runtime...');
+    try {
+      // Dynamically import WASM runtime
+      const { getWASMRuntime } = await import('./wasm-runtime');
 
-    if (typeof window !== 'undefined') {
-      (window as any).__LLMOS_KERNEL__.modules.wasm = {
-        status: 'pending',
-        message: 'WASM runtime will be loaded in future milestone',
-      };
+      // Initialize the runtime
+      const runtime = await getWASMRuntime();
+
+      if (typeof window !== 'undefined') {
+        // Store runtime reference in kernel
+        (window as any).__LLMOS_KERNEL__.modules.wasm = {
+          status: 'ready',
+          runtime: 'quickjs',
+          version: '0.29.2',
+          instance: runtime,
+        };
+      }
+
+      console.log('[Kernel] WASM runtime initialized successfully');
+    } catch (error) {
+      console.error('[Kernel] WASM initialization failed:', error);
+
+      if (typeof window !== 'undefined') {
+        (window as any).__LLMOS_KERNEL__.modules.wasm = {
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+
+      throw error;
     }
-
-    await this.sleep(300);
   }
 
   /**

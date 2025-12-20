@@ -7,7 +7,7 @@
 'use client';
 
 import { useState } from 'react';
-import { executePython, executeJavaScript, ExecutionResult } from '@/lib/pyodide-runtime';
+import { executeArtifact, ExecutionResult, isKernelReady } from '@/lib/artifact-executor';
 
 interface CodeExecutorProps {
   code: string;
@@ -25,13 +25,23 @@ export default function CodeExecutor({ code, language, onResult }: CodeExecutorP
     setShowOutput(true);
 
     try {
-      let execResult: ExecutionResult;
-
-      if (language === 'python') {
-        execResult = await executePython(code);
-      } else {
-        execResult = await executeJavaScript(code);
+      // Check if kernel is ready for JavaScript execution
+      if (language === 'javascript' && !isKernelReady()) {
+        setResult({
+          success: false,
+          error: 'Kernel not ready. Please wait for system to boot.',
+          executionTime: 0,
+        });
+        setIsExecuting(false);
+        return;
       }
+
+      // Execute using artifact executor
+      const execResult = await executeArtifact(
+        code,
+        language,
+        `artifact-${Date.now()}` // Generate unique artifact ID
+      );
 
       setResult(execResult);
       onResult?.(execResult);

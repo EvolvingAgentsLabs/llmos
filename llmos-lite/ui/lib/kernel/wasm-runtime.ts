@@ -281,8 +281,16 @@ export class WASMRuntime {
   private getMemoryUsage(): number {
     if (!this.runtime) return 0;
 
-    const stats = this.runtime.computeMemoryUsage();
-    return stats.memory_used_size;
+    try {
+      const stats = this.runtime.computeMemoryUsage();
+      // QuickJS returns an object with various memory stats
+      // Access the correct property based on the QuickJS API
+      return (stats as any)?.memory_used_size || 0;
+    } catch (error) {
+      // If computeMemoryUsage fails or stats format is different, return 0
+      console.warn('[WASM] Could not get memory usage:', error);
+      return 0;
+    }
   }
 
   /**
