@@ -34,33 +34,33 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-gray-900 via-black to-gray-900 transition-opacity duration-500 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-bg-primary transition-opacity duration-500 ${
         isComplete ? 'opacity-0' : 'opacity-100'
       }`}
     >
       <div className="w-full max-w-2xl px-8">
         {/* Logo/Title */}
         <div className="text-center mb-12 animate-fade-in">
-          <div className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <div className="text-6xl font-bold mb-4 text-accent-primary">
             LLMos
           </div>
-          <div className="text-xl text-gray-400 font-light tracking-wider">
+          <div className="text-xl text-fg-secondary font-light tracking-wider">
             Autonomous Runtime Environment
           </div>
-          <div className="text-sm text-gray-600 mt-2">v0.1.0</div>
+          <div className="text-sm text-fg-tertiary mt-2">v0.1.0</div>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-8">
-          <div className="h-2 bg-gray-800 rounded-full overflow-hidden shadow-inner">
+          <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden shadow-sm">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out"
+              className="h-full bg-accent-primary transition-all duration-300 ease-out"
               style={{ width: `${progress.percent}%` }}
             >
               <div className="h-full w-full animate-pulse-glow" />
             </div>
           </div>
-          <div className="flex justify-between mt-2 text-xs text-gray-500">
+          <div className="flex justify-between mt-2 text-xs text-fg-tertiary">
             <span>{progress.percent.toFixed(0)}%</span>
             <span>{progress.stage.description}</span>
           </div>
@@ -68,11 +68,11 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
 
         {/* Current Stage Message */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 px-6 py-3 rounded-lg bg-gray-800/50 border border-gray-700/50 backdrop-blur-sm">
+          <div className="inline-flex items-center gap-3 px-6 py-3 rounded-lg bg-bg-secondary border border-border-primary shadow-sm">
             {/* Spinner */}
             {!progress.error && (
               <div className="relative">
-                <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-accent-primary/30 border-t-accent-primary rounded-full animate-spin" />
               </div>
             )}
 
@@ -80,7 +80,7 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
             {progress.error && (
               <div className="w-5 h-5 flex items-center justify-center">
                 <svg
-                  className="w-4 h-4 text-yellow-500"
+                  className="w-4 h-4 text-accent-warning"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -98,7 +98,7 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
             {/* Message */}
             <span
               className={`text-sm font-mono ${
-                progress.error ? 'text-yellow-400' : 'text-gray-300'
+                progress.error ? 'text-accent-warning' : 'text-fg-primary'
               }`}
             >
               {progress.message}
@@ -108,7 +108,7 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
 
           {/* Error message */}
           {progress.error && (
-            <div className="mt-4 p-4 rounded-lg bg-yellow-900/20 border border-yellow-700/50 text-yellow-400 text-sm animate-fade-in">
+            <div className="mt-4 p-4 rounded-lg bg-accent-warning/10 border border-accent-warning/30 text-accent-warning text-sm animate-fade-in">
               <div className="font-semibold mb-1">Non-critical error (continuing boot):</div>
               <div className="font-mono text-xs opacity-80">{progress.error}</div>
             </div>
@@ -129,12 +129,12 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
                   relative h-1 rounded-full transition-all duration-300
                   ${
                     isPast
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-500'
+                      ? 'bg-accent-primary'
                       : isCurrent && !hasFailed
-                      ? 'bg-blue-500 animate-pulse'
+                      ? 'bg-accent-primary animate-pulse'
                       : hasFailed
-                      ? 'bg-yellow-500'
-                      : 'bg-gray-700'
+                      ? 'bg-accent-warning'
+                      : 'bg-bg-tertiary'
                   }
                 `}
                 title={stageName}
@@ -145,10 +145,10 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
                     absolute -bottom-6 left-0 right-0 text-center text-xs transition-opacity duration-300
                     ${
                       isCurrent
-                        ? 'text-blue-400 opacity-100'
+                        ? 'text-accent-primary opacity-100'
                         : isPast
-                        ? 'text-gray-500 opacity-70'
-                        : 'text-gray-600 opacity-50'
+                        ? 'text-fg-tertiary opacity-70'
+                        : 'text-fg-muted opacity-50'
                     }
                   `}
                 >
@@ -160,7 +160,7 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
         </div>
 
         {/* Additional info */}
-        <div className="mt-16 text-center text-xs text-gray-600 space-y-1">
+        <div className="mt-16 text-center text-xs text-fg-tertiary space-y-1">
           <div>Loading kernel from system volume...</div>
           <div className="font-mono">/system/kernel/</div>
         </div>

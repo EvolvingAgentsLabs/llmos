@@ -12,8 +12,8 @@ import BootScreen from '@/components/kernel/BootScreen';
 const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
   ssr: false,
   loading: () => (
-    <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
-      <div className="text-terminal-accent-green animate-pulse">
+    <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+      <div className="text-accent-primary animate-pulse">
         Loading...
       </div>
     </div>
@@ -23,8 +23,8 @@ const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
 const APIKeySetup = dynamic(() => import('@/components/setup/APIKeySetup'), {
   ssr: false,
   loading: () => (
-    <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
-      <div className="text-terminal-accent-green animate-pulse">
+    <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+      <div className="text-accent-primary animate-pulse">
         Loading Setup...
       </div>
     </div>
@@ -89,8 +89,8 @@ export default function Home() {
   // Loading state
   if (isConfigured === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
-        <div className="text-terminal-accent-green animate-pulse">
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+        <div className="text-accent-primary animate-pulse">
           Checking configuration...
         </div>
       </div>
