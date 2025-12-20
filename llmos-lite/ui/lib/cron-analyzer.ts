@@ -67,7 +67,10 @@ export class CronAnalyzer {
     });
 
     // Generate skills from high-confidence patterns
-    const skillsGenerated = await this.generateSkills(patterns.filter(p => p.confidence >= 0.85));
+    const skillsGenerated = await this.generateSkills(
+      patterns.filter(p => p.confidence >= 0.85),
+      volume
+    );
 
     return {
       patterns,
@@ -241,7 +244,10 @@ Return ONLY valid JSON:
    * Generate skills from detected patterns
    * Creates reusable skill files from high-confidence patterns
    */
-  private static async generateSkills(patterns: Pattern[]): Promise<string[]> {
+  private static async generateSkills(
+    patterns: Pattern[],
+    volume: VolumeType
+  ): Promise<string[]> {
     if (patterns.length === 0) return [];
 
     const client = createLLMClient();
@@ -268,7 +274,18 @@ Create a skill document with:
 5. Example code or template
 6. Common variations
 
-Format as Markdown.`;
+Format as Markdown with YAML frontmatter:
+---
+name: ${pattern.name}
+description: ${pattern.description}
+confidence: ${pattern.confidence}
+occurrences: ${pattern.occurrences}
+tags: []
+---
+
+# ${pattern.name}
+
+[YOUR CONTENT HERE]`;
 
       try {
         const skillContent = await client.chatDirect([
@@ -278,10 +295,23 @@ Format as Markdown.`;
           },
         ]);
 
-        skillsGenerated.push(skillName);
+        // Commit skill to GitHub repository
+        try {
+          await GitService.commitSkill(
+            volume,
+            `skills/${skillName}.md`,
+            skillContent,
+            `Auto-generated skill: ${pattern.name}\n\nDetected from ${pattern.occurrences} occurrences with ${(pattern.confidence * 100).toFixed(0)}% confidence.\n\n🤖 Generated with LLMos-Lite Evolution Engine`
+          );
 
-        // In production, would commit this to the repository
-        console.log(`Generated skill: ${skillName}.md`);
+          skillsGenerated.push(skillName);
+          console.log(`✓ Generated and committed skill: ${skillName}.md`);
+        } catch (commitError) {
+          console.error(`Failed to commit skill ${skillName}:`, commitError);
+          // Still add to generated list even if commit fails
+          skillsGenerated.push(skillName);
+          console.log(`✓ Generated skill (commit failed): ${skillName}.md`);
+        }
       } catch (error) {
         console.error(`Failed to generate skill for pattern: ${pattern.name}`, error);
       }
