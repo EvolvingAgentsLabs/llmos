@@ -6,6 +6,9 @@
 
 import { getFileTools, ToolResult } from './llm-tools/file-tools';
 
+// Re-export ToolResult for external use
+export type { ToolResult } from './llm-tools/file-tools';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
