@@ -279,6 +279,75 @@ export class GitService {
   }
 
   /**
+   * Commit a skill file to GitHub
+   * Used by evolution engine to persist auto-generated skills
+   */
+  static async commitSkill(
+    volume: VolumeType,
+    filePath: string,
+    content: string,
+    commitMessage: string
+  ): Promise<string> {
+    const user = GitHubAuth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const repo = this.getRepoForVolume(volume, user);
+    await this.ensureRepository(repo);
+
+    const token = this.getAccessToken();
+
+    // Get current file SHA if it exists (needed for updates)
+    let currentSha: string | undefined;
+    const getResponse = await fetch(
+      `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${filePath}?ref=${repo.branch}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }
+    );
+
+    if (getResponse.ok) {
+      const data = await getResponse.json();
+      currentSha = data.sha;
+    }
+
+    // Encode content as base64
+    const encodedContent = Buffer.from(content).toString('base64');
+
+    const response = await fetch(
+      `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${filePath}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: commitMessage,
+          content: encodedContent,
+          sha: currentSha,
+          branch: repo.branch,
+          committer: {
+            name: user.name || user.login,
+            email: user.email || `${user.login}@users.noreply.github.com`,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to commit skill: ${error}`);
+    }
+
+    const result = await response.json();
+    return result.commit.sha.substring(0, 7); // Return short hash
+  }
+
+  /**
    * Pull latest changes from repository
    */
   static async pullLatestSessions(volume: VolumeType): Promise<any[]> {
@@ -319,5 +388,61 @@ export class GitService {
     }
 
     return sessions;
+  }
+
+  /**
+   * Fetch skills from repository
+   * Used to load auto-generated skills into LLM context
+   */
+  static async fetchSkills(volume: VolumeType): Promise<Array<{
+    name: string;
+    content: string;
+    path: string;
+  }>> {
+    const user = GitHubAuth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const repo = this.getRepoForVolume(volume, user);
+    const token = this.getAccessToken();
+
+    // Get all skill files
+    const response = await fetch(
+      `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/skills?ref=${repo.branch}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) return []; // No skills yet
+      throw new Error(`Failed to fetch skills: ${await response.text()}`);
+    }
+
+    const files = await response.json();
+    const skills = [];
+
+    // Fetch each skill file
+    for (const file of files) {
+      if (file.type === 'file' && file.name.endsWith('.md')) {
+        try {
+          const contentResponse = await fetch(file.download_url);
+          if (contentResponse.ok) {
+            const content = await contentResponse.text();
+            skills.push({
+              name: file.name.replace('.md', ''),
+              content,
+              path: file.path,
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to fetch skill ${file.name}:`, error);
+        }
+      }
+    }
+
+    return skills;
   }
 }
