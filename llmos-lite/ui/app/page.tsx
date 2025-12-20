@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { LLMStorage } from '@/lib/llm-client';
 import { UserStorage } from '@/lib/user-storage';
 import { SessionProvider } from '@/contexts/SessionContext';
+import { bootKernel, BootProgress } from '@/lib/kernel/boot';
+import BootScreen from '@/components/kernel/BootScreen';
 
 // Dynamically import components with no SSR
 const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
@@ -32,26 +34,56 @@ const APIKeySetup = dynamic(() => import('@/components/setup/APIKeySetup'), {
 export default function Home() {
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isBooting, setIsBooting] = useState(true);
+  const [bootProgress, setBootProgress] = useState<BootProgress>({
+    stage: {
+      name: 'init',
+      description: 'Initializing system',
+      duration: 500,
+      critical: true,
+    },
+    percent: 0,
+    message: 'Starting boot sequence...',
+  });
 
   useEffect(() => {
     setIsMounted(true);
-    // Check if both LLM config AND user/team are configured
+
+    // Check configuration
     const configured = LLMStorage.isConfigured() && UserStorage.isUserConfigured();
     setIsConfigured(configured);
 
-    // TODO: Re-enable Pyodide preloading once Next.js compatibility is resolved
-    // The preloader is implemented but conflicts with Next.js SSR
+    // Start kernel boot sequence
+    const startBoot = async () => {
+      try {
+        await bootKernel(
+          (progress) => {
+            setBootProgress(progress);
+          },
+          {
+            enableWASM: true,
+            enablePython: true,
+            loadStdLib: true,
+          }
+        );
+
+        // Boot complete, hide boot screen
+        setTimeout(() => {
+          setIsBooting(false);
+        }, 500);
+      } catch (error) {
+        console.error('[App] Kernel boot failed:', error);
+        // Continue to app even if boot fails
+        setIsBooting(false);
+      }
+    };
+
+    startBoot();
   }, []);
 
-  // Don't render anything until mounted (client-side only)
-  if (!isMounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
-        <div className="text-terminal-accent-green animate-pulse">
-          Initializing LLMos-Lite...
-        </div>
-      </div>
-    );
+  // Show boot screen while booting
+  if (!isMounted || isBooting) {
+    return <BootScreen progress={bootProgress} onComplete={() => setIsBooting(false)} />;
   }
 
   // Loading state
