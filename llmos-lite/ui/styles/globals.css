@@ -617,7 +617,7 @@
 }
 
 .markdown-content blockquote {
-  @apply border-l-3 border-accent-primary/40 pl-5 py-2 my-5;
+  @apply border-l-4 border-accent-primary/40 pl-5 py-2 my-5;
   @apply bg-accent-primary/5 text-fg-secondary;
 }
 
