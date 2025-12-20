@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useSessionContext, SessionType } from '@/contexts/SessionContext';
 import VolumeTree from '../panel1-volumes/VolumeTree';
 import ActivitySection from './ActivitySection';
+import NewSessionDialog from '../session/NewSessionDialog';
+import SessionStatusBadge from '../session/SessionStatusBadge';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -20,14 +22,25 @@ export default function SidebarPanel({
 }: SidebarPanelProps) {
   const { activeSessions, addSession } = useSessionContext();
   const [activityExpanded, setActivityExpanded] = useState(false);
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
 
   const currentSessions = activeSessions[activeVolume];
 
   const handleNewSession = () => {
+    setShowNewSessionDialog(true);
+  };
+
+  const handleCreateSession = (data: {
+    name: string;
+    type: SessionType;
+    goal?: string;
+  }) => {
     const newSession = addSession({
-      name: `New Session ${currentSessions.length + 1}`,
-      status: 'uncommitted',
+      name: data.name,
+      type: data.type,
+      status: 'temporal',
       volume: activeVolume,
+      goal: data.goal,
     });
     onSessionChange(newSession.id);
   };
@@ -89,24 +102,25 @@ export default function SidebarPanel({
                     }
                   `}
                 >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {/* Status indicator */}
-                    <div className={
-                      session.status === 'uncommitted'
-                        ? 'status-pending'
-                        : 'status-active'
-                    } />
-
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
                     {/* Session name */}
                     <span className={`text-sm font-medium truncate ${
                       activeSession === session.id ? 'text-fg-primary' : 'text-fg-secondary group-hover:text-fg-primary'
                     }`}>
                       {session.name}
                     </span>
+
+                    {/* Session type badge (small) */}
+                    <span className={`
+                      text-xs px-1.5 py-0.5 rounded flex-shrink-0
+                      ${session.type === 'user' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}
+                    `}>
+                      {session.type === 'user' ? '🔒' : '👥'}
+                    </span>
                   </div>
 
                   {/* Session metadata */}
-                  <div className="ml-4 flex items-center gap-2 text-xs text-fg-tertiary">
+                  <div className="ml-0 flex items-center gap-2 text-xs text-fg-tertiary flex-wrap">
                     <span className="flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -115,6 +129,12 @@ export default function SidebarPanel({
                     </span>
                     <span>·</span>
                     <span>{session.timeAgo}</span>
+                    {session.status === 'temporal' && (
+                      <>
+                        <span>·</span>
+                        <span className="text-yellow-400">⚠️ Unsaved</span>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -127,6 +147,14 @@ export default function SidebarPanel({
       <ActivitySection
         expanded={activityExpanded}
         onToggle={() => setActivityExpanded(!activityExpanded)}
+      />
+
+      {/* New Session Dialog */}
+      <NewSessionDialog
+        isOpen={showNewSessionDialog}
+        onClose={() => setShowNewSessionDialog(false)}
+        onCreate={handleCreateSession}
+        defaultVolume={activeVolume}
       />
     </div>
   );

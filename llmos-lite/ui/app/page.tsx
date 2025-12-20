@@ -7,12 +7,12 @@ import { UserStorage } from '@/lib/user-storage';
 import { SessionProvider } from '@/contexts/SessionContext';
 
 // Dynamically import components with no SSR
-const TerminalLayout = dynamic(() => import('@/components/layout/TerminalLayoutNew'), {
+const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
   ssr: false,
   loading: () => (
     <div className="min-h-screen flex items-center justify-center bg-terminal-bg-primary">
       <div className="text-terminal-accent-green animate-pulse">
-        Loading Terminal...
+        Loading...
       </div>
     </div>
   ),
@@ -70,10 +70,10 @@ export default function Home() {
     return <APIKeySetup onComplete={() => setIsConfigured(true)} />;
   }
 
-  // Show main terminal interface wrapped in SessionProvider
+  // Show simple 2-panel interface
   return (
     <SessionProvider>
-      <TerminalLayout />
+      <SimpleLayout />
     </SessionProvider>
   );
 }

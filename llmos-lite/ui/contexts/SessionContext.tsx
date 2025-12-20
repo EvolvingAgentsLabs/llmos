@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ArtifactReference } from '@/lib/artifacts/types';
 
 // Types
 export interface Message {
@@ -9,6 +10,12 @@ export interface Message {
   content: string;
   timestamp: string;
   traces?: number[];
+
+  // NEW: Artifact integration
+  references?: ArtifactReference[]; // Artifacts referenced in this message (@artifact)
+  generatedArtifacts?: string[]; // IDs of artifacts created by this message
+
+  // Legacy (kept for backward compatibility)
   artifact?: string;
   pattern?: {
     name: string;
@@ -16,10 +23,17 @@ export interface Message {
   };
 }
 
+export type SessionType = 'user' | 'team';
+export type SessionStatus = 'temporal' | 'saved';
+
 export interface Session {
   id: string;
   name: string;
-  status: 'uncommitted' | 'committed';
+
+  // NEW: Enhanced session properties
+  type: SessionType; // User or Team session
+  status: SessionStatus; // Temporal (unsaved) or Saved (committed to repo)
+
   traces: number;
   timeAgo: string;
   patterns?: number;
@@ -27,6 +41,11 @@ export interface Session {
   goal?: string;
   volume: 'system' | 'team' | 'user';
   messages: Message[];
+
+  // NEW: Artifact tracking
+  artifactIds?: string[]; // IDs of all artifacts in this session
+
+  // Legacy (kept for backward compatibility)
   artifacts?: Array<{
     type: 'skill' | 'code' | 'workflow';
     name: string;
@@ -61,11 +80,16 @@ interface SessionContextType {
   cronJobs: CronJob[];
   activeSession: string | null;
   setActiveSession: (id: string | null) => void;
-  addSession: (session: Omit<Session, 'id' | 'traces' | 'timeAgo' | 'messages'>) => Session;
+  addSession: (session: Omit<Session, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds'>) => Session;
   updateSession: (id: string, updates: Partial<Session>) => void;
   deleteSession: (id: string) => void;
   addMessage: (sessionId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
   updateCronJob: (id: string, updates: Partial<CronJob>) => void;
+
+  // NEW: Artifact management
+  addArtifactToSession: (sessionId: string, artifactId: string) => void;
+  removeArtifactFromSession: (sessionId: string, artifactId: string) => void;
+  getSessionArtifacts: (sessionId: string) => string[];
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -184,7 +208,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const addSession = (
-    sessionData: Omit<Session, 'id' | 'traces' | 'timeAgo' | 'messages'>
+    sessionData: Omit<Session, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds'>
   ): Session => {
     const newSession: Session = {
       ...sessionData,
@@ -192,6 +216,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       traces: 0,
       timeAgo: 'just now',
       messages: [],
+      artifactIds: [],
+      // Default to temporal status if not specified
+      status: sessionData.status || 'temporal',
+      // Default to user type if not specified
+      type: sessionData.type || 'user',
     };
 
     setSessions((prev) => [...prev, newSession]);
@@ -214,6 +243,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const addMessage = (sessionId: string, messageData: Omit<Message, 'id' | 'timestamp'>) => {
+    console.log('[SessionContext] addMessage called:', {
+      sessionId,
+      role: messageData.role,
+      contentLength: messageData.content?.length || 0,
+      contentPreview: messageData.content?.substring(0, 100)
+    });
+
     const now = new Date();
     const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now
       .getMinutes()
@@ -226,14 +262,58 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       timestamp,
     };
 
+    console.log('[SessionContext] Created message:', newMessage.id);
+
+    setSessions((prev) => {
+      const updated = prev.map((session) => {
+        if (session.id === sessionId) {
+          const updatedSession = {
+            ...session,
+            messages: [...session.messages, newMessage],
+            traces: session.traces + (newMessage.traces?.length || 0),
+            timeAgo: 'just now',
+          };
+          console.log('[SessionContext] Updated session, new message count:', updatedSession.messages.length);
+          return updatedSession;
+        }
+        return session;
+      });
+      console.log('[SessionContext] Total sessions:', updated.length);
+      return updated;
+    });
+  };
+
+  const updateCronJob = (id: string, updates: Partial<CronJob>) => {
+    setCronJobs((prev) =>
+      prev.map((cron) => (cron.id === id ? { ...cron, ...updates } : cron))
+    );
+  };
+
+  // NEW: Artifact management functions
+  const addArtifactToSession = (sessionId: string, artifactId: string) => {
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id === sessionId) {
+          const artifactIds = session.artifactIds || [];
+          if (!artifactIds.includes(artifactId)) {
+            return {
+              ...session,
+              artifactIds: [...artifactIds, artifactId],
+            };
+          }
+        }
+        return session;
+      })
+    );
+  };
+
+  const removeArtifactFromSession = (sessionId: string, artifactId: string) => {
     setSessions((prev) =>
       prev.map((session) => {
         if (session.id === sessionId) {
           return {
             ...session,
-            messages: [...session.messages, newMessage],
-            traces: session.traces + (newMessage.traces?.length || 0),
-            timeAgo: 'just now',
+            artifactIds: (session.artifactIds || []).filter((id) => id !== artifactId),
           };
         }
         return session;
@@ -241,10 +321,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const updateCronJob = (id: string, updates: Partial<CronJob>) => {
-    setCronJobs((prev) =>
-      prev.map((cron) => (cron.id === id ? { ...cron, ...updates } : cron))
-    );
+  const getSessionArtifacts = (sessionId: string): string[] => {
+    const session = sessions.find((s) => s.id === sessionId);
+    return session?.artifactIds || [];
   };
 
   // Group sessions by volume
@@ -267,6 +346,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     deleteSession,
     addMessage,
     updateCronJob,
+    addArtifactToSession,
+    removeArtifactFromSession,
+    getSessionArtifacts,
   };
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -143,27 +143,57 @@ export class LLMClient {
    * @returns The assistant's response text
    */
   async chatDirect(messages: Message[]): Promise<string> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'HTTP-Referer': this.config.siteUrl || window.location.origin,
-        'X-Title': 'LLMos-Lite',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: messages,
-      }),
-    });
+    console.log('[LLMClient] Making request to OpenRouter');
+    console.log('[LLMClient] Model:', this.config.model);
+    console.log('[LLMClient] API Key (first 20 chars):', this.config.apiKey.substring(0, 20) + '...');
+    console.log('[LLMClient] Messages count:', messages.length);
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter API error: ${error}`);
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'HTTP-Referer': this.config.siteUrl || window.location.origin,
+          'X-Title': 'LLMos-Lite',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: messages,
+        }),
+      });
+
+      console.log('[LLMClient] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[LLMClient] Error response:', errorText);
+
+        // Try to parse error as JSON for better error messages
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(`OpenRouter API error (${response.status}): ${errorJson.error?.message || errorText}`);
+        } catch (parseError) {
+          throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+        }
+      }
+
+      const data = await response.json();
+      console.log('[LLMClient] Response received successfully');
+      console.log('[LLMClient] Response data:', JSON.stringify(data, null, 2));
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('[LLMClient] Unexpected response structure:', data);
+        throw new Error('Invalid response structure from OpenRouter API');
+      }
+
+      const content = data.choices[0].message.content;
+      console.log('[LLMClient] Extracted content (first 200 chars):', content?.substring(0, 200));
+      return content;
+    } catch (error) {
+      console.error('[LLMClient] Request failed:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
   /**
@@ -257,7 +287,12 @@ export function createLLMClient(): LLMClient | null {
   const apiKey = LLMStorage.getApiKey();
   const modelId = LLMStorage.getModel();
 
+  console.log('[createLLMClient] Attempting to create client');
+  console.log('[createLLMClient] API Key:', apiKey ? `present (${apiKey.substring(0, 20)}...)` : 'missing');
+  console.log('[createLLMClient] Model ID from storage:', modelId);
+
   if (!apiKey || !modelId) {
+    console.error('[createLLMClient] Missing configuration:', { hasApiKey: !!apiKey, hasModelId: !!modelId });
     return null;
   }
 
@@ -268,8 +303,14 @@ export function createLLMClient(): LLMClient | null {
   // otherwise use the custom model ID directly
   const actualModelId = model ? model.id : modelId;
 
-  return new LLMClient({
+  console.log('[createLLMClient] Model lookup in AVAILABLE_MODELS:', model ? 'found' : 'not found, using as-is');
+  console.log('[createLLMClient] Actual model ID to use:', actualModelId);
+
+  const client = new LLMClient({
     apiKey,
     model: actualModelId,
   });
+
+  console.log('[createLLMClient] Client created successfully');
+  return client;
 }
