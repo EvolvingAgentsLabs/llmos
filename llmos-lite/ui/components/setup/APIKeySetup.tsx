@@ -64,11 +64,18 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       return;
     }
 
+    console.log('[APIKeySetup] Saving configuration:');
+    console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
+    console.log('  - Model:', modelName);
+    console.log('  - Provider: openrouter');
+
     // Save LLM config to localStorage
     LLMStorage.saveProvider('openrouter');
     LLMStorage.saveApiKey(apiKey);
     // Save the model name directly - it will be validated in createLLMClient
     LLMStorage.saveModel(modelName as any);
+
+    console.log('[APIKeySetup] Configuration saved to localStorage');
 
     // Save user/team to localStorage
     const user: User = {

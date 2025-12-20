@@ -44,9 +44,9 @@ export default function ContextPanel({
         commitHash = `local-${Math.random().toString(36).substring(2, 9)}`;
       }
 
-      // Update session status to committed
+      // Update session status to saved
       updateSession(currentSession.id, {
-        status: 'committed',
+        status: 'saved',
         commitHash,
       });
     } catch (error) {
@@ -80,7 +80,7 @@ export default function ContextPanel({
             <span>Status:</span>
             <span
               className={
-                currentSession.status === 'uncommitted'
+                currentSession.status === 'temporal'
                   ? 'text-terminal-accent-yellow'
                   : 'text-terminal-accent-green'
               }
@@ -195,24 +195,24 @@ export default function ContextPanel({
       <div className="p-4">
         <h2 className="terminal-heading text-xs mb-3">ACTIONS</h2>
         <div className="space-y-2">
-          {currentSession.status === 'uncommitted' && (
+          {currentSession.status === 'temporal' && (
             <>
               <button
                 onClick={handleCommitSession}
                 disabled={isCommitting}
                 className="btn-touch md:btn-terminal text-xs w-full"
               >
-                {isCommitting ? 'Committing...' : 'Commit Session'}
+                {isCommitting ? 'Saving...' : 'Save Session'}
               </button>
               <button className="btn-touch-secondary md:btn-terminal-secondary text-xs w-full">
                 Share Session
               </button>
             </>
           )}
-          {currentSession.status === 'committed' && currentSession.commitHash && (
+          {currentSession.status === 'saved' && currentSession.commitHash && (
             <div className="p-2 bg-terminal-bg-tertiary rounded border border-terminal-border">
               <div className="text-xs text-terminal-fg-secondary mb-1">
-                Committed
+                Saved
               </div>
               <div className="font-mono text-xs text-terminal-accent-green">
                 {currentSession.commitHash}

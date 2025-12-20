@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Prompt Integration Test</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #0a0e1a;
+            color: #e0e7ff;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #1a1f3a;
+            border: 1px solid #2d3561;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        h2 {
+            color: #818cf8;
+            margin-top: 0;
+        }
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 5px;
+        }
+        button:hover {
+            background: #6366f1;
+        }
+        button:disabled {
+            background: #4b5563;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #0f1729;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4f46e5;
+            padding-left: 10px;
+        }
+        .success { border-left-color: #10b981; color: #10b981; }
+        .error { border-left-color: #ef4444; color: #ef4444; }
+        .warning { border-left-color: #f59e0b; color: #f59e0b; }
+        .info { border-left-color: #3b82f6; color: #3b82f6; }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status.pending { background: #f59e0b; color: #0a0e1a; }
+        .status.running { background: #3b82f6; color: white; }
+        .status.success { background: #10b981; color: white; }
+        .status.failed { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🔬 Quantum Prompt Integration Test</h1>
+
+    <div class="section">
+        <h2>Test Configuration</h2>
+        <div>
+            <strong>API Key:</strong> <code>sk-or-v1-c05eaf14840...</code>
+            <br>
+            <strong>Model:</strong> <code>anthropic/claude-sonnet-4.5</code>
+            <br>
+            <strong>Test Prompt:</strong> "Create a quantum circuit for cepstral analysis of cardiac pressure waves"
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Test Controls</h2>
+        <button onclick="runTest1()">Test 1: API Connection</button>
+        <button onclick="runTest2()">Test 2: Simple Prompt</button>
+        <button onclick="runTest3()">Test 3: Quantum Prompt (Full)</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div style="margin-top: 10px;">
+            <span><strong>Status:</strong></span>
+            <span id="status" class="status pending">Pending</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Test Output</h2>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <script>
+        const apiKey = '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';
+        const model = 'anthropic/claude-sonnet-4.5';
+
+        function setStatus(text, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status ${type}`;
+        }
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+            setStatus('Pending', 'pending');
+        }
+
+        async function makeRequest(messages, testName) {
+            log(`Starting ${testName}...`, 'info');
+            setStatus('Running', 'running');
+
+            try {
+                const startTime = Date.now();
+                log('Sending request to OpenRouter...', 'info');
+
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': window.location.href,
+                        'X-Title': 'LLMos-Lite Integration Test'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: messages,
+                        stream: false
+                    })
+                });
+
+                const elapsed = Date.now() - startTime;
+                log(`Response received in ${elapsed}ms`, 'success');
+                log(`Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`Error: ${errorText}`, 'error');
+                    setStatus('Failed', 'failed');
+                    return null;
+                }
+
+                const data = await response.json();
+                log(`Response ID: ${data.id}`, 'info');
+                log(`Provider: ${data.provider}`, 'info');
+                log(`Model: ${data.model}`, 'info');
+
+                const content = data.choices[0].message.content;
+                log(`Content length: ${content.length} characters`, 'success');
+
+                // Check if content contains Python code
+                if (content.includes('```python')) {
+                    log('✓ Response contains Python code blocks', 'success');
+                }
+
+                // Check if content contains quantum-related terms
+                const quantumTerms = ['quantum', 'qiskit', 'QuantumCircuit', 'QFT', 'qubit'];
+                const foundTerms = quantumTerms.filter(term => content.toLowerCase().includes(term.toLowerCase()));
+                if (foundTerms.length > 0) {
+                    log(`✓ Found quantum terms: ${foundTerms.join(', ')}`, 'success');
+                }
+
+                // Log first 500 characters of response
+                log(`<strong>Response preview:</strong><pre>${content.substring(0, 500)}...</pre>`, 'info');
+
+                setStatus('Success', 'success');
+                return data;
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                setStatus('Failed', 'failed');
+                return null;
+            }
+        }
+
+        async function runTest1() {
+            await makeRequest([
+                { role: 'user', content: 'Hello, are you working?' }
+            ], 'Test 1: API Connection');
+        }
+
+        async function runTest2() {
+            await makeRequest([
+                { role: 'user', content: 'Write a simple Python function to add two numbers' }
+            ], 'Test 2: Simple Prompt');
+        }
+
+        async function runTest3() {
+            await makeRequest([
+                { role: 'user', content: 'Create a quantum circuit for cepstral analysis of cardiac pressure waves' }
+            ], 'Test 3: Quantum Prompt');
+        }
+
+        // Auto-run Test 1 on load
+        window.addEventListener('load', () => {
+            log('Integration test page loaded', 'success');
+            log('Ready to run tests', 'info');
+        });
+    </script>
+</body>
+</html>

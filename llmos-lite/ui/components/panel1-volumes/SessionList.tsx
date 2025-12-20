@@ -39,8 +39,8 @@ export default function SessionList({
           `}
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className={session.status === 'uncommitted' ? 'status-active' : 'status-success'}>
-              {session.status === 'uncommitted' ? '●' : '✓'}
+            <span className={session.status === 'temporal' ? 'status-active' : 'status-success'}>
+              {session.status === 'temporal' ? '●' : '✓'}
             </span>
             <span className="text-sm font-medium">{session.name}</span>
           </div>

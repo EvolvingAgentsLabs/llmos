@@ -20,6 +20,9 @@ import type { ExecutionResult } from '@/lib/pyodide-runtime';
 interface MarkdownRendererProps {
   content: string;
   enableCodeExecution?: boolean;
+  onExecutionStart?: (status: string) => void;
+  onExecutionEnd?: () => void;
+  onExecutionStatusChange?: (status: string) => void;
 }
 
 interface CodeBlockProps {
@@ -28,10 +31,14 @@ interface CodeBlockProps {
   className?: string;
   children?: React.ReactNode;
   enableExecution?: boolean;
+  onExecutionStart?: (status: string) => void;
+  onExecutionEnd?: () => void;
+  onExecutionStatusChange?: (status: string) => void;
 }
 
-function CodeBlock({ inline, className, children, enableExecution }: CodeBlockProps) {
+function CodeBlock({ inline, className, children, enableExecution, onExecutionStart, onExecutionEnd, onExecutionStatusChange }: CodeBlockProps) {
   const [isExecuting, setIsExecuting] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<string>('');
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [showOutput, setShowOutput] = useState(false);
   const [showCode, setShowCode] = useState(false); // Default: show visual output, hide code
@@ -60,6 +67,8 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
   const handleExecute = async () => {
     setIsExecuting(true);
     setShowOutput(true);
+    setExecutionStatus('Validating code...');
+    onExecutionStart?.('Validating code...');
 
     try {
       // Validate code before execution
@@ -68,6 +77,8 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
       setValidationResult(validation);
 
       if (!validation.valid) {
+        setExecutionStatus('Validation failed');
+        onExecutionStatusChange?.('Validation failed');
         // Show validation errors without executing
         setResult({
           success: false,
@@ -79,12 +90,41 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
           executionTime: 0,
         });
         setIsExecuting(false);
+        setExecutionStatus('');
+        onExecutionEnd?.();
         return;
+      }
+
+      // Check if quantum code
+      const isQuantumCode = codeString.includes('qiskit') || codeString.includes('QuantumCircuit');
+      const hasMatplotlib = codeString.includes('matplotlib') || codeString.includes('plt.');
+
+      if (isQuantumCode) {
+        setExecutionStatus('Loading quantum simulator...');
+        onExecutionStatusChange?.('Loading quantum simulator...');
+      } else if (hasMatplotlib) {
+        setExecutionStatus('Loading visualization libraries...');
+        onExecutionStatusChange?.('Loading visualization libraries...');
+      } else {
+        setExecutionStatus('Initializing Python runtime...');
+        onExecutionStatusChange?.('Initializing Python runtime...');
       }
 
       // Dynamic import to avoid SSR/bundling issues
       const { executePython } = await import('@/lib/pyodide-runtime');
+
+      setExecutionStatus('Executing code...');
+      onExecutionStatusChange?.('Executing code...');
       const execResult = await executePython(codeString);
+
+      if (execResult.images && execResult.images.length > 0) {
+        setExecutionStatus('Rendering visualizations...');
+        onExecutionStatusChange?.('Rendering visualizations...');
+      } else {
+        setExecutionStatus('Processing results...');
+        onExecutionStatusChange?.('Processing results...');
+      }
+
       setResult(execResult);
 
       // Show warnings even on success
@@ -94,7 +134,11 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
           ? `${execResult.stderr}\n\n${warningMessage}`
           : warningMessage;
       }
+
+      setExecutionStatus('');
     } catch (error: any) {
+      setExecutionStatus('Execution error');
+      onExecutionStatusChange?.('Execution error');
       setResult({
         success: false,
         error: error.message || String(error),
@@ -102,14 +146,22 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
       });
     } finally {
       setIsExecuting(false);
+      setTimeout(() => {
+        setExecutionStatus('');
+        onExecutionEnd?.();
+      }, 1000);
     }
   };
 
   // Auto-execute Python code blocks on mount
   useEffect(() => {
     if (isExecutable && !hasAutoExecuted && !isExecuting) {
+      console.log('[MarkdownRenderer] Auto-executing Python code block');
       setHasAutoExecuted(true);
-      handleExecute();
+      // Use setTimeout to avoid blocking the render
+      setTimeout(() => {
+        handleExecute();
+      }, 100);
     }
   }, [isExecutable, hasAutoExecuted, isExecuting]);
 
@@ -198,19 +250,71 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
             </div>
           )}
           {isExecuting && (
-            <div className="flex items-center justify-center py-8 text-fg-tertiary">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+              <div className="flex items-center gap-3 text-fg-tertiary">
                 <div className="w-5 h-5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm">Generating visualization...</span>
+                <span className="text-sm font-medium">{executionStatus || 'Processing...'}</span>
+              </div>
+              {/* Progress steps visualization */}
+              <div className="flex items-center gap-2 text-xs text-fg-muted">
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Validating') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                  Validate
+                </div>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Loading') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                  Load
+                </div>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Executing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                  Execute
+                </div>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                  Render
+                </div>
               </div>
             </div>
           )}
         </div>
       ) : (
         // Show code when toggled or no visual output
-        <pre className="!my-0 !bg-bg-primary overflow-x-auto">
-          <code className={className}>{children}</code>
-        </pre>
+        <>
+          <pre className="!my-0 !bg-bg-primary overflow-x-auto">
+            <code className={className}>{children}</code>
+          </pre>
+          {/* Show execution progress overlay for code view */}
+          {isExecuting && (
+            <div className="border-t border-border-primary bg-bg-tertiary p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-fg-primary">{executionStatus || 'Processing...'}</div>
+                  {/* Progress steps */}
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Validating') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                      {executionStatus.includes('Validating') ? '⏳' : '✓'} Validate
+                    </div>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Loading') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus.includes('Executing') || executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                      {executionStatus.includes('Loading') ? '⏳' : executionStatus.includes('Executing') || executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '✓' : '⋯'} Load
+                    </div>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Executing') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                      {executionStatus.includes('Executing') ? '⏳' : executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '✓' : '⋯'} Execute
+                    </div>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                      {executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '⏳' : '⋯'} Render
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Additional output details (console, return values, errors) - shown when in visual mode or when explicitly showing output */}
@@ -344,14 +448,17 @@ function CodeBlock({ inline, className, children, enableExecution }: CodeBlockPr
   );
 }
 
-export default function MarkdownRenderer({ content, enableCodeExecution = true }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, enableCodeExecution = true, onExecutionStart, onExecutionEnd, onExecutionStatusChange }: MarkdownRendererProps) {
+  console.log('[MarkdownRenderer] Rendering with content length:', content?.length || 0);
+  console.log('[MarkdownRenderer] Content preview:', content?.substring(0, 100));
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight, rehypeRaw]}
         components={{
-          code: (props) => <CodeBlock {...props} enableExecution={enableCodeExecution} />,
+          code: (props) => <CodeBlock {...props} enableExecution={enableCodeExecution} onExecutionStart={onExecutionStart} onExecutionEnd={onExecutionEnd} onExecutionStatusChange={onExecutionStatusChange} />,
           // Custom image renderer to handle base64 images
           img: ({ node, ...props }) => (
             <img

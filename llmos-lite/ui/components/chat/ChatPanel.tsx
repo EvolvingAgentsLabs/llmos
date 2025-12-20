@@ -26,10 +26,19 @@ export default function ChatPanel({
   const { sessions, addSession, addMessage } = useSessionContext();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState<string>('');
+  const [isExecutingCode, setIsExecutingCode] = useState(false);
+  const [codeExecutionStatus, setCodeExecutionStatus] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = sessions.find((s) => s.id === activeSession);
   const messages = currentSession?.messages || [];
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[ChatPanel] Render - Message count:', messages.length);
+    console.log('[ChatPanel] Render - Messages:', messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content.length })));
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,15 +66,18 @@ export default function ChatPanel({
     const messageText = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
+    setLoadingStatus('Initializing...');
 
     // Auto-create session if none exists
     let sessionId = activeSession;
 
     try {
       if (!sessionId) {
+        setLoadingStatus('Creating new session...');
         const newSession = addSession({
           name: `Session ${new Date().toLocaleTimeString()}`,
-          status: 'uncommitted',
+          type: 'user',
+          status: 'temporal',
           volume: activeVolume,
         });
         sessionId = newSession.id;
@@ -73,6 +85,7 @@ export default function ChatPanel({
       }
 
       // Add user message
+      setLoadingStatus('Sending message...');
       addMessage(sessionId, {
         role: 'user',
         content: messageText,
@@ -92,14 +105,19 @@ export default function ChatPanel({
       }
 
       // Create LLM client
+      setLoadingStatus('Configuring AI client...');
+      console.log('[ChatPanel] Creating LLM client...');
       const client = createLLMClient();
       if (!client) {
-        console.error('LLM client not configured');
+        console.error('[ChatPanel] LLM client not configured');
 
         // Provide specific error message
         const { LLMStorage } = await import('@/lib/llm-client');
         const apiKey = LLMStorage.getApiKey();
         const model = LLMStorage.getModel();
+
+        console.error('[ChatPanel] Storage check - API Key:', apiKey ? 'present' : 'missing');
+        console.error('[ChatPanel] Storage check - Model:', model);
 
         let errorMsg = 'Error: LLM client not configured. ';
         if (!apiKey) {
@@ -119,8 +137,10 @@ export default function ChatPanel({
         });
         return;
       }
+      console.log('[ChatPanel] LLM client created successfully');
 
       // Send message directly to OpenRouter (client-side only)
+      setLoadingStatus('Generating AI response...');
       const conversationHistory = messages.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
@@ -134,13 +154,20 @@ export default function ChatPanel({
 
       const assistantResponse = await client.chatDirect(conversationHistory);
 
+      console.log('[ChatPanel] Received response:', assistantResponse ? `${assistantResponse.substring(0, 200)}...` : 'EMPTY');
+      console.log('[ChatPanel] Response length:', assistantResponse?.length || 0);
+
+      setLoadingStatus('Processing response...');
       // Add assistant response
+      console.log('[ChatPanel] Adding assistant message to session:', sessionId);
       addMessage(sessionId, {
         role: 'assistant',
         content: assistantResponse || 'No response from assistant.',
       });
+      console.log('[ChatPanel] Message added successfully');
     } catch (error) {
       console.error('Failed to send message:', error);
+      setLoadingStatus('Error occurred');
       if (sessionId) {
         addMessage(sessionId, {
           role: 'assistant',
@@ -149,6 +176,7 @@ export default function ChatPanel({
       }
     } finally {
       setIsLoading(false);
+      setLoadingStatus('');
     }
   };
 
@@ -275,8 +303,8 @@ export default function ChatPanel({
               <span>{currentSession.timeAgo}</span>
             </div>
           </div>
-          <div className={currentSession.status === 'uncommitted' ? 'badge-warning' : 'badge-success'}>
-            {currentSession.status === 'uncommitted' ? 'Uncommitted' : 'Committed'}
+          <div className={currentSession.status === 'temporal' ? 'badge-warning' : 'badge-success'}>
+            {currentSession.status === 'temporal' ? 'Temporal' : 'Saved'}
           </div>
         </div>
       </div>
@@ -324,7 +352,21 @@ export default function ChatPanel({
                 }`}
               >
                 {message.role === 'assistant' ? (
-                  <MarkdownRenderer content={message.content} enableCodeExecution={true} />
+                  <MarkdownRenderer
+                    content={message.content}
+                    enableCodeExecution={true}
+                    onExecutionStart={(status) => {
+                      setIsExecutingCode(true);
+                      setCodeExecutionStatus(status);
+                    }}
+                    onExecutionEnd={() => {
+                      setIsExecutingCode(false);
+                      setCodeExecutionStatus('');
+                    }}
+                    onExecutionStatusChange={(status) => {
+                      setCodeExecutionStatus(status);
+                    }}
+                  />
                 ) : (
                   message.content
                 )}
@@ -353,6 +395,51 @@ export default function ChatPanel({
             </div>
           ))
         )}
+
+        {/* Loading indicator with status */}
+        {isLoading && (
+          <div className="animate-fade-in">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+              <span className="text-xs font-medium text-fg-secondary">Assistant</span>
+            </div>
+            <div className="ml-8 p-3 rounded-lg bg-bg-tertiary border border-border-primary">
+              <div className="flex items-center gap-2">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-fg-tertiary">{loadingStatus}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Code execution indicator (shown after message is received) */}
+        {!isLoading && isExecutingCode && (
+          <div className="animate-fade-in">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-success to-accent-info flex items-center justify-center">
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+              <span className="text-xs font-medium text-fg-secondary">Executing Code</span>
+            </div>
+            <div className="ml-8 p-3 rounded-lg bg-accent-success/5 border border-accent-success/30">
+              <div className="flex items-center gap-2">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-accent-success">{codeExecutionStatus || 'Processing...'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -362,7 +449,7 @@ export default function ChatPanel({
           <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend();
@@ -375,10 +462,14 @@ export default function ChatPanel({
           />
           <button
             onClick={handleSend}
-            disabled={isLoading || !inputValue.trim()}
+            disabled={isLoading || isExecutingCode || !inputValue.trim()}
             className="btn-primary px-6 flex-shrink-0"
           >
             {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : isExecutingCode ? (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               </div>

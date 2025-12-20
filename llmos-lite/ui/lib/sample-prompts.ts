@@ -18,6 +18,12 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
+    title: 'Quantum Cepstral Analysis',
+    prompt: 'Create a circuit to perform quantum cepstral analysis of a cardiac pressure wave to detect echoes using 2-stage Fourier quantum transform with 4 qubits',
+    description: 'Quantum signal processing with visualization',
+    category: 'Quantum Computing',
+  },
+  {
     title: 'Create REST API',
     prompt: 'Create a FastAPI REST API for a task management system with CRUD operations, authentication, and PostgreSQL integration',
     description: 'Full-stack API with auth and database',
