@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import dynamic from 'next/dynamic';
+import { Sparkles } from 'lucide-react';
 
 const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
   ssr: false,
@@ -24,9 +25,7 @@ export default function Header() {
           <div className="flex items-center gap-2">
             {/* Logo icon */}
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-glow">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
             {/* Brand name */}
             <div>
