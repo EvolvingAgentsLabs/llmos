@@ -259,7 +259,7 @@ function FileIcon({ fileType, fileName }: { fileType?: string; fileName: string 
 }
 
 // Code view component
-function CodeView({ node }: { node: { id: string; name: string; path: string; metadata?: { fileType?: string } } }) {
+function CodeView({ node }: { node: { id: string; name: string; path: string; metadata?: { fileType?: string; readonly?: boolean } } }) {
   // Mock file content based on file type
   const getFileContent = () => {
     const fileType = node.metadata?.fileType;
