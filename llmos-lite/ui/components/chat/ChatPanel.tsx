@@ -287,65 +287,59 @@ export default function ChatPanel({
   // Active session view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Session Header */}
-      <div className="px-4 py-3 border-b border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl flex-shrink-0">
+      {/* Session Header - VSCode Style */}
+      <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-fg-primary">{currentSession.name}</h2>
-            <div className="flex items-center gap-2 text-xs text-fg-tertiary mt-0.5">
-              <span className="flex items-center gap-1">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                {messages.length} messages
-              </span>
-              <span>·</span>
-              <span>{currentSession.timeAgo}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-fg-primary">{currentSession.name}</span>
+            <span className="text-[10px] text-fg-tertiary">•</span>
+            <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
+            <span className="text-[10px] text-fg-tertiary">•</span>
+            <span className="text-[10px] text-fg-tertiary">{currentSession.timeAgo}</span>
           </div>
-          <div className={currentSession.status === 'temporal' ? 'badge-warning' : 'badge-success'}>
-            {currentSession.status === 'temporal' ? 'Temporal' : 'Saved'}
-          </div>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentSession.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
+            {currentSession.status === 'temporal' ? 'Unsaved' : 'Saved'}
+          </span>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+      {/* Messages - Compact VSCode Style */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin">
         {messages.length === 0 ? (
-          <div className="empty-state h-full">
-            <svg className="empty-state-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-            <h3 className="empty-state-title">No messages yet</h3>
-            <p className="empty-state-description">
-              Start the conversation with a message below
-            </p>
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <svg className="w-12 h-12 mx-auto mb-3 text-fg-muted opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              <p className="text-xs text-fg-tertiary">No messages yet</p>
+              <p className="text-[10px] text-fg-muted mt-1">Start the conversation below</p>
+            </div>
           </div>
         ) : (
           messages.map((message, idx) => (
             <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
-              {/* Message header */}
-              <div className="flex items-center gap-2 mb-2">
+              {/* Message header - Compact */}
+              <div className="flex items-center gap-1.5 mb-1">
                 {message.role === 'user' ? (
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-secondary to-accent-info flex items-center justify-center text-white text-xs font-semibold">
-                    U
+                  <div className="w-5 h-5 rounded bg-accent-secondary/20 flex items-center justify-center">
+                    <span className="text-[10px] text-accent-secondary font-semibold">U</span>
                   </div>
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-5 h-5 rounded bg-accent-primary/20 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
                 )}
-                <span className="text-xs font-medium text-fg-secondary">
+                <span className="text-[10px] font-semibold text-fg-secondary">
                   {message.role === 'user' ? 'You' : 'Assistant'}
                 </span>
-                <span className="text-xs text-fg-muted">{message.timestamp}</span>
+                <span className="text-[10px] text-fg-muted">{message.timestamp}</span>
               </div>
 
-              {/* Message content */}
+              {/* Message content - Compact */}
               <div
-                className={`ml-8 p-3 rounded-lg ${
+                className={`ml-6 p-2 rounded text-xs ${
                   message.role === 'user'
                     ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary whitespace-pre-wrap'
                     : 'bg-bg-tertiary border border-border-primary text-fg-secondary'
@@ -372,23 +366,23 @@ export default function ChatPanel({
                 )}
               </div>
 
-              {/* Metadata */}
+              {/* Metadata - Compact */}
               {(message.traces || message.artifact || message.pattern) && (
-                <div className="ml-8 mt-2 space-y-1">
+                <div className="ml-6 mt-1 flex flex-wrap gap-1">
                   {message.traces && message.traces.length > 0 && (
-                    <div className="badge badge-success text-xs">
-                      Trace #{message.traces[0]}-{message.traces[message.traces.length - 1]} executed
-                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success">
+                      Trace #{message.traces[0]}-{message.traces[message.traces.length - 1]}
+                    </span>
                   )}
                   {message.artifact && (
-                    <div className="badge badge-info text-xs">
-                      Artifact: {message.artifact}
-                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-info/20 text-accent-info">
+                      {message.artifact}
+                    </span>
                   )}
                   {message.pattern && (
-                    <div className="badge badge-warning text-xs">
-                      Pattern: {message.pattern.name} ({(message.pattern.confidence * 100).toFixed(0)}%)
-                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-warning/20 text-accent-warning">
+                      {message.pattern.name} ({(message.pattern.confidence * 100).toFixed(0)}%)
+                    </span>
                   )}
                 </div>
               )}
@@ -396,45 +390,45 @@ export default function ChatPanel({
           ))
         )}
 
-        {/* Loading indicator with status */}
+        {/* Loading indicator - Compact */}
         {isLoading && (
           <div className="animate-fade-in">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-5 h-5 rounded bg-accent-primary/20 flex items-center justify-center">
+                <div className="w-2.5 h-2.5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
               </div>
-              <span className="text-xs font-medium text-fg-secondary">Assistant</span>
+              <span className="text-[10px] font-semibold text-fg-secondary">Assistant</span>
             </div>
-            <div className="ml-8 p-3 rounded-lg bg-bg-tertiary border border-border-primary">
+            <div className="ml-6 p-2 rounded text-xs bg-bg-tertiary border border-border-primary">
               <div className="flex items-center gap-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex space-x-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
-                <span className="text-sm text-fg-tertiary">{loadingStatus}</span>
+                <span className="text-[10px] text-fg-tertiary">{loadingStatus}</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Code execution indicator (shown after message is received) */}
+        {/* Code execution indicator - Compact */}
         {!isLoading && isExecutingCode && (
           <div className="animate-fade-in">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-success to-accent-info flex items-center justify-center">
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-5 h-5 rounded bg-accent-success/20 flex items-center justify-center">
+                <div className="w-2.5 h-2.5 border-2 border-accent-success border-t-transparent rounded-full animate-spin" />
               </div>
-              <span className="text-xs font-medium text-fg-secondary">Executing Code</span>
+              <span className="text-[10px] font-semibold text-fg-secondary">Executing Code</span>
             </div>
-            <div className="ml-8 p-3 rounded-lg bg-accent-success/5 border border-accent-success/30">
+            <div className="ml-6 p-2 rounded text-xs bg-accent-success/5 border border-accent-success/30">
               <div className="flex items-center gap-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex space-x-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent-success animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
-                <span className="text-sm text-accent-success">{codeExecutionStatus || 'Processing...'}</span>
+                <span className="text-[10px] text-accent-success">{codeExecutionStatus || 'Processing...'}</span>
               </div>
             </div>
           </div>
@@ -443,8 +437,8 @@ export default function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl flex-shrink-0">
+      {/* Input - Compact VSCode Style */}
+      <div className="px-3 py-2 border-t border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex gap-2">
           <textarea
             value={inputValue}
@@ -456,25 +450,19 @@ export default function ChatPanel({
               }
             }}
             placeholder="Type your message... (Shift+Enter for new line)"
-            className="textarea flex-1 min-h-[44px] max-h-32"
+            className="textarea flex-1 min-h-[36px] max-h-32 text-xs"
             rows={1}
             disabled={isLoading}
           />
           <button
             onClick={handleSend}
             disabled={isLoading || isExecutingCode || !inputValue.trim()}
-            className="btn-primary px-6 flex-shrink-0"
+            className="btn-primary px-4 flex-shrink-0"
           >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : isExecutingCode ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              </div>
+            {isLoading || isExecutingCode ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             )}

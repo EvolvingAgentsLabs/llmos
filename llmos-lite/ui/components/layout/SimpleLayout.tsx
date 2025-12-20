@@ -2,15 +2,27 @@
 
 import { useState } from 'react';
 import Header from './Header';
-import VolumeFileTree from '../volumes/VolumeFileTree';
+import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ChatPanel from '../chat/ChatPanel';
 import CanvasView from '../canvas/CanvasView';
 
 type ViewMode = 'chat' | 'canvas';
 
+interface TreeNode {
+  id: string;
+  name: string;
+  type: 'volume' | 'folder' | 'file';
+  path: string;
+  metadata?: {
+    fileType?: string;
+    readonly?: boolean;
+  };
+}
+
 export default function SimpleLayout() {
-  const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
-  const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
+  const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('system');
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
   const [activeSession, setActiveSession] = useState<string | null>(null);
 
@@ -22,32 +34,22 @@ export default function SimpleLayout() {
       {/* Main 2-Panel Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: File Tree (Fixed width ~280px) */}
-        <div className="w-72 flex-shrink-0 border-r border-border-primary/50 bg-bg-secondary/30 flex flex-col overflow-hidden">
-          {/* Volume selector tabs */}
-          <div className="flex border-b border-border-primary/50">
-            {(['system', 'team', 'user'] as const).map((volume) => (
-              <button
-                key={volume}
-                onClick={() => setActiveVolume(volume)}
-                className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 ${
-                  activeVolume === volume
-                    ? 'text-accent-primary border-b-2 border-accent-primary bg-bg-tertiary/50'
-                    : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary/30'
-                }`}
-              >
-                {volume.charAt(0).toUpperCase() + volume.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {/* File tree */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            <VolumeFileTree
-              volume={activeVolume}
-              selectedArtifact={selectedArtifact}
-              onSelectArtifact={setSelectedArtifact}
-            />
-          </div>
+        <div className="w-72 flex-shrink-0 border-r border-border-primary/50 bg-bg-secondary flex flex-col overflow-hidden">
+          {/* File tree - VSCode style with volumes as drives */}
+          <VSCodeFileTree
+            activeVolume={activeVolume}
+            onVolumeChange={setActiveVolume}
+            onFileSelect={(node) => {
+              console.log('[SimpleLayout] File selected:', node);
+              setSelectedFile(node.id);
+              setSelectedNode(node as TreeNode);
+              // Switch to canvas view when file is selected
+              if (node.type === 'file') {
+                setViewMode('canvas');
+              }
+            }}
+            selectedFile={selectedFile}
+          />
         </div>
 
         {/* Right Panel: Chat or Canvas (Flexible) */}
@@ -77,9 +79,9 @@ export default function SimpleLayout() {
               </button>
             </div>
 
-            {selectedArtifact && (
+            {selectedFile && (
               <span className="text-sm text-fg-secondary">
-                Selected: <span className="text-fg-primary font-medium">{selectedArtifact}</span>
+                Selected: <span className="text-fg-primary font-medium">{selectedFile}</span>
               </span>
             )}
           </div>
@@ -97,7 +99,8 @@ export default function SimpleLayout() {
             ) : (
               <CanvasView
                 volume={activeVolume}
-                selectedArtifact={selectedArtifact}
+                selectedArtifact={selectedFile}
+                selectedNode={selectedNode}
               />
             )}
           </div>
