@@ -1,5 +1,5 @@
 import { getVolumeFileSystem } from '../volumes/file-operations';
-import { ToolDefinition, ToolResult } from './tool-definition';
+import { ToolDefinition, ToolResult } from './file-tools';
 
 export class GitTools {
   private fs = getVolumeFileSystem();
