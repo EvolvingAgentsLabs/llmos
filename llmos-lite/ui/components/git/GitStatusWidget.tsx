@@ -21,7 +21,6 @@ export default function GitStatusWidget({ volume, onCommit }: GitStatusWidgetPro
   const [isCommitting, setIsCommitting] = useState(false);
 
   const fs = getVolumeFileSystem();
-  const git = getGitOperations();
 
   useEffect(() => {
     refreshStatus();
