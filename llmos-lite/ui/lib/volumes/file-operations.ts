@@ -1,3 +1,4 @@
+import { getGitOperations } from './git-operations';
 /**
  * File Operations Layer - Claude Code Style
  *
@@ -349,6 +350,41 @@ export class VolumeFileSystem {
       type: item.type,
       lastModified: new Date().toISOString() // GitHub API doesn't provide this directly
     }));
+  }
+
+  /**
+   * Commit all modified files in a volume
+   */
+  async commit(volume: VolumeType, message: string): Promise<void> {
+    const config = this.volumes.get(volume);
+    if (!config) {
+      throw new Error(`Volume ${volume} configuration not found.`);
+    }
+
+    const modifiedFiles = this.getModifiedFiles(volume);
+    if (modifiedFiles.length === 0) {
+      console.log(`No changes to commit in ${volume} volume.`);
+      return;
+    }
+
+    const gitOps = getGitOperations();
+    await gitOps.commit(config, message, modifiedFiles);
+
+    // After successful commit, reset git status in cache
+    modifiedFiles.forEach(file => {
+      const fullPath = this.getFullPath(file.volume, file.path);
+      const cachedFile = this.fileCache.get(fullPath);
+      if (cachedFile) {
+        if (cachedFile.gitStatus === 'deleted') {
+          this.fileCache.delete(fullPath);
+        } else {
+          this.fileCache.set(fullPath, {
+            ...cachedFile,
+            gitStatus: 'unmodified',
+          });
+        }
+      }
+    });
   }
 }
 

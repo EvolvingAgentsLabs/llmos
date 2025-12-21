@@ -8,7 +8,6 @@
 
 import { useState, useEffect } from 'react';
 import { getVolumeFileSystem, VolumeType, VolumeFile } from '@/lib/volumes/file-operations';
-import { getGitOperations } from '@/lib/volumes/git-operations';
 
 interface GitStatusWidgetProps {
   volume: VolumeType;
@@ -22,7 +21,6 @@ export default function GitStatusWidget({ volume, onCommit }: GitStatusWidgetPro
   const [isCommitting, setIsCommitting] = useState(false);
 
   const fs = getVolumeFileSystem();
-  const git = getGitOperations();
 
   useEffect(() => {
     refreshStatus();
@@ -42,8 +40,7 @@ export default function GitStatusWidget({ volume, onCommit }: GitStatusWidgetPro
 
     setIsCommitting(true);
     try {
-      // In a real implementation, this would commit to GitHub
-      console.log(`Committing ${modifiedFiles.length} files:`, commitMessage);
+      await fs.commit(volume, commitMessage);
 
       setCommitMessage('');
       setShowCommitDialog(false);
