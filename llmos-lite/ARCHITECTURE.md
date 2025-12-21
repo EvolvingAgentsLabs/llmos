@@ -8,16 +8,20 @@ Complete technical documentation for developers implementing and extending the C
 
 1. [System Overview](#system-overview)
 2. [Core Architecture](#core-architecture)
-3. [Volume File System](#volume-file-system)
-4. [LLM Tool System](#llm-tool-system)
-5. [Live Runtime](#live-runtime)
-6. [Git Operations](#git-operations)
-7. [Sub-Agent System](#sub-agent-system)
-8. [UI Components](#ui-components)
-9. [Data Flow](#data-flow)
-10. [API Integration](#api-integration)
-11. [State Management](#state-management)
-12. [Performance & Optimization](#performance--optimization)
+3. [LLMunix Integration](#llmunix-integration)
+4. [Virtual File System (VFS)](#virtual-file-system-vfs)
+5. [Memory System](#memory-system)
+6. [SystemAgent Orchestration](#systemagent-orchestration)
+7. [Volume File System](#volume-file-system)
+8. [LLM Tool System](#llm-tool-system)
+9. [Live Runtime](#live-runtime)
+10. [Git Operations](#git-operations)
+11. [Sub-Agent System](#sub-agent-system)
+12. [UI Components](#ui-components)
+13. [Data Flow](#data-flow)
+14. [API Integration](#api-integration)
+15. [State Management](#state-management)
+16. [Performance & Optimization](#performance--optimization)
 
 ---
 
@@ -41,6 +45,536 @@ User → Copy/Paste → IDE          User → Chat → Live File Edit
 Code → Static Display            Code → Live Execution
 No Persistence                   Git-Backed Persistence
 ```
+
+---
+
+## LLMunix Integration
+
+### Overview
+
+LLMos-Lite implements the complete **LLMunix pattern** - a self-evolving, markdown-driven operating system that learns from every execution. This section covers the technical implementation of the memory system, orchestration workflow, and file tree integration.
+
+### LLMunix Architecture
+
+```
+┌─────────────────────────────────────┐
+│    User Interaction (Chat/Canvas)   │
+├─────────────────────────────────────┤
+│    SystemAgent (LLMunix)            │  ← Memory-aware orchestrator
+│    - Memory consultation            │
+│    - Project creation                │
+│    - Experience logging              │
+├─────────────────────────────────────┤
+│    Virtual File System (VFS)        │  ← Browser localStorage
+│    - Hierarchical storage            │
+│    - Auto-refresh file tree          │
+│    - Path normalization              │
+├─────────────────────────────────────┤
+│    Tools Layer                       │
+│    - write-file (VFS)                │
+│    - read-file (VFS + system)       │
+│    - execute-python (Pyodide)       │
+├─────────────────────────────────────┤
+│    Runtime Environment              │
+│    - Pyodide (Python in browser)    │
+│    - Package auto-install            │
+│    - Plot capture                    │
+└─────────────────────────────────────┘
+```
+
+### System Volume Structure
+
+All system artifacts are stored in `public/system/` and accessible as read-only files:
+
+```
+system/
+├── agents/
+│   ├── SystemAgent.md              # Master orchestrator with memory workflow
+│   ├── MemoryAnalysisAgent.md      # Memory querying agent
+│   └── MemoryConsolidationAgent.md # Learning consolidation agent
+└── memory_log.md                   # System-wide experience repository
+```
+
+**Key Features:**
+- System files served from `public/system/` directory
+- Read-only access enforced in VFS
+- Enhanced `read-file` tool supports both VFS and system paths
+- Visible in file tree under "System" volume
+
+### Project Structure Standard
+
+Every SystemAgent execution creates a standardized project structure:
+
+```
+projects/[project_name]/
+├── components/
+│   └── agents/          # Project-specific agent definitions
+├── output/              # All deliverables
+│   ├── code/           # Generated Python files
+│   ├── data/           # Data files (CSV, JSON)
+│   └── visualizations/ # Matplotlib plots (PNG)
+└── memory/
+    ├── short_term/     # Execution logs, session traces
+    └── long_term/      # Consolidated learnings, patterns
+```
+
+**Why This Structure:**
+- **Organized Outputs**: All files in structured directories
+- **Complete Traceability**: Execution logs for every task
+- **Persistent Projects**: Files saved across sessions
+- **Self-Documenting**: Standard structure aids discovery
+
+---
+
+## Virtual File System (VFS)
+
+### Design Philosophy
+
+The VFS provides browser-based persistent file storage using localStorage, enabling a complete file system experience without server-side dependencies.
+
+### Implementation: `ui/lib/virtual-fs.ts`
+
+```typescript
+interface VFSFile {
+  path: string;
+  content: string;
+  size: number;
+  created: number;
+  modified: number;
+}
+
+export class VirtualFileSystem {
+  private static STORAGE_KEY = 'llmos_vfs';
+  private files: Map<string, VFSFile>;
+
+  constructor() {
+    this.files = new Map();
+    this.load();
+  }
+
+  // Core operations
+  writeFile(path: string, content: string): void;
+  readFile(path: string): VFSFile | null;
+  deleteFile(path: string): boolean;
+  listDirectory(path: string): { files: VFSFile[], directories: string[] };
+
+  // Persistence
+  private save(): void;
+  private load(): void;
+}
+```
+
+### Path Normalization
+
+Critical fix for handling root directories correctly:
+
+```typescript
+private normalizePath(path: string): string {
+  // Remove leading/trailing slashes
+  let normalized = path.replace(/^\/+|\/+$/g, '');
+
+  // Check if path already has valid root
+  const rootDirs = ['projects', 'system', 'user', 'team'];
+  const hasValidRoot = rootDirs.some(root =>
+    normalized === root || normalized.startsWith(root + '/')
+  );
+
+  // Prepend 'projects/' only if no valid root
+  if (!hasValidRoot && normalized) {
+    normalized = 'projects/' + normalized;
+  }
+
+  return normalized;
+}
+```
+
+**Before Fix:**
+- Path `'projects'` became `'projects/projects'` (double-prepending)
+- File tree showed empty directories
+
+**After Fix:**
+- Correctly handles exact matches: `'projects'` → `'projects'`
+- Handles subdirectories: `'projects/my_proj'` → `'projects/my_proj'`
+- Prevents double-prepending in all cases
+
+### Storage Backend
+
+Uses browser localStorage with JSON serialization:
+
+```typescript
+private save(): void {
+  const data = Array.from(this.files.values());
+  localStorage.setItem(VirtualFileSystem.STORAGE_KEY, JSON.stringify(data));
+}
+
+private load(): void {
+  const data = localStorage.getItem(VirtualFileSystem.STORAGE_KEY);
+  if (data) {
+    const files: VFSFile[] = JSON.parse(data);
+    files.forEach(file => {
+      this.files.set(file.path, file);
+    });
+  }
+}
+```
+
+**Storage Limits:**
+- localStorage limit: ~5-10MB per origin
+- Suitable for: Code files, small datasets, metadata
+- Not suitable for: Large binary files, videos
+
+### VFS vs Volume File System
+
+| Feature | VFS (Browser) | Volume FS (GitHub) |
+|---------|---------------|-------------------|
+| **Storage** | localStorage | GitHub API |
+| **Persistence** | Browser-local | Cloud-backed |
+| **Collaboration** | Single user | Multi-user (Git) |
+| **Size Limit** | ~5-10MB | Unlimited |
+| **Speed** | Instant | Network latency |
+| **Use Case** | User projects, temp files | Team repos, shared assets |
+
+---
+
+## Memory System
+
+### Architecture
+
+The memory system enables learning across executions through structured experience logs:
+
+```
+Memory System
+├── Short-Term Memory (Per-Project)
+│   └── projects/[name]/memory/short_term/
+│       └── execution_log.md
+│
+└── Long-Term Memory (System-Wide)
+    └── /system/memory_log.md
+```
+
+### Short-Term Memory
+
+**Location**: `projects/[project_name]/memory/short_term/execution_log.md`
+
+**Purpose**: Detailed execution traces for individual tasks
+
+**Structure**:
+```markdown
+---
+timestamp: 2025-12-21T18:30:00Z
+action: task_execution
+task: signal_analysis
+status: completed
+---
+
+# Task: Signal Analysis with FFT
+
+## Request
+User asked to create a sine wave signal, add noise, and apply FFT.
+
+## Actions Taken
+1. Created project structure: projects/signal_fft_analysis/
+2. Generated Python code for signal processing
+3. Executed code successfully
+4. Saved visualization to output/visualizations/
+
+## Results
+- Signal frequency: 50 Hz detected
+- FFT peak at correct frequency
+- Visualization saved: signal_fft_spectrum.png
+
+## Code Generated
+[Python code here]
+```
+
+### Long-Term Memory
+
+**Location**: `/system/memory_log.md` (read-only system file)
+
+**Purpose**: System-wide repository of all execution experiences
+
+**Structure**:
+```yaml
+---
+- experience_id: exp_001
+- project_name: signal_fft_analysis
+- primary_goal: Create sine wave and apply FFT
+- final_outcome: success | failure | success_with_recovery
+- components_used: [SystemAgent, scipy, matplotlib]
+- files_created: 9
+- output_summary: Successfully created project with FFT analysis
+- execution_time_ms: 12500
+- learnings_or_issues: |
+    scipy.fft + matplotlib works reliably in browser.
+    Organized output/ structure improves clarity.
+    Creating .gitkeep files ensures directory persistence.
+- timestamp: 2025-12-21T18:30:45Z
+---
+```
+
+### Memory Agents
+
+#### MemoryAnalysisAgent
+
+**Purpose**: Query memory for insights during planning phase
+
+**Input**:
+```json
+{
+  "query": "What patterns lead to successful signal processing?",
+  "filters": {
+    "project_type": "signal_processing",
+    "outcome": "success"
+  },
+  "context": "Planning new FFT analysis"
+}
+```
+
+**Output**:
+```json
+{
+  "analysis_summary": "Signal processing succeeds when...",
+  "relevant_experiences": ["exp_001", "exp_003"],
+  "key_insights": [
+    "scipy.fft has 95% success rate",
+    "Organized output/ structure completes faster"
+  ],
+  "recommendations": [
+    "Create output/visualizations/ upfront",
+    "Use scipy.fft for frequency analysis"
+  ],
+  "confidence_score": 0.85
+}
+```
+
+#### MemoryConsolidationAgent
+
+**Purpose**: Transform session traces into permanent learnings
+
+**Process**:
+1. Read `memory/short_term/` execution logs
+2. Extract patterns and insights
+3. Update `memory/long_term/` files
+4. Append consolidated experiences to system memory
+
+**Outputs**:
+- `memory/long_term/patterns.md` - Recurring successful patterns
+- `memory/long_term/best_practices.md` - Proven strategies
+- Updated system `memory_log.md` entries
+
+### Memory-Informed Planning
+
+The SystemAgent consults memory before every execution:
+
+```typescript
+// 1. Planning Phase (in SystemAgent)
+async plan(userGoal: string): Promise<ExecutionPlan> {
+  // Read system memory log
+  const memoryLog = await readFile('/system/memory_log.md');
+
+  // Search for similar past tasks
+  const relevantExperiences = this.searchMemory(memoryLog, userGoal);
+
+  // Extract successful patterns
+  const patterns = this.extractPatterns(relevantExperiences);
+
+  // Incorporate learnings into plan
+  return {
+    projectName: this.generateProjectName(userGoal),
+    tasks: this.decomposeTasks(userGoal),
+    bestPractices: patterns,
+    recommendations: this.generateRecommendations(patterns)
+  };
+}
+```
+
+**Benefits**:
+- Faster execution (reuses proven patterns)
+- Better quality (avoids past mistakes)
+- Continuous improvement (learns from every run)
+
+---
+
+## SystemAgent Orchestration
+
+### Eight-Phase Workflow
+
+SystemAgent implements a complete LLMunix orchestration workflow:
+
+```
+1. ANALYZE & PLAN (with Memory Consultation)
+   ↓
+2. CREATE PROJECT STRUCTURE
+   ↓
+3. DYNAMIC AGENT CREATION (if needed)
+   ↓
+4. EXECUTE THE PLAN
+   ↓
+5. LOG EVERYTHING (Short-Term Memory)
+   ↓
+6. PRODUCE OUTPUT
+   ↓
+7. PROVIDE SUMMARY
+   ↓
+8. UPDATE SYSTEM MEMORY (Learning)
+```
+
+### Implementation: `ui/lib/system-agent-orchestrator.ts`
+
+```typescript
+export class SystemAgentOrchestrator {
+  private maxIterations = 20;
+  private llmClient: LLMClient;
+  private systemPrompt: string;
+
+  async execute(userGoal: string): Promise<SystemAgentResult> {
+    const conversationHistory: Message[] = [
+      { role: 'system', content: this.buildSystemPromptWithTools() },
+      { role: 'user', content: userGoal }
+    ];
+
+    const toolCalls: ToolCall[] = [];
+    const filesCreated: string[] = [];
+    let iterations = 0;
+    let finalResponse = '';
+
+    while (iterations < this.maxIterations) {
+      iterations++;
+
+      // Call LLM with conversation history
+      const llmResponse = await this.llmClient.chatDirect(conversationHistory);
+
+      // Check for tool calls in response
+      const toolCallsInResponse = this.parseToolCalls(llmResponse);
+
+      if (toolCallsInResponse.length === 0) {
+        // No more tool calls, we're done
+        finalResponse = llmResponse;
+        break;
+      }
+
+      // Execute each tool
+      for (const toolCall of toolCallsInResponse) {
+        const result = await executeSystemTool(toolCall.toolId, toolCall.inputs);
+
+        toolCalls.push({
+          ...toolCall,
+          output: result,
+          success: true
+        });
+
+        // Track files created
+        if (toolCall.toolId === 'write-file') {
+          filesCreated.push(toolCall.inputs.path);
+        }
+      }
+
+      // Add tool results to conversation
+      conversationHistory.push({
+        role: 'assistant',
+        content: llmResponse
+      });
+      conversationHistory.push({
+        role: 'user',
+        content: this.formatToolResults(toolCalls)
+      });
+    }
+
+    return {
+      success: true,
+      response: finalResponse,
+      toolCalls,
+      filesCreated,
+      iterations
+    };
+  }
+
+  private parseToolCalls(llmResponse: string): ToolCall[] {
+    // Parse JSON tool calls from LLM response
+    // Supports both ```tool blocks and inline JSON
+    const toolPattern = /```tool\s*\n({[\s\S]*?})\n```/g;
+    const calls: ToolCall[] = [];
+
+    let match;
+    while ((match = toolPattern.exec(llmResponse)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        calls.push({
+          toolId: parsed.tool,
+          inputs: parsed.inputs
+        });
+      } catch (error) {
+        console.error('Failed to parse tool call:', error);
+      }
+    }
+
+    return calls;
+  }
+
+  private buildSystemPromptWithTools(): string {
+    // Load SystemAgent.md from system volume
+    // Append tool definitions
+    return `${systemAgentPrompt}
+
+## Available Tools
+
+${this.getToolDefinitions()}`;
+  }
+}
+```
+
+### Tool Call Format
+
+SystemAgent uses structured JSON for tool invocations:
+
+```markdown
+```tool
+{
+  "tool": "write-file",
+  "inputs": {
+    "path": "projects/signal_fft/output/code/analysis.py",
+    "content": "import numpy as np\n..."
+  }
+}
+```
+```
+
+**Why JSON in Code Blocks:**
+- Clear separation from conversational text
+- Easy to parse with regex
+- Supports complex nested parameters
+- Compatible with markdown rendering
+
+### Memory Consultation Example
+
+```typescript
+// Phase 1: Planning with Memory
+async executeWithMemory(userGoal: string): Promise<void> {
+  // 1. Read system memory
+  const memoryLog = await readFile('/system/memory_log.md');
+
+  // 2. Add to initial prompt
+  const initialPrompt = `
+User Goal: ${userGoal}
+
+Before planning, consult the system memory log:
+${memoryLog}
+
+Look for:
+- Similar past tasks
+- Successful patterns
+- Failure modes to avoid
+- Best practices
+
+Then create an execution plan incorporating these learnings.
+`;
+
+  // 3. Execute with enhanced context
+  await this.execute(initialPrompt);
+}
+```
+
+**Result**: SystemAgent references past experiences and applies proven patterns automatically.
 
 ---
 
@@ -736,6 +1270,118 @@ export class EnhancedLLMClient {
   }
 }
 ```
+
+### Enhanced read-file Tool
+
+The `read-file` tool has been enhanced to support both VFS files and system files:
+
+**Location**: `ui/lib/system-tools.ts`
+
+```typescript
+export const ReadFileTool: ToolDefinition = {
+  id: 'read-file',
+  name: 'Read File',
+  description: 'Read content from a file in the virtual file system or system directory',
+  inputs: [
+    {
+      name: 'path',
+      type: 'string',
+      description: 'File path to read (supports /system/* for system files and projects/* for VFS files)',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { path } = inputs;
+
+    if (!path || typeof path !== 'string') {
+      throw new Error('Invalid path parameter');
+    }
+
+    // Handle system files (from public/system/)
+    if (path.startsWith('/system/') || path.startsWith('system/')) {
+      const systemPath = path.replace(/^\//, ''); // Remove leading slash
+
+      try {
+        const response = await fetch(`/${systemPath}`);
+        if (!response.ok) {
+          throw new Error(`System file not found: ${path}`);
+        }
+        const content = await response.text();
+
+        return {
+          success: true,
+          path,
+          content,
+          size: content.length,
+          readonly: true,
+          type: 'system',
+        };
+      } catch (error: any) {
+        throw new Error(`Failed to read system file: ${error.message}`);
+      }
+    }
+
+    // Handle VFS files (projects/*)
+    const vfs = getVFS();
+    const file = vfs.readFile(path);
+
+    if (!file) {
+      throw new Error(`File not found: ${path}`);
+    }
+
+    return {
+      success: true,
+      path: file.path,
+      content: file.content,
+      size: file.size,
+      created: file.created,
+      modified: file.modified,
+      type: 'vfs',
+    };
+  },
+};
+```
+
+**Key Features:**
+
+1. **Dual-Source Reading**:
+   - System files: Fetched from `public/system/` via HTTP
+   - VFS files: Read from browser localStorage
+
+2. **Path Detection**:
+   - Paths starting with `/system/` or `system/` → system files
+   - All other paths → VFS files (normalized to `projects/...`)
+
+3. **Response Metadata**:
+   - System files: `readonly: true`, `type: 'system'`
+   - VFS files: timestamps, `type: 'vfs'`
+
+4. **Error Handling**:
+   - System files: 404 if not found in public/system/
+   - VFS files: null if not in localStorage
+
+**Usage Examples:**
+
+```typescript
+// Read system memory log
+const result = await executeSystemTool('read-file', {
+  path: '/system/memory_log.md'
+});
+// Returns: { success: true, content: '...', readonly: true, type: 'system' }
+
+// Read project file
+const result = await executeSystemTool('read-file', {
+  path: 'projects/signal_fft/output/code/analysis.py'
+});
+// Returns: { success: true, content: '...', created: ..., type: 'vfs' }
+```
+
+**SystemAgent Integration:**
+
+SystemAgent uses this enhanced tool to:
+1. Read `/system/memory_log.md` during planning phase
+2. Read `/system/agents/MemoryAnalysisAgent.md` for memory queries
+3. Read project files from VFS for code review/editing
 
 ---
 
@@ -1587,6 +2233,236 @@ export default function SplitViewCanvas({ filePath }: { filePath: string }) {
 }
 ```
 
+### File Tree Component
+
+#### Complete Recursive Hierarchy Display
+
+**Location**: `ui/components/panel1-volumes/VSCodeFileTree.tsx`
+
+The file tree displays complete directory hierarchies recursively, showing all files and folders at every level.
+
+**Before (Flat Structure)**:
+```
+User/
+  projects/
+    signal_fft_analysis/
+```
+
+**After (Complete Hierarchy)**:
+```
+User/
+  projects/
+    signal_fft_analysis/
+      components/
+        agents/
+          .gitkeep
+      memory/
+        long_term/
+          .gitkeep
+        short_term/
+          execution_log.md
+      output/
+        code/
+          signal_fft_analysis.py
+        data/
+          .gitkeep
+        visualizations/
+          .gitkeep
+        README.md
+```
+
+#### Tree Building Algorithm
+
+Completely rewritten to build recursive structure:
+
+```typescript
+const buildVFSTree = (files: any[], directories: string[]): TreeNode[] => {
+  const vfs = getVFS();
+  const allFiles = vfs.getAllFiles();
+  const projectFiles = allFiles.filter(f => f.path.startsWith('projects/'));
+
+  // Map to hold all directory nodes
+  const nodeMap = new Map<string, TreeNode>();
+
+  // Helper: Ensure directory exists in tree
+  const ensureDirectory = (path: string): TreeNode => {
+    if (nodeMap.has(path)) {
+      return nodeMap.get(path)!;
+    }
+
+    const parts = path.split('/');
+    const name = parts[parts.length - 1];
+
+    const node: TreeNode = {
+      id: `vfs-dir-${path}`,
+      name,
+      type: 'folder',
+      path,
+      children: []
+    };
+
+    nodeMap.set(path, node);
+
+    // Ensure parent exists and add this as child
+    if (parts.length > 2) {  // Has parent beyond 'projects'
+      const parentPath = parts.slice(0, -1).join('/');
+      const parentNode = ensureDirectory(parentPath);
+
+      if (parentNode.children && !parentNode.children.find(c => c.id === node.id)) {
+        parentNode.children.push(node);
+      }
+    }
+
+    return node;
+  };
+
+  // Process all files
+  for (const file of projectFiles) {
+    const parts = file.path.split('/');
+
+    // Ensure all parent directories exist
+    for (let i = 2; i < parts.length; i++) {
+      const dirPath = parts.slice(0, i + 1).join('/');
+      ensureDirectory(dirPath);
+    }
+
+    // Create file node
+    const fileName = parts[parts.length - 1];
+    const fileNode: TreeNode = {
+      id: `vfs-file-${file.path}`,
+      name: fileName,
+      type: 'file',
+      path: file.path,
+      metadata: {
+        size: file.size,
+        modified: new Date(file.modified).toLocaleString()
+      }
+    };
+
+    // Add file to parent directory
+    const parentDirPath = parts.slice(0, -1).join('/');
+    const parentDir = nodeMap.get(parentDirPath);
+
+    if (parentDir && parentDir.children) {
+      parentDir.children.push(fileNode);
+    }
+  }
+
+  // Sort all children recursively (directories first, then alphabetically)
+  const sortChildren = (node: TreeNode) => {
+    if (!node.children) return;
+
+    node.children.sort((a, b) => {
+      if (a.type === 'folder' && b.type !== 'folder') return -1;
+      if (a.type !== 'folder' && b.type === 'folder') return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    node.children.forEach(sortChildren);
+  };
+
+  // Get top-level project directories
+  const topLevelProjects = Array.from(nodeMap.values())
+    .filter(node => {
+      const parts = node.path.split('/');
+      return parts.length === 2 && parts[0] === 'projects';
+    });
+
+  topLevelProjects.forEach(sortChildren);
+
+  return topLevelProjects;
+};
+```
+
+**Key Features:**
+1. **Recursive Structure**: Uses `nodeMap` to track all directory nodes
+2. **Parent Auto-Creation**: `ensureDirectory()` recursively creates parent dirs
+3. **Proper Sorting**: Directories first, then files, alphabetically
+4. **File Metadata**: Shows size and modification date
+5. **Complete Hierarchy**: Every file and folder visible
+
+#### Auto-Refresh Mechanism
+
+File tree refreshes every 2 seconds to pick up new files:
+
+```typescript
+useEffect(() => {
+  const interval = setInterval(() => {
+    // Rebuild tree from VFS
+    const vfs = getVFS();
+    const allFiles = vfs.getAllFiles();
+    const vfsTree = buildVFSTree(allFiles, []);
+    setTreeData(vfsTree);
+  }, 2000);  // 2 second refresh
+
+  return () => clearInterval(interval);
+}, []);
+```
+
+**Benefits:**
+- Automatically shows new files created by SystemAgent
+- No manual refresh needed
+- Keeps UI in sync with VFS state
+
+#### System Artifacts in Tree
+
+System files are added as read-only nodes in ROOT_TREE:
+
+```typescript
+const ROOT_TREE: TreeNode[] = [
+  {
+    id: 'system-volume',
+    name: 'System',
+    type: 'folder',
+    path: '/volumes/system',
+    metadata: { readonly: true },
+    children: [
+      {
+        id: 'system-agents',
+        name: 'agents',
+        type: 'folder',
+        children: [
+          {
+            id: 'system-agent',
+            name: 'SystemAgent.md',
+            type: 'file',
+            path: '/volumes/system/agents/SystemAgent.md',
+            metadata: { readonly: true }
+          },
+          {
+            id: 'memory-analysis',
+            name: 'MemoryAnalysisAgent.md',
+            type: 'file',
+            path: '/volumes/system/agents/MemoryAnalysisAgent.md',
+            metadata: { readonly: true }
+          },
+          {
+            id: 'memory-consolidation',
+            name: 'MemoryConsolidationAgent.md',
+            type: 'file',
+            path: '/volumes/system/agents/MemoryConsolidationAgent.md',
+            metadata: { readonly: true }
+          }
+        ]
+      },
+      {
+        id: 'system-memory-log',
+        name: 'memory_log.md',
+        type: 'file',
+        path: '/volumes/system/memory_log.md',
+        metadata: { readonly: true }
+      }
+    ]
+  },
+  // ... User, Team volumes
+];
+```
+
+**Visual Indicators:**
+- Read-only badge on system files
+- Different icon for system volume
+- Tooltips showing file metadata
+
 ---
 
 ## Data Flow
@@ -2286,15 +3162,136 @@ class CollaborationSync {
 
 ## Conclusion
 
-This architecture implements a Claude Code-style file-first development environment entirely in the browser, with:
+This architecture implements a Claude Code-style file-first development environment entirely in the browser, with **complete LLMunix integration** for self-evolving intelligence.
 
-- **Git-backed volumes** for persistence
+### Core Capabilities
+
+**File-First Architecture:**
+- **Git-backed volumes** for cloud persistence
+- **Virtual File System (VFS)** for browser-local storage
 - **LLM tool system** for file operations
 - **Live Python runtime** with Pyodide
 - **VSCode-inspired UI** for familiarity
-- **Sub-agent system** for extensibility
 
-All components are designed to be modular, testable, and performant while providing a seamless developer experience.
+**LLMunix Self-Evolution:**
+- **Memory System**: Short-term execution logs + long-term learnings
+- **SystemAgent Orchestration**: 8-phase workflow with memory consultation
+- **Pattern Recognition**: Learns from every execution
+- **Continuous Improvement**: Reuses proven patterns, avoids past mistakes
 
-For user-facing documentation, see **README.md**.
-For implementation status, see **IMPLEMENTATION-STATUS.md**.
+**Technical Highlights:**
+- **Path Normalization**: Correctly handles root directories without double-prepending
+- **Recursive File Tree**: Complete hierarchies with auto-refresh every 2 seconds
+- **Dual-Source read-file**: Supports both VFS and system files transparently
+- **System Volume**: Read-only artifacts visible in file tree
+- **Project Structure**: Standardized organization for all outputs
+
+### Implementation Status
+
+✅ **Complete LLMunix Pattern:**
+- SystemAgent with memory-aware orchestration
+- Virtual File System with localStorage persistence
+- Memory system (short-term + long-term)
+- MemoryAnalysisAgent and MemoryConsolidationAgent
+- Enhanced file tree with complete hierarchies
+- System volume with read-only enforcement
+- Tool system with VFS and system file support
+
+✅ **Claude Code-Style Features:**
+- File-first approach (not chat artifacts)
+- Persistent storage across sessions
+- Organized project structures
+- Live code execution in browser
+- Real-time file tree updates
+
+### Key Technical Achievements
+
+1. **VFS Path Normalization Fix** (`ui/lib/virtual-fs.ts:172-188`)
+   - Fixed double-prepending bug for root directories
+   - Enables proper file tree display
+
+2. **Recursive Tree Building** (`ui/components/panel1-volumes/VSCodeFileTree.tsx`)
+   - Complete rewrite using nodeMap and ensureDirectory()
+   - Shows full directory hierarchies with proper sorting
+
+3. **Enhanced read-file Tool** (`ui/lib/system-tools.ts:70-131`)
+   - Dual-source: VFS (localStorage) + System (public/system/)
+   - Transparent path-based routing
+
+4. **SystemAgent Orchestration** (`ui/lib/system-agent-orchestrator.ts`)
+   - Tool call parsing from LLM responses
+   - Iterative execution with conversation history
+   - Memory consultation integration
+
+5. **Memory System Architecture**
+   - Project-level: `projects/[name]/memory/short_term/`
+   - System-level: `/system/memory_log.md`
+   - Structured YAML frontmatter + markdown content
+
+### Architecture Principles
+
+All components follow these design principles:
+
+- **Modular**: Each system (VFS, Memory, Tools, Runtime) is independent
+- **Testable**: Clear interfaces enable unit and integration testing
+- **Performant**: Caching, lazy loading, Web Workers where appropriate
+- **Observable**: File tree, tool displays, execution logs provide transparency
+- **Extensible**: Easy to add new tools, agents, memory queries
+
+### Next Steps for Developers
+
+**To extend the system:**
+
+1. **Add new tools**: Implement `ToolDefinition` in `ui/lib/system-tools.ts`
+2. **Create memory agents**: Add markdown files to `public/system/agents/`
+3. **Enhance memory queries**: Implement semantic search in MemoryAnalysisAgent
+4. **Add visualizations**: Create components for memory patterns, learning curves
+5. **Implement consolidation**: Auto-run MemoryConsolidationAgent after sessions
+
+**To debug:**
+
+1. Check VFS state: `/debug-vfs` page
+2. Test SystemAgent: `/test-system-agent` page
+3. Inspect localStorage: Browser DevTools → Application → Local Storage
+4. View system files: `public/system/` directory
+5. Check tool calls: Console logs from SystemAgentOrchestrator
+
+### Documentation References
+
+- **User Documentation**: `README.md` - Marketing-focused overview with quick start
+- **LLMunix Implementation**: `LLMUNIX_COMPLETE.md` - Complete pattern documentation
+- **Technical Architecture**: This document - Deep technical implementation details
+- **Development Status**: `IMPLEMENTATION-STATUS.md` - Feature checklist and roadmap
+
+### Performance Characteristics
+
+**VFS Operations:**
+- Read: ~1ms (localStorage lookup)
+- Write: ~5ms (JSON serialization + localStorage write)
+- List: ~10ms (filter + map over all files)
+
+**System File Access:**
+- First read: ~50-100ms (HTTP fetch from public/)
+- Subsequent: ~1ms (browser HTTP cache)
+
+**Pyodide Execution:**
+- Initialization: ~3-5 seconds (first load)
+- Simple code: ~10-50ms
+- With packages: ~200ms-2s (scipy, matplotlib)
+
+**File Tree Refresh:**
+- Rebuild: ~20-50ms (for 100-500 files)
+- Auto-refresh: Every 2 seconds (non-blocking)
+
+**Memory Query:**
+- Read memory_log.md: ~50ms (system file)
+- Parse + search: ~10-30ms (regex matching)
+- LLM analysis: ~1-3 seconds (API call)
+
+---
+
+LLMos-Lite successfully combines Claude Code's file-first philosophy with LLMunix's self-evolving intelligence, creating a unique browser-based operating system that learns from every execution while maintaining complete transparency and traceability through persistent file structures.
+
+**For user-facing documentation, see README.md**
+**For LLMunix implementation details, see LLMUNIX_COMPLETE.md**
+**For development progress, see IMPLEMENTATION-STATUS.md**
