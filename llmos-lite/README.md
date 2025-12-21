@@ -2,7 +2,7 @@
 
 **An AI Operating System That Actually Learns**
 
-LLMos-Lite isn't just another AI coding assistant—it's a **self-evolving operating system** that learns from every interaction, builds institutional knowledge, and gets smarter over time. Starting with quantum computing and WebAssembly-compatible data science, expanding to any domain you teach it.
+LLMos-Lite isn't just another AI coding assistant—it's a **self-evolving operating system** that learns from every interaction, builds institutional knowledge, and gets smarter over time. Optimized for WebAssembly-compatible scientific computing, data science, and 3D visualization, expanding to any domain you teach it.
 
 ---
 
@@ -121,7 +121,7 @@ Open http://localhost:3000
 ### 2. Setup
 
 1. Enter your OpenRouter API key
-2. Select your domain (Quantum Computing, Data Science, 3D Visualization)
+2. Select your use case (Signal Processing, Data Science, 3D Visualization, Robotics)
 3. Start chatting - the system learns your field
 
 ### 3. Your First Task
