@@ -1,21 +1,45 @@
-# LLMos-Lite
+# LLMos-Lite 🚀
 
-**An Evolving Operating System for AI-Native Development**
+**An AI Operating System That Actually Learns**
 
-LLMos-Lite is where Claude Code meets a living, learning operating system. It's not just a tool—it's an environment that **evolves with you**, learning from your patterns, growing its capabilities, and adapting to your domain. Starting with quantum computing, expanding to any field you imagine.
+LLMos-Lite isn't just another AI coding assistant—it's a **self-evolving operating system** that learns from every interaction, builds institutional knowledge, and gets smarter over time. Optimized for WebAssembly-compatible scientific computing, data science, and 3D visualization, expanding to any domain you teach it.
 
 ---
 
-## What Makes LLMos Different?
+## 🎯 What Makes LLMos Different?
 
-### 🧬 It Evolves
+### 🧠 It Has Memory
 
-Unlike static tools, LLMos-Lite **learns and grows**:
+Unlike traditional AI assistants that forget everything after each conversation:
 
-- **Patterns become Skills** - Your successful workflows automatically become reusable patterns
-- **Agents Self-Improve** - Sub-agents observe how you work and optimize themselves
-- **System Adapts** - The OS learns your domain's language and conventions
-- **Knowledge Compounds** - Every session builds on the last, nothing is forgotten
+- ✅ **Learns from every execution** - Successful patterns become system knowledge
+- ✅ **Queries past experiences** - Consults memory before planning new tasks
+- ✅ **Improves over time** - Each run makes the next one better
+- ✅ **Never forgets** - Persistent memory across all sessions
+
+```
+First Time:  "Create FFT analysis" → Takes 5 mins, requires guidance
+Third Time:  "Analyze audio spectrum" → 30 seconds, applies learned patterns
+Tenth Time:  "Process signal data" → Instant, uses refined techniques
+```
+
+### 📁 It's File-First (The Claude Code Way)
+
+Everything is **real files in persistent storage**, not chat artifacts:
+
+- 📁 All outputs saved to organized project structures
+- 🌳 Complete file tree showing every file and folder
+- 💾 Virtual file system with localStorage persistence
+- 🔄 Auto-refreshing tree (picks up new files in <2 seconds)
+
+### 🔄 It's Self-Improving
+
+The system doesn't stay static—it **evolves**:
+
+- 🧠 **Memory System**: Short-term execution logs + long-term learnings
+- 📊 **Pattern Recognition**: Identifies what works, what doesn't
+- 🔄 **Continuous Learning**: Every task updates system knowledge
+- 📈 **Compound Intelligence**: Gets better with use
 
 ```
 Traditional Tools                LLMos-Lite (Evolving OS)
@@ -26,200 +50,223 @@ Generic templates               Domain-specific expertise
 Starts fresh each time          Continuous knowledge growth
 ```
 
-### 🎯 Domain-First Design
+---
 
-**Currently Optimized For:**
-- **⚛️ Quantum Computing** - VQE, QAOA, quantum chemistry, circuit optimization
-- **🎨 3D Visualization** - Molecular dynamics, scientific animation, data viz
+## 🎨 What You Can Build
 
-**Expanding To:**
-- **🧬 Bioinformatics** - Protein folding, genomics, drug discovery
-- **🔬 Materials Science** - DFT calculations, crystal structures
-- **🌊 Climate Modeling** - Weather simulation, environmental data
-- **Your Domain** - The system adapts to whatever you teach it
+### WebAssembly-Compatible Domains
 
-The OS doesn't just support these domains—it **becomes fluent in them**.
+**🎵 Signal Processing & Audio Analysis**
+- FFT spectrum analysis for audio signals
+- Digital filter design (low-pass, high-pass, band-pass)
+- Wavelet transforms and time-frequency analysis
+- Noise reduction and signal enhancement
+- Spectrograms and audio feature extraction
 
-### 🤝 Claude Code + OS Fusion
+**📊 Data Science & Machine Learning**
+- Classification models (SVM, Random Forest, Decision Trees)
+- Regression analysis and predictive modeling
+- Clustering algorithms (K-means, DBSCAN, hierarchical)
+- Principal Component Analysis (PCA) and dimensionality reduction
+- Time series analysis and forecasting
+- Interactive data visualizations with matplotlib
 
-LLMos-Lite merges **Claude Code's file-first philosophy** with **operating system concepts**:
+**🔬 Scientific Computing & Simulation**
+- Numerical integration and differentiation
+- Solving differential equations (ODEs, PDEs)
+- Linear algebra operations and matrix decomposition
+- Optimization problems (linear, nonlinear, constrained)
+- Monte Carlo simulations
+- Statistical distributions and hypothesis testing
 
-**From Claude Code:**
-- ✅ File operations as first-class tools
-- ✅ Real Git-backed persistence
-- ✅ Tool use visualization
-- ✅ Conversational development
+**🎨 3D Visualization & Modeling**
+- 3D surface plots and contour maps
+- Parametric curves and surfaces
+- Vector field visualization
+- Molecular structure visualization
+- Terrain modeling and topographic maps
+- Interactive 3D scatter plots
 
-**From OS Design:**
-- ✅ Volume-based file system (System/Team/User)
-- ✅ Sub-agents as executable processes
-- ✅ Skills as loadable libraries
-- ✅ Self-modifying system code
+**🤖 Robotics & Control Systems**
+- Forward and inverse kinematics
+- Trajectory planning and path optimization
+- PID controller tuning and simulation
+- Motion planning algorithms
+- Sensor fusion and Kalman filtering
+- Robot arm workspace analysis
 
-**The Result:**
-An environment where **AI doesn't just write code—it builds and maintains a living system** that grows smarter over time.
+**🌐 Network & Graph Analysis**
+- Social network analysis
+- Graph algorithms (shortest path, centrality, clustering)
+- Network topology visualization
+- Flow optimization problems
+- Community detection
+
+### Available Libraries (Browser-Compatible)
+
+✅ **numpy** - Numerical computing
+✅ **scipy** - Scientific computing
+✅ **matplotlib** - Visualization
+✅ **pandas** - Data analysis
+✅ **scikit-learn** - Machine learning
+✅ **networkx** - Graph analysis
+✅ **sympy** - Symbolic mathematics
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. First Launch
+### 1. Installation
 
+```bash
+git clone https://github.com/EvolvingAgentsLabs/llmos.git
+cd llmos/llmos-lite
+npm install
+npm run dev
 ```
+
+Open http://localhost:3000
+
+### 2. Setup
+
 1. Enter your OpenRouter API key
-2. Select your domain (Quantum Computing, 3D Viz, etc.)
-3. The system loads domain-specific agents and tools
-4. Start conversing—the AI understands your field
-```
+2. Select your use case (Signal Processing, Data Science, 3D Visualization, Robotics)
+3. Start chatting - the system learns your field
 
-### 2. Your First Quantum Circuit
+### 3. Your First Task
 
 ```
-You: Create a VQE circuit for H2 molecule ground state
+You: "Create a sine wave signal, add noise, then apply FFT to show frequency spectrum"
 
-AI: I'll create a variational quantum eigensolver circuit
+SystemAgent:
+📝 Creating project: signal_fft_analysis
+📝 Generating Python code with scipy.fft
+✅ Executing in browser...
+📊 FFT peak detected at 50 Hz
+📁 Saved to output/visualizations/
+📝 Logged to memory/short_term/
 
-    📝 Write File: user-volume/circuits/h2-vqe.py
-    ✓ Created circuit with UCCSD ansatz
-
-    The file is ready in your workspace.
-
-You: Run it and show me the energy curve
-
-AI: 👁️ Read File: user-volume/circuits/h2-vqe.py
-    ✏️ Edit File: Add optimization loop and plotting
-
-    [Circuit executes in browser]
-
-    ✓ Ground state energy: -1.137 Ha
-    [Shows convergence plot]
-
-    The optimization converged in 47 iterations.
+Your project is ready in User > projects > signal_fft_analysis
 ```
 
 **What just happened?**
-- Files were created in your Git-backed volume
-- Code executed in your browser (no server needed)
-- The system remembered this pattern for future VQE tasks
-- Your user volume now contains reusable quantum chemistry code
+- Created organized project structure (9 files)
+- Generated Python code with WebAssembly-compatible libraries
+- Executed in your browser (no server needed)
+- Saved all outputs to persistent VFS
+- Logged execution for future learning
+- **System now knows how to do FFT analysis**
 
 ---
 
-## The Three Volumes: Your Evolving File System
+## 🏗️ The LLMunix Architecture
 
-LLMos organizes knowledge across three volumes, like an OS manages disk drives:
+### Complete Implementation
 
-### 🔒 System Volume (The OS Kernel)
+✅ **SystemAgent** - Memory-aware master orchestrator
+✅ **Virtual File System (VFS)** - Browser-based persistent storage
+✅ **Memory Analysis Agent** - Queries past experiences
+✅ **Memory Consolidation Agent** - Transforms traces into learnings
+✅ **System Memory Log** - Repository of all execution experiences
+✅ **Enhanced File Tree** - Shows complete hierarchies recursively
+✅ **Read-Only System Volume** - Immutable system artifacts
 
-**Read-only, maintained by LLMos**
+### How It Works
 
-Think of this as `/usr` in Unix—the core system:
-- Foundational quantum algorithms (VQE, QAOA, Grover)
-- Domain-specific base agents (quantum-researcher, circuit-optimizer)
-- Standard tools and utilities
-- Reference implementations
+```
+1. Planning Phase
+   └─ SystemAgent reads /system/memory_log.md
+   └─ Searches for similar past tasks
+   └─ Extracts successful patterns
+   └─ Incorporates learnings into plan
 
-The System volume **evolves over time** through:
-- Automated pattern extraction from community usage
-- Curated contributions from domain experts
-- Continuous updates to best practices
+2. Execution Phase
+   └─ Creates organized project structure
+   └─ Generates all required directories
+   └─ Executes Python code in browser
+   └─ Saves outputs to structured folders
 
-### 👥 Team Volume (Shared Knowledge)
+3. Memory Recording
+   └─ Writes execution log to memory/short_term/
+   └─ Appends experience to system memory
+   └─ Includes: goal, outcome, learnings
 
-**Read-write, shared across your organization**
-
-Your team's collective intelligence:
-- Shared quantum chemistry workflows
-- Team-specific circuit optimization agents
-- Collaborative research projects
-- Custom domain tools
-
-**Self-Improving:**
-- Agents observe successful team patterns
-- Workflows get refined based on usage
-- Best practices emerge organically
-- Knowledge compounds across projects
-
-### 👤 User Volume (Personal Workspace)
-
-**Your private laboratory**
-
-Your personal experimentation space:
-- Research projects and experiments
-- Custom agents you're developing
-- Modified tools and workflows
-- Work-in-progress ideas
-
-**Learns From You:**
-- Tracks your coding patterns
-- Suggests improvements based on your style
-- Adapts to your preferred workflows
-- Becomes your personal quantum computing assistant
-
-**All volumes are Git repositories**—version controlled, mergeable, and persistent.
+4. Future Executions
+   └─ Next similar task consults memory
+   └─ Reuses successful patterns
+   └─ Avoids past mistakes
+   └─ Improves automatically
+```
 
 ---
 
-## How the System Evolves
+## 📁 Project Structure
 
-### Pattern → Skill Extraction
-
-As you work, LLMos observes and learns:
+Every SystemAgent execution creates:
 
 ```
-Session 1: You manually optimize a VQE circuit
-          ↓
-System: "I notice you always check gradient norms
-         and adjust step size dynamically"
-          ↓
-Session 5: Pattern detected 3+ times
-          ↓
-System: "I've created a skill: adaptive_vqe_optimization
-         It's now in your user-volume/skills/"
-          ↓
-Future: AI automatically applies this pattern
-        "I'll use your adaptive optimization skill for this VQE"
+projects/[project_name]/
+├── components/
+│   └── agents/          # Agent definitions
+├── output/
+│   ├── code/           # Generated Python files
+│   ├── data/           # Data files
+│   └── visualizations/ # Matplotlib plots
+└── memory/
+    ├── short_term/     # Execution logs
+    └── long_term/      # Consolidated learnings
 ```
 
-### Agent Self-Improvement
-
-Agents don't stay static—they evolve:
-
-```python
-# agents/quantum-optimizer.py (Version 1.0)
-"""
-Optimizes quantum circuits using basic COBYLA
-"""
-
-# After observing 50+ optimization sessions...
-
-# agents/quantum-optimizer.py (Version 2.3)
-"""
-Optimizes quantum circuits using:
-- Adaptive gradient descent (learned from user patterns)
-- Automatic ansatz selection (improved through usage)
-- Smart initialization (from successful runs)
-- Error mitigation (added based on common failures)
-"""
-```
-
-The agent literally **rewrites its own code** based on what works.
-
-### Domain Knowledge Accumulation
-
-The system builds domain expertise:
-
-**Week 1:** "VQE" means running variational quantum algorithms
-**Week 5:** System knows H2 bond lengths, UCCSD ansatz patterns, chemical accuracy thresholds
-**Month 3:** Can suggest molecules, predict convergence issues, recommend basis sets
-
-It's learning quantum chemistry through **doing**, not just documentation.
+**All visible in the file tree. All persistent. All organized.**
 
 ---
 
-## File-First Development (The Claude Code Way)
+## 🧠 The Memory System
 
-### Real Files, Real Git
+### System-Wide Learning
+
+**Location:** `/system/memory_log.md` (visible in System volume)
+
+Every execution creates a structured experience entry:
+
+```yaml
+---
+experience_id: exp_001
+project_name: signal_fft_analysis
+primary_goal: Create sine wave and apply FFT
+final_outcome: success
+components_used: [SystemAgent, scipy, matplotlib]
+files_created: 9
+execution_time_ms: 12500
+learnings_or_issues: |
+  scipy.fft + matplotlib works reliably in browser.
+  Organized output/ structure improves clarity.
+  Creating .gitkeep files ensures directory persistence.
+timestamp: 2025-12-21T18:30:45Z
+---
+```
+
+### Memory-Informed Planning
+
+Next time you run a similar task:
+
+```
+You: "Analyze audio frequency spectrum"
+
+SystemAgent:
+👁️ Reading /system/memory_log.md
+📖 Found: exp_001 - FFT analysis with scipy.fft
+✅ Applying learned pattern...
+⚡ Completed in 3 seconds (vs 12 seconds first time)
+```
+
+The system **remembers** and **reuses** successful patterns.
+
+---
+
+## 🔧 File-First Development (The Claude Code Way)
+
+### Real Files, Real Persistence
 
 LLMos doesn't show code in chat—it **creates actual files**:
 
@@ -227,16 +274,16 @@ LLMos doesn't show code in chat—it **creates actual files**:
 Traditional Chatbot              LLMos-Lite
 ───────────────                 ─────────────
 Bot: "Here's the code:          AI: 📝 Write File
-     ```python                      user-volume/circuits/ghz.py
-     def create_ghz():
-       ...                      ✓ File created
+     ```python                      projects/analysis/fft.py
+     def analyze():
+       ...                      ✓ File created in VFS
      ```
-     [Copy and paste this]"     [File is in Git, can be edited,
-                                 committed, shared]
+     [Copy and paste this]"     [File persists across sessions,
+                                 visible in file tree]
 
 User: Copy → Paste → Save       User: File already exists,
       Create new file                 ready to run
-      Lose chat history              Persisted in Git forever
+      Lose chat history              Stored in browser forever
 ```
 
 ### The AI Uses Tools, Not Text
@@ -244,35 +291,35 @@ User: Copy → Paste → Save       User: File already exists,
 Watch the AI work transparently:
 
 ```
-You: "Add noise modeling to my circuit"
+You: "Add noise filtering to my signal analysis"
 
 AI: 👁️ Read File
-    user-volume/circuits/bell-state.py
+    projects/signal_analysis/fft.py
 
-    [AI analyzes the circuit]
+    [AI analyzes the code]
 
     ✏️ Edit File
-    user-volume/circuits/bell-state.py
+    projects/signal_analysis/fft.py
 
-    + from qiskit.providers.aer.noise import NoiseModel
-    + noise_model = NoiseModel.from_backend(backend)
-    + result = execute(qc, backend, noise_model=noise_model)
+    + from scipy.signal import butter, filtfilt
+    + b, a = butter(4, 0.125)
+    + filtered_signal = filtfilt(b, a, noisy_signal)
 
-    ✓ Added depolarizing noise model
+    ✓ Added low-pass Butterworth filter
 
     📝 Write File
-    user-volume/docs/noise-analysis.md
+    projects/signal_analysis/README.md
 
-    ✓ Created documentation explaining the noise model
+    ✓ Created documentation explaining the filter design
 ```
 
-Every operation is **visible** and **reversible** (it's all in Git).
+Every operation is **visible** and **traceable**.
 
 ---
 
-## Live Execution: Your Browser is the Computer
+## 💻 Live Execution: Your Browser is the Computer
 
-### Split View: Code ↔ Reality
+### Split View: Code ↔ Results
 
 Open any Python file and see:
 
@@ -281,32 +328,29 @@ Open any Python file and see:
 │   CODE EDITOR       │   LIVE PREVIEW      │
 ├─────────────────────┼─────────────────────┤
 │ import numpy as np  │ ✓ Executed 0.8s    │
-│ from qiskit import  │                     │
-│   QuantumCircuit    │ Output:             │
+│ from scipy.fft      │                     │
+│   import fft        │ Output:             │
 │                     │                     │
-│ # H2 molecule VQE   │ Iter  Energy        │
-│ qc = QuantumCircuit │   1   -0.92        │
-│   (4, 4)            │   5   -1.08        │
-│ qc.h([0,1])        │  10   -1.13        │
-│ qc.cx(0,2)         │                     │
-│                     │ [Circuit Diagram]   │
-│ vqe_result = vqe.   │     ●─H─●─Ry(θ)    │
-│   compute()         │     │   │          │
-│                     │     ●───⊕          │
-│ print(vqe_result    │                     │
-│   .eigenvalue)      │ [Convergence Plot]  │
-│                     │  📈 [Graph]        │
+│ # FFT Analysis      │ FFT Results:        │
+│ signal = np.sin(    │ Peak at 50 Hz       │
+│   2*np.pi*50*t)     │ Amplitude: 1.0      │
 │                     │                     │
-│ [Auto-run: ON]      │ Ground: -1.137 Ha  │
+│ spectrum = fft(     │ [Frequency Plot]    │
+│   signal)           │  📊 [Graph]        │
+│                     │                     │
+│ plt.plot(freq,      │ [Time Domain]       │
+│   np.abs(spectrum)) │  📈 [Graph]        │
+│                     │                     │
+│ [Auto-run: ON]      │ Done in 847ms      │
 └─────────────────────┴─────────────────────┘
 ```
 
 **Everything runs in your browser:**
-- ✅ Python via Pyodide (no server)
-- ✅ Qiskit for quantum circuits
-- ✅ NumPy, SciPy, Matplotlib
-- ✅ Auto-install missing packages
-- ✅ Capture all plots and output
+- ⚡ Python via Pyodide (no server)
+- 📊 Matplotlib plots captured as images
+- 📝 Full stdout/stderr capture
+- 🎯 30-second timeout protection
+- 📦 Auto-install missing packages
 
 ### Instant Feedback Loop
 
@@ -322,220 +366,86 @@ No context switching. No deployment. **Pure flow state.**
 
 ---
 
-## Sub-Agents: The OS Processes
+## 📊 Example Workflows
 
-Agents are **executable programs** that run in your environment:
-
-### What Are Sub-Agents?
-
-Think of them as specialized processes in your OS:
-- **quantum-optimizer** - Process for circuit optimization
-- **chemistry-simulator** - Process for molecular simulation
-- **circuit-analyzer** - Process for analyzing circuit properties
-- **paper-researcher** - Process for finding relevant papers
-
-### Using Agents with @mentions
+### 1. Signal Processing
 
 ```
-You: "@quantum-optimizer improve this VQE circuit"
+You: "Analyze audio file with spectrogram"
 
-AI: I'll invoke the quantum-optimizer agent
+AI: Setting up audio spectrogram analysis
 
-    🤖 Executing: quantum-optimizer
-    Task: Optimize VQE circuit in bell-state.py
+    📝 projects/audio_analysis/spectrogram.py
+    📝 projects/audio_analysis/output/README.md
 
-    [Agent runs in Pyodide sandbox]
+    [Runs automatically]
 
-    Agent output:
-    - Reduced gate count by 34%
-    - Improved fidelity from 0.89 → 0.96
-    - Suggested alternative ansatz: Hardware-efficient
+    ✓ Generated spectrogram (0-5000 Hz range)
+    ✓ Identified dominant frequencies: 440Hz, 880Hz
+    ✓ Saved visualization: output/visualizations/spectrogram.png
 
-    ✓ Created: circuits/bell-state-optimized.py
-    ✓ Updated: docs/optimization-report.md
+    [Shows time-frequency plot]
 
-You: "Thanks! Apply the hardware-efficient ansatz"
-
-AI: Based on @quantum-optimizer's suggestion...
-    [continues with the recommendation]
+    This is a musical note A4 (440 Hz) with its first harmonic.
 ```
 
-Agents can **call other agents**, forming a network of specialized processes.
+### 2. Machine Learning
 
-### Agents That Evolve
+```
+You: "Build a classification model for iris dataset"
 
-Agents aren't static scripts—they **observe and improve**:
+AI: Creating scikit-learn classification pipeline
 
-**Example: circuit-analyzer evolution**
+    📝 projects/iris_classification/train_model.py
+    📝 projects/iris_classification/evaluate.py
 
-```python
-# Week 1: Basic agent
-class CircuitAnalyzer:
-    def analyze(self, circuit):
-        return {
-            'depth': circuit.depth(),
-            'gate_count': len(circuit.data)
-        }
+    [Trains model in browser]
 
-# Week 4: Learned from usage
-class CircuitAnalyzer:
-    def analyze(self, circuit):
-        # Added based on what users always check after basic analysis
-        metrics = {
-            'depth': circuit.depth(),
-            'gate_count': len(circuit.data),
-            'connectivity': self._check_connectivity(),  # NEW
-            'decoherence_estimate': self._estimate_errors(),  # NEW
-            'hardware_compatibility': self._check_ibm_coupling()  # NEW
-        }
+    ✓ Model: Random Forest (100 trees)
+    ✓ Accuracy: 96.7%
+    ✓ Cross-validation: 95.3% ± 2.1%
 
-        # Learned: Users care about gate type distribution
-        metrics['gate_breakdown'] = self._count_gate_types()  # NEW
+    [Shows confusion matrix]
 
-        return metrics
+    Model ready. Predictions:
+    - Setosa: 100% accuracy
+    - Versicolor: 93% accuracy
+    - Virginica: 97% accuracy
 ```
 
-The agent **literally rewrote itself** based on observed patterns.
+### 3. Robotics Simulation
+
+```
+You: "Calculate inverse kinematics for 3-DOF robot arm"
+
+AI: Setting up robotic arm kinematics solver
+
+    📝 projects/robot_arm/kinematics.py
+    📝 projects/robot_arm/visualization.py
+
+    [Executes simulation]
+
+    ✓ Solved inverse kinematics
+    ✓ Joint angles: [45°, 30°, -15°]
+    ✓ End effector position: (0.5, 0.3, 0.2)
+
+    [Shows 3D arm configuration]
+
+    Solution found in 12 iterations using Jacobian method.
+```
 
 ---
 
-## Domain Expertise: Starting with Quantum
-
-### Why Quantum First?
-
-Quantum computing is the **perfect test bed** for an evolving OS:
-- Rapidly evolving field (knowledge changes fast)
-- Requires domain expertise (generic AI isn't enough)
-- Complex workflows (circuit design → optimization → simulation → analysis)
-- High-value automation (saves weeks of PhD-level work)
-
-### What the System Knows
-
-After domain initialization, LLMos understands:
-
-**Quantum Concepts:**
-- VQE, QAOA, quantum chemistry, error mitigation
-- Ansatz design, hardware topology, noise models
-- Basis sets, molecular Hamiltonians, active spaces
-
-**Best Practices:**
-- When to use hardware-efficient vs. chemistry-inspired ansatzes
-- How to handle barren plateaus
-- Which optimizers work for different problems
-- Error mitigation strategies for NISQ devices
-
-**Ecosystem Integration:**
-- Qiskit, PennyLane, Cirq interop
-- IBM Quantum backend specifics
-- Simulation vs. hardware tradeoffs
-
-### Example: Quantum Chemistry Workflow
-
-```
-You: "I want to simulate the H2O molecule ground state"
-
-AI: I'll set up a quantum chemistry calculation for water
-
-    [System activates quantum chemistry knowledge]
-
-    📝 Creates: molecules/h2o.py
-    - Geometry optimization (bent structure, 104.5° angle)
-    - Basis set: STO-3G (good starting point for H2O)
-    - Active space: (4e, 4o) - includes bonding orbitals
-    - Mapper: Jordan-Wigner
-    - Ansatz: UCCSD (chemistry-inspired for accuracy)
-
-    📝 Creates: workflows/h2o-vqe.py
-    - Hamiltonian construction
-    - VQE setup with COBYLA
-    - Energy scan over O-H bond lengths
-
-    📝 Creates: docs/h2o-analysis.md
-    - Expected energy range
-    - Comparison to classical methods
-    - Notes on convergence criteria
-
-    Ready to run. Expected time: ~2 minutes
-
-You: "Run it"
-
-[Executes in browser]
-
-AI: ✓ Simulation complete
-
-    Ground state energy: -75.01 Ha
-    [Shows potential energy surface]
-    [Shows orbital contributions]
-
-    Note: Energy is within chemical accuracy (1.6 mHa) of FCI
-
-    This matches literature values. The UCCSD ansatz worked well
-    because H2O has strong correlation in the bonding orbitals.
-```
-
-The system **knew**:
-- H2O geometry
-- Appropriate active space for water
-- Which ansatz suits this molecule
-- Expected energy ranges
-- How to validate results
-
-That's **domain fluency**, not generic code generation.
-
----
-
-## Git Integration: Version Everything
-
-### Real-Time Status
-
-```
-Git Status (user-volume)
-────────────────────────
-M circuits/h2-vqe.py          (modified 2 mins ago)
-A circuits/h2o-vqe.py         (new file)
-M skills/adaptive-opt.py      (improved by system)
-A docs/h2o-analysis.md        (auto-generated)
-
-4 files changed
-[Commit] [Diff] [Revert]
-```
-
-### AI-Powered Commits
-
-```
-You: "Commit these water molecule calculations"
-
-AI: 🔧 Git Commit
-    user-volume
-
-    Message:
-    "Add H2O VQE calculation with UCCSD ansatz
-
-    - Implement water molecule ground state calculation
-    - Use chemistry-inspired UCCSD ansatz (4e, 4o)
-    - Include bond length scan and analysis
-    - Achieve chemical accuracy vs. FCI reference
-
-    Results: -75.01 Ha ground state energy"
-
-    ✓ Committed 4 files
-    ✓ Pushed to github.com/your-name/llmos-workspace
-```
-
-The AI writes **meaningful commit messages** based on understanding what changed and why.
-
----
-
-## How Knowledge Compounds
+## 🔄 How Knowledge Compounds
 
 ### The Learning Loop
 
 ```
 Week 1
 ──────
-You: Manually create VQE circuits
-     Learn ansatz design
-     Experiment with optimizers
+You: Manually create FFT analyses
+     Learn filter design
+     Experiment with window functions
 
 System: Observes patterns
         Tracks successful approaches
@@ -543,475 +453,201 @@ System: Observes patterns
 
 Week 2
 ──────
-You: Continue quantum chemistry work
-     Try different molecules
+You: Continue signal processing work
+     Try different audio files
      Refine techniques
 
-System: "I've noticed you prefer UCCSD for small molecules"
-        "You always check gradient norms"
-        "Your optimization thresholds are tighter than defaults"
+System: "I've noticed you prefer Hamming windows"
+        "You always normalize signals first"
+        "Your frequency range is typically 0-5000 Hz"
 
 Week 3
 ──────
 System: Creates skills:
-        - user-volume/skills/chemistry-ansatz-selection.md
-        - user-volume/skills/adaptive-gradient-vqe.py
+        - projects/skills/audio-preprocessing.py
+        - projects/skills/fft-with-windowing.py
 
-        Updates agents:
-        - quantum-optimizer now uses your preferred methods
-        - chemistry-simulator auto-selects UCCSD for small molecules
+        Updates memory:
+        - Remembers your preferred parameters
+        - Applies normalization automatically
 
 Week 4
 ──────
-You: "Calculate LiH dissociation curve"
+You: "Analyze this new audio sample"
 
-AI: I'll use your chemistry workflows
+AI: I'll use your audio analysis workflows
     [Automatically applies all your learned patterns]
-    [Selects optimal ansatz based on molecule size]
-    [Uses your adaptive optimization skill]
-    [Applies your tight convergence criteria]
+    [Uses Hamming window]
+    [Normalizes signal]
+    [Sets 0-5000 Hz range]
 
-    ✓ Done in 3 minutes (would have taken you 2 hours in Week 1)
+    ✓ Done in 2 seconds (would have taken 15 minutes in Week 1)
 
-The system has become **your quantum computing research assistant**.
-```
-
-### Pattern Recognition Examples
-
-**The system learns:**
-
-1. **Your Preferences**
-   - "You prefer chemical accuracy thresholds of 1.6 mHa"
-   - "You always visualize convergence curves"
-   - "You like detailed logging during optimization"
-
-2. **Domain Patterns**
-   - "Small molecules (< 4 atoms) → UCCSD ansatz"
-   - "Hardware runs → hardware-efficient ansatz + error mitigation"
-   - "Barren plateau detected → switch to natural gradient"
-
-3. **Workflow Automation**
-   - "After VQE → always run circuit analysis"
-   - "New molecule → check literature values first"
-   - "Optimization complete → generate comparison plots"
-
-4. **Error Prevention**
-   - "This active space will cause memory issues → suggest reduction"
-   - "COBYLA rarely converges for this problem → recommend SPSA"
-   - "Circuit too deep for hardware → insert decomposition step"
-
----
-
-## Common Workflows
-
-### 1. Quantum Chemistry Research
-
-```
-You: "Study the nitrogen dimer N2 dissociation"
-
-AI: Setting up N2 dissociation curve calculation
-
-    📝 molecules/n2.py - Geometry and Hamiltonian
-    📝 workflows/n2-dissociation.py - Bond scan workflow
-    📝 analysis/n2-results.ipynb - Analysis notebook
-
-    [Runs automatically]
-
-    ✓ Scanned N-N distances: 0.8 - 3.0 Å (15 points)
-    ✓ Found equilibrium: 1.098 Å
-    ✓ Dissociation energy: 9.79 eV
-
-    [Shows potential energy curve]
-
-    Observation: Triple bond character evident in orbital analysis.
-    This matches experimental bond length (1.0975 Å).
-
-    Created 47 commits in your user-volume.
-    Ready to push to GitHub?
-```
-
-### 2. Circuit Optimization
-
-```
-You: "I have a 100-gate circuit that's too deep for hardware"
-
-AI: I'll optimize this for IBM hardware constraints
-
-    👁️ Read: user-volume/circuits/deep-circuit.py
-
-    Current circuit:
-    - Depth: 143
-    - Gates: 98 (23 CNOTs)
-    - Estimated T1 decoherence: 47%
-
-    🤖 @circuit-optimizer optimize for ibm_kyoto
-
-    Optimizer strategies:
-    ✓ Gate cancellation: 143 → 98 depth
-    ✓ Commutation analysis: 98 → 67 depth
-    ✓ Hardware-native compilation: 67 → 34 depth
-    ✓ SWAP reduction: 23 → 14 CNOTs
-
-    📝 Created: circuits/deep-circuit-optimized.py
-
-    New circuit:
-    - Depth: 34 (-76%)
-    - Gates: 51 (-48%)
-    - Estimated T1 decoherence: 12%
-
-    This should run reliably on ibm_kyoto (127q, heavy-hex topology).
-```
-
-### 3. Research Paper to Implementation
-
-```
-You: "Implement the VQE variant from arxiv:2301.12345"
-
-AI: I'll read and implement that paper
-
-    🤖 @paper-researcher fetch arxiv:2301.12345
-
-    Paper: "Adaptive VQE with Dynamic Ansatz Selection"
-    Authors: Smith et al. (2023)
-
-    Key contributions:
-    1. Adaptive ansatz growth based on gradient magnitudes
-    2. Automatic layer insertion when optimization stalls
-    3. Hardware-aware gate selection
-
-    I'll implement this approach:
-
-    📝 agents/adaptive-vqe.py - Main algorithm
-    📝 utils/ansatz-growth.py - Dynamic ansatz logic
-    📝 experiments/paper-replication.py - Test cases from paper
-    📝 docs/adaptive-vqe-notes.md - Implementation notes
-
-    ✓ Implementation complete
-
-    Tested on H2, LiH, BeH2 (same molecules as paper)
-    Results match within numerical precision.
-
-    Ready to use: @adaptive-vqe for your molecules
-```
-
-### 4. Hardware Benchmarking
-
-```
-You: "Benchmark my circuit on all available IBM backends"
-
-AI: Running hardware comparison analysis
-
-    🤖 @circuit-analyzer get-hardware-compatibility
-
-    Circuit: bell-state.py (depth 3, 1 CNOT)
-
-    Compatible backends:
-    ✓ ibm_kyoto (127q) - Est. fidelity: 0.94
-    ✓ ibm_osaka (127q) - Est. fidelity: 0.92
-    ✓ ibm_brisbane (127q) - Est. fidelity: 0.95 (best)
-    ⚠ ibm_cairo (27q) - Est. fidelity: 0.88 (older hardware)
-
-    Recommendation: Use ibm_brisbane
-    - Best CNOT fidelity for qubits [0,1]
-    - Shortest queue time currently
-    - Recent calibration (2h ago)
-
-    📝 Created: benchmarks/hardware-comparison.csv
-    📝 Created: reports/backend-recommendation.md
+The system has become **your signal processing assistant**.
 ```
 
 ---
 
-## System Architecture
+## 🎯 Test Pages
 
-### The OS Stack
+### SystemAgent Test Interface
 
-```
-┌─────────────────────────────────────┐
-│    User Interaction (Chat/Canvas)   │  ← You work here
-├─────────────────────────────────────┤
-│    AI Assistant Layer               │  ← Claude Code-style tools
-│    - File operations                │
-│    - Git integration                │
-│    - Agent orchestration            │
-├─────────────────────────────────────┤
-│    Knowledge Layer (Evolving)       │  ← System learns here
-│    - Skills extraction              │
-│    - Pattern recognition            │
-│    - Agent self-improvement         │
-├─────────────────────────────────────┤
-│    Volume File System               │  ← Organized storage
-│    - System volume (read-only)     │
-│    - Team volume (shared)           │
-│    - User volume (personal)         │
-├─────────────────────────────────────┤
-│    Runtime Environment              │  ← Code execution
-│    - Pyodide (Python in browser)   │
-│    - Package management             │
-│    - Output capture                 │
-├─────────────────────────────────────┤
-│    Persistence Layer                │  ← Long-term memory
-│    - Git repositories              │
-│    - GitHub API                     │
-│    - Local caching                  │
-└─────────────────────────────────────┘
-```
+**URL:** http://localhost:3000/test-system-agent
 
-### The Evolution Engine
+Test the LLMunix orchestrator with:
+- Sample prompts (signal processing, 3D plots, robotics)
+- View execution results
+- Browse created files
+- Inspect tool calls
 
-```
-User Actions → Pattern Detection → Skill Extraction → System Update
-     ↓               ↓                    ↓                ↓
-  Git commits   Statistical         New .py files    Agents improve
-  File edits    analysis            Workflow docs    Tools adapt
-  Agent usage   Success tracking    Knowledge base   Prompts refine
-```
+### VFS Debug Page
 
-The system is **constantly evolving** based on what works.
+**URL:** http://localhost:3000/debug-vfs
+
+Inspect the Virtual File System:
+- View all stored files
+- Check file metadata
+- Inspect localStorage contents
+- Debug path normalization
 
 ---
 
-## Keyboard Shortcuts
+## 📚 Documentation
 
-- `Cmd/Ctrl + K` - Focus chat
-- `Cmd/Ctrl + S` - Save and run
-- `Cmd/Ctrl + Enter` - Run code
-- `Cmd/Ctrl + /` - Toggle Code/Preview
-- `@` - Mention agents/files
-- `Cmd/Ctrl + Shift + C` - Commit from anywhere
+- **README.md** (this file) - Overview and quick start
+- **llmos-lite/README.md** - Detailed feature documentation
+- **llmos-lite/ARCHITECTURE.md** - Technical architecture
+- **llmos-lite/LLMUNIX_COMPLETE.md** - Complete LLMunix implementation guide
 
 ---
 
-## Extending to New Domains
+## 🚀 What's Next
 
-### Current Domains
+### Immediate Future
 
-**⚛️ Quantum Computing** (Primary)
-- Full VQE/QAOA/chemistry workflow support
-- Hardware compilation and optimization
-- Circuit analysis and benchmarking
-
-**🎨 3D Visualization** (Secondary)
-- Molecular structure rendering
-- Scientific animation
-- Data visualization
-
-### Adding Your Domain
-
-The system is designed to **learn new domains**:
-
-```
-1. Create domain initialization in system-volume/domains/your-field/
-2. Add base agents for your field
-3. Provide example workflows
-4. The system observes and learns from usage
-5. Domain expertise compounds over time
-```
-
-**Example future domains:**
-- **🧬 Bioinformatics** - Protein folding, genomics
-- **🔬 Materials Science** - DFT, crystal structures
-- **🌊 Climate Modeling** - Weather sim, climate data
-- **📊 Data Science** - ML pipelines, statistical analysis
-- **🎮 Game Development** - Physics engines, procedural generation
-
-The architecture is **domain-agnostic**—it adapts to whatever you teach it.
-
----
-
-## Philosophy
-
-### An OS That Grows With You
-
-Traditional tools are **static**:
-- Fixed features
-- Generic templates
-- No learning
-- Starts fresh each time
-
-LLMos is **living**:
-- Self-improving capabilities
-- Domain-specific expertise
-- Continuous learning
-- Cumulative knowledge
-
-### File-First, Git-Native
-
-Inspired by Claude Code:
-- Files are the source of truth
-- Everything is versioned
-- Collaboration through Git
-- Transparent operations
-
-### Quantum-First, Domain-Ready
-
-Built for the future:
-- Advanced domains need advanced tools
-- AI must understand your field deeply
-- Generic assistants aren't enough
-- Expertise compounds through doing
-
----
-
-## Comparison to Other Tools
-
-### vs Jupyter Notebooks
-- ✅ AI pair programmer integrated
-- ✅ Git-native workflow
-- ✅ Multi-file project structure
-- ✅ Self-improving agents
-- ✅ Domain-specific expertise
-
-### vs Claude Code CLI
-- ✅ Browser-based (zero install)
-- ✅ Live code preview
-- ✅ Domain specialization (quantum, etc.)
-- ✅ Visual circuit rendering
-- ✅ Evolving knowledge base
-- ⚠️ Python-focused (more languages coming)
-
-### vs VSCode + Copilot
-- ✅ Conversational development
-- ✅ No setup required
-- ✅ Domain fluency (quantum, chemistry)
-- ✅ Self-modifying system
-- ✅ Learns from your patterns
-- ⚠️ Simpler editor (Monaco coming)
-
-### vs Generic AI Assistants
-- ✅ Real file operations (not just code snippets)
-- ✅ Git integration built-in
-- ✅ Domain expertise (not generic knowledge)
-- ✅ Persistent memory (agents remember)
-- ✅ Self-improving (gets better over time)
-- ✅ Executable agents (not just chat)
-
----
-
-## What's Next
-
-### Near-Term Evolution
-
-**Editor Improvements:**
-- Monaco editor with IntelliSense
-- Multi-file editing
-- Advanced debugging
-
-**Collaboration:**
-- Real-time pair programming
-- Shared sessions
-- Team knowledge sync
-
-**Domain Expansion:**
-- Bioinformatics domain pack
-- Materials science toolkit
-- Climate modeling suite
+- **Memory Query UI** - Browse system memory visually
+- **Pattern Visualization** - Charts showing learning patterns
+- **Session Replay** - Replay past executions
+- **Cross-Project Learning** - Share learnings between projects
 
 ### Long-Term Vision
 
 **The Self-Improving OS:**
-- Agents that rewrite themselves
-- Skills that merge and evolve
-- Domain knowledge that compounds
-- System that adapts to any field
+- System that adapts to any technical domain
+- Agents that rewrite themselves based on success
+- Skills that merge and evolve automatically
+- Community knowledge marketplace
 
 **The Research Accelerator:**
 - Paper → Implementation in minutes
+- Automated literature review
 - Experiment design assistance
-- Automatic literature review
 - Reproducibility by default
 
-**The Knowledge Commons:**
-- Shared team intelligence
-- Cross-domain pattern transfer
-- Community skill marketplace
-- Federated learning across installations
+---
+
+## 🤝 Contributing
+
+LLMos-Lite is open source and actively developed. Contributions welcome!
+
+### Areas for Contribution
+
+- **Domain Packs**: Add support for new technical domains
+- **Memory Algorithms**: Improve pattern recognition
+- **Tool Development**: Create new system tools
+- **UI Improvements**: Enhance file tree, canvas, chat
+
+### Getting Started
+
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/llmos.git
+cd llmos/llmos-lite
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Run tests
+npm test
+```
+
+See **llmos-lite/CONTRIBUTING.md** for guidelines.
 
 ---
 
-## Technical Requirements
+## 📖 Philosophy
 
-**Browser:**
-- Chrome 90+ (recommended)
-- Firefox 88+
-- Edge 90+
+### File-First, Browser-Native
 
-**Connection:**
-- Required for AI chat (OpenRouter)
-- Code runs locally (Pyodide)
+Inspired by Claude Code:
+- Files are the source of truth (not chat)
+- Everything is persistent
+- Operations are transparent
+- No server needed—runs in your browser
 
-**Storage:**
-- ~100MB for runtime (cached)
-- GitHub repos for volumes
-- LocalStorage for cache
+### Self-Evolving Intelligence
 
----
+Unlike static tools:
+- Learns from every execution
+- Builds institutional knowledge
+- Improves continuously
+- Never forgets successful patterns
 
-## Getting Help
+### Domain-Ready, Not Domain-Specific
 
-### Documentation
-
-- **ARCHITECTURE.md** - Technical implementation details
-- **IMPLEMENTATION-STATUS.md** - Development progress
-- **UX-REDESIGN-CLAUDE-CODE.md** - Design philosophy
-
-### FAQ
-
-**Q: How is this different from ChatGPT + Code Interpreter?**
-A: ChatGPT generates code in chat. LLMos creates real files in Git, learns your domain deeply, and evolves over time. It's an OS, not a chatbot.
-
-**Q: Where does the AI run?**
-A: LLM calls go to OpenRouter. Code execution is 100% local in your browser (Pyodide). Your files are in GitHub.
-
-**Q: Does it really "learn" from me?**
-A: Yes. The system tracks patterns, extracts skills, and agents literally rewrite their own code based on observed success patterns.
-
-**Q: Can I use my own models?**
-A: Currently OpenRouter only (access to Claude, GPT-4, etc.). Self-hosted models coming.
-
-**Q: Is my code private?**
-A: User volume repos can be private. You control the GitHub permissions.
-
-**Q: What if I don't do quantum computing?**
-A: The quantum domain is just the first implementation. The architecture works for any technical field. We're building domain packs for bio, materials, climate, etc.
-
-**Q: How is this "an OS"?**
-A: It has volumes (file systems), agents (processes), skills (libraries), and self-modifying system code. It's an operating environment that evolves, not just a tool.
+Built to adapt:
+- Start with WebAssembly-compatible computing
+- Teach it your domain through use
+- System becomes fluent over time
+- Knowledge compounds through doing
 
 ---
 
-## Built With
+## 💬 Community
 
-- **Next.js** - React framework
-- **Pyodide** - Python runtime (browser)
-- **Qiskit** - Quantum computing
-- **OpenRouter** - LLM API gateway
-- **GitHub API** - Git operations
-- **Claude 4.5** - Primary AI model
+- **GitHub Repository**: https://github.com/EvolvingAgentsLabs/llmos
+- **Issues & Bug Reports**: https://github.com/EvolvingAgentsLabs/llmos/issues
+- **Discussions**: https://github.com/EvolvingAgentsLabs/llmos/discussions
+- **Documentation**: See `/llmos-lite/` folder in the repository
 
 ---
 
-## The Vision
+## 🔒 Security & Privacy
 
-**LLMos-Lite is the beginning of something bigger:**
-
-An operating system that:
-- Learns your domain
-- Grows with your expertise
-- Compounds knowledge over time
-- Adapts to any field
-- Never forgets
-- Always improves
-
-**It's not a tool you use.**
-**It's an environment that evolves with you.**
+- **API Keys**: Stored in browser localStorage only
+- **Code Execution**: Sandboxed in Pyodide (browser-based Python)
+- **File Storage**: All in browser localStorage (no server storage)
+- **Network Access**: Disabled from Python runtime
 
 ---
 
-**Ready to build a quantum computer in your browser?** 🚀
+## 📝 License
 
-**Ready to teach an OS your domain?** 🧬
+MIT License - See LICENSE file for details
 
-**Ready for an AI that actually learns?** 🎯
+---
 
-Start with `npm run dev` and watch the system evolve.
+## 🙏 Acknowledgments
+
+- **Claude Code** - Inspiration for file-first architecture
+- **LLMunix** - Original LLMunix pattern and memory system
+- **Pyodide** - Python in the browser
+- **OpenRouter** - LLM API access
+
+---
+
+**Ready to build an AI that actually learns?** 🧠
+
+**Ready for organized, persistent outputs?** 📁
+
+**Ready for a system that gets smarter over time?** 📈
+
+```bash
+cd llmos-lite
+npm run dev
+```
+
+**Watch the system evolve.** 🚀
