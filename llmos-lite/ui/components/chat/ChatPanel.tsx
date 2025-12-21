@@ -6,6 +6,7 @@ import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
 import MarkdownRenderer from './MarkdownRenderer';
+import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import type { Message } from '@/contexts/SessionContext';
 
 interface ChatPanelProps {
@@ -29,6 +30,7 @@ export default function ChatPanel({
   const [loadingStatus, setLoadingStatus] = useState<string>('');
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [codeExecutionStatus, setCodeExecutionStatus] = useState<string>('');
+  const [agentActivities, setAgentActivities] = useState<AgentActivity[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = sessions.find((s) => s.id === activeSession);
@@ -67,6 +69,7 @@ export default function ChatPanel({
     setInputValue('');
     setIsLoading(true);
     setLoadingStatus('Initializing...');
+    setAgentActivities([]); // Clear previous activities
 
     // Auto-create session if none exists
     let sessionId = activeSession;
@@ -143,10 +146,21 @@ export default function ChatPanel({
       setLoadingStatus('Initializing SystemAgent...');
       console.log('[ChatPanel] Executing SystemAgent for goal:', messageText);
 
-      const { executeSystemAgent } = await import('@/lib/system-agent-orchestrator');
+      const { SystemAgentOrchestrator } = await import('@/lib/system-agent-orchestrator');
       const { getVFS } = await import('@/lib/virtual-fs');
 
-      const result = await executeSystemAgent(messageText);
+      // Load SystemAgent definition
+      const systemAgentMarkdown = await fetch('/system/agents/SystemAgent.md').then(r => r.text());
+      const frontmatterMatch = systemAgentMarkdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      const systemPrompt = frontmatterMatch ? frontmatterMatch[2].trim() : systemAgentMarkdown;
+
+      // Create orchestrator with progress callback
+      const orchestrator = new SystemAgentOrchestrator(systemPrompt, (event) => {
+        setAgentActivities(prev => [...prev, event]);
+      });
+
+      // Execute
+      const result = await orchestrator.execute(messageText);
 
       console.log('[ChatPanel] SystemAgent result:', {
         success: result.success,
@@ -411,6 +425,14 @@ export default function ChatPanel({
               )}
             </div>
           ))
+        )}
+
+        {/* Agent Activity Display - Matrix Style */}
+        {(isLoading || agentActivities.length > 0) && (
+          <AgentActivityDisplay
+            activities={agentActivities}
+            isActive={isLoading}
+          />
         )}
 
         {/* Loading indicator - Compact */}
