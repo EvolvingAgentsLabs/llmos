@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { getVFS } from '@/lib/virtual-fs';
 
 // VS Code-style icon components
 const ChevronRightIcon = ({ className }: { className?: string }) => (
@@ -139,6 +140,9 @@ const ROOT_TREE: TreeNode[] = [
         path: '/volumes/system/agents',
         metadata: { readonly: true },
         children: [
+          { id: 'system-agent', name: 'SystemAgent.md', type: 'file', path: '/volumes/system/agents/SystemAgent.md', metadata: { fileType: 'agent', readonly: true } },
+          { id: 'memory-analysis', name: 'MemoryAnalysisAgent.md', type: 'file', path: '/volumes/system/agents/MemoryAnalysisAgent.md', metadata: { fileType: 'agent', readonly: true } },
+          { id: 'memory-consolidation', name: 'MemoryConsolidationAgent.md', type: 'file', path: '/volumes/system/agents/MemoryConsolidationAgent.md', metadata: { fileType: 'agent', readonly: true } },
           { id: 'researcher', name: 'researcher.md', type: 'file', path: '/volumes/system/agents/researcher.md', metadata: { fileType: 'agent', readonly: true } },
           { id: 'refiner', name: 'artifact-refiner.md', type: 'file', path: '/volumes/system/agents/artifact-refiner.md', metadata: { fileType: 'agent', readonly: true } },
           { id: 'debugger', name: 'code-debugger.md', type: 'file', path: '/volumes/system/agents/code-debugger.md', metadata: { fileType: 'agent', readonly: true } },
@@ -184,6 +188,13 @@ const ROOT_TREE: TreeNode[] = [
         path: '/volumes/system/workflows',
         metadata: { readonly: true },
         children: [],
+      },
+      {
+        id: 'system-memory-log',
+        name: 'memory_log.md',
+        type: 'file',
+        path: '/volumes/system/memory_log.md',
+        metadata: { readonly: true },
       },
     ],
   },
@@ -239,6 +250,13 @@ const ROOT_TREE: TreeNode[] = [
     metadata: { volume: 'user' },
     children: [
       {
+        id: 'user-projects',
+        name: 'projects',
+        type: 'folder',
+        path: '/volumes/user/projects',
+        children: [], // Will be populated dynamically from VFS
+      },
+      {
         id: 'user-agents',
         name: 'agents',
         type: 'folder',
@@ -286,6 +304,154 @@ export default function VSCodeFileTree({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
     new Set(['system', 'system-agents', 'system-tools', 'system-skills'])
   );
+  const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
+
+  // Load VFS projects on mount and when activeVolume changes
+  useEffect(() => {
+    const loadVFSProjects = () => {
+      try {
+        const vfs = getVFS();
+        const { files, directories } = vfs.listDirectory('projects');
+
+        // Build tree from VFS
+        const vfsProjects = buildVFSTree(files, directories);
+
+        // Update tree data
+        setTreeData(prev => {
+          const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
+          const userVolume = newTree.find(v => v.id === 'user');
+          if (userVolume && userVolume.children) {
+            const projectsFolder = userVolume.children.find(f => f.id === 'user-projects');
+            if (projectsFolder) {
+              projectsFolder.children = vfsProjects;
+            }
+          }
+          return newTree;
+        });
+      } catch (error) {
+        console.error('Failed to load VFS projects:', error);
+      }
+    };
+
+    loadVFSProjects();
+
+    // Refresh every 2 seconds to pick up new files
+    const interval = setInterval(loadVFSProjects, 2000);
+    return () => clearInterval(interval);
+  }, [activeVolume]);
+
+  // Helper to build tree from VFS files
+  const buildVFSTree = (files: any[], directories: string[]): TreeNode[] => {
+    // Get all VFS files (not just direct children)
+    const vfs = getVFS();
+    const allFiles = vfs.getAllFiles();
+
+    // Filter for files in projects/ directory
+    const projectFiles = allFiles.filter(f => f.path.startsWith('projects/'));
+
+    // Build a map of all nodes (directories and files)
+    const nodeMap = new Map<string, TreeNode>();
+
+    // Helper to ensure a directory node exists
+    const ensureDirectory = (path: string): TreeNode => {
+      if (nodeMap.has(path)) {
+        return nodeMap.get(path)!;
+      }
+
+      const parts = path.split('/');
+      const name = parts[parts.length - 1];
+
+      const node: TreeNode = {
+        id: `vfs-dir-${path}`,
+        name,
+        type: 'folder',
+        path,
+        children: [],
+      };
+
+      nodeMap.set(path, node);
+
+      // Ensure parent directory exists and add this as a child
+      if (parts.length > 2) { // More than just 'projects/projectname'
+        const parentPath = parts.slice(0, -1).join('/');
+        const parentNode = ensureDirectory(parentPath);
+        if (parentNode.children && !parentNode.children.find(c => c.id === node.id)) {
+          parentNode.children.push(node);
+        }
+      }
+
+      return node;
+    };
+
+    // Process all files
+    projectFiles.forEach(file => {
+      const parts = file.path.split('/');
+
+      // Ensure all parent directories exist
+      if (parts.length > 2) {
+        const dirPath = parts.slice(0, -1).join('/');
+        ensureDirectory(dirPath);
+      }
+
+      // Create file node
+      const fileName = parts[parts.length - 1];
+      const fileNode: TreeNode = {
+        id: `vfs-file-${file.path}`,
+        name: fileName,
+        type: 'file',
+        path: file.path,
+        metadata: {
+          size: `${(file.size / 1024).toFixed(1)} KB`,
+          modified: new Date(file.modified).toLocaleString(),
+        },
+      };
+
+      // Add file to its parent directory
+      const parentPath = parts.slice(0, -1).join('/');
+      const parentNode = nodeMap.get(parentPath);
+      if (parentNode && parentNode.children) {
+        parentNode.children.push(fileNode);
+      }
+    });
+
+    // Return only top-level project directories (children of 'projects/')
+    const topLevelProjects: TreeNode[] = [];
+    nodeMap.forEach((node, path) => {
+      const parts = path.split('/');
+      if (parts.length === 2 && parts[0] === 'projects') {
+        // Sort children (directories first, then files, both alphabetically)
+        if (node.children) {
+          node.children.sort((a, b) => {
+            if (a.type === b.type) {
+              return a.name.localeCompare(b.name);
+            }
+            return a.type === 'folder' ? -1 : 1;
+          });
+
+          // Recursively sort all descendants
+          const sortChildren = (n: TreeNode) => {
+            if (n.children) {
+              n.children.sort((a, b) => {
+                if (a.type === b.type) {
+                  return a.name.localeCompare(b.name);
+                }
+                return a.type === 'folder' ? -1 : 1;
+              });
+              n.children.forEach(sortChildren);
+            }
+          };
+          sortChildren(node);
+        }
+
+        topLevelProjects.push(node);
+      }
+    });
+
+    // Sort top-level projects
+    topLevelProjects.sort((a, b) => a.name.localeCompare(b.name));
+
+    return topLevelProjects;
+  };
 
   const toggleNode = useCallback((nodeId: string, volumeType?: 'system' | 'team' | 'user') => {
     setExpandedNodes((prev) => {
@@ -410,7 +576,7 @@ export default function VSCodeFileTree({
     }, 0);
   };
 
-  const activeVolumeNode = ROOT_TREE.find(v => v.id === activeVolume);
+  const activeVolumeNode = treeData.find(v => v.id === activeVolume);
   const activeVolumeItemCount = activeVolumeNode ? countItems(activeVolumeNode.children || []) : 0;
 
   return (
@@ -433,7 +599,7 @@ export default function VSCodeFileTree({
 
       {/* File tree - Single unified tree with volumes as drives */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-2 scrollbar-thin">
-        {ROOT_TREE.map((volumeNode) => renderTreeNode(volumeNode, 0))}
+        {treeData.map((volumeNode) => renderTreeNode(volumeNode, 0))}
       </div>
 
       {/* Tree footer (stats) */}

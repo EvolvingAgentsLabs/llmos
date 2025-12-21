@@ -42,16 +42,19 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="terminal-panel max-w-md w-full">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+      <div className="card-elevated max-w-md w-full animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="terminal-heading text-lg">Profile Settings</h1>
+          <h1 className="heading-3">Profile Settings</h1>
           <button
             onClick={onClose}
-            className="text-terminal-fg-secondary hover:text-terminal-fg-primary transition-colors"
+            className="btn-icon"
+            aria-label="Close"
           >
-            ✕
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
@@ -59,17 +62,17 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
         <div className="space-y-4 mb-6">
           {/* User ID (read-only) */}
           <div>
-            <label className="block text-xs text-terminal-fg-secondary mb-1">
+            <label className="block text-xs text-fg-secondary mb-1.5 font-medium">
               User ID
             </label>
-            <div className="terminal-input bg-terminal-bg-tertiary text-terminal-fg-tertiary cursor-not-allowed">
+            <div className="input bg-bg-tertiary text-fg-tertiary cursor-not-allowed">
               {user.id}
             </div>
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-xs text-terminal-fg-secondary mb-1">
+            <label className="block text-xs text-fg-secondary mb-1.5 font-medium">
               Email
             </label>
             {editMode ? (
@@ -77,10 +80,10 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
                 type="email"
                 value={user.email}
                 onChange={(e) => setUser({ ...user, email: e.target.value })}
-                className="terminal-input w-full"
+                className="input w-full"
               />
             ) : (
-              <div className="terminal-input bg-terminal-bg-tertiary">
+              <div className="input bg-bg-tertiary">
                 {user.email}
               </div>
             )}
@@ -88,7 +91,7 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
 
           {/* Name */}
           <div>
-            <label className="block text-xs text-terminal-fg-secondary mb-1">
+            <label className="block text-xs text-fg-secondary mb-1.5 font-medium">
               Name
             </label>
             {editMode ? (
@@ -96,10 +99,10 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
                 type="text"
                 value={user.name}
                 onChange={(e) => setUser({ ...user, name: e.target.value })}
-                className="terminal-input w-full"
+                className="input w-full"
               />
             ) : (
-              <div className="terminal-input bg-terminal-bg-tertiary">
+              <div className="input bg-bg-tertiary">
                 {user.name}
               </div>
             )}
@@ -107,7 +110,7 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
 
           {/* Team */}
           <div>
-            <label className="block text-xs text-terminal-fg-secondary mb-1">
+            <label className="block text-xs text-fg-secondary mb-1.5 font-medium">
               Team Name
             </label>
             {editMode ? (
@@ -115,10 +118,10 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
                 type="text"
                 value={team.name}
                 onChange={(e) => setTeam({ ...team, name: e.target.value })}
-                className="terminal-input w-full"
+                className="input w-full"
               />
             ) : (
-              <div className="terminal-input bg-terminal-bg-tertiary">
+              <div className="input bg-bg-tertiary">
                 {team.name}
               </div>
             )}
@@ -126,10 +129,10 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
 
           {/* Created Date */}
           <div>
-            <label className="block text-xs text-terminal-fg-secondary mb-1">
+            <label className="block text-xs text-fg-secondary mb-1.5 font-medium">
               Account Created
             </label>
-            <div className="terminal-input bg-terminal-bg-tertiary text-terminal-fg-tertiary cursor-not-allowed">
+            <div className="input bg-bg-tertiary text-fg-tertiary cursor-not-allowed">
               {new Date(user.created_at).toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'long',
@@ -145,7 +148,7 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
             <div className="flex gap-3">
               <button
                 onClick={handleSave}
-                className="btn-terminal flex-1"
+                className="btn-primary flex-1"
               >
                 Save Changes
               </button>
@@ -155,7 +158,7 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
                   setTeam(UserStorage.getTeam());
                   setEditMode(false);
                 }}
-                className="btn-terminal-secondary flex-1"
+                className="btn-secondary flex-1"
               >
                 Cancel
               </button>
@@ -164,13 +167,13 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
             <>
               <button
                 onClick={() => setEditMode(true)}
-                className="btn-terminal w-full"
+                className="btn-primary w-full"
               >
                 Edit Profile
               </button>
               <button
                 onClick={handleLogout}
-                className="btn-terminal-secondary w-full text-terminal-accent-red hover:border-terminal-accent-red"
+                className="btn-secondary w-full text-accent-error hover:border-accent-error hover:text-accent-error"
               >
                 Logout & Clear Data
               </button>
@@ -179,9 +182,9 @@ export default function ProfileSettings({ onClose }: ProfileSettingsProps) {
         </div>
 
         {/* Info Note */}
-        <div className="mt-6 p-3 bg-terminal-bg-tertiary border border-terminal-border rounded">
-          <p className="text-xs text-terminal-fg-secondary">
-            💡 <span className="text-terminal-accent-blue">Note:</span> All data is stored locally in your browser.
+        <div className="mt-6 p-3 bg-bg-tertiary border border-border-primary rounded-lg">
+          <p className="text-xs text-fg-secondary leading-relaxed">
+            <span className="text-accent-info font-medium">Note:</span> All data is stored locally in your browser.
             Clearing your browser data will remove your profile and settings.
           </p>
         </div>

@@ -139,30 +139,53 @@ export default function ChatPanel({
       }
       console.log('[ChatPanel] LLM client created successfully');
 
-      // Send message directly to OpenRouter (client-side only)
-      setLoadingStatus('Generating AI response...');
-      const conversationHistory = messages.map((msg) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      }));
+      // Execute SystemAgent orchestrator
+      setLoadingStatus('Initializing SystemAgent...');
+      console.log('[ChatPanel] Executing SystemAgent for goal:', messageText);
 
-      // Add current user message to history
-      conversationHistory.push({
-        role: 'user' as const,
-        content: messageText,
+      const { executeSystemAgent } = await import('@/lib/system-agent-orchestrator');
+      const { getVFS } = await import('@/lib/virtual-fs');
+
+      const result = await executeSystemAgent(messageText);
+
+      console.log('[ChatPanel] SystemAgent result:', {
+        success: result.success,
+        filesCreated: result.filesCreated.length,
+        projectPath: result.projectPath,
       });
 
-      const assistantResponse = await client.chatDirect(conversationHistory);
-
-      console.log('[ChatPanel] Received response:', assistantResponse ? `${assistantResponse.substring(0, 200)}...` : 'EMPTY');
-      console.log('[ChatPanel] Response length:', assistantResponse?.length || 0);
-
       setLoadingStatus('Processing response...');
-      // Add assistant response
+
+      // Build response with project info and file paths
+      let assistantResponse = result.response || '';
+
+      if (result.success && result.projectPath) {
+        assistantResponse += `\n\n---\n\n**Project Created:** \`${result.projectPath}\`\n`;
+        assistantResponse += `**Files Created:** ${result.filesCreated.length}\n\n`;
+
+        // List files created
+        if (result.filesCreated.length > 0) {
+          assistantResponse += '**Files:**\n';
+          result.filesCreated.slice(0, 10).forEach(file => {
+            assistantResponse += `- \`${file}\`\n`;
+          });
+          if (result.filesCreated.length > 10) {
+            assistantResponse += `- ... and ${result.filesCreated.length - 10} more\n`;
+          }
+        }
+
+        // Show how to view files
+        assistantResponse += `\n💡 Check the **User** volume in the left panel to browse your project files.`;
+      }
+
+      if (!result.success && result.error) {
+        assistantResponse = `Error executing SystemAgent: ${result.error}`;
+      }
+
       console.log('[ChatPanel] Adding assistant message to session:', sessionId);
       addMessage(sessionId, {
         role: 'assistant',
-        content: assistantResponse || 'No response from assistant.',
+        content: assistantResponse,
       });
       console.log('[ChatPanel] Message added successfully');
     } catch (error) {

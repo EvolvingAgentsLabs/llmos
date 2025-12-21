@@ -14,13 +14,13 @@ interface IndustrySelectorProps {
 }
 
 const industries: Industry[] = [
-  'developer', // For quantum computing
-  'robotics',
-  'biology', // Will be repurposed for 3D animation
+  'biology', // 3D animation & visualization
+  'robotics', // Robotics simulation
+  'financial', // Data science & analytics
 ];
 
 const industryIcons: Record<Industry, string> = {
-  developer: '⚛️', // Quantum computing
+  developer: '💻',
   legal: '⚖️',
   financial: '📊',
   consulting: '📈',
@@ -31,23 +31,23 @@ const industryIcons: Record<Industry, string> = {
 };
 
 const industryLabels: Record<Industry, string> = {
-  developer: 'Quantum Computing',
+  developer: 'Developer',
   legal: 'Legal',
-  financial: 'Financial',
+  financial: 'Data Science',
   consulting: 'Consulting',
   biology: '3D Animation',
-  robotics: 'Robotic Simulation',
+  robotics: 'Robotics',
   audit: 'Audit',
   general: 'General',
 };
 
 const industryDetails: Record<Industry, string> = {
-  developer: 'Build and simulate quantum circuits, explore quantum algorithms and visualize quantum states',
+  developer: 'Build applications with AI assistance',
   legal: 'Legal research and documentation',
-  financial: 'Financial analysis and reporting',
+  financial: 'Data analysis, visualization, and machine learning with scipy, numpy, pandas, and scikit-learn',
   consulting: 'Business consulting and strategy',
-  biology: 'Create stunning 3D animations, model complex scenes, and render interactive experiences in the browser',
-  robotics: 'Simulate robots, plan movements, and visualize 3D trajectories in real-time',
+  biology: 'Create 3D animations and visualizations using matplotlib, plotly, and scientific computing libraries',
+  robotics: 'Simulate robots, plan movements, and visualize trajectories with scipy, numpy, and matplotlib',
   audit: 'Audit and compliance workflows',
   general: 'General purpose workflows',
 };
@@ -204,12 +204,12 @@ export default function IndustrySelector({ onSelect }: IndustrySelectorProps) {
  */
 function getIndustryCapability(industry: Industry): string {
   const capabilities: Record<Industry, string> = {
-    developer: 'Quantum circuit simulation with state vector visualization',
+    developer: 'Code generation and software development workflows',
     legal: 'Legal research and case analysis',
-    financial: 'Financial modeling and forecasting',
+    financial: 'Statistical analysis, machine learning models, and data visualization',
     consulting: 'Strategic framework development',
-    biology: '3D scene composition with physics and lighting',
-    robotics: 'Robot kinematics, path planning, and collision detection',
+    biology: '3D rendering, animation curves, and visual effects',
+    robotics: 'Kinematics, path planning, and physics simulation',
     audit: 'Compliance testing and verification',
     general: 'General purpose automation',
   };
