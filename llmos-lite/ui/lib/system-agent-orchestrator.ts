@@ -18,6 +18,17 @@ export interface SystemAgentResult {
   executionTime: number;
 }
 
+export interface AgentProgressEvent {
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed';
+  agent?: string;
+  action?: string;
+  tool?: string;
+  details?: string;
+  timestamp: number;
+}
+
+export type ProgressCallback = (event: AgentProgressEvent) => void;
+
 export interface ToolCallResult {
   toolId: string;
   toolName: string;
@@ -33,9 +44,20 @@ export interface ToolCallResult {
 export class SystemAgentOrchestrator {
   private systemPrompt: string;
   private maxIterations: number = 10;
+  private progressCallback?: ProgressCallback;
 
-  constructor(systemPrompt: string) {
+  constructor(systemPrompt: string, progressCallback?: ProgressCallback) {
     this.systemPrompt = systemPrompt;
+    this.progressCallback = progressCallback;
+  }
+
+  private emitProgress(event: Omit<AgentProgressEvent, 'timestamp'>) {
+    if (this.progressCallback) {
+      this.progressCallback({
+        ...event,
+        timestamp: Date.now(),
+      });
+    }
   }
 
   /**
@@ -68,9 +90,25 @@ export class SystemAgentOrchestrator {
       let iterations = 0;
       let finalResponse = '';
 
+      // Emit initial thinking event
+      this.emitProgress({
+        type: 'thinking',
+        agent: 'SystemAgent',
+        action: 'Reading system memory and planning approach',
+        details: 'Consulting /system/memory_log.md for similar past tasks',
+      });
+
       // Agent loop: LLM → Parse tools → Execute → LLM → ...
       while (iterations < this.maxIterations) {
         iterations++;
+
+        // Emit thinking event
+        this.emitProgress({
+          type: 'thinking',
+          agent: 'SystemAgent',
+          action: `Planning step ${iterations}/${this.maxIterations}`,
+          details: 'Analyzing context and determining next actions',
+        });
 
         // Call LLM
         const llmResponse = await llmClient.chatDirect(conversationHistory);
@@ -87,8 +125,53 @@ export class SystemAgentOrchestrator {
         // Execute tool calls
         let toolResults = '';
         for (const toolCall of toolCallsInResponse) {
+          // Emit tool call event
+          this.emitProgress({
+            type: 'tool-call',
+            agent: 'SystemAgent',
+            action: `Calling ${toolCall.toolName}`,
+            tool: toolCall.toolId,
+            details: this.getToolCallDetails(toolCall),
+          });
+
           try {
             const result = await executeSystemTool(toolCall.toolId, toolCall.inputs);
+
+            // Emit memory-query event if reading system memory
+            if (toolCall.toolId === 'read-file' &&
+                toolCall.inputs.path &&
+                (toolCall.inputs.path.includes('/system/memory_log.md') ||
+                 toolCall.inputs.path.includes('system/memory_log.md'))) {
+              this.emitProgress({
+                type: 'memory-query',
+                agent: 'SystemAgent',
+                action: 'Consulting system memory for past experiences',
+                details: 'Reading /system/memory_log.md to extract relevant learnings',
+              });
+            }
+
+            // Emit memory-query event if checking existing system agents
+            if (toolCall.toolId === 'read-file' &&
+                toolCall.inputs.path &&
+                (toolCall.inputs.path.includes('/system/agents/') ||
+                 toolCall.inputs.path.includes('system/agents/'))) {
+              const agentName = toolCall.inputs.path.split('/').pop()?.replace('.md', '') || 'agent';
+              this.emitProgress({
+                type: 'memory-query',
+                agent: 'SystemAgent',
+                action: `Checking existing ${agentName} for reuse`,
+                details: `Evaluating if ${agentName} can be evolved for this task`,
+              });
+            }
+
+            // Emit execution event
+            this.emitProgress({
+              type: 'execution',
+              agent: 'SystemAgent',
+              action: `${toolCall.toolName} completed successfully`,
+              tool: toolCall.toolId,
+              details: this.getToolResultSummary(toolCall, result),
+            });
 
             toolCalls.push({
               toolId: toolCall.toolId,
@@ -138,6 +221,14 @@ export class SystemAgentOrchestrator {
       }
 
       const executionTime = performance.now() - startTime;
+
+      // Emit completion event
+      this.emitProgress({
+        type: 'completed',
+        agent: 'SystemAgent',
+        action: 'Task completed successfully',
+        details: `Created ${filesCreated.length} file(s) in ${executionTime.toFixed(0)}ms`,
+      });
 
       return {
         success: true,
@@ -199,6 +290,77 @@ export class SystemAgentOrchestrator {
     prompt += 'You can make multiple tool calls in one response by including multiple ```tool blocks.\n\n';
 
     return prompt;
+  }
+
+  /**
+   * Get formatted details for a tool call
+   */
+  private getToolCallDetails(toolCall: {
+    toolId: string;
+    toolName: string;
+    inputs: Record<string, any>;
+  }): string {
+    // Format tool inputs for display
+    const inputKeys = Object.keys(toolCall.inputs);
+
+    if (inputKeys.length === 0) {
+      return 'No parameters';
+    }
+
+    // Special formatting for common tools
+    if (toolCall.toolId === 'write-file' && toolCall.inputs.path) {
+      return `Path: ${toolCall.inputs.path}`;
+    }
+
+    if (toolCall.toolId === 'read-file' && toolCall.inputs.path) {
+      return `Reading: ${toolCall.inputs.path}`;
+    }
+
+    if (toolCall.toolId === 'execute-python') {
+      const codePreview = toolCall.inputs.code?.substring(0, 50) || '';
+      return `Executing: ${codePreview}${codePreview.length >= 50 ? '...' : ''}`;
+    }
+
+    // Generic parameter list
+    return inputKeys.map(key => `${key}: ${JSON.stringify(toolCall.inputs[key]).substring(0, 30)}`).join(', ');
+  }
+
+  /**
+   * Get formatted summary of tool execution result
+   */
+  private getToolResultSummary(
+    toolCall: { toolId: string; toolName: string; inputs: Record<string, any> },
+    result: any
+  ): string {
+    // Format result based on tool type
+    if (toolCall.toolId === 'write-file') {
+      return `Written ${result.size || 0} bytes to ${result.path || 'file'}`;
+    }
+
+    if (toolCall.toolId === 'read-file') {
+      return `Read ${result.size || 0} bytes from ${result.type || 'unknown'} file`;
+    }
+
+    if (toolCall.toolId === 'execute-python') {
+      const hasOutput = result.stdout && result.stdout.length > 0;
+      const hasImages = result.images && result.images.length > 0;
+      const time = result.executionTime ? `${result.executionTime}ms` : 'unknown';
+
+      let summary = `Completed in ${time}`;
+      if (hasOutput) summary += `, produced output`;
+      if (hasImages) summary += `, generated ${result.images.length} plot(s)`;
+
+      return summary;
+    }
+
+    if (toolCall.toolId === 'list-directory') {
+      const fileCount = result.files?.length || 0;
+      const dirCount = result.directories?.length || 0;
+      return `Found ${fileCount} file(s), ${dirCount} director(ies)`;
+    }
+
+    // Generic success message
+    return 'Completed successfully';
   }
 
   /**
