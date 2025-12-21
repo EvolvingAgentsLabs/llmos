@@ -14,32 +14,32 @@ export interface SamplePrompt {
 }
 
 /**
- * Developer Sample Prompts (Original)
+ * Developer Sample Prompts (WebAssembly-compatible)
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Quantum Cepstral Analysis',
-    prompt: 'Create a circuit to perform quantum cepstral analysis of a cardiac pressure wave to detect echoes using 2-stage Fourier quantum transform with 4 qubits',
-    description: 'Quantum signal processing with visualization',
-    category: 'Quantum Computing',
+    title: 'Signal Processing & FFT',
+    prompt: 'Create a sine wave signal, add noise, then apply FFT to show frequency spectrum. Plot both time and frequency domains.',
+    description: 'Signal analysis with visualization',
+    category: 'Data Science',
   },
   {
-    title: 'Create REST API',
-    prompt: 'Create a FastAPI REST API for a task management system with CRUD operations, authentication, and PostgreSQL integration',
-    description: 'Full-stack API with auth and database',
-    category: 'Backend Development',
+    title: '3D Surface Plot',
+    prompt: 'Create a 3D surface plot of z = sin(sqrt(x^2 + y^2)) using matplotlib with a colorful gradient',
+    description: 'Interactive 3D visualization',
+    category: 'Visualization',
   },
   {
-    title: 'React Component',
-    prompt: 'Create a reusable React component library for data visualization with charts, tables, and interactive dashboards',
-    description: 'Component library with TypeScript',
-    category: 'Frontend Development',
+    title: 'Robot Kinematics',
+    prompt: 'Simulate a 2-link robot arm trajectory from (0,2) to (2,0) and animate it with matplotlib',
+    description: 'Robotics simulation and animation',
+    category: 'Robotics',
   },
   {
-    title: 'DevOps Pipeline',
-    prompt: 'Set up a CI/CD pipeline using GitHub Actions with automated testing, security scanning, and deployment to AWS',
-    description: 'Complete deployment automation',
-    category: 'DevOps',
+    title: 'Machine Learning Model',
+    prompt: 'Train a K-means clustering model on synthetic 2D data and visualize the clusters with matplotlib',
+    description: 'ML with scikit-learn visualization',
+    category: 'Machine Learning',
   },
 ];
 
@@ -68,26 +68,26 @@ const legalPrompts: SamplePrompt[] = [
 ];
 
 /**
- * Financial Services Sample Prompts
+ * Data Science & Analytics Sample Prompts
  */
 const financialPrompts: SamplePrompt[] = [
   {
-    title: 'DCF Valuation',
-    prompt: 'Perform a discounted cash flow valuation for a mid-cap technology company with 5-year projections, WACC calculation, and sensitivity analysis',
-    description: 'Complete equity valuation',
-    category: 'Investment Analysis',
+    title: 'Time Series Analysis',
+    prompt: 'Generate synthetic stock price data, calculate moving averages and Bollinger bands, visualize with matplotlib',
+    description: 'Financial time series visualization',
+    category: 'Time Series',
   },
   {
-    title: 'Portfolio Optimization',
-    prompt: 'Optimize a $10M portfolio across equities, bonds, and alternatives targeting 8% return with maximum 15% volatility using modern portfolio theory',
-    description: 'Risk-return optimization',
-    category: 'Portfolio Management',
+    title: 'Statistical Analysis',
+    prompt: 'Create a dataset with normal and outlier distributions, perform statistical tests and visualize with box plots and histograms',
+    description: 'Exploratory data analysis',
+    category: 'Statistics',
   },
   {
-    title: 'Credit Analysis',
-    prompt: 'Analyze the creditworthiness of a manufacturing company using financial ratios, cash flow analysis, and industry comparisons',
-    description: 'Credit risk assessment',
-    category: 'Credit Analysis',
+    title: 'Linear Regression Model',
+    prompt: 'Train a linear regression model on synthetic data, plot predictions vs actuals, and show residual analysis with scikit-learn',
+    description: 'Predictive modeling with visualization',
+    category: 'Machine Learning',
   },
 ];
 
@@ -116,50 +116,50 @@ const consultingPrompts: SamplePrompt[] = [
 ];
 
 /**
- * Biology Research Sample Prompts
+ * 3D Animation & Visualization Sample Prompts
  */
 const biologyPrompts: SamplePrompt[] = [
   {
-    title: 'CRISPR Protocol',
-    prompt: 'Design a CRISPR-Cas9 gene editing protocol for knockout of BRCA1 in HEK293 cells, including guide RNA design, transfection, and validation',
-    description: 'Gene editing experimental design',
-    category: 'Molecular Biology',
+    title: '3D Parametric Surface',
+    prompt: 'Create an animated 3D parametric surface showing a torus morphing into a sphere using matplotlib animation',
+    description: 'Mathematical surface animation',
+    category: '3D Visualization',
   },
   {
-    title: 'Protein Structure Prediction',
-    prompt: 'Predict the 3D structure of a novel enzyme using AlphaFold, identify active sites, and suggest potential ligands for drug development',
-    description: 'Computational biology analysis',
-    category: 'Structural Biology',
+    title: 'Particle System',
+    prompt: 'Simulate a 3D particle system with gravity and collisions, visualize trajectories with matplotlib scatter plot animation',
+    description: 'Physics-based animation',
+    category: 'Simulation',
   },
   {
-    title: 'RNA-seq Analysis',
-    prompt: 'Analyze differential gene expression from RNA-seq data comparing treated vs control samples, with pathway enrichment and visualization',
-    description: 'Transcriptomics analysis',
-    category: 'Bioinformatics',
+    title: 'Fourier Epicycles',
+    prompt: 'Animate Fourier epicycles drawing a complex shape in 2D, showing how circular motions combine to create patterns',
+    description: 'Mathematical animation',
+    category: 'Mathematics',
   },
 ];
 
 /**
- * Robotics & Control Sample Prompts
+ * Robotics & Control Sample Prompts (WebAssembly-compatible)
  */
 const roboticsPrompts: SamplePrompt[] = [
   {
-    title: 'PID Controller Tuning',
-    prompt: 'Design and tune a PID controller for a quadcopter altitude control system, with Ziegler-Nichols method and simulation validation',
-    description: 'Controller optimization',
+    title: 'Forward Kinematics',
+    prompt: 'Calculate and visualize forward kinematics for a 3-link planar robot arm, showing workspace and joint configurations with matplotlib',
+    description: 'Kinematics analysis and visualization',
+    category: 'Kinematics',
+  },
+  {
+    title: 'Trajectory Planning',
+    prompt: 'Generate a smooth trajectory for a robot end-effector using cubic splines, plot position, velocity, and acceleration profiles',
+    description: 'Motion planning with visualization',
+    category: 'Path Planning',
+  },
+  {
+    title: 'PID Controller Simulation',
+    prompt: 'Simulate a PID controller for position control, plot step response and tune gains using scipy optimization',
+    description: 'Control system design',
     category: 'Control Systems',
-  },
-  {
-    title: 'Path Planning',
-    prompt: 'Implement RRT* path planning for a mobile robot navigating a warehouse with dynamic obstacles, including trajectory optimization',
-    description: 'Motion planning algorithm',
-    category: 'Autonomous Navigation',
-  },
-  {
-    title: 'Robot Simulation',
-    prompt: 'Create a Gazebo simulation of a 6-DOF robotic arm with URDF model, joint controllers, and pick-and-place task validation',
-    description: 'Robot modeling and simulation',
-    category: 'Robotics Simulation',
   },
 ];
 
