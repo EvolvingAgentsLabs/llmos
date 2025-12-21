@@ -2,7 +2,7 @@
 
 **An AI Operating System That Actually Learns**
 
-LLMos-Lite isn't just another AI coding assistant—it's a **self-evolving operating system** that learns from every interaction, builds institutional knowledge, and gets smarter over time. Starting with quantum computing and WebAssembly-compatible data science, expanding to any domain you teach it.
+LLMos-Lite isn't just another AI coding assistant—it's a **self-evolving operating system** that learns from every interaction, builds institutional knowledge, and gets smarter over time. Optimized for WebAssembly-compatible scientific computing, data science, and 3D visualization, expanding to any domain you teach it.
 
 ---
 
@@ -121,7 +121,7 @@ Open http://localhost:3000
 ### 2. Setup
 
 1. Enter your OpenRouter API key
-2. Select your domain (Quantum Computing, Data Science, 3D Visualization)
+2. Select your use case (Signal Processing, Data Science, 3D Visualization, Robotics)
 3. Start chatting - the system learns your field
 
 ### 3. Your First Task
@@ -197,30 +197,51 @@ The system **remembers** and **reuses** successful patterns.
 
 ### WebAssembly-Compatible Domains
 
-**Signal Processing**
-- FFT analysis
-- Audio processing
-- Frequency domain operations
+**Signal Processing & Audio Analysis**
+- FFT spectrum analysis for audio signals
+- Digital filter design (low-pass, high-pass, band-pass)
+- Wavelet transforms and time-frequency analysis
+- Noise reduction and signal enhancement
+- Spectrograms and audio feature extraction
 
-**Data Science**
-- Statistical analysis
-- Machine learning with scikit-learn
-- Data visualization with matplotlib
+**Data Science & Machine Learning**
+- Classification models (SVM, Random Forest, Decision Trees)
+- Regression analysis and predictive modeling
+- Clustering algorithms (K-means, DBSCAN, hierarchical)
+- Principal Component Analysis (PCA) and dimensionality reduction
+- Time series analysis and forecasting
+- Interactive data visualizations with matplotlib
 
-**Scientific Computing**
-- Numerical simulations
-- Differential equations
-- Optimization problems
+**Scientific Computing & Simulation**
+- Numerical integration and differentiation
+- Solving differential equations (ODEs, PDEs)
+- Linear algebra operations and matrix decomposition
+- Optimization problems (linear, nonlinear, constrained)
+- Monte Carlo simulations
+- Statistical distributions and hypothesis testing
 
-**3D Visualization**
-- Matplotlib 3D plots
-- Surface plots
-- Scientific animations
+**3D Visualization & Modeling**
+- 3D surface plots and contour maps
+- Parametric curves and surfaces
+- Vector field visualization
+- Molecular structure visualization
+- Terrain modeling and topographic maps
+- Interactive 3D scatter plots
 
-**Robotics**
-- Kinematics simulations
-- Trajectory planning
-- Control systems
+**Robotics & Control Systems**
+- Forward and inverse kinematics
+- Trajectory planning and path optimization
+- PID controller tuning and simulation
+- Motion planning algorithms
+- Sensor fusion and Kalman filtering
+- Robot arm workspace analysis
+
+**Network & Graph Analysis**
+- Social network analysis
+- Graph algorithms (shortest path, centrality, clustering)
+- Network topology visualization
+- Flow optimization problems
+- Community detection
 
 ### Available Libraries (Browser-Compatible)
 
