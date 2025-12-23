@@ -23,6 +23,7 @@ interface MarkdownRendererProps {
   onExecutionStart?: (status: string) => void;
   onExecutionEnd?: () => void;
   onExecutionStatusChange?: (status: string) => void;
+  onOpenInCanvas?: (code: string, language: string) => void;
 }
 
 interface CodeBlockProps {
@@ -34,9 +35,10 @@ interface CodeBlockProps {
   onExecutionStart?: (status: string) => void;
   onExecutionEnd?: () => void;
   onExecutionStatusChange?: (status: string) => void;
+  onOpenInCanvas?: (code: string, language: string) => void;
 }
 
-function CodeBlock({ inline, className, children, enableExecution, onExecutionStart, onExecutionEnd, onExecutionStatusChange }: CodeBlockProps) {
+function CodeBlock({ inline, className, children, enableExecution, onExecutionStart, onExecutionEnd, onExecutionStatusChange, onOpenInCanvas }: CodeBlockProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<string>('');
   const [result, setResult] = useState<ExecutionResult | null>(null);
@@ -205,31 +207,46 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
             </div>
           )}
         </div>
-        {isExecutable && (
-          <button
-            onClick={handleExecute}
-            disabled={isExecuting}
-            className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 ${
-              isExecuting
-                ? 'bg-bg-tertiary text-fg-tertiary cursor-not-allowed'
-                : 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30 border border-accent-success/50'
-            }`}
-          >
-            {isExecuting ? (
-              <>
-                <div className="w-3 h-3 border-2 border-accent-success border-t-transparent rounded-full animate-spin" />
-                Running...
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Re-run
-              </>
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Open in Canvas button for Python and JavaScript/Three.js code */}
+          {(language === 'python' || language === 'py' || language === 'javascript' || language === 'js') && onOpenInCanvas && (
+            <button
+              onClick={() => onOpenInCanvas(codeString, language)}
+              className="px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 bg-accent-info/20 text-accent-info hover:bg-accent-info/30 border border-accent-info/50"
+              title="Open in interactive canvas"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Open in Canvas
+            </button>
+          )}
+          {isExecutable && (
+            <button
+              onClick={handleExecute}
+              disabled={isExecuting}
+              className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 ${
+                isExecuting
+                  ? 'bg-bg-tertiary text-fg-tertiary cursor-not-allowed'
+                  : 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30 border border-accent-success/50'
+              }`}
+            >
+              {isExecuting ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-accent-success border-t-transparent rounded-full animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Re-run
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Visual output or code based on toggle */}
@@ -448,9 +465,22 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
   );
 }
 
-export default function MarkdownRenderer({ content, enableCodeExecution = true, onExecutionStart, onExecutionEnd, onExecutionStatusChange }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, enableCodeExecution = true, onExecutionStart, onExecutionEnd, onExecutionStatusChange, onOpenInCanvas }: MarkdownRendererProps) {
   console.log('[MarkdownRenderer] Rendering with content length:', content?.length || 0);
-  console.log('[MarkdownRenderer] Content preview:', content?.substring(0, 100));
+  console.log('[MarkdownRenderer] Content preview:', content?.substring(0, 200));
+
+  // Check for images in content
+  const imageMatches = content?.match(/!\[([^\]]*)\]\(([^)]+)\)/g);
+  if (imageMatches) {
+    console.log('[MarkdownRenderer] Found images:', imageMatches.length);
+    imageMatches.forEach((match, idx) => {
+      const urlMatch = match.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+      if (urlMatch) {
+        const [, alt, src] = urlMatch;
+        console.log(`[MarkdownRenderer] Image ${idx + 1}:`, { alt, srcPreview: src.substring(0, 50) + '...' });
+      }
+    });
+  }
 
   return (
     <div className="markdown-content">
@@ -458,15 +488,30 @@ export default function MarkdownRenderer({ content, enableCodeExecution = true, 
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight, rehypeRaw]}
         components={{
-          code: (props) => <CodeBlock {...props} enableExecution={enableCodeExecution} onExecutionStart={onExecutionStart} onExecutionEnd={onExecutionEnd} onExecutionStatusChange={onExecutionStatusChange} />,
+          code: (props) => <CodeBlock {...props} enableExecution={enableCodeExecution} onExecutionStart={onExecutionStart} onExecutionEnd={onExecutionEnd} onExecutionStatusChange={onExecutionStatusChange} onOpenInCanvas={onOpenInCanvas} />,
           // Custom image renderer to handle base64 images
-          img: ({ node, ...props }) => (
-            <img
-              {...props}
-              className="max-w-full h-auto rounded-lg border border-border-primary my-4"
-              loading="lazy"
-            />
-          ),
+          img: ({ node, ...props }) => {
+            console.log('[MarkdownRenderer] Rendering image:', { alt: props.alt, srcPreview: props.src?.toString().substring(0, 50) });
+            return (
+              <img
+                {...props}
+                style={{ maxWidth: '100%', height: 'auto', display: 'block', margin: '1rem auto', borderRadius: '0.5rem', border: '1px solid rgb(var(--border-primary))' }}
+                loading="lazy"
+              />
+            );
+          },
+          // Custom paragraph renderer to avoid nesting issues with images
+          p: ({ node, children, ...props }) => {
+            // Check if paragraph only contains an image
+            const hasOnlyImage = node?.children?.length === 1 && node?.children[0]?.type === 'element' && (node?.children[0] as any)?.tagName === 'img';
+
+            if (hasOnlyImage) {
+              // Return children directly without <p> wrapper to avoid nesting issues
+              return <>{children}</>;
+            }
+
+            return <p {...props}>{children}</p>;
+          },
           // Custom link renderer with security
           a: ({ node, ...props }) => (
             <a
