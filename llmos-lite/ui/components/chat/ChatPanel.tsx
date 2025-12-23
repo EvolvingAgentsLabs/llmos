@@ -7,6 +7,8 @@ import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
 import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
+import ModelSelector from './ModelSelector';
+import CanvasModal from './CanvasModal';
 import type { Message } from '@/contexts/SessionContext';
 
 interface ChatPanelProps {
@@ -31,6 +33,11 @@ export default function ChatPanel({
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [codeExecutionStatus, setCodeExecutionStatus] = useState<string>('');
   const [agentActivities, setAgentActivities] = useState<AgentActivity[]>([]);
+  const [canvasModal, setCanvasModal] = useState<{ code: string; language: string; isOpen: boolean }>({
+    code: '',
+    language: '',
+    isOpen: false,
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = sessions.find((s) => s.id === activeSession);
@@ -166,12 +173,35 @@ export default function ChatPanel({
         success: result.success,
         filesCreated: result.filesCreated.length,
         projectPath: result.projectPath,
+        toolCallsCount: result.toolCalls?.length || 0,
       });
 
       setLoadingStatus('Processing response...');
 
       // Build response with project info and file paths
       let assistantResponse = result.response || '';
+
+      // Extract and embed images from Python execution tool calls
+      console.log('[ChatPanel] Checking for Python tool calls...', { toolCallsCount: result.toolCalls?.length || 0 });
+      const pythonToolCalls = result.toolCalls.filter(tc => tc.toolId === 'execute-python' && tc.success);
+      console.log('[ChatPanel] Found Python tool calls:', pythonToolCalls.length);
+
+      for (const toolCall of pythonToolCalls) {
+        console.log('[ChatPanel] Python tool call output:', {
+          hasImages: !!toolCall.output?.images,
+          imageCount: toolCall.output?.images?.length || 0,
+        });
+
+        if (toolCall.output?.images && Array.isArray(toolCall.output.images) && toolCall.output.images.length > 0) {
+          console.log('[ChatPanel] Embedding images in markdown...');
+          assistantResponse += '\n\n';
+          toolCall.output.images.forEach((base64Image: string, idx: number) => {
+            const imagePreview = base64Image.substring(0, 50);
+            console.log(`[ChatPanel] Adding image ${idx + 1}, base64 preview:`, imagePreview);
+            assistantResponse += `![Plot ${idx + 1}](data:image/png;base64,${base64Image})\n\n`;
+          });
+        }
+      }
 
       if (result.success && result.projectPath) {
         assistantResponse += `\n\n---\n\n**Project Created:** \`${result.projectPath}\`\n`;
@@ -197,6 +227,9 @@ export default function ChatPanel({
       }
 
       console.log('[ChatPanel] Adding assistant message to session:', sessionId);
+      console.log('[ChatPanel] Assistant response content preview:', assistantResponse.substring(0, 500));
+      console.log('[ChatPanel] Assistant response contains image markdown:', assistantResponse.includes('![Plot'));
+
       addMessage(sessionId, {
         role: 'assistant',
         content: assistantResponse,
@@ -225,13 +258,6 @@ export default function ChatPanel({
       <div className="h-full flex flex-col overflow-hidden">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
           <div className="max-w-2xl space-y-6 animate-fade-in">
-            {/* Welcome Icon */}
-            <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-glow-lg">
-              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </div>
-
             {/* Welcome Message */}
             <div className="space-y-2">
               <h2 className="heading-1 text-gradient">Welcome to LLMos-Lite</h2>
@@ -286,7 +312,17 @@ export default function ChatPanel({
         </div>
 
         {/* Input at bottom */}
-        <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl">
+        <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl space-y-3">
+          {/* Model Selector */}
+          <div className="flex justify-center">
+            <ModelSelector
+              dropdownPosition="top"
+              onModelChange={(modelId) => {
+                console.log('[ChatPanel] Model changed to:', modelId);
+              }}
+            />
+          </div>
+
           <div className="flex gap-2">
             <input
               type="text"
@@ -334,9 +370,14 @@ export default function ChatPanel({
             <span className="text-[10px] text-fg-tertiary">•</span>
             <span className="text-[10px] text-fg-tertiary">{currentSession.timeAgo}</span>
           </div>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentSession.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
-            {currentSession.status === 'temporal' ? 'Unsaved' : 'Saved'}
-          </span>
+          <div className="flex items-center gap-2">
+            <ModelSelector onModelChange={(modelId) => {
+              console.log('[ChatPanel] Model changed to:', modelId);
+            }} />
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentSession.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
+              {currentSession.status === 'temporal' ? 'Unsaved' : 'Saved'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -397,11 +438,22 @@ export default function ChatPanel({
                     onExecutionStatusChange={(status) => {
                       setCodeExecutionStatus(status);
                     }}
+                    onOpenInCanvas={(code, language) => {
+                      setCanvasModal({ code, language, isOpen: true });
+                    }}
                   />
                 ) : (
                   message.content
                 )}
               </div>
+
+              {/* Canvas Modal */}
+              <CanvasModal
+                code={canvasModal.code}
+                language={canvasModal.language}
+                isOpen={canvasModal.isOpen}
+                onClose={() => setCanvasModal({ ...canvasModal, isOpen: false })}
+              />
 
               {/* Metadata - Compact */}
               {(message.traces || message.artifact || message.pattern) && (

@@ -174,9 +174,15 @@ export const ExecutePythonTool: ToolDefinition = {
       description: 'Python code to execute',
       required: true,
     },
+    {
+      name: 'projectPath',
+      type: 'string',
+      description: 'Optional project path to save generated images (e.g., projects/my_project)',
+      required: false,
+    },
   ],
   execute: async (inputs) => {
-    const { code } = inputs;
+    const { code, projectPath } = inputs;
 
     if (!code || typeof code !== 'string') {
       throw new Error('Invalid code parameter');
@@ -188,12 +194,41 @@ export const ExecutePythonTool: ToolDefinition = {
       throw new Error(result.error || 'Python execution failed');
     }
 
+    // Save images to VFS if project path provided
+    const savedImagePaths: string[] = [];
+    if (projectPath && result.images && result.images.length > 0) {
+      const vfs = getVFS();
+      const visualizationPath = `${projectPath}/output/visualizations`;
+
+      for (let i = 0; i < result.images.length; i++) {
+        const base64Image = result.images[i];
+        const imageName = `plot_${Date.now()}_${i + 1}.png`;
+        const imagePath = `${visualizationPath}/${imageName}`;
+
+        // Save base64 image as a text file with metadata
+        const imageData = {
+          format: 'png',
+          base64: base64Image,
+          createdAt: new Date().toISOString(),
+          index: i + 1,
+        };
+
+        try {
+          vfs.writeFile(imagePath, JSON.stringify(imageData, null, 2));
+          savedImagePaths.push(imagePath);
+        } catch (error) {
+          console.warn(`Failed to save image to VFS: ${imagePath}`, error);
+        }
+      }
+    }
+
     return {
       success: true,
       stdout: result.stdout,
       stderr: result.stderr,
       output: result.output,
       images: result.images, // Base64 encoded matplotlib images
+      savedImages: savedImagePaths.length > 0 ? savedImagePaths : undefined,
       executionTime: result.executionTime,
     };
   },

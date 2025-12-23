@@ -584,7 +584,8 @@ Read content from a file path (supports `/system/*` and `projects/*`)
 ### execute-python
 Execute Python code in browser (Pyodide)
 - **code**: Python code to execute
-- **Returns**: stdout, stderr, images (matplotlib plots as base64)
+- **projectPath** (optional): Project path to save generated images (e.g., `projects/my_project`)
+- **Returns**: stdout, stderr, images (matplotlib plots as base64), savedImages (paths to saved images in VFS)
 
 ### list-directory
 List files and directories in a path

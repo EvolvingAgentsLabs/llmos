@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useArtifactStore } from '@/lib/artifacts/store';
 
 interface CanvasViewProps {
@@ -260,8 +260,81 @@ function FileIcon({ fileType, fileName }: { fileType?: string; fileName: string 
 
 // Code view component
 function CodeView({ node }: { node: { id: string; name: string; path: string; metadata?: { fileType?: string; readonly?: boolean } } }) {
-  // Mock file content based on file type
-  const getFileContent = () => {
+  const [fileContent, setFileContent] = useState<string>('');
+  const [imageData, setImageData] = useState<{ base64: string; format: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load actual file content from VFS or system
+  useEffect(() => {
+    async function loadFile() {
+      try {
+        setLoading(true);
+
+        // Handle system files (from public/system/)
+        if (node.path.startsWith('/system/') || node.path.startsWith('system/')) {
+          const systemPath = node.path.replace(/^\//, '');
+          const response = await fetch(`/${systemPath}`);
+          if (response.ok) {
+            const content = await response.text();
+            setFileContent(content);
+            setImageData(null);
+          } else {
+            setFileContent(`Error: System file not found: ${node.path}`);
+          }
+          setLoading(false);
+          return;
+        }
+
+        // Handle VFS files (projects/*)
+        const { getVFS } = await import('@/lib/virtual-fs');
+        const vfs = getVFS();
+        const file = vfs.readFile(node.path);
+
+        if (!file) {
+          setFileContent(getMockFileContent());
+          setImageData(null);
+          setLoading(false);
+          return;
+        }
+
+        // Check if this is a .png file with JSON image data
+        if (node.name.endsWith('.png')) {
+          try {
+            const imageJson = JSON.parse(file.content);
+            if (imageJson.base64 && imageJson.format) {
+              // This is a matplotlib plot saved as JSON
+              setImageData({
+                base64: imageJson.base64,
+                format: imageJson.format
+              });
+              setFileContent(''); // Clear text content when showing image
+            } else {
+              setFileContent(file.content);
+              setImageData(null);
+            }
+          } catch {
+            // Not JSON, show as regular file
+            setFileContent(file.content);
+            setImageData(null);
+          }
+        } else {
+          setFileContent(file.content);
+          setImageData(null);
+        }
+      } catch (error) {
+        console.error('Failed to load file:', error);
+        setFileContent(getMockFileContent());
+        setImageData(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFile();
+  }, [node.path, node.name]);
+
+  // Mock file content based on file type (fallback)
+  const getMockFileContent = () => {
     const fileType = node.metadata?.fileType;
 
     if (fileType === 'agent') {
@@ -434,10 +507,46 @@ ${node.metadata?.readonly ? '🔒 Read-only' : '✏️ Editable'}
 `;
   };
 
+  if (loading) {
+    return (
+      <div className="h-full bg-bg-primary flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-fg-tertiary">Loading file...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If this is an image, render it
+  if (imageData) {
+    return (
+      <div className="h-full bg-bg-primary overflow-auto">
+        <div className="p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-fg-primary mb-1">Matplotlib Plot</h3>
+              <p className="text-xs text-fg-tertiary">Generated visualization saved to VFS</p>
+            </div>
+            <div className="rounded-lg border border-border-primary overflow-hidden bg-bg-secondary/30">
+              <img
+                src={`data:image/${imageData.format};base64,${imageData.base64}`}
+                alt={node.name}
+                className="w-full h-auto"
+                style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Otherwise render text content
   return (
-    <div className="h-full bg-bg-primary">
+    <div className="h-full bg-bg-primary overflow-auto">
       <pre className="p-6 text-sm font-mono text-fg-secondary leading-relaxed whitespace-pre-wrap">
-        {getFileContent()}
+        {fileContent || getMockFileContent()}
       </pre>
     </div>
   );
