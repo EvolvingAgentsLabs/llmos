@@ -182,7 +182,7 @@ Start with scientific computing, teach it your domain through use, watch it beco
 
 ## 📝 License
 
-MIT License - See LICENSE file for details
+Apache 2.0 License - See LICENSE file for details
 
 ---
 
