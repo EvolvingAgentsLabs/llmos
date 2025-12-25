@@ -258,6 +258,107 @@ export class VirtualFileSystem {
   }
 
   /**
+   * Delete a directory and all its contents recursively
+   */
+  deleteDirectory(path: string): boolean {
+    if (typeof window === 'undefined') return false;
+
+    const normalizedPath = this.normalizePath(path);
+    const index = this.getIndex();
+
+    // Find all files under this directory
+    const filesToDelete = index.files.filter(f =>
+      f === normalizedPath || f.startsWith(normalizedPath + '/')
+    );
+
+    // Find all subdirectories under this directory
+    const dirsToDelete = index.directories.filter(d =>
+      d === normalizedPath || d.startsWith(normalizedPath + '/')
+    );
+
+    // Delete all files
+    for (const filePath of filesToDelete) {
+      localStorage.removeItem(VFS_PREFIX + filePath);
+    }
+
+    // Update index - remove files and directories
+    index.files = index.files.filter(f => !filesToDelete.includes(f));
+    index.directories = index.directories.filter(d => !dirsToDelete.includes(d));
+    this.updateIndex(index);
+
+    return true;
+  }
+
+  /**
+   * Rename a file or directory
+   */
+  rename(oldPath: string, newPath: string): boolean {
+    if (typeof window === 'undefined') return false;
+
+    const normalizedOld = this.normalizePath(oldPath);
+    const normalizedNew = this.normalizePath(newPath);
+    const index = this.getIndex();
+
+    // Check if it's a file
+    if (index.files.includes(normalizedOld)) {
+      const file = this.readFile(normalizedOld);
+      if (file) {
+        // Create new file with updated path
+        file.path = normalizedNew;
+        file.modified = new Date().toISOString();
+        localStorage.setItem(VFS_PREFIX + normalizedNew, JSON.stringify(file));
+        localStorage.removeItem(VFS_PREFIX + normalizedOld);
+
+        // Update index
+        index.files = index.files.filter(f => f !== normalizedOld);
+        index.files.push(normalizedNew);
+        this.ensureDirectories(normalizedNew);
+        this.updateIndex(index);
+        return true;
+      }
+    }
+
+    // Check if it's a directory
+    if (index.directories.includes(normalizedOld)) {
+      // Rename all files under this directory
+      const filesToRename = index.files.filter(f =>
+        f === normalizedOld || f.startsWith(normalizedOld + '/')
+      );
+      const dirsToRename = index.directories.filter(d =>
+        d === normalizedOld || d.startsWith(normalizedOld + '/')
+      );
+
+      // Rename files
+      for (const filePath of filesToRename) {
+        const newFilePath = filePath.replace(normalizedOld, normalizedNew);
+        const file = this.readFile(filePath);
+        if (file) {
+          file.path = newFilePath;
+          file.modified = new Date().toISOString();
+          localStorage.setItem(VFS_PREFIX + newFilePath, JSON.stringify(file));
+          localStorage.removeItem(VFS_PREFIX + filePath);
+        }
+      }
+
+      // Update index
+      index.files = index.files.filter(f => !filesToRename.includes(f));
+      filesToRename.forEach(f => {
+        index.files.push(f.replace(normalizedOld, normalizedNew));
+      });
+
+      index.directories = index.directories.filter(d => !dirsToRename.includes(d));
+      dirsToRename.forEach(d => {
+        index.directories.push(d.replace(normalizedOld, normalizedNew));
+      });
+
+      this.updateIndex(index);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Create a directory
    */
   createDirectory(path: string): void {
