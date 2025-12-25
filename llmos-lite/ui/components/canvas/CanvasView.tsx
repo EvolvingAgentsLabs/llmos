@@ -1,7 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useArtifactStore } from '@/lib/artifacts/store';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Monaco Editor to avoid SSR issues
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center bg-bg-primary">
+      <div className="text-fg-tertiary">Loading editor...</div>
+    </div>
+  ),
+});
 
 interface CanvasViewProps {
   volume: 'system' | 'team' | 'user';
@@ -258,17 +269,51 @@ function FileIcon({ fileType, fileName }: { fileType?: string; fileName: string 
   );
 }
 
-// Code view component
+// Code view component with Monaco Editor, edit/save, and run functionality
 function CodeView({ node }: { node: { id: string; name: string; path: string; metadata?: { fileType?: string; readonly?: boolean } } }) {
   const [fileContent, setFileContent] = useState<string>('');
+  const [originalContent, setOriginalContent] = useState<string>('');
   const [imageData, setImageData] = useState<{ base64: string; format: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [runOutput, setRunOutput] = useState<{ stdout: string; stderr: string } | null>(null);
+  const [showOutput, setShowOutput] = useState(false);
+
+  const isReadOnly = node.metadata?.readonly || node.path.startsWith('/system/') || node.path.startsWith('system/');
+  const isPythonFile = node.name.endsWith('.py');
+  const isVFSFile = node.path.startsWith('projects/') || node.id.startsWith('vfs-');
+
+  // Get language for Monaco Editor
+  const getLanguage = useCallback(() => {
+    const ext = node.name.split('.').pop()?.toLowerCase();
+    const langMap: Record<string, string> = {
+      'py': 'python',
+      'js': 'javascript',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'jsx': 'javascript',
+      'json': 'json',
+      'md': 'markdown',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'html': 'html',
+      'css': 'css',
+      'sql': 'sql',
+    };
+    return langMap[ext || ''] || 'plaintext';
+  }, [node.name]);
 
   // Load actual file content from VFS or system
   useEffect(() => {
     async function loadFile() {
       try {
         setLoading(true);
+        setRunOutput(null);
+        setShowOutput(false);
 
         // Handle system files (from public/system/)
         if (node.path.startsWith('/system/') || node.path.startsWith('system/')) {
@@ -277,9 +322,11 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
           if (response.ok) {
             const content = await response.text();
             setFileContent(content);
+            setOriginalContent(content);
             setImageData(null);
           } else {
             setFileContent(`Error: System file not found: ${node.path}`);
+            setOriginalContent('');
           }
           setLoading(false);
           return;
@@ -291,7 +338,9 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
         const file = vfs.readFile(node.path);
 
         if (!file) {
-          setFileContent(getMockFileContent());
+          const mockContent = getMockFileContent();
+          setFileContent(mockContent);
+          setOriginalContent(mockContent);
           setImageData(null);
           setLoading(false);
           return;
@@ -302,208 +351,197 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
           try {
             const imageJson = JSON.parse(file.content);
             if (imageJson.base64 && imageJson.format) {
-              // This is a matplotlib plot saved as JSON
               setImageData({
                 base64: imageJson.base64,
                 format: imageJson.format
               });
-              setFileContent(''); // Clear text content when showing image
+              setFileContent('');
+              setOriginalContent('');
             } else {
               setFileContent(file.content);
+              setOriginalContent(file.content);
               setImageData(null);
             }
           } catch {
-            // Not JSON, show as regular file
             setFileContent(file.content);
+            setOriginalContent(file.content);
             setImageData(null);
           }
         } else {
           setFileContent(file.content);
+          setOriginalContent(file.content);
           setImageData(null);
         }
       } catch (error) {
         console.error('Failed to load file:', error);
-        setFileContent(getMockFileContent());
+        const mockContent = getMockFileContent();
+        setFileContent(mockContent);
+        setOriginalContent(mockContent);
         setImageData(null);
       } finally {
         setLoading(false);
+        setIsDirty(false);
+        setIsEditing(false);
       }
     }
 
     loadFile();
-  }, [node.path, node.name]);
+  }, [node.path, node.name, node.id]);
+
+  // Handle content change
+  const handleContentChange = useCallback((value: string | undefined) => {
+    if (value !== undefined && isEditing) {
+      setFileContent(value);
+      setIsDirty(value !== originalContent);
+    }
+  }, [isEditing, originalContent]);
+
+  // Save file to VFS
+  const handleSave = useCallback(async () => {
+    if (!isDirty || !isVFSFile) return;
+
+    try {
+      setSaving(true);
+      const { getVFS } = await import('@/lib/virtual-fs');
+      const vfs = getVFS();
+      vfs.writeFile(node.path, fileContent);
+      setOriginalContent(fileContent);
+      setIsDirty(false);
+      console.log('File saved:', node.path);
+    } catch (error) {
+      console.error('Failed to save file:', error);
+    } finally {
+      setSaving(false);
+    }
+  }, [isDirty, isVFSFile, node.path, fileContent]);
+
+  // Cancel editing
+  const handleCancel = useCallback(() => {
+    setFileContent(originalContent);
+    setIsDirty(false);
+    setIsEditing(false);
+  }, [originalContent]);
+
+  // Copy to clipboard
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(fileContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [fileContent]);
+
+  // Run Python code using Pyodide
+  const handleRun = useCallback(async () => {
+    if (!isPythonFile || isRunning) return;
+
+    setIsRunning(true);
+    setShowOutput(true);
+    setRunOutput({ stdout: 'Initializing Python runtime...', stderr: '' });
+
+    try {
+      // Dynamic import of Pyodide
+      const { loadPyodide } = await import('pyodide');
+
+      setRunOutput({ stdout: 'Loading Pyodide...', stderr: '' });
+
+      const pyodide = await loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+      });
+
+      setRunOutput({ stdout: 'Installing packages...', stderr: '' });
+
+      // Load common packages
+      await pyodide.loadPackage(['numpy', 'micropip']);
+
+      // Try to load scipy and matplotlib
+      try {
+        await pyodide.loadPackage(['scipy', 'matplotlib']);
+      } catch {
+        console.log('Some packages not available, continuing...');
+      }
+
+      // Capture stdout/stderr
+      let stdout = '';
+      let stderr = '';
+
+      pyodide.setStdout({
+        batched: (text: string) => {
+          stdout += text + '\n';
+          setRunOutput({ stdout, stderr });
+        }
+      });
+
+      pyodide.setStderr({
+        batched: (text: string) => {
+          stderr += text + '\n';
+          setRunOutput({ stdout, stderr });
+        }
+      });
+
+      setRunOutput({ stdout: 'Running code...\n', stderr: '' });
+
+      // Run the code
+      const result = await pyodide.runPythonAsync(fileContent);
+
+      // Add result to output if not None
+      if (result !== undefined && result !== null) {
+        stdout += `\nResult: ${result}`;
+      }
+
+      setRunOutput({ stdout: stdout || 'Code executed successfully (no output)', stderr });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setRunOutput(prev => ({
+        stdout: prev?.stdout || '',
+        stderr: `Error: ${errorMessage}`
+      }));
+    } finally {
+      setIsRunning(false);
+    }
+  }, [isPythonFile, isRunning, fileContent]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && isEditing && isDirty) {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === 'Escape' && isEditing) {
+        handleCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isEditing, isDirty, handleSave, handleCancel]);
 
   // Mock file content based on file type (fallback)
   const getMockFileContent = () => {
     const fileType = node.metadata?.fileType;
 
     if (fileType === 'agent') {
-      return `# ${node.name.replace('.md', '')}
+      return `---
+name: ${node.name.replace('.md', '')}
+type: agent
+---
+
+# ${node.name.replace('.md', '')}
 
 ## Description
-An AI agent for automated research and information gathering.
+An AI agent definition file.
 
 ## Capabilities
-- Web search and content extraction
-- Document analysis and summarization
-- Multi-source information synthesis
-- Citation and reference management
-
-## Usage
-\`\`\`python
-from agents import ResearchAgent
-
-agent = ResearchAgent()
-result = agent.research("quantum computing applications")
-print(result.summary)
-\`\`\`
-
-## Configuration
-- **Model**: Claude 3.5 Sonnet
-- **Temperature**: 0.7
-- **Max Tokens**: 4096
-
-## Dependencies
-- anthropic
-- requests
-- beautifulsoup4
-`;
-    }
-
-    if (fileType === 'tool') {
-      return `# ${node.name.replace('.md', '')}
-
-## Description
-A utility tool for performing calculations and data processing.
-
-## Functions
-
-### calculate(expression: str) -> float
-Evaluates mathematical expressions safely.
-
-\`\`\`python
-result = calculator.calculate("(2 + 3) * 4")
-# Returns: 20.0
-\`\`\`
-
-### convert_units(value: float, from_unit: str, to_unit: str) -> float
-Converts between different units of measurement.
-
-\`\`\`python
-meters = calculator.convert_units(100, "cm", "m")
-# Returns: 1.0
-\`\`\`
-
-## API
-- Endpoint: \`/api/tools/calculator\`
-- Method: POST
-- Auth: Required
-`;
-    }
-
-    if (fileType === 'skill') {
-      return `# ${node.name.replace('.md', '')}
-
-## Overview
-A computational skill for quantum circuit simulation and analysis.
-
-## Parameters
-\`\`\`yaml
-name: quantum-vqe-node
-type: skill
-runtime: python
-version: 1.0.0
-\`\`\`
-
-## Implementation
-\`\`\`python
-import numpy as np
-from qiskit import QuantumCircuit, execute
-
-def quantum_vqe(hamiltonian, ansatz, optimizer):
-    """
-    Variational Quantum Eigensolver implementation
-    """
-    def cost_function(params):
-        qc = ansatz.bind_parameters(params)
-        result = execute(qc, backend).result()
-        return calculate_expectation(result, hamiltonian)
-
-    optimal_params = optimizer.minimize(cost_function)
-    return optimal_params
-\`\`\`
-
-## Inputs
-- \`hamiltonian\`: Quantum hamiltonian operator
-- \`ansatz\`: Parameterized quantum circuit
-- \`optimizer\`: Classical optimization algorithm
-
-## Outputs
-- \`energy\`: Ground state energy estimation
-- \`state\`: Optimal quantum state
-`;
-    }
-
-    if (fileType === 'runtime') {
-      return `// ${node.name}
-
-import { PyodideInterface } from 'pyodide';
-
-export class PyodideRuntime {
-  private pyodide: PyodideInterface | null = null;
-  private initialized = false;
-
-  async initialize(): Promise<void> {
-    if (this.initialized) return;
-
-    // Load Pyodide
-    const { loadPyodide } = await import('pyodide');
-    this.pyodide = await loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
-    });
-
-    // Install base packages
-    await this.pyodide.loadPackage(['numpy', 'matplotlib']);
-
-    this.initialized = true;
-  }
-
-  async execute(code: string): Promise<{
-    output: string;
-    error?: string;
-    images?: string[];
-  }> {
-    if (!this.pyodide) throw new Error('Runtime not initialized');
-
-    try {
-      const result = await this.pyodide.runPythonAsync(code);
-      return { output: String(result) };
-    } catch (error) {
-      return {
-        output: '',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-}
+- Autonomous task execution
+- Tool integration
+- Memory management
 `;
     }
 
     // Default content
     return `# ${node.name}
 
-This is a placeholder file in the ${node.path} path.
-
-Select a file from the explorer to view its contents here.
-
-## Features
-- Syntax highlighting
-- Code editing
-- File management
-- Version control integration
-
-## Status
-${node.metadata?.readonly ? '🔒 Read-only' : '✏️ Editable'}
+This is a placeholder file.
 `;
   };
 
@@ -542,12 +580,219 @@ ${node.metadata?.readonly ? '🔒 Read-only' : '✏️ Editable'}
     );
   }
 
-  // Otherwise render text content
+  // Render code editor with toolbar
   return (
-    <div className="h-full bg-bg-primary overflow-auto">
-      <pre className="p-6 text-sm font-mono text-fg-secondary leading-relaxed whitespace-pre-wrap">
-        {fileContent || getMockFileContent()}
-      </pre>
+    <div className="h-full flex flex-col bg-bg-primary">
+      {/* Toolbar */}
+      <div className="px-4 py-2 border-b border-border-primary/50 bg-bg-secondary/30 flex items-center justify-between">
+        <div className="flex items-center gap-3 text-xs text-fg-tertiary">
+          <span className="font-mono px-2 py-0.5 bg-bg-tertiary rounded">{getLanguage()}</span>
+          {isReadOnly ? (
+            <span className="flex items-center gap-1 text-yellow-400">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Read-only
+            </span>
+          ) : isEditing ? (
+            <span className="flex items-center gap-1 text-accent-primary">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Editing
+            </span>
+          ) : (
+            <span className="text-fg-tertiary">View mode</span>
+          )}
+          {isDirty && (
+            <span className="flex items-center gap-1 text-yellow-400">
+              <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+              Unsaved
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Run button (Python files only) */}
+          {isPythonFile && (
+            <button
+              onClick={handleRun}
+              disabled={isRunning}
+              className={`px-3 py-1 text-xs rounded flex items-center gap-1 transition-colors ${
+                isRunning
+                  ? 'bg-bg-tertiary text-fg-tertiary cursor-wait'
+                  : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
+              }`}
+              title="Run Python code"
+            >
+              {isRunning ? (
+                <>
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  Running...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Run
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Copy button */}
+          <button
+            onClick={handleCopy}
+            className="px-3 py-1 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary transition-colors flex items-center gap-1"
+            title="Copy code"
+          >
+            {copied ? (
+              <>
+                <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy
+              </>
+            )}
+          </button>
+
+          {/* Edit/Save/Cancel buttons */}
+          {!isReadOnly && isVFSFile && (
+            <>
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={handleCancel}
+                    className="px-3 py-1 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary transition-colors"
+                    title="Cancel (Esc)"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={!isDirty || saving}
+                    className={`px-3 py-1 text-xs rounded flex items-center gap-1 transition-colors ${
+                      isDirty && !saving
+                        ? 'bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 border border-accent-primary/30'
+                        : 'bg-bg-tertiary text-fg-tertiary cursor-not-allowed'
+                    }`}
+                    title="Save (Ctrl+S)"
+                  >
+                    {saving ? (
+                      <>
+                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-3 py-1 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary transition-colors flex items-center gap-1"
+                  title="Edit file"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Monaco Editor */}
+      <div className={`flex-1 overflow-hidden ${showOutput ? 'h-1/2' : ''}`}>
+        <MonacoEditor
+          height="100%"
+          language={getLanguage()}
+          value={fileContent}
+          onChange={handleContentChange}
+          theme="vs-dark"
+          options={{
+            readOnly: isReadOnly || !isEditing,
+            minimap: { enabled: fileContent.split('\n').length > 50 },
+            fontSize: 14,
+            lineNumbers: 'on',
+            roundedSelection: true,
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            tabSize: 2,
+            wordWrap: 'on',
+            folding: true,
+            lineDecorationsWidth: 10,
+            lineNumbersMinChars: 3,
+            renderLineHighlight: isEditing ? 'all' : 'none',
+            scrollbar: {
+              verticalScrollbarSize: 10,
+              horizontalScrollbarSize: 10,
+            },
+            cursorStyle: isEditing ? 'line' : 'line-thin',
+            cursorBlinking: isEditing ? 'blink' : 'solid',
+          }}
+        />
+      </div>
+
+      {/* Output Panel */}
+      {showOutput && runOutput && (
+        <div className="h-1/2 border-t border-border-primary flex flex-col">
+          <div className="px-4 py-2 bg-bg-secondary/50 flex items-center justify-between">
+            <span className="text-xs font-medium text-fg-secondary">Output</span>
+            <button
+              onClick={() => setShowOutput(false)}
+              className="text-fg-tertiary hover:text-fg-primary"
+              title="Close output"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-4 font-mono text-sm">
+            {runOutput.stdout && (
+              <pre className="text-fg-secondary whitespace-pre-wrap">{runOutput.stdout}</pre>
+            )}
+            {runOutput.stderr && (
+              <pre className="text-red-400 whitespace-pre-wrap mt-2">{runOutput.stderr}</pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Status bar */}
+      <div className="px-4 py-1 border-t border-border-primary/50 bg-bg-secondary/30 text-xs text-fg-tertiary flex items-center justify-between">
+        <span>{fileContent.split('\n').length} lines, {fileContent.length} characters</span>
+        {isEditing && (
+          <span>
+            Press <kbd className="px-1 py-0.5 rounded bg-bg-elevated text-[10px]">Ctrl+S</kbd> to save, <kbd className="px-1 py-0.5 rounded bg-bg-elevated text-[10px]">Esc</kbd> to cancel
+          </span>
+        )}
+      </div>
     </div>
   );
 }
