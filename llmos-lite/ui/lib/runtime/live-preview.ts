@@ -48,7 +48,7 @@ export class LivePreview {
     const { loadPyodide } = await import('pyodide');
 
     this.pyodide = await loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/'
+      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
     });
 
     // Set up output capture
