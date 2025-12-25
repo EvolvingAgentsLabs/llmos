@@ -3,10 +3,13 @@
  *
  * Executes Python-based sub-agents from volume files
  * Like Claude Code's custom agents
+ *
+ * Includes usage tracking for system evolution analysis
  */
 
 import { getVolumeFileSystem, VolumeType } from '../volumes/file-operations';
 import { getLivePreview } from '../runtime/live-preview';
+import { recordSubAgentExecution } from './usage-tracker';
 
 export interface SubAgentDefinition {
   name: string;
@@ -123,6 +126,10 @@ export class SubAgentExecutor {
   ): Promise<AgentExecutionResult> {
     const startTime = Date.now();
 
+    // Get agent definition for tracking
+    const agentDef = this.loadedAgents.get(`${volume}:${agentPath}`);
+    const agentName = agentDef?.name || agentPath.split('/').pop()?.replace('.py', '') || 'unknown';
+
     try {
       // Load agent code
       const agentCode = await this.fs.readFile(volume, agentPath);
@@ -137,18 +144,46 @@ export class SubAgentExecutor {
         { capturePlots: true }
       );
 
+      const executionTime = Date.now() - startTime;
+
+      // Track usage for system evolution analysis
+      recordSubAgentExecution(
+        agentPath,
+        agentName,
+        volume,
+        task,
+        result.success,
+        executionTime
+      );
+
+      console.log(`[SubAgentExecutor] Executed ${agentName} (${volume}): success=${result.success}, time=${executionTime}ms`);
+
       return {
         success: result.success,
         output: result.stdout || result.stderr || '',
         error: result.error,
-        executionTime: Date.now() - startTime
+        executionTime
       };
     } catch (error) {
+      const executionTime = Date.now() - startTime;
+
+      // Track failed execution
+      recordSubAgentExecution(
+        agentPath,
+        agentName,
+        volume,
+        task,
+        false,
+        executionTime
+      );
+
+      console.log(`[SubAgentExecutor] Execution failed for ${agentName} (${volume}): ${error}`);
+
       return {
         success: false,
         output: '',
         error: error instanceof Error ? error.message : String(error),
-        executionTime: Date.now() - startTime
+        executionTime
       };
     }
   }

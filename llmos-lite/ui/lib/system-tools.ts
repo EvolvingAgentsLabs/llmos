@@ -1,11 +1,14 @@
 /**
  * System Tools for LLMunix SystemAgent
  *
- * Provides file system, Python execution, and agent creation tools
+ * Provides file system, Python execution, sub-agent delegation, and orchestration tools
  */
 
 import { getVFS } from './virtual-fs';
 import { executePython } from './pyodide-runtime';
+import { getSubAgentExecutor } from './subagents/subagent-executor';
+import { getSubAgentUsage, SubAgentUsageRecord } from './subagents/usage-tracker';
+import type { VolumeType } from './volumes/file-operations';
 
 export interface ToolDefinition {
   id: string;
@@ -235,6 +238,356 @@ export const ExecutePythonTool: ToolDefinition = {
 };
 
 /**
+ * Discover Sub-Agents Tool
+ * Lists available markdown sub-agent definitions with usage statistics
+ */
+export const DiscoverSubAgentsTool: ToolDefinition = {
+  id: 'discover-subagents',
+  name: 'Discover Sub-Agents',
+  description: 'Discover available markdown sub-agent definitions. Searches /system/agents/ for system agents and projects/*/components/agents/ for project-specific agents. Returns agent metadata and usage statistics to help decide which agent to use.',
+  inputs: [
+    {
+      name: 'location',
+      type: 'string',
+      description: 'Where to search: "system" for /system/agents/, "projects" for all projects, or specific path like "projects/my_project/components/agents/"',
+      required: false,
+    },
+    {
+      name: 'capability',
+      type: 'string',
+      description: 'Optional capability filter (e.g., "signal processing", "FFT", "data analysis")',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { location, capability } = inputs;
+    const vfs = getVFS();
+    const usageStats = getSubAgentUsage();
+
+    interface AgentInfo {
+      name: string;
+      path: string;
+      location: string;
+      type?: string;
+      description?: string;
+      capabilities: string[];
+      libraries: string[];
+      usageCount: number;
+      successRate: number | null;
+      lastUsed: string | null;
+    }
+
+    const agents: AgentInfo[] = [];
+
+    // Helper to parse frontmatter from markdown
+    const parseAgentFrontmatter = (content: string, filePath: string): Partial<AgentInfo> => {
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      const result: Partial<AgentInfo> = { capabilities: [], libraries: [] };
+
+      if (!frontmatterMatch) return result;
+
+      const frontmatter = frontmatterMatch[1];
+
+      // Parse YAML-like frontmatter
+      const nameMatch = frontmatter.match(/name:\s*(.+)/);
+      result.name = nameMatch ? nameMatch[1].trim() : filePath.split('/').pop()?.replace('.md', '');
+
+      const typeMatch = frontmatter.match(/type:\s*(.+)/);
+      if (typeMatch) result.type = typeMatch[1].trim();
+
+      // Try to get description from frontmatter or first paragraph
+      const descMatch = frontmatter.match(/description:\s*(.+)/);
+      if (descMatch) {
+        result.description = descMatch[1].trim();
+      } else {
+        // Try first heading after frontmatter
+        const headingMatch = content.match(/^#\s+(.+)/m);
+        if (headingMatch) result.description = headingMatch[1].trim();
+      }
+
+      // Parse capabilities array
+      const capMatch = frontmatter.match(/capabilities:\n((?:\s+-\s+.+\n?)+)/);
+      if (capMatch) {
+        result.capabilities = capMatch[1]
+          .split('\n')
+          .filter(line => line.trim().startsWith('-'))
+          .map(line => line.replace(/^\s*-\s*/, '').trim())
+          .filter(Boolean);
+      }
+
+      // Parse libraries array
+      const libMatch = frontmatter.match(/libraries:\n((?:\s+-\s+.+\n?)+)/);
+      if (libMatch) {
+        result.libraries = libMatch[1]
+          .split('\n')
+          .filter(line => line.trim().startsWith('-'))
+          .map(line => line.replace(/^\s*-\s*/, '').trim())
+          .filter(Boolean);
+      }
+
+      return result;
+    };
+
+    // Search system agents (via fetch since they're in public/)
+    const searchSystem = !location || location === 'system';
+    if (searchSystem) {
+      // Known system agents (since we can't list directory contents via fetch)
+      const knownSystemAgents = [
+        'researcher.md',
+        'artifact-refiner.md',
+        'code-debugger.md',
+        'MemoryAnalysisAgent.md',
+        'MemoryConsolidationAgent.md',
+      ];
+
+      for (const fileName of knownSystemAgents) {
+        try {
+          const response = await fetch(`/system/agents/${fileName}`);
+          if (response.ok) {
+            const content = await response.text();
+            const agentPath = `/system/agents/${fileName}`;
+            const parsed = parseAgentFrontmatter(content, agentPath);
+            const usage = usageStats.find(u => u.agentPath === agentPath);
+
+            agents.push({
+              name: parsed.name || fileName.replace('.md', ''),
+              path: agentPath,
+              location: 'system',
+              type: parsed.type,
+              description: parsed.description,
+              capabilities: parsed.capabilities || [],
+              libraries: parsed.libraries || [],
+              usageCount: usage?.executionCount || 0,
+              successRate: usage
+                ? Math.round((usage.successCount / Math.max(1, usage.executionCount)) * 100)
+                : null,
+              lastUsed: usage?.lastExecuted || null,
+            });
+          }
+        } catch (e) {
+          // Agent doesn't exist or can't be read
+        }
+      }
+    }
+
+    // Search project agents (via VFS)
+    const searchProjects = !location || location === 'projects' || location?.startsWith('projects/');
+    if (searchProjects) {
+      const projectsToSearch: string[] = [];
+
+      if (location?.startsWith('projects/') && location !== 'projects') {
+        // Specific project path
+        projectsToSearch.push(location.replace(/\/components\/agents\/?$/, ''));
+      } else {
+        // List all projects
+        try {
+          const { directories } = vfs.listDirectory('projects');
+          projectsToSearch.push(...directories);
+        } catch (e) {
+          // No projects directory
+        }
+      }
+
+      for (const projectPath of projectsToSearch) {
+        const agentsDir = `${projectPath}/components/agents`;
+        try {
+          const { files } = vfs.listDirectory(agentsDir);
+          for (const file of files) {
+            if (!file.path.endsWith('.md')) continue;
+
+            const content = vfs.readFileContent(file.path);
+            if (!content) continue;
+
+            const parsed = parseAgentFrontmatter(content, file.path);
+            const usage = usageStats.find(u => u.agentPath === file.path);
+
+            agents.push({
+              name: parsed.name || file.path.split('/').pop()?.replace('.md', '') || 'Unknown',
+              path: file.path,
+              location: projectPath,
+              type: parsed.type,
+              description: parsed.description,
+              capabilities: parsed.capabilities || [],
+              libraries: parsed.libraries || [],
+              usageCount: usage?.executionCount || 0,
+              successRate: usage
+                ? Math.round((usage.successCount / Math.max(1, usage.executionCount)) * 100)
+                : null,
+              lastUsed: usage?.lastExecuted || null,
+            });
+          }
+        } catch (e) {
+          // No agents directory in this project
+        }
+      }
+    }
+
+    // Apply capability filter
+    let filteredAgents = agents;
+    if (capability) {
+      const searchTerm = capability.toLowerCase();
+      filteredAgents = agents.filter(a =>
+        a.capabilities.some(cap => cap.toLowerCase().includes(searchTerm)) ||
+        a.description?.toLowerCase().includes(searchTerm) ||
+        a.name.toLowerCase().includes(searchTerm) ||
+        a.libraries.some(lib => lib.toLowerCase().includes(searchTerm))
+      );
+    }
+
+    // Sort by usage (most used first), then by location (system first)
+    filteredAgents.sort((a, b) => {
+      if (b.usageCount !== a.usageCount) return b.usageCount - a.usageCount;
+      if (a.location === 'system' && b.location !== 'system') return -1;
+      if (b.location === 'system' && a.location !== 'system') return 1;
+      return 0;
+    });
+
+    return {
+      success: true,
+      totalAgents: filteredAgents.length,
+      agents: filteredAgents,
+      message: `Found ${filteredAgents.length} sub-agent definition(s)`,
+      hint: 'To use an agent: 1) Read its definition with read-file, 2) Generate code following its instructions, 3) Execute with invoke-subagent to track usage.',
+    };
+  },
+};
+
+/**
+ * Invoke Sub-Agent Tool
+ * Executes Python code on behalf of a markdown sub-agent and tracks usage
+ */
+export const InvokeSubAgentTool: ToolDefinition = {
+  id: 'invoke-subagent',
+  name: 'Invoke Sub-Agent',
+  description: 'Execute Python code on behalf of a markdown sub-agent. This tracks the agent\'s usage for evolution analysis. Use this instead of execute-python when running code generated from a sub-agent\'s instructions.',
+  inputs: [
+    {
+      name: 'agentPath',
+      type: 'string',
+      description: 'Path to the markdown sub-agent definition (e.g., /system/agents/SignalProcessorAgent.md or projects/my_project/components/agents/MyAgent.md)',
+      required: true,
+    },
+    {
+      name: 'agentName',
+      type: 'string',
+      description: 'Name of the sub-agent being invoked',
+      required: true,
+    },
+    {
+      name: 'task',
+      type: 'string',
+      description: 'Brief description of the task being performed',
+      required: true,
+    },
+    {
+      name: 'code',
+      type: 'string',
+      description: 'Python code generated based on the agent\'s instructions',
+      required: true,
+    },
+    {
+      name: 'projectPath',
+      type: 'string',
+      description: 'Optional project path to save generated images',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { agentPath, agentName, task, code, projectPath } = inputs;
+    const startTime = Date.now();
+
+    if (!agentPath || typeof agentPath !== 'string') {
+      throw new Error('Invalid agentPath parameter');
+    }
+
+    if (!code || typeof code !== 'string') {
+      throw new Error('Invalid code parameter');
+    }
+
+    console.log(`[InvokeSubAgent] Invoking ${agentName} from ${agentPath}`);
+    console.log(`[InvokeSubAgent] Task: ${task?.substring(0, 100)}...`);
+
+    // Execute the Python code
+    const result = await executePython(code);
+
+    const executionTime = Date.now() - startTime;
+
+    // Determine volume from path for tracking
+    let volume: VolumeType = 'user';
+    if (agentPath.startsWith('/system/') || agentPath.startsWith('system/')) {
+      volume = 'system';
+    } else if (agentPath.includes('team/')) {
+      volume = 'team';
+    }
+
+    // Track usage for evolution analysis
+    const { recordSubAgentExecution } = await import('./subagents/usage-tracker');
+    recordSubAgentExecution(
+      agentPath,
+      agentName || agentPath.split('/').pop()?.replace('.md', '') || 'unknown',
+      volume,
+      task || 'Unknown task',
+      result.success,
+      executionTime
+    );
+
+    // Save images to VFS if project path provided
+    const savedImagePaths: string[] = [];
+    if (projectPath && result.images && result.images.length > 0) {
+      const visualizationPath = `${projectPath}/output/visualizations`;
+
+      for (let i = 0; i < result.images.length; i++) {
+        const base64Image = result.images[i];
+        const imageName = `plot_${Date.now()}_${i + 1}.png`;
+        const imagePath = `${visualizationPath}/${imageName}`;
+
+        const imageData = {
+          format: 'png',
+          base64: base64Image,
+          createdAt: new Date().toISOString(),
+          index: i + 1,
+          agent: agentName,
+        };
+
+        try {
+          const vfs = getVFS();
+          vfs.writeFile(imagePath, JSON.stringify(imageData, null, 2));
+          savedImagePaths.push(imagePath);
+        } catch (error) {
+          console.warn(`Failed to save image to VFS: ${imagePath}`, error);
+        }
+      }
+    }
+
+    if (!result.success) {
+      return {
+        success: false,
+        agentPath,
+        agentName,
+        task,
+        error: result.error || 'Execution failed',
+        executionTime,
+        message: `Sub-agent ${agentName} failed: ${result.error}`,
+      };
+    }
+
+    return {
+      success: true,
+      agentPath,
+      agentName,
+      task,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      output: result.output,
+      images: result.images,
+      savedImages: savedImagePaths.length > 0 ? savedImagePaths : undefined,
+      executionTime,
+      message: `Sub-agent ${agentName} completed successfully in ${executionTime}ms`,
+    };
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -243,6 +596,8 @@ export function getSystemTools(): ToolDefinition[] {
     ReadFileTool,
     ListDirectoryTool,
     ExecutePythonTool,
+    DiscoverSubAgentsTool,
+    InvokeSubAgentTool,
   ];
 }
 

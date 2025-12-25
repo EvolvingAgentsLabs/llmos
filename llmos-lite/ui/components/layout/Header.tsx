@@ -3,15 +3,20 @@
 import { useEffect, useState } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import dynamic from 'next/dynamic';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Zap } from 'lucide-react';
 
 const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
+  ssr: false,
+});
+
+const SystemEvolutionModal = dynamic(() => import('@/components/evolution/SystemEvolutionModal'), {
   ssr: false,
 });
 
 export default function Header() {
   const [userDisplay, setUserDisplay] = useState('loading...');
   const [showSettings, setShowSettings] = useState(false);
+  const [showEvolution, setShowEvolution] = useState(false);
 
   useEffect(() => {
     setUserDisplay(UserStorage.getUserDisplay());
@@ -41,6 +46,21 @@ export default function Header() {
 
         {/* Right side: User info and status */}
         <div className="flex items-center gap-3 md:gap-4">
+          {/* System Evolution button */}
+          <button
+            onClick={() => setShowEvolution(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200
+                       bg-gradient-to-r from-accent-primary/10 to-accent-secondary/10
+                       hover:from-accent-primary/20 hover:to-accent-secondary/20
+                       border border-accent-primary/30 hover:border-accent-primary/50"
+            title="Run System Evolution analysis"
+          >
+            <Zap className="w-4 h-4 text-accent-primary" />
+            <span className="hidden md:inline text-sm font-medium text-accent-primary">
+              Evolve
+            </span>
+          </button>
+
           {/* User profile button */}
           <button
             onClick={() => setShowSettings(true)}
@@ -75,6 +95,11 @@ export default function Header() {
       {/* Settings modal */}
       {showSettings && (
         <ProfileSettings onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* System Evolution modal */}
+      {showEvolution && (
+        <SystemEvolutionModal onClose={() => setShowEvolution(false)} />
       )}
     </>
   );
