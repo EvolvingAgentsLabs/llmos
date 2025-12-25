@@ -2,11 +2,19 @@
  * SystemAgent Orchestrator
  *
  * Coordinates the execution of the SystemAgent with tool access
+ * Uses WorkflowContextManager for intelligent context management
+ * Supports artifact evolution and system memory updates
  */
 
 import { createLLMClient, Message } from './llm-client';
 import { executeSystemTool, getSystemTools } from './system-tools';
 import { getVFS } from './virtual-fs';
+import {
+  WorkflowContextManager,
+  createWorkflowContextManager,
+  SummarizationStrategy,
+  ContextManagerConfig,
+} from './workflow-context-manager';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -16,10 +24,21 @@ export interface SystemAgentResult {
   projectPath?: string;
   error?: string;
   executionTime: number;
+  workflowId?: string;
+  contextStats?: {
+    totalTokens: number;
+    wasSummarized: boolean;
+    summarizationSteps?: number;
+    strategy?: SummarizationStrategy;
+  };
+  evolution?: {
+    memoryUpdated: boolean;
+    learnings: string[];
+  };
 }
 
 export interface AgentProgressEvent {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution';
   agent?: string;
   action?: string;
   tool?: string;
@@ -38,6 +57,79 @@ export interface ToolCallResult {
   error?: string;
 }
 
+export interface OrchestratorConfig {
+  /** Maximum iterations for the agent loop (default: 10) */
+  maxIterations: number;
+  /** Summarization strategy (default: 'balanced') */
+  strategy: SummarizationStrategy;
+  /** Whether to update system memory after execution (default: true) */
+  updateSystemMemory: boolean;
+  /** Whether to persist workflow history (default: true) */
+  persistWorkflow: boolean;
+  /** Context manager configuration overrides */
+  contextConfig?: Partial<ContextManagerConfig>;
+}
+
+export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
+  maxIterations: 10,
+  strategy: 'balanced',
+  updateSystemMemory: true,
+  persistWorkflow: true,
+};
+
+// Token management constants
+const MAX_TOOL_RESULT_LENGTH = 8000; // Truncate large tool results
+
+/**
+ * Truncate text to max length with ellipsis
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength - 100) + '\n\n... [truncated - content too long] ...\n';
+}
+
+/**
+ * Summarize tool result for context efficiency
+ */
+function summarizeToolResult(result: any, toolId: string): string {
+  const resultStr = JSON.stringify(result, null, 2);
+
+  // Always truncate large results
+  if (resultStr.length > MAX_TOOL_RESULT_LENGTH) {
+    // For file reads, keep beginning and end
+    if (toolId === 'read-file' && result.content) {
+      const content = result.content;
+      if (content.length > MAX_TOOL_RESULT_LENGTH) {
+        const halfLen = Math.floor(MAX_TOOL_RESULT_LENGTH / 2) - 50;
+        return JSON.stringify({
+          ...result,
+          content: content.substring(0, halfLen) +
+            '\n\n... [content truncated for context efficiency] ...\n\n' +
+            content.substring(content.length - halfLen),
+          _truncated: true
+        }, null, 2);
+      }
+    }
+
+    // For Python execution, keep stdout/stderr and truncate
+    if (toolId === 'execute-python') {
+      return JSON.stringify({
+        success: result.success,
+        stdout: truncateText(result.stdout || '', 2000),
+        stderr: truncateText(result.stderr || '', 1000),
+        executionTime: result.executionTime,
+        images: result.images?.length ? `[${result.images.length} image(s) generated]` : undefined,
+        _truncated: true
+      }, null, 2);
+    }
+
+    // Generic truncation
+    return truncateText(resultStr, MAX_TOOL_RESULT_LENGTH);
+  }
+
+  return resultStr;
+}
+
 /**
  * SystemAgent Orchestrator
  */
@@ -45,10 +137,24 @@ export class SystemAgentOrchestrator {
   private systemPrompt: string;
   private maxIterations: number = 10;
   private progressCallback?: ProgressCallback;
+  private contextManager: WorkflowContextManager;
+  private config: OrchestratorConfig;
 
-  constructor(systemPrompt: string, progressCallback?: ProgressCallback) {
+  constructor(
+    systemPrompt: string,
+    progressCallback?: ProgressCallback,
+    config: Partial<OrchestratorConfig> = {}
+  ) {
     this.systemPrompt = systemPrompt;
     this.progressCallback = progressCallback;
+    this.config = { ...DEFAULT_ORCHESTRATOR_CONFIG, ...config };
+    this.maxIterations = this.config.maxIterations;
+
+    // Create context manager with strategy and config
+    this.contextManager = createWorkflowContextManager({
+      strategy: this.config.strategy,
+      ...this.config.contextConfig,
+    });
   }
 
   private emitProgress(event: Omit<AgentProgressEvent, 'timestamp'>) {
@@ -61,6 +167,26 @@ export class SystemAgentOrchestrator {
   }
 
   /**
+   * Create LLM summarizer function for context management
+   */
+  private createSummarizer(llmClient: ReturnType<typeof createLLMClient>) {
+    return async (prompt: string): Promise<string> => {
+      const messages: Message[] = [
+        {
+          role: 'system',
+          content: 'You are a context summarization assistant. Your task is to create concise but comprehensive summaries of workflow context, preserving key information relevant to the user\'s goal.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ];
+
+      return await llmClient!.chatDirect(messages);
+    };
+  }
+
+  /**
    * Execute the SystemAgent with a user goal
    */
   async execute(userGoal: string): Promise<SystemAgentResult> {
@@ -68,6 +194,7 @@ export class SystemAgentOrchestrator {
     const toolCalls: ToolCallResult[] = [];
     const filesCreated: string[] = [];
     let projectPath: string | undefined;
+    let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
 
     try {
       const llmClient = createLLMClient();
@@ -75,17 +202,9 @@ export class SystemAgentOrchestrator {
         throw new Error('LLM client not configured');
       }
 
-      // Build conversation with system prompt and tools
-      const conversationHistory: Message[] = [
-        {
-          role: 'system',
-          content: this.buildSystemPromptWithTools(),
-        },
-        {
-          role: 'user',
-          content: userGoal,
-        },
-      ];
+      // Initialize context manager with system prompt and user goal
+      const systemPromptWithTools = this.buildSystemPromptWithTools();
+      this.contextManager.initialize(systemPromptWithTools, userGoal);
 
       let iterations = 0;
       let finalResponse = '';
@@ -97,6 +216,9 @@ export class SystemAgentOrchestrator {
         action: 'Reading system memory and planning approach',
         details: 'Consulting /system/memory_log.md for similar past tasks',
       });
+
+      // Create summarizer function
+      const summarizer = this.createSummarizer(llmClient);
 
       // Agent loop: LLM → Parse tools → Execute → LLM → ...
       while (iterations < this.maxIterations) {
@@ -110,8 +232,31 @@ export class SystemAgentOrchestrator {
           details: 'Analyzing context and determining next actions',
         });
 
-        // Call LLM
-        const llmResponse = await llmClient.chatDirect(conversationHistory);
+        // Build context with iterative summarization if needed
+        const currentStep = `Step ${iterations}/${this.maxIterations}: ${iterations === 1 ? 'Initial planning' : 'Continuing workflow'}`;
+
+        const contextResult = await this.contextManager.buildContext(
+          currentStep,
+          summarizer,
+          (step, details) => {
+            // Emit context management progress
+            this.emitProgress({
+              type: 'context-management',
+              agent: 'SystemAgent',
+              action: this.formatContextAction(step),
+              details,
+            });
+          }
+        );
+
+        lastContextResult = contextResult;
+
+        if (contextResult.wasSummarized) {
+          console.log(`[SystemAgent] Context summarized: ${contextResult.summarizationSteps} steps, ${Math.round(contextResult.tokenEstimate / 1000)}K tokens`);
+        }
+
+        // Call LLM with the managed context
+        const llmResponse = await llmClient.chatDirect(contextResult.messages);
 
         // Parse for tool calls
         const toolCallsInResponse = this.parseToolCalls(llmResponse);
@@ -121,6 +266,9 @@ export class SystemAgentOrchestrator {
           finalResponse = llmResponse;
           break;
         }
+
+        // Add LLM response to context manager
+        this.contextManager.addLLMResponse(llmResponse, iterations);
 
         // Execute tool calls
         let toolResults = '';
@@ -194,7 +342,12 @@ export class SystemAgentOrchestrator {
               }
             }
 
-            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nSuccess: ✓\nResult: ${JSON.stringify(result, null, 2)}`;
+            // Use summarized result to prevent context overflow
+            const summarizedResult = summarizeToolResult(result, toolCall.toolId);
+            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nSuccess: ✓\nResult: ${summarizedResult}`;
+
+            // Add tool result to context manager
+            this.contextManager.addToolResult(toolCall.toolName, toolCall.toolId, summarizedResult);
           } catch (error: any) {
             toolCalls.push({
               toolId: toolCall.toolId,
@@ -204,23 +357,71 @@ export class SystemAgentOrchestrator {
               error: error.message || String(error),
             });
 
-            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nError: ✗ ${error.message || error}`;
+            const errorResult = `Error: ✗ ${error.message || error}`;
+            toolResults += `\n\n**Tool: ${toolCall.toolName}**\n${errorResult}`;
+
+            // Add error to context manager
+            this.contextManager.addToolResult(toolCall.toolName, toolCall.toolId, errorResult);
           }
         }
 
-        // Add tool results to conversation
-        conversationHistory.push({
-          role: 'assistant',
-          content: llmResponse,
-        });
-
-        conversationHistory.push({
+        // Add continuation prompt to context
+        this.contextManager.addEntry({
           role: 'user',
           content: `Tool execution results:${toolResults}\n\nContinue with the next step or provide final summary if done.`,
+          type: 'context-note',
         });
       }
 
       const executionTime = performance.now() - startTime;
+      const contextStats = this.contextManager.getStats();
+      const workflowId = this.contextManager.getWorkflowId();
+
+      // Extract learnings from the workflow
+      const learnings = this.contextManager.extractLearnings();
+      const evolutionResult: { memoryUpdated: boolean; learnings: string[] } = {
+        memoryUpdated: false,
+        learnings: [],
+      };
+
+      // Update system memory if configured
+      if (this.config.updateSystemMemory && filesCreated.length > 0) {
+        this.emitProgress({
+          type: 'evolution',
+          agent: 'SystemAgent',
+          action: 'Updating system memory with workflow learnings',
+          details: `Recording ${filesCreated.length} files created, ${learnings.toolsUsed.length} tools used`,
+        });
+
+        try {
+          const memoryEntry = await this.updateSystemMemory(
+            userGoal,
+            filesCreated,
+            learnings,
+            executionTime
+          );
+          evolutionResult.memoryUpdated = true;
+          evolutionResult.learnings = [
+            `Completed: ${userGoal.substring(0, 100)}`,
+            `Created ${filesCreated.length} file(s)`,
+            `Used tools: ${learnings.toolsUsed.join(', ')}`,
+          ];
+
+          this.emitProgress({
+            type: 'evolution',
+            agent: 'SystemAgent',
+            action: 'System memory updated',
+            details: 'Learnings recorded for future reference',
+          });
+        } catch (error) {
+          console.error('[SystemAgent] Failed to update system memory:', error);
+        }
+      }
+
+      // Persist workflow if configured
+      if (this.config.persistWorkflow) {
+        await this.contextManager.save();
+      }
 
       // Emit completion event
       this.emitProgress({
@@ -237,6 +438,14 @@ export class SystemAgentOrchestrator {
         filesCreated,
         projectPath,
         executionTime,
+        workflowId,
+        contextStats: {
+          totalTokens: contextStats.totalTokens,
+          wasSummarized: lastContextResult?.wasSummarized || false,
+          summarizationSteps: lastContextResult?.summarizationSteps,
+          strategy: this.config.strategy,
+        },
+        evolution: evolutionResult,
       };
     } catch (error: any) {
       const executionTime = performance.now() - startTime;
@@ -251,6 +460,74 @@ export class SystemAgentOrchestrator {
         executionTime,
       };
     }
+  }
+
+  /**
+   * Format context management action for display
+   */
+  private formatContextAction(step: string): string {
+    switch (step) {
+      case 'context-analysis':
+        return 'Analyzing context size';
+      case 'pagination':
+        return 'Paginating context for summarization';
+      case 'summarizing':
+        return 'Summarizing context';
+      case 'cache-hit':
+        return 'Using cached context summary';
+      case 'complete':
+        return 'Context optimization complete';
+      default:
+        return 'Managing context';
+    }
+  }
+
+  /**
+   * Update system memory with workflow learnings
+   * Appends to /system/memory_log.md for future reference
+   */
+  private async updateSystemMemory(
+    userGoal: string,
+    filesCreated: string[],
+    learnings: ReturnType<WorkflowContextManager['extractLearnings']>,
+    executionTime: number
+  ): Promise<string> {
+    const vfs = getVFS();
+    const memoryPath = 'system/memory_log.md';
+
+    // Read existing memory
+    let existingMemory = '';
+    try {
+      existingMemory = vfs.readFileContent(memoryPath) || '';
+    } catch {
+      // File may not exist yet
+    }
+
+    // Create new entry
+    const timestamp = new Date().toISOString();
+    const entry = `
+## [${timestamp}] Workflow Completed
+
+**Goal:** ${userGoal}
+
+**Files Created:**
+${filesCreated.map(f => `- ${f}`).join('\n') || '- None'}
+
+**Tools Used:** ${learnings.toolsUsed.join(', ') || 'None'}
+
+**Execution Time:** ${(executionTime / 1000).toFixed(2)}s
+
+**Iterations:** ${learnings.iterations}
+
+${learnings.errors.length > 0 ? `**Errors Encountered:**\n${learnings.errors.map(e => `- ${e}`).join('\n')}\n` : ''}
+---
+`;
+
+    // Append to memory log
+    const updatedMemory = existingMemory + entry;
+    vfs.writeFile(memoryPath, updatedMemory);
+
+    return entry;
   }
 
   /**
@@ -410,7 +687,11 @@ export class SystemAgentOrchestrator {
 /**
  * Create and execute SystemAgent
  */
-export async function executeSystemAgent(userGoal: string): Promise<SystemAgentResult> {
+export async function executeSystemAgent(
+  userGoal: string,
+  progressCallback?: ProgressCallback,
+  config?: Partial<OrchestratorConfig>
+): Promise<SystemAgentResult> {
   // Load SystemAgent definition
   const systemAgentMarkdown = await fetch('/system/agents/SystemAgent.md').then(r => r.text());
 
@@ -418,9 +699,25 @@ export async function executeSystemAgent(userGoal: string): Promise<SystemAgentR
   const frontmatterMatch = systemAgentMarkdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   const systemPrompt = frontmatterMatch ? frontmatterMatch[2].trim() : systemAgentMarkdown;
 
-  // Create orchestrator
-  const orchestrator = new SystemAgentOrchestrator(systemPrompt);
+  // Create orchestrator with config
+  const orchestrator = new SystemAgentOrchestrator(
+    systemPrompt,
+    progressCallback,
+    config
+  );
 
   // Execute
   return await orchestrator.execute(userGoal);
+}
+
+/**
+ * Create SystemAgent with specific strategy
+ */
+export function createSystemAgentWithStrategy(
+  strategy: SummarizationStrategy,
+  progressCallback?: ProgressCallback
+): (userGoal: string) => Promise<SystemAgentResult> {
+  return async (userGoal: string) => {
+    return executeSystemAgent(userGoal, progressCallback, { strategy });
+  };
 }

@@ -334,6 +334,23 @@
     animation: scale-in 0.2s ease-out;
   }
 
+  .animate-flow-wave {
+    animation: flow-wave 3s ease-in-out infinite;
+  }
+
+  .animate-breathe {
+    animation: breathe 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgb(var(--accent-primary) / 0.1) 50%,
+      transparent 100%);
+    background-size: 200% 100%;
+  }
+
   /* Text utilities */
   .text-gradient {
     @apply bg-gradient-to-r from-accent-primary to-accent-secondary;
@@ -405,6 +422,40 @@
   to {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+/* Anthropic-style flowing wave animation */
+@keyframes flow-wave {
+  0%, 100% {
+    transform: translateX(-10%);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateX(10%);
+    opacity: 0.4;
+  }
+}
+
+/* Gentle breathing animation for agent indicators */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+/* Shimmer effect for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
 
