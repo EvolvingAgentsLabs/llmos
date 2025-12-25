@@ -31,8 +31,21 @@ class PyodideRunner {
   private async loadPyodide(): Promise<any> {
     console.log('[Pyodide] Loading...');
 
-    // Dynamic import to avoid SSR issues
-    const { loadPyodide } = await import('pyodide');
+    // Load Pyodide via script tag (more reliable in Next.js)
+    if (typeof window !== 'undefined' && !(window as any).loadPyodide) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Pyodide script'));
+        document.head.appendChild(script);
+      });
+    }
+
+    const loadPyodide = (window as any).loadPyodide;
+    if (!loadPyodide) {
+      throw new Error('Failed to load Pyodide loader');
+    }
 
     // Load Pyodide from CDN
     const pyodide = await loadPyodide({

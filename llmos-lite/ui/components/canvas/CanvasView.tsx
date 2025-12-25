@@ -438,10 +438,23 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
     setRunOutput({ stdout: 'Initializing Python runtime...', stderr: '' });
 
     try {
-      // Dynamic import of Pyodide
-      const { loadPyodide } = await import('pyodide');
-
       setRunOutput({ stdout: 'Loading Pyodide...', stderr: '' });
+
+      // Load Pyodide via script tag (more reliable in Next.js)
+      if (typeof window !== 'undefined' && !(window as any).loadPyodide) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Pyodide script'));
+          document.head.appendChild(script);
+        });
+      }
+
+      const loadPyodide = (window as any).loadPyodide;
+      if (!loadPyodide) {
+        throw new Error('Failed to load Pyodide loader');
+      }
 
       const pyodide = await loadPyodide({
         indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
