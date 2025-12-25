@@ -38,6 +38,69 @@ export interface ToolCallResult {
   error?: string;
 }
 
+// Token management constants
+const MAX_CONTEXT_TOKENS = 180000; // Leave buffer below 200K limit
+const TOKENS_PER_CHAR = 0.25; // Rough estimate: ~4 chars per token
+const MAX_TOOL_RESULT_LENGTH = 8000; // Truncate large tool results
+const MAX_HISTORY_MESSAGES = 10; // Keep recent conversation history
+
+/**
+ * Estimate token count for a string (rough approximation)
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length * TOKENS_PER_CHAR);
+}
+
+/**
+ * Truncate text to max length with ellipsis
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength - 100) + '\n\n... [truncated - content too long] ...\n';
+}
+
+/**
+ * Summarize tool result for context efficiency
+ */
+function summarizeToolResult(result: any, toolId: string): string {
+  const resultStr = JSON.stringify(result, null, 2);
+
+  // Always truncate large results
+  if (resultStr.length > MAX_TOOL_RESULT_LENGTH) {
+    // For file reads, keep beginning and end
+    if (toolId === 'read-file' && result.content) {
+      const content = result.content;
+      if (content.length > MAX_TOOL_RESULT_LENGTH) {
+        const halfLen = Math.floor(MAX_TOOL_RESULT_LENGTH / 2) - 50;
+        return JSON.stringify({
+          ...result,
+          content: content.substring(0, halfLen) +
+            '\n\n... [content truncated for context efficiency] ...\n\n' +
+            content.substring(content.length - halfLen),
+          _truncated: true
+        }, null, 2);
+      }
+    }
+
+    // For Python execution, keep stdout/stderr and truncate
+    if (toolId === 'execute-python') {
+      return JSON.stringify({
+        success: result.success,
+        stdout: truncateText(result.stdout || '', 2000),
+        stderr: truncateText(result.stderr || '', 1000),
+        executionTime: result.executionTime,
+        images: result.images?.length ? `[${result.images.length} image(s) generated]` : undefined,
+        _truncated: true
+      }, null, 2);
+    }
+
+    // Generic truncation
+    return truncateText(resultStr, MAX_TOOL_RESULT_LENGTH);
+  }
+
+  return resultStr;
+}
+
 /**
  * SystemAgent Orchestrator
  */
@@ -58,6 +121,61 @@ export class SystemAgentOrchestrator {
         timestamp: Date.now(),
       });
     }
+  }
+
+  /**
+   * Estimate total tokens in conversation
+   */
+  private estimateConversationTokens(messages: Message[]): number {
+    return messages.reduce((total, msg) => {
+      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      return total + estimateTokens(content);
+    }, 0);
+  }
+
+  /**
+   * Trim conversation history to stay within token limits
+   * Keeps: system prompt, original user goal, and recent messages
+   */
+  private trimConversationHistory(
+    conversationHistory: Message[],
+    userGoal: string
+  ): Message[] {
+    const systemMessage = conversationHistory[0]; // Always keep system prompt
+    const userGoalMessage = conversationHistory[1]; // Always keep original goal
+
+    // Check if we're within limits
+    const currentTokens = this.estimateConversationTokens(conversationHistory);
+    if (currentTokens <= MAX_CONTEXT_TOKENS) {
+      return conversationHistory;
+    }
+
+    console.log(`[SystemAgent] Context too large (${currentTokens} estimated tokens), trimming history...`);
+
+    // Get remaining messages (after system + user goal)
+    const historyMessages = conversationHistory.slice(2);
+
+    // Keep only the most recent messages
+    const recentMessages = historyMessages.slice(-MAX_HISTORY_MESSAGES);
+
+    // Create summary of trimmed context
+    const trimmedCount = historyMessages.length - recentMessages.length;
+    const summaryMessage: Message = {
+      role: 'user',
+      content: `[Context trimmed: ${trimmedCount} earlier messages removed to stay within context limits. The original goal was: "${userGoal}". Continue with the current step.]`,
+    };
+
+    const trimmedHistory = [
+      systemMessage,
+      userGoalMessage,
+      summaryMessage,
+      ...recentMessages,
+    ];
+
+    const newTokens = this.estimateConversationTokens(trimmedHistory);
+    console.log(`[SystemAgent] Trimmed to ${newTokens} estimated tokens`);
+
+    return trimmedHistory;
   }
 
   /**
@@ -109,6 +227,9 @@ export class SystemAgentOrchestrator {
           action: `Planning step ${iterations}/${this.maxIterations}`,
           details: 'Analyzing context and determining next actions',
         });
+
+        // Trim conversation history if needed to stay within token limits
+        conversationHistory = this.trimConversationHistory(conversationHistory, userGoal);
 
         // Call LLM
         const llmResponse = await llmClient.chatDirect(conversationHistory);
@@ -194,7 +315,9 @@ export class SystemAgentOrchestrator {
               }
             }
 
-            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nSuccess: ✓\nResult: ${JSON.stringify(result, null, 2)}`;
+            // Use summarized result to prevent context overflow
+            const summarizedResult = summarizeToolResult(result, toolCall.toolId);
+            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nSuccess: ✓\nResult: ${summarizedResult}`;
           } catch (error: any) {
             toolCalls.push({
               toolId: toolCall.toolId,
