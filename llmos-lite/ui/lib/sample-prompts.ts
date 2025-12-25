@@ -18,6 +18,18 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
+    title: 'Quantum Circuit Designer',
+    prompt: `Design a quantum computing experiment: Generate Qiskit code for a 4-qubit Quantum Fourier Transform (QFT) that I can run on IBM Quantum. Include:
+1. The complete Python code with proper imports
+2. Circuit analysis (depth, gate count, connectivity)
+3. Export to OpenQASM 2.0 format
+4. Instructions for running on IBM Quantum hardware
+
+Don't execute the code - just generate it for download and external execution.`,
+    description: 'Design quantum circuits for external execution on real hardware',
+    category: 'Quantum Computing',
+  },
+  {
     title: 'Signal Processing & FFT',
     prompt: 'Create a sine wave signal, add noise, then apply FFT to show frequency spectrum. Plot both time and frequency domains.',
     description: 'Signal analysis with visualization',
