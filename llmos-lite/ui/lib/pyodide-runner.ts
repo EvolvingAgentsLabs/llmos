@@ -36,7 +36,7 @@ class PyodideRunner {
 
     // Load Pyodide from CDN
     const pyodide = await loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/',
+      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
     });
 
     // Install common packages

@@ -444,7 +444,7 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
       setRunOutput({ stdout: 'Loading Pyodide...', stderr: '' });
 
       const pyodide = await loadPyodide({
-        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
       });
 
       setRunOutput({ stdout: 'Installing packages...', stderr: '' });
