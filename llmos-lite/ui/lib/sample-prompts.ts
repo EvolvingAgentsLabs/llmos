@@ -156,6 +156,18 @@ const biologyPrompts: SamplePrompt[] = [
  */
 const roboticsPrompts: SamplePrompt[] = [
   {
+    title: 'Quantum Circuit Designer',
+    prompt: `Design a quantum computing experiment: Generate Qiskit code for a 4-qubit Quantum Fourier Transform (QFT) that I can run on IBM Quantum. Include:
+1. The complete Python code with proper imports
+2. Circuit analysis (depth, gate count, connectivity)
+3. Export to OpenQASM 2.0 format
+4. Instructions for running on IBM Quantum hardware
+
+Don't execute the code - just generate it for download and external execution.`,
+    description: 'Design quantum circuits for external execution on real hardware',
+    category: 'Quantum Computing',
+  },
+  {
     title: 'Forward Kinematics',
     prompt: 'Calculate and visualize forward kinematics for a 3-link planar robot arm, showing workspace and joint configurations with matplotlib',
     description: 'Kinematics analysis and visualization',
