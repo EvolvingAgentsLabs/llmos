@@ -5,8 +5,6 @@
  * Similar to Jupyter but file-based with auto-execution
  */
 
-import { PyodideInterface } from 'pyodide';
-
 export interface ExecutionResult {
   success: boolean;
   stdout: string;
@@ -33,7 +31,7 @@ export interface RuntimeOptions {
  * - Support for quantum libraries (qiskit, numpy, scipy)
  */
 export class LivePreview {
-  private pyodide: PyodideInterface | null = null;
+  private pyodide: any | null = null;
   private initialized: boolean = false;
   private currentFile: string | null = null;
   private watchCallbacks: Map<string, (result: ExecutionResult) => void> = new Map();
@@ -44,8 +42,21 @@ export class LivePreview {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Load Pyodide
-    const { loadPyodide } = await import('pyodide');
+    // Load Pyodide via script tag (more reliable in Next.js)
+    if (typeof window !== 'undefined' && !(window as any).loadPyodide) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Pyodide script'));
+        document.head.appendChild(script);
+      });
+    }
+
+    const loadPyodide = (window as any).loadPyodide;
+    if (!loadPyodide) {
+      throw new Error('Failed to load Pyodide loader');
+    }
 
     this.pyodide = await loadPyodide({
       indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
