@@ -434,6 +434,207 @@ async def get_trace(user_id: str, trace_id: str):
 
 
 # ============================================================================
+# Quantum / OpenQASM API Endpoints
+# ============================================================================
+
+class QuantumTranspileRequest(BaseModel):
+    qasm: str
+    optimization_level: int = 1
+    target_basis: Optional[List[str]] = None
+    approximation_degree: Optional[int] = None
+
+
+class QuantumExecuteRequest(BaseModel):
+    qasm: str
+    shots: int = 1024
+    backend: str = "simulator"
+
+
+@app.get("/api/quantum/health")
+async def quantum_health():
+    """Check if quantum backend is available"""
+    try:
+        # Check if qiskit is available
+        import importlib
+        qiskit_available = importlib.util.find_spec("qiskit") is not None
+        return {
+            "status": "healthy" if qiskit_available else "limited",
+            "qiskit_available": qiskit_available,
+            "supported_gates": ["x", "y", "z", "h", "rx", "ry", "rz", "cx", "cz", "crz", "swap"],
+            "max_qubits": 20 if qiskit_available else 10,
+            "openqasm_version": "2.0"
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/quantum/transpile")
+async def quantum_transpile(req: QuantumTranspileRequest):
+    """
+    Transpile OpenQASM circuit using Qiskit.
+
+    This is the key endpoint for WASM → Backend optimization.
+    Browser sends OpenQASM, backend returns optimized OpenQASM.
+    """
+    try:
+        # Try to use full Qiskit if available
+        try:
+            from qiskit import QuantumCircuit, transpile
+            from qiskit_aer import Aer
+
+            # Import from QASM
+            original_circuit = QuantumCircuit.from_qasm_str(req.qasm)
+            original_gate_count = len(original_circuit.data)
+            original_depth = original_circuit.depth()
+
+            # Get backend
+            backend = Aer.get_backend('aer_simulator')
+
+            # Transpile
+            transpiled = transpile(
+                original_circuit,
+                backend=backend,
+                optimization_level=req.optimization_level,
+                basis_gates=req.target_basis
+            )
+
+            # Export back to QASM
+            optimized_qasm = transpiled.qasm()
+
+            return {
+                "success": True,
+                "optimizedQasm": optimized_qasm,
+                "originalGateCount": original_gate_count,
+                "optimizedGateCount": len(transpiled.data),
+                "originalDepth": original_depth,
+                "optimizedDepth": transpiled.depth()
+            }
+
+        except ImportError:
+            # Fallback: basic validation without optimization
+            # Parse QASM to validate
+            lines = req.qasm.strip().split('\n')
+            gate_count = sum(1 for l in lines if l.strip() and
+                           not l.strip().startswith('//') and
+                           not l.strip().startswith('OPENQASM') and
+                           not l.strip().startswith('include') and
+                           not l.strip().startswith('qreg') and
+                           not l.strip().startswith('creg'))
+
+            return {
+                "success": True,
+                "optimizedQasm": req.qasm,  # Return unchanged
+                "originalGateCount": gate_count,
+                "optimizedGateCount": gate_count,
+                "originalDepth": gate_count,
+                "optimizedDepth": gate_count,
+                "note": "Qiskit not available - returned unoptimized circuit"
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "originalGateCount": 0,
+            "optimizedGateCount": 0,
+            "originalDepth": 0,
+            "optimizedDepth": 0,
+            "error": str(e)
+        }
+
+
+@app.post("/api/quantum/execute")
+async def quantum_execute(req: QuantumExecuteRequest):
+    """
+    Execute OpenQASM circuit on simulator or hardware.
+
+    For production, this would connect to IBM Quantum for hardware execution.
+    """
+    try:
+        # Try to use full Qiskit if available
+        try:
+            from qiskit import QuantumCircuit, transpile
+            from qiskit_aer import Aer
+            import numpy as np
+
+            # Import from QASM
+            circuit = QuantumCircuit.from_qasm_str(req.qasm)
+
+            # Get backend
+            if req.backend == "simulator" or req.backend == "aer_simulator":
+                backend = Aer.get_backend('aer_simulator')
+            else:
+                # For real hardware, would use IBMQ provider
+                # For now, fall back to simulator
+                backend = Aer.get_backend('aer_simulator')
+
+            # Transpile for backend
+            transpiled = transpile(circuit, backend=backend)
+
+            # Execute
+            import time
+            start_time = time.time()
+            job = backend.run(transpiled, shots=req.shots)
+            result = job.result()
+            execution_time = (time.time() - start_time) * 1000  # ms
+
+            counts = result.get_counts()
+
+            # Get statevector if possible
+            statevector = None
+            try:
+                sv_backend = Aer.get_backend('statevector_simulator')
+                sv_circuit = circuit.remove_final_measurements(inplace=False)
+                sv_job = sv_backend.run(sv_circuit)
+                sv_result = sv_job.result()
+                sv = sv_result.get_statevector()
+                statevector = [[float(np.real(c)), float(np.imag(c))] for c in sv]
+            except:
+                pass
+
+            return {
+                "success": True,
+                "counts": counts,
+                "statevector": statevector,
+                "executionTime": execution_time
+            }
+
+        except ImportError:
+            # Fallback: use MicroQiskit-style simulation
+            # Parse basic circuit and simulate
+            return {
+                "success": False,
+                "error": "Full Qiskit not available. Use browser simulation for small circuits."
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.post("/api/quantum/validate")
+async def quantum_validate(qasm: str):
+    """Validate OpenQASM syntax"""
+    errors = []
+
+    if not qasm or 'OPENQASM' not in qasm:
+        errors.append("Missing OPENQASM header")
+
+    if 'qreg' not in qasm:
+        errors.append("Missing quantum register declaration")
+
+    # Check for balanced brackets
+    if qasm.count('[') != qasm.count(']'):
+        errors.append("Unbalanced brackets")
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors
+    }
+
+
+# ============================================================================
 # Startup/Shutdown
 # ============================================================================
 

@@ -359,19 +359,37 @@ qiskit.QuantumCircuit = QuantumCircuit
 qiskit.QuantumRegister = type('QuantumRegister', (), {})
 qiskit.ClassicalRegister = type('ClassicalRegister', (), {})
 qiskit.execute = execute
+qiskit.transpile = transpile
 
 # Add to circuit submodule
 qiskit_circuit.QuantumCircuit = QuantumCircuit
 qiskit_circuit.QuantumRegister = type('QuantumRegister', (), {})
 qiskit_circuit.ClassicalRegister = type('ClassicalRegister', (), {})
 
-# Add QFT to library
+# Add QFT to library (both original and enhanced)
 qiskit_circuit_library.QFT = QFT
+qiskit_circuit_library.QFTCircuit = QFTCircuit
 
 # Add Aer backend
 qiskit_aer.Aer = Aer
 
-print("✓ MicroQiskit loaded (lightweight quantum simulator for browser)")
+# Create qiskit.quantum_info submodule
+qiskit_quantum_info = types.ModuleType('qiskit.quantum_info')
+sys.modules['qiskit.quantum_info'] = qiskit_quantum_info
+qiskit.quantum_info = qiskit_quantum_info
+qiskit_quantum_info.Statevector = Statevector
+
+# Export helper functions to global scope for convenience
+globals()['create_qft'] = create_qft
+globals()['Statevector'] = Statevector
+globals()['circuit_to_qasm'] = circuit_to_qasm
+globals()['circuit_from_qasm_str'] = circuit_from_qasm_str
+
+print("✓ MicroQiskit loaded with OpenQASM 2.0 support")
+print("  • Gates: H, X, Y, Z, RX, RY, RZ, CX, CZ, CRZ, SWAP")
+print("  • OpenQASM: circuit.qasm(), QuantumCircuit.from_qasm_str()")
+print("  • QFT: create_qft(n, do_swaps=True, inverse=False, approximation_degree=0)")
+print("  • Analysis: Statevector.from_instruction(circuit)")
     `);
   }
 
