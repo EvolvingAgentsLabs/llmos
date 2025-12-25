@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export interface AgentActivity {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution';
   agent?: string;
   action?: string;
   tool?: string;
@@ -100,6 +100,14 @@ export default function AgentActivityDisplay({
             </svg>
           </div>
         );
+      case 'evolution':
+        return (
+          <div className="w-5 h-5 rounded-full bg-accent-secondary/20 flex items-center justify-center">
+            <svg className="w-3 h-3 text-accent-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+        );
       default:
         return (
           <div className="w-5 h-5 rounded-full bg-fg-muted/20 flex items-center justify-center">
@@ -123,6 +131,8 @@ export default function AgentActivityDisplay({
         return 'text-accent-success';
       case 'context-management':
         return 'text-accent-primary';
+      case 'evolution':
+        return 'text-accent-secondary';
       default:
         return 'text-fg-tertiary';
     }

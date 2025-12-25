@@ -3,12 +3,18 @@
  *
  * Coordinates the execution of the SystemAgent with tool access
  * Uses WorkflowContextManager for intelligent context management
+ * Supports artifact evolution and system memory updates
  */
 
 import { createLLMClient, Message } from './llm-client';
 import { executeSystemTool, getSystemTools } from './system-tools';
 import { getVFS } from './virtual-fs';
-import { WorkflowContextManager, createWorkflowContextManager } from './workflow-context-manager';
+import {
+  WorkflowContextManager,
+  createWorkflowContextManager,
+  SummarizationStrategy,
+  ContextManagerConfig,
+} from './workflow-context-manager';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -18,15 +24,21 @@ export interface SystemAgentResult {
   projectPath?: string;
   error?: string;
   executionTime: number;
+  workflowId?: string;
   contextStats?: {
     totalTokens: number;
     wasSummarized: boolean;
     summarizationSteps?: number;
+    strategy?: SummarizationStrategy;
+  };
+  evolution?: {
+    memoryUpdated: boolean;
+    learnings: string[];
   };
 }
 
 export interface AgentProgressEvent {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution';
   agent?: string;
   action?: string;
   tool?: string;
@@ -44,6 +56,26 @@ export interface ToolCallResult {
   success: boolean;
   error?: string;
 }
+
+export interface OrchestratorConfig {
+  /** Maximum iterations for the agent loop (default: 10) */
+  maxIterations: number;
+  /** Summarization strategy (default: 'balanced') */
+  strategy: SummarizationStrategy;
+  /** Whether to update system memory after execution (default: true) */
+  updateSystemMemory: boolean;
+  /** Whether to persist workflow history (default: true) */
+  persistWorkflow: boolean;
+  /** Context manager configuration overrides */
+  contextConfig?: Partial<ContextManagerConfig>;
+}
+
+export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
+  maxIterations: 10,
+  strategy: 'balanced',
+  updateSystemMemory: true,
+  persistWorkflow: true,
+};
 
 // Token management constants
 const MAX_TOOL_RESULT_LENGTH = 8000; // Truncate large tool results
@@ -106,11 +138,23 @@ export class SystemAgentOrchestrator {
   private maxIterations: number = 10;
   private progressCallback?: ProgressCallback;
   private contextManager: WorkflowContextManager;
+  private config: OrchestratorConfig;
 
-  constructor(systemPrompt: string, progressCallback?: ProgressCallback) {
+  constructor(
+    systemPrompt: string,
+    progressCallback?: ProgressCallback,
+    config: Partial<OrchestratorConfig> = {}
+  ) {
     this.systemPrompt = systemPrompt;
     this.progressCallback = progressCallback;
-    this.contextManager = createWorkflowContextManager();
+    this.config = { ...DEFAULT_ORCHESTRATOR_CONFIG, ...config };
+    this.maxIterations = this.config.maxIterations;
+
+    // Create context manager with strategy and config
+    this.contextManager = createWorkflowContextManager({
+      strategy: this.config.strategy,
+      ...this.config.contextConfig,
+    });
   }
 
   private emitProgress(event: Omit<AgentProgressEvent, 'timestamp'>) {
@@ -331,6 +375,53 @@ export class SystemAgentOrchestrator {
 
       const executionTime = performance.now() - startTime;
       const contextStats = this.contextManager.getStats();
+      const workflowId = this.contextManager.getWorkflowId();
+
+      // Extract learnings from the workflow
+      const learnings = this.contextManager.extractLearnings();
+      const evolutionResult: { memoryUpdated: boolean; learnings: string[] } = {
+        memoryUpdated: false,
+        learnings: [],
+      };
+
+      // Update system memory if configured
+      if (this.config.updateSystemMemory && filesCreated.length > 0) {
+        this.emitProgress({
+          type: 'evolution',
+          agent: 'SystemAgent',
+          action: 'Updating system memory with workflow learnings',
+          details: `Recording ${filesCreated.length} files created, ${learnings.toolsUsed.length} tools used`,
+        });
+
+        try {
+          const memoryEntry = await this.updateSystemMemory(
+            userGoal,
+            filesCreated,
+            learnings,
+            executionTime
+          );
+          evolutionResult.memoryUpdated = true;
+          evolutionResult.learnings = [
+            `Completed: ${userGoal.substring(0, 100)}`,
+            `Created ${filesCreated.length} file(s)`,
+            `Used tools: ${learnings.toolsUsed.join(', ')}`,
+          ];
+
+          this.emitProgress({
+            type: 'evolution',
+            agent: 'SystemAgent',
+            action: 'System memory updated',
+            details: 'Learnings recorded for future reference',
+          });
+        } catch (error) {
+          console.error('[SystemAgent] Failed to update system memory:', error);
+        }
+      }
+
+      // Persist workflow if configured
+      if (this.config.persistWorkflow) {
+        await this.contextManager.save();
+      }
 
       // Emit completion event
       this.emitProgress({
@@ -347,11 +438,14 @@ export class SystemAgentOrchestrator {
         filesCreated,
         projectPath,
         executionTime,
+        workflowId,
         contextStats: {
           totalTokens: contextStats.totalTokens,
           wasSummarized: lastContextResult?.wasSummarized || false,
           summarizationSteps: lastContextResult?.summarizationSteps,
+          strategy: this.config.strategy,
         },
+        evolution: evolutionResult,
       };
     } catch (error: any) {
       const executionTime = performance.now() - startTime;
@@ -386,6 +480,54 @@ export class SystemAgentOrchestrator {
       default:
         return 'Managing context';
     }
+  }
+
+  /**
+   * Update system memory with workflow learnings
+   * Appends to /system/memory_log.md for future reference
+   */
+  private async updateSystemMemory(
+    userGoal: string,
+    filesCreated: string[],
+    learnings: ReturnType<WorkflowContextManager['extractLearnings']>,
+    executionTime: number
+  ): Promise<string> {
+    const vfs = getVFS();
+    const memoryPath = 'system/memory_log.md';
+
+    // Read existing memory
+    let existingMemory = '';
+    try {
+      existingMemory = vfs.readFileContent(memoryPath) || '';
+    } catch {
+      // File may not exist yet
+    }
+
+    // Create new entry
+    const timestamp = new Date().toISOString();
+    const entry = `
+## [${timestamp}] Workflow Completed
+
+**Goal:** ${userGoal}
+
+**Files Created:**
+${filesCreated.map(f => `- ${f}`).join('\n') || '- None'}
+
+**Tools Used:** ${learnings.toolsUsed.join(', ') || 'None'}
+
+**Execution Time:** ${(executionTime / 1000).toFixed(2)}s
+
+**Iterations:** ${learnings.iterations}
+
+${learnings.errors.length > 0 ? `**Errors Encountered:**\n${learnings.errors.map(e => `- ${e}`).join('\n')}\n` : ''}
+---
+`;
+
+    // Append to memory log
+    const updatedMemory = existingMemory + entry;
+    vfs.writeFile(memoryPath, updatedMemory);
+
+    return entry;
   }
 
   /**
@@ -545,7 +687,11 @@ export class SystemAgentOrchestrator {
 /**
  * Create and execute SystemAgent
  */
-export async function executeSystemAgent(userGoal: string): Promise<SystemAgentResult> {
+export async function executeSystemAgent(
+  userGoal: string,
+  progressCallback?: ProgressCallback,
+  config?: Partial<OrchestratorConfig>
+): Promise<SystemAgentResult> {
   // Load SystemAgent definition
   const systemAgentMarkdown = await fetch('/system/agents/SystemAgent.md').then(r => r.text());
 
@@ -553,9 +699,25 @@ export async function executeSystemAgent(userGoal: string): Promise<SystemAgentR
   const frontmatterMatch = systemAgentMarkdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   const systemPrompt = frontmatterMatch ? frontmatterMatch[2].trim() : systemAgentMarkdown;
 
-  // Create orchestrator
-  const orchestrator = new SystemAgentOrchestrator(systemPrompt);
+  // Create orchestrator with config
+  const orchestrator = new SystemAgentOrchestrator(
+    systemPrompt,
+    progressCallback,
+    config
+  );
 
   // Execute
   return await orchestrator.execute(userGoal);
+}
+
+/**
+ * Create SystemAgent with specific strategy
+ */
+export function createSystemAgentWithStrategy(
+  strategy: SummarizationStrategy,
+  progressCallback?: ProgressCallback
+): (userGoal: string) => Promise<SystemAgentResult> {
+  return async (userGoal: string) => {
+    return executeSystemAgent(userGoal, progressCallback, { strategy });
+  };
 }
