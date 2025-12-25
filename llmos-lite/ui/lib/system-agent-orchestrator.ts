@@ -2,11 +2,13 @@
  * SystemAgent Orchestrator
  *
  * Coordinates the execution of the SystemAgent with tool access
+ * Uses WorkflowContextManager for intelligent context management
  */
 
 import { createLLMClient, Message } from './llm-client';
 import { executeSystemTool, getSystemTools } from './system-tools';
 import { getVFS } from './virtual-fs';
+import { WorkflowContextManager, createWorkflowContextManager } from './workflow-context-manager';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -16,10 +18,15 @@ export interface SystemAgentResult {
   projectPath?: string;
   error?: string;
   executionTime: number;
+  contextStats?: {
+    totalTokens: number;
+    wasSummarized: boolean;
+    summarizationSteps?: number;
+  };
 }
 
 export interface AgentProgressEvent {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management';
   agent?: string;
   action?: string;
   tool?: string;
@@ -39,17 +46,7 @@ export interface ToolCallResult {
 }
 
 // Token management constants
-const MAX_CONTEXT_TOKENS = 180000; // Leave buffer below 200K limit
-const TOKENS_PER_CHAR = 0.25; // Rough estimate: ~4 chars per token
 const MAX_TOOL_RESULT_LENGTH = 8000; // Truncate large tool results
-const MAX_HISTORY_MESSAGES = 10; // Keep recent conversation history
-
-/**
- * Estimate token count for a string (rough approximation)
- */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length * TOKENS_PER_CHAR);
-}
 
 /**
  * Truncate text to max length with ellipsis
@@ -108,10 +105,12 @@ export class SystemAgentOrchestrator {
   private systemPrompt: string;
   private maxIterations: number = 10;
   private progressCallback?: ProgressCallback;
+  private contextManager: WorkflowContextManager;
 
   constructor(systemPrompt: string, progressCallback?: ProgressCallback) {
     this.systemPrompt = systemPrompt;
     this.progressCallback = progressCallback;
+    this.contextManager = createWorkflowContextManager();
   }
 
   private emitProgress(event: Omit<AgentProgressEvent, 'timestamp'>) {
@@ -124,58 +123,23 @@ export class SystemAgentOrchestrator {
   }
 
   /**
-   * Estimate total tokens in conversation
+   * Create LLM summarizer function for context management
    */
-  private estimateConversationTokens(messages: Message[]): number {
-    return messages.reduce((total, msg) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return total + estimateTokens(content);
-    }, 0);
-  }
+  private createSummarizer(llmClient: ReturnType<typeof createLLMClient>) {
+    return async (prompt: string): Promise<string> => {
+      const messages: Message[] = [
+        {
+          role: 'system',
+          content: 'You are a context summarization assistant. Your task is to create concise but comprehensive summaries of workflow context, preserving key information relevant to the user\'s goal.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ];
 
-  /**
-   * Trim conversation history to stay within token limits
-   * Keeps: system prompt, original user goal, and recent messages
-   */
-  private trimConversationHistory(
-    conversationHistory: Message[],
-    userGoal: string
-  ): Message[] {
-    const systemMessage = conversationHistory[0]; // Always keep system prompt
-    const userGoalMessage = conversationHistory[1]; // Always keep original goal
-
-    // Check if we're within limits
-    const currentTokens = this.estimateConversationTokens(conversationHistory);
-    if (currentTokens <= MAX_CONTEXT_TOKENS) {
-      return conversationHistory;
-    }
-
-    console.log(`[SystemAgent] Context too large (${currentTokens} estimated tokens), trimming history...`);
-
-    // Get remaining messages (after system + user goal)
-    const historyMessages = conversationHistory.slice(2);
-
-    // Keep only the most recent messages
-    const recentMessages = historyMessages.slice(-MAX_HISTORY_MESSAGES);
-
-    // Create summary of trimmed context
-    const trimmedCount = historyMessages.length - recentMessages.length;
-    const summaryMessage: Message = {
-      role: 'user',
-      content: `[Context trimmed: ${trimmedCount} earlier messages removed to stay within context limits. The original goal was: "${userGoal}". Continue with the current step.]`,
+      return await llmClient!.chatDirect(messages);
     };
-
-    const trimmedHistory = [
-      systemMessage,
-      userGoalMessage,
-      summaryMessage,
-      ...recentMessages,
-    ];
-
-    const newTokens = this.estimateConversationTokens(trimmedHistory);
-    console.log(`[SystemAgent] Trimmed to ${newTokens} estimated tokens`);
-
-    return trimmedHistory;
   }
 
   /**
@@ -186,6 +150,7 @@ export class SystemAgentOrchestrator {
     const toolCalls: ToolCallResult[] = [];
     const filesCreated: string[] = [];
     let projectPath: string | undefined;
+    let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
 
     try {
       const llmClient = createLLMClient();
@@ -193,17 +158,9 @@ export class SystemAgentOrchestrator {
         throw new Error('LLM client not configured');
       }
 
-      // Build conversation with system prompt and tools
-      const conversationHistory: Message[] = [
-        {
-          role: 'system',
-          content: this.buildSystemPromptWithTools(),
-        },
-        {
-          role: 'user',
-          content: userGoal,
-        },
-      ];
+      // Initialize context manager with system prompt and user goal
+      const systemPromptWithTools = this.buildSystemPromptWithTools();
+      this.contextManager.initialize(systemPromptWithTools, userGoal);
 
       let iterations = 0;
       let finalResponse = '';
@@ -215,6 +172,9 @@ export class SystemAgentOrchestrator {
         action: 'Reading system memory and planning approach',
         details: 'Consulting /system/memory_log.md for similar past tasks',
       });
+
+      // Create summarizer function
+      const summarizer = this.createSummarizer(llmClient);
 
       // Agent loop: LLM → Parse tools → Execute → LLM → ...
       while (iterations < this.maxIterations) {
@@ -228,11 +188,31 @@ export class SystemAgentOrchestrator {
           details: 'Analyzing context and determining next actions',
         });
 
-        // Trim conversation history if needed to stay within token limits
-        conversationHistory = this.trimConversationHistory(conversationHistory, userGoal);
+        // Build context with iterative summarization if needed
+        const currentStep = `Step ${iterations}/${this.maxIterations}: ${iterations === 1 ? 'Initial planning' : 'Continuing workflow'}`;
 
-        // Call LLM
-        const llmResponse = await llmClient.chatDirect(conversationHistory);
+        const contextResult = await this.contextManager.buildContext(
+          currentStep,
+          summarizer,
+          (step, details) => {
+            // Emit context management progress
+            this.emitProgress({
+              type: 'context-management',
+              agent: 'SystemAgent',
+              action: this.formatContextAction(step),
+              details,
+            });
+          }
+        );
+
+        lastContextResult = contextResult;
+
+        if (contextResult.wasSummarized) {
+          console.log(`[SystemAgent] Context summarized: ${contextResult.summarizationSteps} steps, ${Math.round(contextResult.tokenEstimate / 1000)}K tokens`);
+        }
+
+        // Call LLM with the managed context
+        const llmResponse = await llmClient.chatDirect(contextResult.messages);
 
         // Parse for tool calls
         const toolCallsInResponse = this.parseToolCalls(llmResponse);
@@ -242,6 +222,9 @@ export class SystemAgentOrchestrator {
           finalResponse = llmResponse;
           break;
         }
+
+        // Add LLM response to context manager
+        this.contextManager.addLLMResponse(llmResponse, iterations);
 
         // Execute tool calls
         let toolResults = '';
@@ -318,6 +301,9 @@ export class SystemAgentOrchestrator {
             // Use summarized result to prevent context overflow
             const summarizedResult = summarizeToolResult(result, toolCall.toolId);
             toolResults += `\n\n**Tool: ${toolCall.toolName}**\nSuccess: ✓\nResult: ${summarizedResult}`;
+
+            // Add tool result to context manager
+            this.contextManager.addToolResult(toolCall.toolName, toolCall.toolId, summarizedResult);
           } catch (error: any) {
             toolCalls.push({
               toolId: toolCall.toolId,
@@ -327,23 +313,24 @@ export class SystemAgentOrchestrator {
               error: error.message || String(error),
             });
 
-            toolResults += `\n\n**Tool: ${toolCall.toolName}**\nError: ✗ ${error.message || error}`;
+            const errorResult = `Error: ✗ ${error.message || error}`;
+            toolResults += `\n\n**Tool: ${toolCall.toolName}**\n${errorResult}`;
+
+            // Add error to context manager
+            this.contextManager.addToolResult(toolCall.toolName, toolCall.toolId, errorResult);
           }
         }
 
-        // Add tool results to conversation
-        conversationHistory.push({
-          role: 'assistant',
-          content: llmResponse,
-        });
-
-        conversationHistory.push({
+        // Add continuation prompt to context
+        this.contextManager.addEntry({
           role: 'user',
           content: `Tool execution results:${toolResults}\n\nContinue with the next step or provide final summary if done.`,
+          type: 'context-note',
         });
       }
 
       const executionTime = performance.now() - startTime;
+      const contextStats = this.contextManager.getStats();
 
       // Emit completion event
       this.emitProgress({
@@ -360,6 +347,11 @@ export class SystemAgentOrchestrator {
         filesCreated,
         projectPath,
         executionTime,
+        contextStats: {
+          totalTokens: contextStats.totalTokens,
+          wasSummarized: lastContextResult?.wasSummarized || false,
+          summarizationSteps: lastContextResult?.summarizationSteps,
+        },
       };
     } catch (error: any) {
       const executionTime = performance.now() - startTime;
@@ -373,6 +365,26 @@ export class SystemAgentOrchestrator {
         error: error.message || String(error),
         executionTime,
       };
+    }
+  }
+
+  /**
+   * Format context management action for display
+   */
+  private formatContextAction(step: string): string {
+    switch (step) {
+      case 'context-analysis':
+        return 'Analyzing context size';
+      case 'pagination':
+        return 'Paginating context for summarization';
+      case 'summarizing':
+        return 'Summarizing context';
+      case 'cache-hit':
+        return 'Using cached context summary';
+      case 'complete':
+        return 'Context optimization complete';
+      default:
+        return 'Managing context';
     }
   }
 
