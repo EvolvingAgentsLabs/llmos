@@ -311,7 +311,7 @@ Applications:
     # GOAL: State Preparation
     # ═══════════════════════════════════════════════════════════════
     elif goal == 'state_preparation':
-        target = "${params.targetState || '+'*numQubits}"
+        target = "${params.targetState || '+'.repeat(numQubits)}"
         qc = QuantumCircuit(n, n)
 
         for i, s in enumerate(target[:n]):
