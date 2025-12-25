@@ -34,7 +34,7 @@ export interface LLMConfig {
 }
 
 export const AVAILABLE_MODELS = {
-  // Anthropic Claude
+  // Anthropic Claude 4.5
   'claude-opus-4.5': {
     id: 'anthropic/claude-opus-4.5',
     name: 'Claude Opus 4.5',
@@ -50,48 +50,6 @@ export const AVAILABLE_MODELS = {
     inputCost: '$3/M tokens',
     outputCost: '$15/M tokens',
     contextWindow: '200K tokens',
-  },
-  'claude-sonnet-4': {
-    id: 'anthropic/claude-sonnet-4',
-    name: 'Claude Sonnet 4',
-    provider: 'Anthropic',
-    inputCost: '$3/M tokens',
-    outputCost: '$15/M tokens',
-    contextWindow: '200K tokens',
-  },
-  // OpenAI GPT
-  'gpt-5.2-pro': {
-    id: 'openai/gpt-5.2-pro',
-    name: 'GPT-5.2 Pro',
-    provider: 'OpenAI',
-    inputCost: '$20/M tokens',
-    outputCost: '$100/M tokens',
-    contextWindow: '128K tokens',
-  },
-  'gpt-4-turbo': {
-    id: 'openai/gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    provider: 'OpenAI',
-    inputCost: '$10/M tokens',
-    outputCost: '$30/M tokens',
-    contextWindow: '128K tokens',
-  },
-  // Free Models
-  'kimi-k2-free': {
-    id: 'moonshotai/kimi-k2:free',
-    name: 'Kimi K2 (Free)',
-    provider: 'MoonshotAI',
-    inputCost: '$0/M tokens',
-    outputCost: '$0/M tokens',
-    contextWindow: '128K tokens',
-  },
-  'deepseek-r1t2-chimera-free': {
-    id: 'tng/deepseek-r1t2-chimera:free',
-    name: 'DeepSeek R1T2 Chimera (Free)',
-    provider: 'TNG',
-    inputCost: '$0/M tokens',
-    outputCost: '$0/M tokens',
-    contextWindow: '128K tokens',
   },
 } as const;
 
