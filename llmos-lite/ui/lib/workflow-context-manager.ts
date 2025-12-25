@@ -684,8 +684,8 @@ SUMMARY:`;
       if (!result) return [];
 
       return result.files
-        .filter((f: string) => f.endsWith('.json'))
-        .map((f: string) => f.replace('.json', ''));
+        .filter((f) => f.path.endsWith('.json'))
+        .map((f) => f.path.replace('.json', '').split('/').pop() || '');
     } catch {
       return [];
     }
