@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import ArtifactViewer, { ArtifactData, ViewMode } from './ArtifactViewer';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 
 interface ArtifactGalleryProps {
-  artifacts: Array<ArtifactData & { id: string }>;
+  artifacts: Array<ArtifactData & { id: string; name?: string }>;
   defaultView?: ViewMode;
+  onDeleteArtifact?: (id: string) => void;
+  onEditArtifact?: (id: string) => void;
 }
 
 /**
@@ -16,26 +19,28 @@ interface ArtifactGalleryProps {
  * - Expandable artifact viewer
  * - Filter by artifact type
  * - Quick preview mode
- *
- * Usage:
- * ```tsx
- * <ArtifactGallery
- *   artifacts={[
- *     { id: '1', type: '3d-scene', data: sceneData },
- *     { id: '2', type: 'quantum-circuit', data: circuitData }
- *   ]}
- * />
- * ```
+ * - Delete and edit actions
  */
 export default function ArtifactGallery({
   artifacts,
   defaultView = 'graphical',
+  onDeleteArtifact,
+  onEditArtifact,
 }: ArtifactGalleryProps) {
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(
     artifacts.length > 0 ? artifacts[0].id : null
   );
   const [filterType, setFilterType] = useState<string>('all');
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('list');
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    artifactId: string | null;
+    artifactName: string;
+  }>({
+    isOpen: false,
+    artifactId: null,
+    artifactName: '',
+  });
 
   // Filter artifacts by type
   const filteredArtifacts = artifacts.filter(
@@ -61,6 +66,14 @@ export default function ArtifactGallery({
         return '📊';
       case 'code':
         return '💻';
+      case 'agent':
+        return '🤖';
+      case 'tool':
+        return '🔧';
+      case 'skill':
+        return '⭐';
+      case 'workflow':
+        return '📋';
       default:
         return '📄';
     }
@@ -76,10 +89,46 @@ export default function ArtifactGallery({
         return 'Plot';
       case 'code':
         return 'Code';
+      case 'agent':
+        return 'Agent';
+      case 'tool':
+        return 'Tool';
+      case 'skill':
+        return 'Skill';
+      case 'workflow':
+        return 'Workflow';
       default:
         return 'Artifact';
     }
   };
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent, artifactId: string, artifactName: string) => {
+    e.stopPropagation();
+    setDeleteConfirm({
+      isOpen: true,
+      artifactId,
+      artifactName: artifactName || `Artifact #${artifactId.slice(0, 6)}`,
+    });
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (deleteConfirm.artifactId && onDeleteArtifact) {
+      onDeleteArtifact(deleteConfirm.artifactId);
+      // If deleted artifact was selected, select another
+      if (selectedArtifact === deleteConfirm.artifactId) {
+        const remaining = filteredArtifacts.filter(a => a.id !== deleteConfirm.artifactId);
+        setSelectedArtifact(remaining.length > 0 ? remaining[0].id : null);
+      }
+    }
+    setDeleteConfirm({ isOpen: false, artifactId: null, artifactName: '' });
+  }, [deleteConfirm.artifactId, onDeleteArtifact, selectedArtifact, filteredArtifacts]);
+
+  const handleEditClick = useCallback((e: React.MouseEvent, artifactId: string) => {
+    e.stopPropagation();
+    setSelectedArtifact(artifactId);
+    setLayoutMode('list'); // Switch to list mode to show editor
+    onEditArtifact?.(artifactId);
+  }, [onEditArtifact]);
 
   if (artifacts.length === 0) {
     return (
@@ -167,46 +216,118 @@ export default function ArtifactGallery({
           {layoutMode === 'list' ? (
             <div className="space-y-2">
               {filteredArtifacts.map((artifact, idx) => (
-                <button
+                <div
                   key={artifact.id}
-                  onClick={() => setSelectedArtifact(artifact.id)}
-                  className={`w-full p-2 rounded text-left transition-all ${
+                  className={`group relative w-full p-2 rounded text-left transition-all ${
                     selectedArtifact === artifact.id
                       ? 'bg-terminal-accent-green text-terminal-bg-primary'
                       : 'bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-green text-terminal-fg-primary'
                   }`}
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span>{getArtifactIcon(artifact.type)}</span>
-                    <span className="text-xs font-medium">#{idx + 1}</span>
+                  <button
+                    onClick={() => setSelectedArtifact(artifact.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span>{getArtifactIcon(artifact.type)}</span>
+                      <span className="text-xs font-medium truncate flex-1">
+                        {artifact.name || `#${idx + 1}`}
+                      </span>
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      {getArtifactLabel(artifact.type)}
+                    </div>
+                  </button>
+
+                  {/* Action buttons */}
+                  <div className={`absolute top-1 right-1 flex gap-1 transition-opacity ${
+                    selectedArtifact === artifact.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}>
+                    {onEditArtifact && (
+                      <button
+                        onClick={(e) => handleEditClick(e, artifact.id)}
+                        className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+                          selectedArtifact === artifact.id
+                            ? 'hover:bg-terminal-bg-primary/20 text-terminal-bg-primary'
+                            : 'hover:bg-terminal-accent-green/20 text-terminal-fg-tertiary hover:text-terminal-accent-green'
+                        }`}
+                        title="Edit"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
+                    {onDeleteArtifact && (
+                      <button
+                        onClick={(e) => handleDeleteClick(e, artifact.id, artifact.name || '')}
+                        className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+                          selectedArtifact === artifact.id
+                            ? 'hover:bg-red-500/30 text-terminal-bg-primary hover:text-red-300'
+                            : 'hover:bg-red-500/20 text-terminal-fg-tertiary hover:text-red-400'
+                        }`}
+                        title="Delete"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <div className="text-[10px] opacity-80">
-                    {getArtifactLabel(artifact.type)}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               {filteredArtifacts.map((artifact, idx) => (
-                <button
+                <div
                   key={artifact.id}
-                  onClick={() => {
-                    setSelectedArtifact(artifact.id);
-                    setLayoutMode('list');
-                  }}
-                  className="p-3 rounded bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-green transition-all text-center"
+                  className="group relative p-3 rounded bg-terminal-bg-primary border border-terminal-border hover:border-terminal-accent-green transition-all text-center"
                 >
-                  <div className="text-2xl mb-1">
-                    {getArtifactIcon(artifact.type)}
+                  <button
+                    onClick={() => {
+                      setSelectedArtifact(artifact.id);
+                      setLayoutMode('list');
+                    }}
+                    className="w-full"
+                  >
+                    <div className="text-2xl mb-1">
+                      {getArtifactIcon(artifact.type)}
+                    </div>
+                    <div className="text-xs text-terminal-fg-primary truncate">
+                      {artifact.name || `#${idx + 1}`}
+                    </div>
+                    <div className="text-[10px] text-terminal-fg-secondary mt-1">
+                      {getArtifactLabel(artifact.type)}
+                    </div>
+                  </button>
+
+                  {/* Action buttons for grid */}
+                  <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onEditArtifact && (
+                      <button
+                        onClick={(e) => handleEditClick(e, artifact.id)}
+                        className="w-5 h-5 flex items-center justify-center rounded bg-terminal-bg-secondary hover:bg-terminal-accent-green/20 text-terminal-fg-tertiary hover:text-terminal-accent-green transition-colors"
+                        title="Edit"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
+                    {onDeleteArtifact && (
+                      <button
+                        onClick={(e) => handleDeleteClick(e, artifact.id, artifact.name || '')}
+                        className="w-5 h-5 flex items-center justify-center rounded bg-terminal-bg-secondary hover:bg-red-500/20 text-terminal-fg-tertiary hover:text-red-400 transition-colors"
+                        title="Delete"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <div className="text-xs text-terminal-fg-primary">
-                    #{idx + 1}
-                  </div>
-                  <div className="text-[10px] text-terminal-fg-secondary mt-1">
-                    {getArtifactLabel(artifact.type)}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -223,6 +344,18 @@ export default function ArtifactGallery({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Artifact"
+        message={`Are you sure you want to delete "${deleteConfirm.artifactName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirm({ isOpen: false, artifactId: null, artifactName: '' })}
+        danger
+      />
     </div>
   );
 }

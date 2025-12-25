@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { getVFS } from '@/lib/virtual-fs';
+import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 
 // VS Code-style icon components
 const ChevronRightIcon = ({ className }: { className?: string }) => (
@@ -295,6 +297,31 @@ const ROOT_TREE: TreeNode[] = [
   },
 ];
 
+// Icons for context menu
+const TrashIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+);
+
+const FolderPlusIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+  </svg>
+);
+
+const FilePlusIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
 export default function VSCodeFileTree({
   activeVolume,
   onVolumeChange,
@@ -305,6 +332,32 @@ export default function VSCodeFileTree({
     new Set(['system', 'system-agents', 'system-tools', 'system-skills'])
   );
   const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    node: TreeNode | null;
+  }>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    node: null,
+  });
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    node: TreeNode | null;
+  }>({
+    isOpen: false,
+    node: null,
+  });
+
+  // Rename state
+  const [renameNode, setRenameNode] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Load VFS projects on mount and when activeVolume changes
   useEffect(() => {
@@ -470,6 +523,158 @@ export default function VSCodeFileTree({
     }
   }, [onVolumeChange]);
 
+  // Handle right-click context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Don't show context menu for system volume items (read-only)
+    if (node.metadata?.readonly) {
+      return;
+    }
+
+    // Only show context menu for VFS files/folders (user projects)
+    if (!node.id.startsWith('vfs-')) {
+      return;
+    }
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      node,
+    });
+  }, []);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ isOpen: false, position: { x: 0, y: 0 }, node: null });
+  }, []);
+
+  // Handle delete confirmation
+  const handleDeleteClick = useCallback((node: TreeNode) => {
+    setDeleteConfirm({ isOpen: true, node });
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  // Perform delete
+  const handleDelete = useCallback(() => {
+    const node = deleteConfirm.node;
+    if (!node) return;
+
+    try {
+      const vfs = getVFS();
+
+      // Extract the actual VFS path from the node
+      // VFS paths are stored as 'projects/...' but node.path might be the full path
+      let vfsPath = node.path;
+
+      // If it's a vfs node, extract path from id
+      if (node.id.startsWith('vfs-file-')) {
+        vfsPath = node.id.replace('vfs-file-', '');
+      } else if (node.id.startsWith('vfs-dir-')) {
+        vfsPath = node.id.replace('vfs-dir-', '');
+      }
+
+      if (node.type === 'folder') {
+        vfs.deleteDirectory(vfsPath);
+      } else {
+        vfs.deleteFile(vfsPath);
+      }
+
+      // Close dialog
+      setDeleteConfirm({ isOpen: false, node: null });
+    } catch (error) {
+      console.error('Failed to delete:', error);
+    }
+  }, [deleteConfirm.node]);
+
+  // Handle rename
+  const handleRename = useCallback((node: TreeNode) => {
+    setRenameNode({ id: node.id, name: node.name });
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  // Perform rename
+  const performRename = useCallback((newName: string) => {
+    if (!renameNode || !newName.trim()) {
+      setRenameNode(null);
+      return;
+    }
+
+    try {
+      const vfs = getVFS();
+
+      // Extract path from node id
+      let oldPath = '';
+      if (renameNode.id.startsWith('vfs-file-')) {
+        oldPath = renameNode.id.replace('vfs-file-', '');
+      } else if (renameNode.id.startsWith('vfs-dir-')) {
+        oldPath = renameNode.id.replace('vfs-dir-', '');
+      }
+
+      if (oldPath) {
+        const pathParts = oldPath.split('/');
+        pathParts[pathParts.length - 1] = newName.trim();
+        const newPath = pathParts.join('/');
+
+        vfs.rename(oldPath, newPath);
+      }
+
+      setRenameNode(null);
+    } catch (error) {
+      console.error('Failed to rename:', error);
+      setRenameNode(null);
+    }
+  }, [renameNode]);
+
+  // Get context menu items for a node
+  const getContextMenuItems = useCallback((node: TreeNode): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+
+    if (node.type === 'folder') {
+      items.push({
+        id: 'new-file',
+        label: 'New File',
+        icon: <FilePlusIcon />,
+        action: () => {
+          // TODO: Implement new file creation
+          closeContextMenu();
+        },
+        disabled: true, // For now
+      });
+      items.push({
+        id: 'new-folder',
+        label: 'New Folder',
+        icon: <FolderPlusIcon />,
+        action: () => {
+          // TODO: Implement new folder creation
+          closeContextMenu();
+        },
+        disabled: true, // For now
+      });
+      items.push({ id: 'divider1', label: '', action: () => {}, divider: true });
+    }
+
+    items.push({
+      id: 'rename',
+      label: 'Rename',
+      icon: <EditIcon />,
+      action: () => handleRename(node),
+    });
+
+    items.push({ id: 'divider2', label: '', action: () => {}, divider: true });
+
+    items.push({
+      id: 'delete',
+      label: node.type === 'folder' ? 'Delete Folder' : 'Delete File',
+      icon: <TrashIcon />,
+      action: () => handleDeleteClick(node),
+      danger: true,
+    });
+
+    return items;
+  }, [closeContextMenu, handleDeleteClick, handleRename]);
+
   const getNodeIcon = (node: TreeNode, isExpanded: boolean): JSX.Element => {
     // Volume/Drive icon
     if (node.type === 'volume' && node.metadata?.volume) {
@@ -502,6 +707,8 @@ export default function VSCodeFileTree({
     const hasChildren = node.children && node.children.length > 0;
     const isReadOnly = node.metadata?.readonly;
     const isVolume = node.type === 'volume';
+    const isRenaming = renameNode?.id === node.id;
+    const isVFSNode = node.id.startsWith('vfs-');
 
     return (
       <div key={node.id}>
@@ -521,6 +728,7 @@ export default function VSCodeFileTree({
               onFileSelect(node);
             }
           }}
+          onContextMenu={(e) => handleContextMenu(e, node)}
         >
           {/* Chevron (only for nodes with children) */}
           <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
@@ -538,20 +746,54 @@ export default function VSCodeFileTree({
             {getNodeIcon(node, isExpanded)}
           </div>
 
-          {/* Name */}
-          <span className={`
-            text-xs truncate flex-1
-            ${isSelected ? 'text-fg-primary font-medium' : 'text-fg-secondary'}
-            ${isVolume ? 'font-semibold' : ''}
-          `}>
-            {node.name}
-          </span>
+          {/* Name or Rename Input */}
+          {isRenaming ? (
+            <input
+              type="text"
+              defaultValue={renameNode.name}
+              autoFocus
+              className="flex-1 text-xs bg-bg-tertiary border border-accent-primary rounded px-1 py-0.5 text-fg-primary outline-none"
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => performRename(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  performRename((e.target as HTMLInputElement).value);
+                } else if (e.key === 'Escape') {
+                  setRenameNode(null);
+                }
+              }}
+            />
+          ) : (
+            <span className={`
+              text-xs truncate flex-1
+              ${isSelected ? 'text-fg-primary font-medium' : 'text-fg-secondary'}
+              ${isVolume ? 'font-semibold' : ''}
+            `}>
+              {node.name}
+            </span>
+          )}
 
           {/* Read-only badge */}
           {isReadOnly && node.type === 'volume' && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-bg-elevated text-fg-tertiary font-normal">
               RO
             </span>
+          )}
+
+          {/* Delete button on hover (for VFS nodes only) */}
+          {isVFSNode && !isReadOnly && !isRenaming && (
+            <button
+              className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-all"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteClick(node);
+              }}
+              title="Delete"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           )}
         </div>
 
@@ -613,6 +855,26 @@ export default function VSCodeFileTree({
           <span>{activeVolume}</span>
         </div>
       </div>
+
+      {/* Context Menu */}
+      <ContextMenu
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.node ? getContextMenuItems(contextMenu.node) : []}
+        onClose={closeContextMenu}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title={deleteConfirm.node?.type === 'folder' ? 'Delete Folder' : 'Delete File'}
+        message={`Are you sure you want to delete "${deleteConfirm.node?.name}"?${deleteConfirm.node?.type === 'folder' ? ' This will delete all contents inside.' : ''} This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirm({ isOpen: false, node: null })}
+        danger
+      />
     </div>
   );
 }

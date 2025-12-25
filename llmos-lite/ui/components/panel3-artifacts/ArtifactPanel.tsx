@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibraryPanel from './NodeLibraryPanel';
 import NodeEditor from './NodeEditor';
@@ -10,6 +10,8 @@ import { QuantumCircuit } from './CircuitRenderer';
 import { ThreeScene } from './ThreeRenderer';
 import { PlotData } from './PlotRenderer';
 import QuantumCircuitDesigner from './QuantumCircuitDesigner';
+import { useArtifactStore } from '@/lib/artifacts/store';
+import { Artifact } from '@/lib/artifacts/types';
 
 interface ArtifactPanelProps {
   activeSession: string | null;
@@ -18,15 +20,74 @@ interface ArtifactPanelProps {
 
 type ViewTab = 'workflow' | 'artifacts' | 'library' | 'quantum-designer';
 
+// Convert Artifact from store to ArtifactData for gallery
+function convertToArtifactData(artifact: Artifact): ArtifactData & { id: string; name?: string } {
+  // Map artifact types to gallery-compatible types
+  if (artifact.renderView) {
+    return {
+      id: artifact.id,
+      name: artifact.name,
+      type: artifact.renderView.type as ArtifactData['type'],
+      data: artifact.renderView.data,
+    };
+  }
+
+  // For code artifacts without render view
+  if (artifact.type === 'code' && artifact.codeView) {
+    return {
+      id: artifact.id,
+      name: artifact.name,
+      type: 'code',
+      data: {
+        language: 'python',
+        code: artifact.codeView,
+        title: artifact.name,
+        executable: true,
+      },
+    };
+  }
+
+  // Default fallback
+  return {
+    id: artifact.id,
+    name: artifact.name,
+    type: 'code',
+    data: {
+      language: 'plaintext',
+      code: artifact.codeView || '// No content',
+      title: artifact.name,
+    },
+  };
+}
+
 export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactPanelProps) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<ViewTab>('workflow');
+  const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
 
-  // Sample artifacts for demonstration
-  const [sampleArtifacts] = useState<Array<ArtifactData & { id: string }>>([
+  // Use artifact store
+  const {
+    artifacts: storeArtifacts,
+    initialized,
+    initialize,
+    deleteArtifact,
+    updateArtifact,
+    getByVolume,
+  } = useArtifactStore();
+
+  // Initialize store on mount
+  useEffect(() => {
+    if (!initialized) {
+      initialize();
+    }
+  }, [initialized, initialize]);
+
+  // Sample artifacts for demonstration (fallback when store is empty)
+  const [sampleArtifacts] = useState<Array<ArtifactData & { id: string; name?: string }>>([
     {
       id: 'bell-circuit',
+      name: 'Bell State Preparation',
       type: 'quantum-circuit',
       data: {
         type: 'quantum-circuit',
@@ -41,6 +102,7 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     },
     {
       id: 'vqe-convergence',
+      name: 'VQE Convergence',
       type: 'plot',
       data: {
         type: 'line',
@@ -60,6 +122,7 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     },
     {
       id: 'molecule-viz',
+      name: 'H2 Molecule Visualization',
       type: '3d-scene',
       data: {
         type: '3d-scene',
@@ -92,6 +155,46 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
       } as ThreeScene,
     },
   ]);
+
+  // Combine store artifacts with samples (store takes precedence)
+  const allArtifacts = storeArtifacts.length > 0
+    ? storeArtifacts.map(convertToArtifactData)
+    : sampleArtifacts;
+
+  // Handle delete artifact
+  const handleDeleteArtifact = useCallback((id: string) => {
+    // Check if it's a sample artifact
+    const isSample = sampleArtifacts.some(a => a.id === id);
+    if (isSample) {
+      // For sample artifacts, we can't delete them from the store
+      console.log('Sample artifact cannot be deleted');
+      return;
+    }
+
+    // Delete from store
+    const deleted = deleteArtifact(id);
+    if (deleted) {
+      console.log('Artifact deleted:', id);
+      if (editingArtifactId === id) {
+        setEditingArtifactId(null);
+      }
+    }
+  }, [deleteArtifact, sampleArtifacts, editingArtifactId]);
+
+  // Handle edit artifact
+  const handleEditArtifact = useCallback((id: string) => {
+    setEditingArtifactId(id);
+    // Switch to artifacts tab to show the editor
+    setActiveTab('artifacts');
+  }, []);
+
+  // Handle save artifact
+  const handleSaveArtifact = useCallback((id: string, newCode: string) => {
+    const updated = updateArtifact(id, { codeView: newCode });
+    if (updated) {
+      console.log('Artifact saved:', id);
+    }
+  }, [updateArtifact]);
 
   return (
     <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -126,7 +229,7 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
                     : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
                 }`}
               >
-                📦 Artifacts ({sampleArtifacts.length})
+                📦 Artifacts ({allArtifacts.length})
               </button>
               <button
                 onClick={() => setActiveTab('library')}
@@ -189,7 +292,12 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
 
           {activeTab === 'artifacts' && (
             <div className="h-full">
-              <ArtifactGallery artifacts={sampleArtifacts} defaultView="split" />
+              <ArtifactGallery
+                artifacts={allArtifacts}
+                defaultView="split"
+                onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
+                onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
+              />
             </div>
           )}
 
