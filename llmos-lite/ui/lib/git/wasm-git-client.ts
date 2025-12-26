@@ -23,10 +23,27 @@ import type {
   GitEventType
 } from './types';
 
+// Type for LightningFS instance
+export interface LightningFSInstance {
+  promises: {
+    readFile(path: string, options?: { encoding?: string }): Promise<string | Uint8Array>;
+    writeFile(path: string, data: string | Uint8Array, options?: { encoding?: string }): Promise<void>;
+    unlink(path: string): Promise<void>;
+    readdir(path: string): Promise<string[]>;
+    mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+    rmdir(path: string): Promise<void>;
+    stat(path: string): Promise<{ isFile(): boolean; isDirectory(): boolean }>;
+    lstat(path: string): Promise<{ isFile(): boolean; isDirectory(): boolean }>;
+  };
+}
+
+// Type for LightningFS constructor
+type LightningFSConstructor = new (name: string, options?: { wipe?: boolean }) => LightningFSInstance;
+
 // Lazy-loaded isomorphic-git to reduce initial bundle size
 let git: typeof import('isomorphic-git') | null = null;
 let http: typeof import('isomorphic-git/http/web') | null = null;
-let LightningFS: typeof import('@isomorphic-git/lightning-fs').default | null = null;
+let LightningFS: LightningFSConstructor | null = null;
 
 /**
  * Load isomorphic-git dependencies lazily
@@ -42,7 +59,7 @@ async function loadGitDependencies(): Promise<void> {
 
   git = gitModule.default || gitModule;
   http = httpModule.default || httpModule;
-  LightningFS = fsModule.default;
+  LightningFS = fsModule.default as LightningFSConstructor;
 }
 
 /**
@@ -58,7 +75,7 @@ const FALLBACK_CORS_PROXY = 'https://cors.isomorphic-git.org';
  * Provides a high-level API for Git operations in the browser.
  */
 export class WasmGitClient {
-  private fs: InstanceType<typeof import('@isomorphic-git/lightning-fs').default> | null = null;
+  private fs: LightningFSInstance | null = null;
   private config: GitClientConfig;
   private volumeName: string;
   private initialized = false;
@@ -103,7 +120,7 @@ export class WasmGitClient {
   /**
    * Get the filesystem instance for external use
    */
-  getFs(): InstanceType<typeof import('@isomorphic-git/lightning-fs').default> {
+  getFs(): LightningFSInstance {
     if (!this.fs) {
       throw new Error('Git client not initialized. Call initialize() first.');
     }

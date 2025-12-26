@@ -26,6 +26,7 @@
 
 // Core client
 export { WasmGitClient, getWasmGitClient } from './wasm-git-client';
+export type { LightningFSInstance } from './wasm-git-client';
 
 // Types
 export type {
