@@ -40,9 +40,16 @@ export interface LightningFSInstance {
 // Type for LightningFS constructor
 type LightningFSConstructor = new (name: string, options?: { wipe?: boolean }) => LightningFSInstance;
 
+// Types for dynamically loaded modules
+// Using explicit types to avoid issues with module resolution
+type IsomorphicGit = typeof import('isomorphic-git');
+type IsomorphicGitHttp = { request: unknown };
+
 // Lazy-loaded isomorphic-git to reduce initial bundle size
-let git: typeof import('isomorphic-git') | null = null;
-let http: typeof import('isomorphic-git/http/web') | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let git: IsomorphicGit | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let http: IsomorphicGitHttp | null = null;
 let LightningFS: LightningFSConstructor | null = null;
 
 /**
@@ -57,9 +64,10 @@ async function loadGitDependencies(): Promise<void> {
     import('@isomorphic-git/lightning-fs')
   ]);
 
-  git = gitModule.default || gitModule;
-  http = httpModule.default || httpModule;
-  LightningFS = fsModule.default as LightningFSConstructor;
+  // Handle both ESM and CJS module formats
+  git = (gitModule as { default?: IsomorphicGit }).default ?? gitModule as IsomorphicGit;
+  http = (httpModule as { default?: IsomorphicGitHttp }).default ?? httpModule as IsomorphicGitHttp;
+  LightningFS = (fsModule as { default: LightningFSConstructor }).default;
 }
 
 /**
