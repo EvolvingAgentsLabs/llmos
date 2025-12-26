@@ -545,7 +545,18 @@ export class WasmGitClient {
       ref
     });
 
-    return commits.map(commit => ({
+    // Type for isomorphic-git log entry
+    interface GitLogEntry {
+      oid: string;
+      commit: {
+        message: string;
+        author: { name: string; email: string; timestamp: number };
+        committer: { name: string; email: string; timestamp: number };
+        parent: string[];
+      };
+    }
+
+    return (commits as GitLogEntry[]).map((commit: GitLogEntry) => ({
       oid: commit.oid,
       message: commit.commit.message,
       author: {
