@@ -482,7 +482,8 @@ export class WasmGitClient {
     });
 
     // Convert matrix to StatusEntry array
-    const files: StatusEntry[] = matrix.map(([filepath, headStatus, workdirStatus, stageStatus]) => {
+    // Matrix format: [filepath, HEAD, WORKDIR, STAGE]
+    const files: StatusEntry[] = matrix.map(([filepath, headStatus, workdirStatus, stageStatus]: [string, number, number, number]) => {
       let status: FileStatus = 'unmodified';
       let staged = false;
 
