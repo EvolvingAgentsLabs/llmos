@@ -6,6 +6,36 @@ LLMos-Lite is a self-evolving AI operating system that learns from every interac
 
 ![LLMos-Lite in Action](./assets/screen1.png)
 
+### Agent Workflow in Action
+
+Watch the SystemAgent orchestrate complex tasks through intelligent planning and sub-agent delegation:
+
+![SystemAgent Workflow](./assets/screen2.png)
+
+*The Chat interface shows real-time agent execution with planning steps, sub-agent invocations, and progress tracking.*
+
+### Canvas Visualization
+
+View generated outputs directly in the Canvas tab with interactive visualizations:
+
+![Canvas Visualization](./assets/screen3.png)
+
+*FFT analysis output showing time domain signal with noise and frequency domain spectrum—all generated and rendered in-browser.*
+
+---
+
+## 🆕 What's New
+
+### Latest Updates
+
+- **Multi-Step Agent Planning** - SystemAgent now shows detailed planning progress (e.g., "Planning step 5/10") with real-time status updates
+- **Sub-Agent Orchestration** - Intelligent task delegation to specialized agents like `SignalProcessorAgent` for domain-specific tasks
+- **Canvas Tab** - New dedicated visualization tab for viewing generated plots, images, and outputs with Code/Design toggle
+- **Enhanced File Explorer** - Improved sidebar with organized sections for System (agents, tools, skills), Team, and User volumes
+- **Project Structure** - Auto-generated project folders with components, memory, and output directories
+- **Model Selection** - Choose from multiple LLM providers including Anthropic Claude models directly in the UI
+- **Real-time Progress Tracking** - Visual indicators for agent status, processing state, and execution timeline
+
 ---
 
 ## 🎯 Main Goals
@@ -45,8 +75,10 @@ The system doesn't stay static—it **evolves**:
 ### Interactive Development
 - **Live Python Execution**: Code runs instantly in your browser via Pyodide
 - **Real-time Previews**: See matplotlib plots and results as you code
-- **File Management**: Full file tree with VFS storage
+- **Canvas Visualization**: Dedicated tab for viewing generated plots with Code/Design views
+- **File Management**: Full file tree with VFS storage and organized project structures
 - **Code Editor**: Split-view with syntax highlighting and auto-execution
+- **Agent Dashboard**: Real-time progress tracking with planning steps and execution timeline
 
 ### Available Libraries (WebAssembly-Compatible)
 ✅ numpy • scipy • matplotlib • pandas • scikit-learn • networkx • sympy
