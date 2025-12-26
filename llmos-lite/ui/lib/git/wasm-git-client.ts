@@ -594,7 +594,7 @@ export class WasmGitClient {
       remote: remote ? 'origin' : undefined
     });
 
-    return branches.map(name => ({
+    return (branches as string[]).map((name: string) => ({
       name,
       current: name === currentBranch,
       commit: '',  // Would need additional call to get
