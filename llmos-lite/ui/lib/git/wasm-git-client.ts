@@ -40,16 +40,12 @@ export interface LightningFSInstance {
 // Type for LightningFS constructor
 type LightningFSConstructor = new (name: string, options?: { wipe?: boolean }) => LightningFSInstance;
 
-// Types for dynamically loaded modules
-// Using explicit types to avoid issues with module resolution
-type IsomorphicGit = typeof import('isomorphic-git');
-type IsomorphicGitHttp = { request: unknown };
-
 // Lazy-loaded isomorphic-git to reduce initial bundle size
+// Using 'any' for dynamic imports to avoid complex module type resolution issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let git: IsomorphicGit | null = null;
+let git: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let http: IsomorphicGitHttp | null = null;
+let http: any = null;
 let LightningFS: LightningFSConstructor | null = null;
 
 /**
@@ -65,9 +61,12 @@ async function loadGitDependencies(): Promise<void> {
   ]);
 
   // Handle both ESM and CJS module formats
-  git = (gitModule as { default?: IsomorphicGit }).default ?? gitModule as IsomorphicGit;
-  http = (httpModule as { default?: IsomorphicGitHttp }).default ?? httpModule as IsomorphicGitHttp;
-  LightningFS = (fsModule as { default: LightningFSConstructor }).default;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  git = (gitModule as any).default ?? gitModule;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  http = (httpModule as any).default ?? httpModule;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  LightningFS = (fsModule as any).default;
 }
 
 /**
