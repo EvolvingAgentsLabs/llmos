@@ -818,7 +818,7 @@ export class WasmGitClient {
         dir
       });
 
-      const targetRemote = remotes.find(r => r.remote === remote);
+      const targetRemote = (remotes as Array<{ remote: string; url: string }>).find((r: { remote: string; url: string }) => r.remote === remote);
       return targetRemote?.url || null;
     } catch {
       return null;
