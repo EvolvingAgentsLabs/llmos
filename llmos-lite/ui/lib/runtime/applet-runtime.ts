@@ -99,6 +99,7 @@ async function loadBabel(): Promise<void> {
 const createAppletScope = () => {
   // We'll dynamically import these to avoid SSR issues
   const scope: Record<string, unknown> = {
+    // React core
     React,
     useState: React.useState,
     useEffect: React.useEffect,
@@ -110,6 +111,33 @@ const createAppletScope = () => {
     createContext: React.createContext,
     Fragment: React.Fragment,
     createElement: React.createElement,
+
+    // JavaScript built-ins needed for complex applets
+    Math,
+    JSON,
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    Date,
+    Map,
+    Set,
+    Promise,
+    console,
+
+    // Common browser APIs
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    requestAnimationFrame:
+      typeof window !== 'undefined' ? window.requestAnimationFrame : undefined,
+    cancelAnimationFrame:
+      typeof window !== 'undefined' ? window.cancelAnimationFrame : undefined,
+
+    // Utility for clipboard (common in applets)
+    navigator: typeof window !== 'undefined' ? window.navigator : undefined,
   };
 
   return scope;
@@ -166,39 +194,94 @@ export async function compileApplet(code: string): Promise<CompilationResult> {
     const extractedMetadata = extractMetadata(code);
 
     // Transpile TSX to JS
-    const jsCode = await transpileTSX(code);
+    let jsCode: string;
+    try {
+      jsCode = await transpileTSX(code);
+    } catch (transpileError: any) {
+      return {
+        success: false,
+        error: `Transpilation error: ${transpileError.message}`,
+        warnings,
+      };
+    }
 
     // Create scope with available libraries
     const scope = createAppletScope();
 
-    // Wrap the code to capture exports
+    // Build the execution function with proper scope injection
+    // Using a different approach that's more robust for various component patterns
+    const scopeKeys = Object.keys(scope);
+    const scopeValues = Object.values(scope);
+
+    // Wrap the code to capture exports - using a cleaner pattern
     const wrappedCode = `
-      (function(scope) {
-        const { React, useState, useEffect, useCallback, useMemo, useRef,
-                useReducer, useContext, createContext, Fragment, createElement } = scope;
+      "use strict";
 
-        const exports = {};
-        ${jsCode}
+      // Destructure scope variables
+      const { ${scopeKeys.join(', ')} } = __scope__;
 
-        // Try to find the default export or a component named 'Applet' or 'App'
-        if (typeof Component !== 'undefined') exports.Component = Component;
-        else if (typeof Applet !== 'undefined') exports.Component = Applet;
-        else if (typeof App !== 'undefined') exports.Component = App;
-        else if (typeof Default !== 'undefined') exports.Component = Default;
+      // User's transpiled code
+      ${jsCode}
 
-        if (typeof metadata !== 'undefined') exports.metadata = metadata;
-        if (typeof defaultState !== 'undefined') exports.defaultState = defaultState;
+      // Capture exports
+      const __exports__ = {};
 
-        return exports;
-      })
+      // Try to find the component (check all common patterns)
+      if (typeof Component !== 'undefined') __exports__.Component = Component;
+      else if (typeof Applet !== 'undefined') __exports__.Component = Applet;
+      else if (typeof App !== 'undefined') __exports__.Component = App;
+      else if (typeof Default !== 'undefined') __exports__.Component = Default;
+
+      // Capture optional exports
+      if (typeof metadata !== 'undefined') __exports__.metadata = metadata;
+      if (typeof defaultState !== 'undefined') __exports__.defaultState = defaultState;
+
+      return __exports__;
     `;
 
-    // Execute the wrapped code
-    const createExports = new Function('return ' + wrappedCode)();
-    const exports = createExports(scope) as AppletExports;
+    // Execute with proper error handling
+    let exports: AppletExports;
+    try {
+      // Create the function with scope parameter
+      const executeFn = new Function('__scope__', wrappedCode);
+      exports = executeFn(scope) as AppletExports;
+    } catch (execError: any) {
+      // Provide more helpful error messages
+      let errorMsg = execError.message || 'Unknown execution error';
 
-    if (!exports.Component) {
-      throw new Error('No component found. Export a component named Component, Applet, or App.');
+      // Check for common issues
+      if (errorMsg.includes('is not defined')) {
+        const match = errorMsg.match(/(\w+) is not defined/);
+        if (match) {
+          errorMsg = `"${match[1]}" is not available. Only React and its hooks (useState, useEffect, etc.) are available in applets.`;
+        }
+      }
+
+      return {
+        success: false,
+        error: `Runtime error: ${errorMsg}`,
+        warnings,
+      };
+    }
+
+    if (!exports || !exports.Component) {
+      // Try to give a helpful error message
+      const hasFunction = jsCode.includes('function ');
+      const hasConst = jsCode.includes('const ');
+
+      let hint = '';
+      if (!hasFunction && !hasConst) {
+        hint = ' The code must define a function component.';
+      } else {
+        hint = ' Make sure your component is named "Component", "Applet", or "App".';
+      }
+
+      throw new Error(`No component found.${hint}`);
+    }
+
+    // Verify the component is actually a function
+    if (typeof exports.Component !== 'function') {
+      throw new Error(`Component must be a function, got ${typeof exports.Component}`);
     }
 
     // Merge extracted metadata

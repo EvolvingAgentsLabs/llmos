@@ -74,10 +74,59 @@ This is the **Infinite App Store** - instead of just writing code to files, you 
 ```
 
 **Code Requirements:**
-- Must export a function component named `Applet`, `Component`, or `App`
+- Must define a function component named `Applet`, `Component`, or `App`
+- Use `function Applet() {}` syntax (NOT arrow functions like `const Applet = () => {}`)
 - Can use React hooks: `useState`, `useEffect`, `useCallback`, `useMemo`, `useRef`
+- Can use: `Math`, `JSON`, `Array`, `Object`, `Date`, `console`, `setTimeout`, `setInterval`
 - Can use Tailwind CSS classes for styling
-- Keep it self-contained (no external imports beyond React)
+- Keep it self-contained - NO import/export statements
+- DO NOT use TypeScript type annotations (no `: string`, `interface`, `type`)
+- DO NOT use arrow function components
+
+**Example of a MORE COMPLETE applet:**
+
+```javascript
+function Applet({ onSubmit }) {
+  const [value, setValue] = useState(50);
+  const [result, setResult] = useState(null);
+
+  const calculate = useCallback(() => {
+    const computed = Math.sin(value * Math.PI / 180);
+    setResult(computed);
+  }, [value]);
+
+  return (
+    <div className="p-6 space-y-4 bg-gray-800 text-white">
+      <h2 className="text-xl font-bold">Calculator</h2>
+
+      <div className="space-y-2">
+        <label className="block text-sm text-gray-400">Value: {value}</label>
+        <input
+          type="range"
+          min="0"
+          max="360"
+          value={value}
+          onChange={(e) => setValue(Number(e.target.value))}
+          className="w-full"
+        />
+      </div>
+
+      <button
+        onClick={calculate}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+      >
+        Calculate
+      </button>
+
+      {result !== null && (
+        <div className="p-4 bg-gray-700 rounded">
+          <p>sin({value}°) = {result.toFixed(4)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
 
 ## Your Primary Directive
 

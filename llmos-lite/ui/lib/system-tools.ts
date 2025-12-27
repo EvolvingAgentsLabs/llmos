@@ -51,10 +51,13 @@ Use this tool when the user needs:
 - A calculator, converter, or interactive tool
 - Any UI that would be better than text responses
 
-The applet code should be a React component using hooks (useState, useEffect, etc.).
-The component MUST be named "Component", "Applet", or "App".
-Use Tailwind CSS for styling with dark theme (bg-gray-800, text-gray-200, etc.).
-Use the onSubmit prop to return data when the user completes a task.`,
+CRITICAL CODE REQUIREMENTS:
+1. Use "function Applet() {}" or "function Component() {}" syntax
+2. DO NOT use arrow functions for the component (const Applet = () => {} will FAIL)
+3. DO NOT use import/export statements
+4. DO NOT use TypeScript type annotations (: string, interface, type)
+5. Available: useState, useEffect, useCallback, useMemo, useRef, Math, JSON, console
+6. Use Tailwind CSS classes for styling (dark theme: bg-gray-800, text-white)`,
   inputs: [
     {
       name: 'name',
@@ -71,27 +74,37 @@ Use the onSubmit prop to return data when the user completes a task.`,
     {
       name: 'code',
       type: 'string',
-      description: `The React component code (TSX). Example:
+      description: `The React component code. MUST use function declaration syntax:
 
-function Component({ onSubmit }) {
+function Applet({ onSubmit }) {
   const [value, setValue] = useState('');
+  const [result, setResult] = useState(null);
+
+  function handleCalculate() {
+    setResult(Math.sqrt(Number(value)));
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <h2 className="text-xl font-bold text-gray-200">My Tool</h2>
+    <div className="p-6 space-y-4 bg-gray-800 text-white">
+      <h2 className="text-xl font-bold">Calculator</h2>
       <input
-        type="text"
+        type="number"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
-        placeholder="Enter value..."
+        className="w-full p-2 bg-gray-700 border border-gray-600 rounded"
+        placeholder="Enter a number..."
       />
       <button
-        onClick={() => onSubmit({ value })}
-        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+        onClick={handleCalculate}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
       >
-        Submit
+        Calculate Square Root
       </button>
+      {result !== null && (
+        <div className="p-4 bg-gray-700 rounded">
+          Result: {result.toFixed(4)}
+        </div>
+      )}
     </div>
   );
 }`,
