@@ -2,15 +2,18 @@
  * Lens Evolution Service
  *
  * Evolutionary system for domain lens selection and generation.
- * Tracks fitness of lens-code pairings, learns which lenses work
- * best for different code patterns, and can generate new lenses
- * through combination and mutation.
+ * Based on cross-domain scientific modeling and phenomena transfer.
  *
- * Core concepts:
- * - Fitness: Success rate + speed improvement + code pattern match
- * - Selection: Probabilistic based on fitness (roulette wheel)
- * - Crossover: Combine successful lenses to create hybrids
- * - Mutation: Modify lens parameters based on learnings
+ * Core Scientific Principles:
+ * - Mathematical Isomorphism: Same equations govern different physical domains
+ * - Phenomena Transfer: Validated phenomena in one domain apply to isomorphic systems
+ * - System Dynamics: Classify code by dynamical behavior (equilibrium, flow, population, signal)
+ * - Validated Laws: Apply proven scientific laws rather than metaphorical mappings
+ *
+ * Example Isomorphisms:
+ * - Electrical (V=IR) ≡ Hydraulic (P=QZ) ≡ Thermal (ΔT=ΦR_th)
+ * - Glacial stochastic resonance ≡ Neural detection ≡ Optimization noise
+ * - Population genetics ≡ Genetic algorithms ≡ Strategy evolution
  */
 
 import { getVFS } from './virtual-fs';
@@ -21,10 +24,44 @@ import { DomainLens } from './mutation-engine';
 // Types
 // ============================================================================
 
-export interface CodePattern {
+/**
+ * System Dynamics Type - classifies code by its mathematical behavior
+ */
+export interface SystemDynamicsType {
   id: string;
   name: string;
   indicators: string[];  // Code patterns that identify this type
+  description: string;
+  governingEquations: string[];  // Mathematical laws that apply
+  applicablePhenomena: string[];  // Cross-domain phenomena that transfer
+}
+
+/**
+ * Mathematical Mapping - tracks how code variables map to physical analogs
+ */
+export interface MathematicalMapping {
+  codeVariable: string;
+  physicalAnalog: string;
+  governingLaw: string;
+  domain: string;
+}
+
+/**
+ * Phenomena Transfer Record - tracks successful cross-domain applications
+ */
+export interface PhenomenaTransfer {
+  phenomenonId: string;
+  sourceDomain: string;
+  targetApplication: string;
+  validationScore: number;  // How well the transfer worked
+  appliedCount: number;
+}
+
+// Legacy alias for backwards compatibility
+export interface CodePattern {
+  id: string;
+  name: string;
+  indicators: string[];
   description: string;
 }
 
@@ -63,6 +100,10 @@ export interface LensSelectionResult {
   confidence: number;
   reasoning: string;
   alternatives: Array<{ lens: DomainLens; score: number }>;
+  // Scientific additions
+  systemDynamicsType?: string;
+  mathematicalMapping?: MathematicalMapping;
+  transferablePhenomena?: string[];
 }
 
 // ============================================================================
@@ -82,90 +123,256 @@ const DEFAULT_CONFIG: EvolutionConfig = {
   learningRate: 0.1,
 };
 
-// Predefined code patterns for classification
-const CODE_PATTERNS: CodePattern[] = [
+/**
+ * System Dynamics Classification
+ *
+ * Classifies code by its mathematical structure, not just its algorithmic pattern.
+ * This enables applying validated physical laws and phenomena transfer.
+ */
+const SYSTEM_DYNAMICS: SystemDynamicsType[] = [
   {
-    id: 'sorting',
-    name: 'Sorting & Ordering',
-    indicators: ['sort', 'bubble', 'quick', 'merge', 'heap', 'swap', 'compare', 'order'],
-    description: 'Algorithms that arrange elements in a specific order',
+    id: 'equilibrium_seeking',
+    name: 'Equilibrium-Seeking Systems',
+    indicators: ['min', 'max', 'optim', 'gradient', 'converge', 'loss', 'cost', 'energy', 'objective', 'fitness', 'descent', 'ascent'],
+    description: 'Systems that minimize/maximize an objective function',
+    governingEquations: [
+      'F = -∇U (gradient descent)',
+      'P(state) ∝ exp(-E/kT) (Boltzmann)',
+      'ΔF = ΔU - TΔS (free energy)'
+    ],
+    applicablePhenomena: [
+      'Simulated annealing',
+      'Phase transitions at critical points',
+      'Quenching vs slow cooling tradeoff'
+    ]
   },
   {
-    id: 'searching',
-    name: 'Searching & Finding',
-    indicators: ['search', 'find', 'binary', 'linear', 'lookup', 'index', 'contains'],
-    description: 'Algorithms that locate specific elements or values',
+    id: 'flow_network',
+    name: 'Flow Network Systems',
+    indicators: ['queue', 'buffer', 'pipe', 'flow', 'stream', 'throughput', 'capacity', 'load', 'balance', 'route', 'distribute'],
+    description: 'Systems where quantities flow through a network structure',
+    governingEquations: [
+      'Σ(inputs) = Σ(outputs) (Kirchhoff current)',
+      'V = IR (Ohm\'s law)',
+      'P = QZ (hydraulic analog)'
+    ],
+    applicablePhenomena: [
+      'Impedance matching for throughput',
+      'RC time constants for buffering',
+      'Current divider for load balancing'
+    ]
   },
   {
-    id: 'aggregation',
-    name: 'Aggregation & Reduction',
-    indicators: ['sum', 'total', 'count', 'average', 'mean', 'reduce', 'accumulate', 'aggregate'],
-    description: 'Operations that combine multiple values into one',
+    id: 'population_dynamics',
+    name: 'Population Dynamics Systems',
+    indicators: ['population', 'fitness', 'select', 'mutate', 'crossover', 'generation', 'evolve', 'compete', 'survive', 'reproduce'],
+    description: 'Systems with competing/cooperating entities under selection',
+    governingEquations: [
+      'Δz̄ = Cov(w,z)/w̄ (Price equation)',
+      'dw̄/dt = Var(w) (Fisher theorem)',
+      'dx_i/dt = x_i(f_i - φ) (Replicator)'
+    ],
+    applicablePhenomena: [
+      'Diversity drives adaptation rate',
+      'Punctuated equilibrium',
+      'Evolutionarily stable strategies'
+    ]
   },
   {
-    id: 'filtering',
-    name: 'Filtering & Selection',
-    indicators: ['filter', 'select', 'where', 'remove', 'exclude', 'include', 'positive', 'negative'],
-    description: 'Operations that select subsets based on criteria',
+    id: 'signal_detection',
+    name: 'Signal Detection Systems',
+    indicators: ['threshold', 'detect', 'noise', 'signal', 'filter', 'classify', 'anomaly', 'pattern', 'match', 'trigger'],
+    description: 'Systems that detect patterns in noisy data',
+    governingEquations: [
+      'SNR = P_signal / P_noise',
+      'Output_SNR peaks at σ_opt (stochastic resonance)',
+      'H(ω) = |Y(ω)| / |X(ω)| (transfer function)'
+    ],
+    applicablePhenomena: [
+      'Optimal noise enhances detection',
+      'Ensemble of noisy detectors beats one clean',
+      'Matched filtering for known patterns'
+    ]
   },
   {
-    id: 'transformation',
-    name: 'Transformation & Mapping',
-    indicators: ['map', 'transform', 'convert', 'apply', 'process', 'modify'],
-    description: 'Operations that transform each element',
+    id: 'market_equilibrium',
+    name: 'Market Equilibrium Systems',
+    indicators: ['price', 'trade', 'bid', 'ask', 'auction', 'allocat', 'scarce', 'resource', 'budget', 'utility', 'payoff'],
+    description: 'Systems with resource allocation and trade-offs',
+    governingEquations: [
+      'MU_x/P_x = MU_y/P_y (utility maximization)',
+      'S(p) = D(p) (market clearing)',
+      'E[u(A)] = Σ p_i × u(A_i) (expected utility)'
+    ],
+    applicablePhenomena: [
+      'Nash equilibrium in competition',
+      'Pareto efficiency boundary',
+      'Arbitrage elimination'
+    ]
   },
   {
-    id: 'optimization',
-    name: 'Optimization & Extrema',
-    indicators: ['max', 'min', 'optimal', 'best', 'worst', 'extreme', 'peak', 'valley'],
-    description: 'Finding optimal values or configurations',
+    id: 'wave_propagation',
+    name: 'Wave/Propagation Systems',
+    indicators: ['propagate', 'spread', 'diffuse', 'wave', 'cascade', 'infect', 'viral', 'neighbor', 'contagion', 'epidemic'],
+    description: 'Systems with spreading/diffusing behavior',
+    governingEquations: [
+      '∂u/∂t = D∇²u (diffusion)',
+      'dI/dt = βSI - γI (SIR model)',
+      'R0 = β/γ (reproduction number)'
+    ],
+    applicablePhenomena: [
+      'Critical threshold for spread',
+      'Diffusion limited aggregation',
+      'Wave interference patterns'
+    ]
   },
   {
-    id: 'graph',
-    name: 'Graph & Tree Operations',
-    indicators: ['graph', 'tree', 'node', 'edge', 'path', 'traverse', 'dfs', 'bfs', 'visit'],
-    description: 'Operations on graph or tree structures',
+    id: 'recursive_structure',
+    name: 'Recursive/Fractal Systems',
+    indicators: ['recursive', 'divide', 'conquer', 'tree', 'hierarchy', 'self-similar', 'branch', 'merge', 'split'],
+    description: 'Systems with self-similar recursive structure',
+    governingEquations: [
+      'T(n) = aT(n/b) + f(n) (master theorem)',
+      'D = log(N)/log(1/r) (fractal dimension)'
+    ],
+    applicablePhenomena: [
+      'Divide-and-conquer optimality',
+      'Tree balancing for efficiency',
+      'Memoization as path caching'
+    ]
   },
   {
-    id: 'recursive',
-    name: 'Recursive & Divide-Conquer',
-    indicators: ['recursive', 'recurse', 'divide', 'conquer', 'split', 'combine', 'base case'],
-    description: 'Self-referential or divide-and-conquer patterns',
-  },
+    id: 'state_machine',
+    name: 'State Machine Systems',
+    indicators: ['state', 'transition', 'event', 'machine', 'automaton', 'phase', 'mode', 'switch', 'trigger'],
+    description: 'Systems with discrete states and transitions',
+    governingEquations: [
+      'P(X_n+1|X_n) (Markov property)',
+      'πP = π (stationary distribution)'
+    ],
+    applicablePhenomena: [
+      'Ergodicity and mixing time',
+      'Absorbing states as attractors',
+      'Hidden state inference'
+    ]
+  }
 ];
 
-// Lens affinity matrix: which lenses work well for which patterns
+// Legacy: Map system dynamics to old pattern IDs for backwards compatibility
+const CODE_PATTERNS: CodePattern[] = SYSTEM_DYNAMICS.map(sd => ({
+  id: sd.id,
+  name: sd.name,
+  indicators: sd.indicators,
+  description: sd.description
+}));
+
+/**
+ * Scientific Affinity Matrix
+ *
+ * Maps domain lenses to system dynamics types based on mathematical isomorphism.
+ * Higher scores indicate stronger isomorphism (same governing equations).
+ */
 const LENS_PATTERN_AFFINITY: Record<string, Record<string, number>> = {
   thermodynamics: {
-    sorting: 0.9,        // Crystallization = sorting
-    optimization: 0.95,  // Energy minimization
-    searching: 0.6,
-    aggregation: 0.5,
-    filtering: 0.4,
-    transformation: 0.5,
-    graph: 0.7,          // Diffusion on graphs
-    recursive: 0.6,
+    equilibrium_seeking: 0.98,  // Energy minimization IS gradient descent
+    flow_network: 0.75,         // Heat flow through thermal resistance
+    population_dynamics: 0.60,  // Statistical mechanics of populations
+    signal_detection: 0.55,     // Thermal noise in detection
+    market_equilibrium: 0.70,   // Free energy ≡ utility maximization
+    wave_propagation: 0.80,     // Heat diffusion equation
+    recursive_structure: 0.40,
+    state_machine: 0.65,        // Phase transitions
+  },
+  circuit_systems: {
+    equilibrium_seeking: 0.70,  // Circuits minimize energy dissipation
+    flow_network: 0.98,         // Direct isomorphism: V=IR ≡ P=QZ
+    population_dynamics: 0.40,
+    signal_detection: 0.85,     // Signal processing fundamentals
+    market_equilibrium: 0.75,   // Economic flow networks
+    wave_propagation: 0.80,     // Transmission lines, wave equations
+    recursive_structure: 0.50,  // Ladder networks
+    state_machine: 0.60,        // Switching circuits
   },
   evolutionary_biology: {
-    sorting: 0.7,        // Survival of fittest
-    optimization: 0.85,  // Natural selection
-    searching: 0.6,      // Foraging
-    filtering: 0.9,      // Natural selection
-    aggregation: 0.5,
-    transformation: 0.7, // Mutation
-    graph: 0.6,          // Phylogenetic trees
-    recursive: 0.7,      // Generations
+    equilibrium_seeking: 0.75,  // Fitness optimization
+    flow_network: 0.45,         // Gene flow
+    population_dynamics: 0.98,  // Direct application
+    signal_detection: 0.50,     // Sensory evolution
+    market_equilibrium: 0.80,   // Game theory, competition
+    wave_propagation: 0.70,     // Epidemic dynamics, species spread
+    recursive_structure: 0.65,  // Phylogenetic trees
+    state_machine: 0.55,        // Life cycle stages
+  },
+  signal_stochastic: {
+    equilibrium_seeking: 0.65,  // Noise-enhanced optimization
+    flow_network: 0.70,         // Signal flow, filtering
+    population_dynamics: 0.55,  // Neural population coding
+    signal_detection: 0.98,     // Core domain
+    market_equilibrium: 0.50,
+    wave_propagation: 0.85,     // Wave processing, FFT
+    recursive_structure: 0.45,
+    state_machine: 0.75,        // Threshold crossings as state changes
   },
   economics: {
-    sorting: 0.6,        // Price ranking
-    optimization: 0.8,   // Cost minimization
-    searching: 0.7,      // Arbitrage
-    filtering: 0.6,
-    aggregation: 0.95,   // Portfolio value
-    transformation: 0.6,
-    graph: 0.5,
-    recursive: 0.5,
+    equilibrium_seeking: 0.85,  // Utility maximization
+    flow_network: 0.75,         // Trade networks, money flow
+    population_dynamics: 0.80,  // Evolutionary game theory
+    signal_detection: 0.50,     // Market signals
+    market_equilibrium: 0.98,   // Core domain
+    wave_propagation: 0.60,     // Information cascades
+    recursive_structure: 0.55,  // Option pricing trees
+    state_machine: 0.65,        // Market regimes
   },
+};
+
+/**
+ * Phenomena Transfer Registry
+ *
+ * Tracks which phenomena successfully transfer between domains.
+ * Used to weight lens selection when similar phenomena are needed.
+ */
+const PHENOMENA_TRANSFER_REGISTRY: Record<string, {
+  sourceDomain: string;
+  targetDomains: string[];
+  phenomenon: string;
+  mathematicalBasis: string;
+}> = {
+  'simulated_annealing': {
+    sourceDomain: 'thermodynamics',
+    targetDomains: ['equilibrium_seeking', 'population_dynamics'],
+    phenomenon: 'Controlled cooling escapes local minima',
+    mathematicalBasis: 'Metropolis criterion: P(accept) = exp(-ΔE/kT)'
+  },
+  'stochastic_resonance': {
+    sourceDomain: 'signal_stochastic',
+    targetDomains: ['signal_detection', 'equilibrium_seeking'],
+    phenomenon: 'Optimal noise enhances detection',
+    mathematicalBasis: 'SNR peaks at non-zero noise level'
+  },
+  'impedance_matching': {
+    sourceDomain: 'circuit_systems',
+    targetDomains: ['flow_network', 'market_equilibrium'],
+    phenomenon: 'Maximum power transfer at matched impedance',
+    mathematicalBasis: 'Z_load = Z_source*'
+  },
+  'fisher_theorem': {
+    sourceDomain: 'evolutionary_biology',
+    targetDomains: ['population_dynamics', 'equilibrium_seeking'],
+    phenomenon: 'Fitness variance drives adaptation rate',
+    mathematicalBasis: 'dw̄/dt = Var(w)'
+  },
+  'nash_equilibrium': {
+    sourceDomain: 'economics',
+    targetDomains: ['population_dynamics', 'market_equilibrium'],
+    phenomenon: 'No player benefits from unilateral deviation',
+    mathematicalBasis: 'Best response functions intersect'
+  },
+  'kirchhoff_conservation': {
+    sourceDomain: 'circuit_systems',
+    targetDomains: ['flow_network', 'wave_propagation'],
+    phenomenon: 'Flow conservation at nodes',
+    mathematicalBasis: 'Σ I_in = Σ I_out'
+  }
 };
 
 // ============================================================================
@@ -219,29 +426,49 @@ export class LensEvolutionService {
   }
 
   // --------------------------------------------------------------------------
-  // Code Analysis
+  // System Dynamics Analysis
   // --------------------------------------------------------------------------
 
   /**
-   * Analyze code to identify its primary patterns
+   * Analyze code to identify its system dynamics type
+   *
+   * This goes beyond simple pattern matching to identify the mathematical
+   * structure of the code, enabling cross-domain law application.
    */
-  analyzeCodePatterns(code: string): Array<{ pattern: CodePattern; confidence: number }> {
+  analyzeSystemDynamics(code: string): Array<{
+    dynamics: SystemDynamicsType;
+    confidence: number;
+    governingEquations: string[];
+    applicablePhenomena: string[];
+  }> {
     const codeLower = code.toLowerCase();
-    const results: Array<{ pattern: CodePattern; confidence: number }> = [];
+    const results: Array<{
+      dynamics: SystemDynamicsType;
+      confidence: number;
+      governingEquations: string[];
+      applicablePhenomena: string[];
+    }> = [];
 
-    for (const pattern of CODE_PATTERNS) {
+    for (const dynamics of SYSTEM_DYNAMICS) {
       let matchCount = 0;
-      let totalIndicators = pattern.indicators.length;
+      const totalIndicators = dynamics.indicators.length;
 
-      for (const indicator of pattern.indicators) {
-        if (codeLower.includes(indicator)) {
+      for (const indicator of dynamics.indicators) {
+        // Use word boundary matching for more accuracy
+        const regex = new RegExp(`\\b${indicator}`, 'i');
+        if (regex.test(codeLower)) {
           matchCount++;
         }
       }
 
       if (matchCount > 0) {
-        const confidence = matchCount / totalIndicators;
-        results.push({ pattern, confidence });
+        const confidence = Math.min(1, matchCount / Math.sqrt(totalIndicators));
+        results.push({
+          dynamics,
+          confidence,
+          governingEquations: dynamics.governingEquations,
+          applicablePhenomena: dynamics.applicablePhenomena
+        });
       }
     }
 
@@ -251,11 +478,81 @@ export class LensEvolutionService {
   }
 
   /**
-   * Get the primary code pattern
+   * Find phenomena that can transfer to this code's dynamics
+   */
+  findTransferablePhenomena(systemDynamicsId: string): Array<{
+    phenomenonId: string;
+    sourceDomain: string;
+    phenomenon: string;
+    mathematicalBasis: string;
+  }> {
+    const applicable: Array<{
+      phenomenonId: string;
+      sourceDomain: string;
+      phenomenon: string;
+      mathematicalBasis: string;
+    }> = [];
+
+    for (const [phenomenonId, transfer] of Object.entries(PHENOMENA_TRANSFER_REGISTRY)) {
+      if (transfer.targetDomains.includes(systemDynamicsId)) {
+        applicable.push({
+          phenomenonId,
+          sourceDomain: transfer.sourceDomain,
+          phenomenon: transfer.phenomenon,
+          mathematicalBasis: transfer.mathematicalBasis
+        });
+      }
+    }
+
+    return applicable;
+  }
+
+  /**
+   * Analyze code to identify its primary patterns (legacy compatibility)
+   */
+  analyzeCodePatterns(code: string): Array<{ pattern: CodePattern; confidence: number }> {
+    const dynamics = this.analyzeSystemDynamics(code);
+    return dynamics.map(d => ({
+      pattern: {
+        id: d.dynamics.id,
+        name: d.dynamics.name,
+        indicators: d.dynamics.indicators,
+        description: d.dynamics.description
+      },
+      confidence: d.confidence
+    }));
+  }
+
+  /**
+   * Get the primary code pattern (legacy compatibility)
    */
   getPrimaryPattern(code: string): CodePattern | null {
     const patterns = this.analyzeCodePatterns(code);
     return patterns.length > 0 ? patterns[0].pattern : null;
+  }
+
+  /**
+   * Get the primary system dynamics with full scientific context
+   */
+  getPrimarySystemDynamics(code: string): {
+    dynamics: SystemDynamicsType;
+    confidence: number;
+    transferablePhenomena: Array<{
+      phenomenonId: string;
+      sourceDomain: string;
+      phenomenon: string;
+      mathematicalBasis: string;
+    }>;
+  } | null {
+    const dynamics = this.analyzeSystemDynamics(code);
+    if (dynamics.length === 0) return null;
+
+    const primary = dynamics[0];
+    return {
+      dynamics: primary.dynamics,
+      confidence: primary.confidence,
+      transferablePhenomena: this.findTransferablePhenomena(primary.dynamics.id)
+    };
   }
 
   // --------------------------------------------------------------------------
@@ -264,6 +561,7 @@ export class LensEvolutionService {
 
   /**
    * Select the best lens for given code using evolutionary fitness
+   * and scientific isomorphism analysis
    */
   async selectLens(
     code: string,
@@ -272,13 +570,21 @@ export class LensEvolutionService {
   ): Promise<LensSelectionResult> {
     this.availableLenses = availableLenses;
 
-    // 1. Analyze code patterns
+    // 1. Analyze system dynamics (not just patterns)
+    const systemDynamics = this.analyzeSystemDynamics(code);
+    const primaryDynamics = systemDynamics[0] || null;
     const codePatterns = this.analyzeCodePatterns(code);
     const primaryPattern = codePatterns[0]?.pattern || null;
 
+    // Find transferable phenomena for this code's dynamics
+    const transferablePhenomena = primaryDynamics
+      ? this.findTransferablePhenomena(primaryDynamics.dynamics.id)
+      : [];
+
     // 2. Calculate lens scores based on:
-    //    - Historical fitness for this code pattern
-    //    - Prior affinity (domain knowledge)
+    //    - Mathematical isomorphism strength (primary factor)
+    //    - Historical fitness for this system dynamics type
+    //    - Phenomena transfer applicability
     //    - Exploration bonus for less-used lenses
     const lensScores: Array<{ lens: DomainLens; score: number; reasoning: string }> = [];
 
@@ -286,32 +592,44 @@ export class LensEvolutionService {
       let score = 0;
       const reasoningParts: string[] = [];
 
+      // Mathematical isomorphism (primary factor)
+      if (primaryDynamics) {
+        const isomorphism = LENS_PATTERN_AFFINITY[lens.id]?.[primaryDynamics.dynamics.id] || 0.3;
+        score += isomorphism * 0.45;
+        if (isomorphism > 0.9) {
+          reasoningParts.push(`strong isomorphism: ${(isomorphism * 100).toFixed(0)}%`);
+        } else if (isomorphism > 0.7) {
+          reasoningParts.push(`good isomorphism: ${(isomorphism * 100).toFixed(0)}%`);
+        }
+      }
+
+      // Phenomena transfer bonus
+      const applicablePhenomena = transferablePhenomena.filter(p => p.sourceDomain === lens.id);
+      if (applicablePhenomena.length > 0) {
+        const phenomenaBonus = Math.min(0.2, applicablePhenomena.length * 0.08);
+        score += phenomenaBonus;
+        reasoningParts.push(`${applicablePhenomena.length} transferable phenomena`);
+      }
+
       // Historical fitness
       const historicalFitness = this.getHistoricalFitness(lens.id, primaryPattern?.id);
       if (historicalFitness !== null) {
-        score += historicalFitness * 0.4;
-        reasoningParts.push(`historical fitness: ${(historicalFitness * 100).toFixed(0)}%`);
-      }
-
-      // Prior affinity
-      if (primaryPattern) {
-        const affinity = LENS_PATTERN_AFFINITY[lens.id]?.[primaryPattern.id] || 0.5;
-        score += affinity * 0.4;
-        reasoningParts.push(`pattern affinity: ${(affinity * 100).toFixed(0)}%`);
+        score += historicalFitness * 0.25;
+        reasoningParts.push(`historical: ${(historicalFitness * 100).toFixed(0)}%`);
       }
 
       // Exploration bonus (less used = higher bonus)
       const usageCount = this.getLensUsageCount(lens.id);
-      const explorationBonus = Math.max(0, 0.2 - (usageCount * 0.01));
+      const explorationBonus = Math.max(0, 0.1 - (usageCount * 0.005));
       score += explorationBonus;
-      if (explorationBonus > 0.05) {
-        reasoningParts.push(`exploration bonus: ${(explorationBonus * 100).toFixed(0)}%`);
+      if (explorationBonus > 0.03) {
+        reasoningParts.push(`exploration: +${(explorationBonus * 100).toFixed(0)}%`);
       }
 
       // Genome fitness from evolution
       const genome = this.lensGenomes.get(lens.id);
       if (genome) {
-        score += genome.fitness * 0.2;
+        score += genome.fitness * 0.1;
       }
 
       lensScores.push({
@@ -335,11 +653,26 @@ export class LensEvolutionService {
     // 4. Apply selection pressure (probabilistic selection)
     const selectedLens = this.rouletteWheelSelect(lensScores);
 
+    // Build mathematical mapping if we have system dynamics
+    let mathematicalMapping: MathematicalMapping | undefined;
+    if (primaryDynamics && primaryDynamics.dynamics.governingEquations.length > 0) {
+      mathematicalMapping = {
+        codeVariable: 'system state',
+        physicalAnalog: primaryDynamics.dynamics.name,
+        governingLaw: primaryDynamics.dynamics.governingEquations[0],
+        domain: selectedLens.lens.domain || selectedLens.lens.id
+      };
+    }
+
     return {
       selectedLens: selectedLens.lens,
       confidence: selectedLens.score,
       reasoning: `Selected ${selectedLens.lens.name}: ${selectedLens.reasoning}`,
       alternatives: lensScores.slice(1, 4).map(s => ({ lens: s.lens, score: s.score })),
+      // Scientific context
+      systemDynamicsType: primaryDynamics?.dynamics.id,
+      mathematicalMapping,
+      transferablePhenomena: transferablePhenomena.map(p => p.phenomenon)
     };
   }
 
@@ -781,7 +1114,7 @@ Create a mutated version of this lens. Keep the core domain but evolve it based 
     const elites = sortedGenomes.slice(0, this.config.elitismCount);
 
     // 2. Cull low-fitness lenses (except base lenses)
-    const baseLensIds = ['thermodynamics', 'evolutionary_biology', 'economics'];
+    const baseLensIds = ['thermodynamics', 'evolutionary_biology', 'economics', 'circuit_systems', 'signal_stochastic'];
     for (const genome of sortedGenomes) {
       if (genome.fitness < this.config.minFitnessThreshold &&
           !baseLensIds.includes(genome.lensId) &&
@@ -956,4 +1289,52 @@ export function recordLensFitness(
 ): void {
   const service = getLensEvolutionService();
   service.recordMutationResult(lensId, code, success, speedImprovement);
+}
+
+/**
+ * Analyze the system dynamics of code and return scientific context
+ */
+export function analyzeCodeDynamics(code: string): {
+  primaryDynamics: SystemDynamicsType | null;
+  confidence: number;
+  governingEquations: string[];
+  transferablePhenomena: Array<{
+    phenomenonId: string;
+    sourceDomain: string;
+    phenomenon: string;
+    mathematicalBasis: string;
+  }>;
+} {
+  const service = getLensEvolutionService();
+  const result = service.getPrimarySystemDynamics(code);
+
+  if (!result) {
+    return {
+      primaryDynamics: null,
+      confidence: 0,
+      governingEquations: [],
+      transferablePhenomena: []
+    };
+  }
+
+  return {
+    primaryDynamics: result.dynamics,
+    confidence: result.confidence,
+    governingEquations: result.dynamics.governingEquations,
+    transferablePhenomena: result.transferablePhenomena
+  };
+}
+
+/**
+ * Get all available system dynamics types
+ */
+export function getSystemDynamicsTypes(): SystemDynamicsType[] {
+  return SYSTEM_DYNAMICS;
+}
+
+/**
+ * Get all registered phenomena transfers
+ */
+export function getPhenomenaTransferRegistry(): typeof PHENOMENA_TRANSFER_REGISTRY {
+  return PHENOMENA_TRANSFER_REGISTRY;
 }
