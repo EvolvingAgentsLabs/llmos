@@ -218,7 +218,12 @@ export class MutationEngine {
    */
   private async loadResources(): Promise<void> {
     // Load domain lenses
-    const domainFiles = ['thermodynamics.md', 'evolutionary_biology.md', 'economics.md'];
+    const domainFiles = [
+      'thermodynamics.md',
+      'evolutionary_biology.md',
+      'economics.md',
+      'quantum_computing.md',  // Quantum OS API primitives
+    ];
     this.domainLenses = [];
 
     for (const file of domainFiles) {
