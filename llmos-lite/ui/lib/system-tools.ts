@@ -10,6 +10,17 @@ import { getSubAgentExecutor } from './subagents/subagent-executor';
 import { getSubAgentUsage, SubAgentUsageRecord } from './subagents/usage-tracker';
 import type { VolumeType } from './volumes/file-operations';
 
+// Dynamic import for applet runtime to avoid SSR issues
+let compileAppletFn: ((code: string) => Promise<any>) | null = null;
+
+async function getCompileApplet() {
+  if (!compileAppletFn) {
+    const { compileApplet } = await import('./runtime/applet-runtime');
+    compileAppletFn = compileApplet;
+  }
+  return compileAppletFn;
+}
+
 export interface ToolDefinition {
   id: string;
   name: string;
@@ -22,6 +33,169 @@ export interface ToolDefinition {
   }[];
   execute: (inputs: Record<string, any>) => Promise<any>;
 }
+
+// Event emitter for applet generation
+type AppletGeneratedCallback = (applet: {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+}) => void;
+
+let appletGeneratedCallback: AppletGeneratedCallback | null = null;
+
+export function setAppletGeneratedCallback(callback: AppletGeneratedCallback | null) {
+  appletGeneratedCallback = callback;
+}
+
+/**
+ * Generate Applet Tool - Creates interactive React applets
+ */
+export const GenerateAppletTool: ToolDefinition = {
+  id: 'generate-applet',
+  name: 'Generate Applet',
+  description: `Generate an interactive React applet that the user can interact with.
+
+Use this tool when the user needs:
+- A form or wizard to collect information
+- A dashboard or visualization tool
+- A calculator, converter, or interactive tool
+- Any UI that would be better than text responses
+
+CRITICAL CODE REQUIREMENTS:
+1. Use "function Applet() {}" or "function Component() {}" syntax
+2. DO NOT use arrow functions for the component (const Applet = () => {} will FAIL)
+3. DO NOT use import/export statements
+4. DO NOT use TypeScript type annotations (: string, interface, type)
+5. Available: useState, useEffect, useCallback, useMemo, useRef, Math, JSON, console
+6. Use Tailwind CSS classes for styling (dark theme: bg-gray-800, text-white)`,
+  inputs: [
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Name of the applet (e.g., "Budget Calculator", "NDA Generator")',
+      required: true,
+    },
+    {
+      name: 'description',
+      type: 'string',
+      description: 'Brief description of what the applet does',
+      required: true,
+    },
+    {
+      name: 'code',
+      type: 'string',
+      description: `The React component code. MUST use function declaration syntax:
+
+function Applet({ onSubmit }) {
+  const [value, setValue] = useState('');
+  const [result, setResult] = useState(null);
+
+  function handleCalculate() {
+    setResult(Math.sqrt(Number(value)));
+  }
+
+  return (
+    <div className="p-6 space-y-4 bg-gray-800 text-white">
+      <h2 className="text-xl font-bold">Calculator</h2>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full p-2 bg-gray-700 border border-gray-600 rounded"
+        placeholder="Enter a number..."
+      />
+      <button
+        onClick={handleCalculate}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+      >
+        Calculate Square Root
+      </button>
+      {result !== null && (
+        <div className="p-4 bg-gray-700 rounded">
+          Result: {result.toFixed(4)}
+        </div>
+      )}
+    </div>
+  );
+}`,
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { name, description, code } = inputs;
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('Invalid name parameter');
+    }
+
+    if (!code || typeof code !== 'string') {
+      throw new Error('Invalid code parameter');
+    }
+
+    // Validate the code has a component
+    if (
+      !code.includes('function Component') &&
+      !code.includes('const Component') &&
+      !code.includes('function Applet') &&
+      !code.includes('const Applet') &&
+      !code.includes('function App') &&
+      !code.includes('const App')
+    ) {
+      return {
+        success: false,
+        error: 'COMPILATION_ERROR: Code must define a component named Component, Applet, or App using "function" syntax.',
+        hint: 'Use "function Applet({ onSubmit }) { ... }" NOT "const Applet = () => { ... }"',
+        code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+      };
+    }
+
+    // Try to compile the code to catch errors BEFORE showing to user
+    try {
+      const compileApplet = await getCompileApplet();
+      const result = await compileApplet(code);
+
+      if (!result.success) {
+        // Return the error to the LLM so it can fix the code
+        return {
+          success: false,
+          error: `COMPILATION_ERROR: ${result.error}`,
+          hint: 'Fix the code and call generate-applet again. Common issues: 1) Arrow functions instead of function declarations, 2) TypeScript types, 3) Import/export statements, 4) Unescaped special characters in template strings.',
+          code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+        };
+      }
+    } catch (compileError: any) {
+      // Return compilation error to LLM
+      return {
+        success: false,
+        error: `COMPILATION_ERROR: ${compileError.message}`,
+        hint: 'The code failed to compile. Common issues: syntax errors, unclosed brackets, invalid JSX. Fix and retry.',
+        code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+      };
+    }
+
+    const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+    // Emit event for the UI to pick up (only after successful validation)
+    if (appletGeneratedCallback) {
+      appletGeneratedCallback({
+        id: appletId,
+        name,
+        description: description || '',
+        code,
+      });
+    }
+
+    return {
+      success: true,
+      appletId,
+      name,
+      description,
+      message: `Applet "${name}" compiled successfully and is now live in the Applets panel.`,
+      _isApplet: true,
+    };
+  },
+};
 
 /**
  * Write File Tool
@@ -598,6 +772,7 @@ export function getSystemTools(): ToolDefinition[] {
     ExecutePythonTool,
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
+    GenerateAppletTool,
   ];
 }
 
