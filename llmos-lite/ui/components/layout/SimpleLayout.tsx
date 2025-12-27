@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Header from './Header';
 import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ChatPanel from '../chat/ChatPanel';
 import CanvasView from '../canvas/CanvasView';
 import { AppletPanel, AppletDock } from '../applets/AppletPanel';
 import { AppletProvider, useApplets } from '@/contexts/AppletContext';
+import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import { Sparkles } from 'lucide-react';
 
 type ViewMode = 'chat' | 'canvas' | 'applets';
@@ -31,8 +32,36 @@ function LayoutContent() {
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [appletPanelMode, setAppletPanelMode] = useState<AppletPanelMode>('hidden');
 
-  const { activeApplets } = useApplets();
+  const { activeApplets, createApplet } = useApplets();
   const hasActiveApplets = activeApplets.length > 0;
+
+  // Set up the applet generation callback when component mounts
+  useEffect(() => {
+    setAppletGeneratedCallback((applet) => {
+      console.log('[SimpleLayout] Applet generated via tool:', applet.name);
+
+      // Create the applet in the store
+      createApplet({
+        code: applet.code,
+        metadata: {
+          id: applet.id,
+          name: applet.name,
+          description: applet.description,
+          version: '1.0.0',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+
+      // Auto-open the applet panel
+      setAppletPanelMode('split');
+    });
+
+    // Cleanup on unmount
+    return () => {
+      setAppletGeneratedCallback(null);
+    };
+  }, [createApplet]);
 
   // Handle applet submission - send data back to chat
   const handleAppletSubmit = useCallback((appletId: string, data: unknown) => {

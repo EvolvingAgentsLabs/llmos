@@ -23,6 +23,127 @@ export interface ToolDefinition {
   execute: (inputs: Record<string, any>) => Promise<any>;
 }
 
+// Event emitter for applet generation
+type AppletGeneratedCallback = (applet: {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+}) => void;
+
+let appletGeneratedCallback: AppletGeneratedCallback | null = null;
+
+export function setAppletGeneratedCallback(callback: AppletGeneratedCallback | null) {
+  appletGeneratedCallback = callback;
+}
+
+/**
+ * Generate Applet Tool - Creates interactive React applets
+ */
+export const GenerateAppletTool: ToolDefinition = {
+  id: 'generate-applet',
+  name: 'Generate Applet',
+  description: `Generate an interactive React applet that the user can interact with.
+
+Use this tool when the user needs:
+- A form or wizard to collect information
+- A dashboard or visualization tool
+- A calculator, converter, or interactive tool
+- Any UI that would be better than text responses
+
+The applet code should be a React component using hooks (useState, useEffect, etc.).
+The component MUST be named "Component", "Applet", or "App".
+Use Tailwind CSS for styling with dark theme (bg-gray-800, text-gray-200, etc.).
+Use the onSubmit prop to return data when the user completes a task.`,
+  inputs: [
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Name of the applet (e.g., "Budget Calculator", "NDA Generator")',
+      required: true,
+    },
+    {
+      name: 'description',
+      type: 'string',
+      description: 'Brief description of what the applet does',
+      required: true,
+    },
+    {
+      name: 'code',
+      type: 'string',
+      description: `The React component code (TSX). Example:
+
+function Component({ onSubmit }) {
+  const [value, setValue] = useState('');
+
+  return (
+    <div className="p-6 space-y-4">
+      <h2 className="text-xl font-bold text-gray-200">My Tool</h2>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+        placeholder="Enter value..."
+      />
+      <button
+        onClick={() => onSubmit({ value })}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+      >
+        Submit
+      </button>
+    </div>
+  );
+}`,
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { name, description, code } = inputs;
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('Invalid name parameter');
+    }
+
+    if (!code || typeof code !== 'string') {
+      throw new Error('Invalid code parameter');
+    }
+
+    // Validate the code has a component
+    if (
+      !code.includes('function Component') &&
+      !code.includes('const Component') &&
+      !code.includes('function Applet') &&
+      !code.includes('const Applet') &&
+      !code.includes('function App') &&
+      !code.includes('const App')
+    ) {
+      throw new Error('Code must export a component named Component, Applet, or App');
+    }
+
+    const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+    // Emit event for the UI to pick up
+    if (appletGeneratedCallback) {
+      appletGeneratedCallback({
+        id: appletId,
+        name,
+        description: description || '',
+        code,
+      });
+    }
+
+    return {
+      success: true,
+      appletId,
+      name,
+      description,
+      message: `Applet "${name}" generated successfully. It will appear in the Applets panel.`,
+      _isApplet: true, // Flag for ChatPanel to detect
+    };
+  },
+};
+
 /**
  * Write File Tool
  */
@@ -598,6 +719,7 @@ export function getSystemTools(): ToolDefinition[] {
     ExecutePythonTool,
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
+    GenerateAppletTool,
   ];
 }
 
