@@ -14,71 +14,73 @@ export interface SamplePrompt {
 }
 
 /**
- * Developer Sample Prompts - Showcasing Infinite App Store
+ * Developer Sample Prompts - Scientific + Generative UI Hybrid
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Generate a Budget Calculator',
-    prompt: `Create an interactive budget calculator applet where I can:
-- Add multiple income sources
-- Track expenses by category (Housing, Food, Transport, etc.)
-- Set a savings goal percentage
-- See a visual breakdown of my spending
+    title: 'Quantum Circuit Playground',
+    prompt: `Build an interactive quantum circuit designer applet where I can:
+- Drag and drop quantum gates (H, X, Y, Z, CNOT, T, S)
+- Add up to 5 qubits
+- See the circuit diagram update in real-time
+- View the state vector and probability amplitudes
+- Export to Qiskit code for IBM Quantum execution
 
-Make it beautiful with a dark theme and real-time calculations.`,
-    description: 'Interactive financial tool generated on demand',
-    category: 'Generative UI',
+Make it visual with gate icons and qubit wire lines.`,
+    description: 'Interactive quantum computing sandbox',
+    category: 'Quantum + UI',
   },
   {
-    title: 'Build an NDA Generator',
-    prompt: `Help me create a Non-Disclosure Agreement. Build a wizard that walks me through:
-1. Party information (disclosing and receiving)
-2. Purpose of disclosure
-3. Jurisdiction and duration
-4. Optional clauses (non-compete, non-solicitation)
-5. Review and generate
+    title: 'Signal Analyzer Studio',
+    prompt: `Create a signal processing applet with:
+- Sliders for frequency, amplitude, and phase of a sine wave
+- Option to add noise (adjustable SNR)
+- Real-time FFT visualization showing frequency spectrum
+- Time domain and frequency domain side-by-side
+- Run the analysis with Python/NumPy in background
 
-Make it a multi-step form with progress indicator.`,
-    description: 'Legal document wizard with form validation',
-    category: 'Generative UI',
+I want to explore Fourier transforms interactively.`,
+    description: 'Live signal analysis with Python backend',
+    category: 'DSP + UI',
   },
   {
-    title: 'Color Palette Generator',
-    prompt: `Create a color palette generator applet with:
-- A base hue slider (0-360)
-- Harmony modes (complementary, analogous, triadic, tetradic)
-- Saturation and lightness controls
-- Click-to-copy hex values
-- Visual preview of all colors
+    title: '3D Function Plotter',
+    prompt: `Build an interactive 3D surface plotter where I can:
+- Enter a mathematical function z = f(x, y)
+- Adjust x and y range with sliders
+- Choose colormap (viridis, plasma, coolwarm)
+- Rotate and zoom the 3D view
+- Execute with matplotlib and display the result
 
-I want to use it for designing my website.`,
-    description: 'Design tool with live color harmonies',
-    category: 'Generative UI',
+Start with z = sin(sqrt(x² + y²)) as default.`,
+    description: '3D math visualization with live rendering',
+    category: 'Visualization + UI',
   },
   {
-    title: 'Unit Converter Dashboard',
-    prompt: `Build a universal unit converter with tabs for:
-- Length (meters, feet, inches, km, miles)
-- Weight (kg, lbs, oz, grams)
-- Temperature (C, F, K)
-- Volume (liters, gallons, cups)
+    title: 'Robot Arm Simulator',
+    prompt: `Create a 2-link robot arm control panel with:
+- Sliders for joint angles θ1 and θ2
+- Input fields for target (x, y) position
+- Visual display of arm configuration
+- Forward and inverse kinematics calculations
+- Animate trajectory from current to target position
 
-Each tab should have input fields and instant conversion.`,
-    description: 'Multi-purpose conversion tool',
-    category: 'Generative UI',
+Show the workspace boundary and joint limits.`,
+    description: 'Robotics kinematics playground',
+    category: 'Robotics + UI',
   },
   {
-    title: 'Password Generator',
-    prompt: `Create a secure password generator with:
-- Length slider (8-64 characters)
-- Toggles for: uppercase, lowercase, numbers, symbols
-- Password strength indicator
-- One-click copy button
-- Generate multiple passwords at once
+    title: 'Neural Network Visualizer',
+    prompt: `Build a neural network architecture designer with:
+- Add/remove layers (input, hidden, output)
+- Adjust neurons per layer with sliders
+- Choose activation functions (ReLU, Sigmoid, Tanh)
+- Visualize network topology as a graph
+- Generate PyTorch/TensorFlow code for the architecture
 
-Show visual strength meter (weak/medium/strong).`,
-    description: 'Security tool with strength analysis',
-    category: 'Generative UI',
+Show parameter count and network depth.`,
+    description: 'ML architecture design tool',
+    category: 'ML + UI',
   },
 ];
 
@@ -107,26 +109,47 @@ const legalPrompts: SamplePrompt[] = [
 ];
 
 /**
- * Data Science & Analytics Sample Prompts
+ * Data Science & Analytics Sample Prompts - Interactive Analysis
  */
 const financialPrompts: SamplePrompt[] = [
   {
-    title: 'Time Series Analysis',
-    prompt: 'Generate synthetic stock price data, calculate moving averages and Bollinger bands, visualize with matplotlib',
-    description: 'Financial time series visualization',
-    category: 'Time Series',
+    title: 'Time Series Lab',
+    prompt: `Build a time series analysis workbench with:
+- Generate or upload data (stock prices, temperatures, etc.)
+- Apply moving averages with adjustable window size
+- Add Bollinger bands with customizable std deviation
+- Detect trends and seasonality
+- Run forecasting with Python in background
+
+Show interactive charts that update as I adjust parameters.`,
+    description: 'Financial analysis playground',
+    category: 'TimeSeries + UI',
   },
   {
-    title: 'Statistical Analysis',
-    prompt: 'Create a dataset with normal and outlier distributions, perform statistical tests and visualize with box plots and histograms',
-    description: 'Exploratory data analysis',
-    category: 'Statistics',
+    title: 'Regression Playground',
+    prompt: `Create a regression analysis tool where I can:
+- Generate synthetic data with noise slider
+- Choose model type (linear, polynomial, ridge, lasso)
+- See fit line update in real-time
+- Display R², MSE, and residual plots
+- Adjust regularization strength for ridge/lasso
+
+Train models with scikit-learn in background.`,
+    description: 'ML regression sandbox',
+    category: 'ML + UI',
   },
   {
-    title: 'Linear Regression Model',
-    prompt: 'Train a linear regression model on synthetic data, plot predictions vs actuals, and show residual analysis with scikit-learn',
-    description: 'Predictive modeling with visualization',
-    category: 'Machine Learning',
+    title: 'Hypothesis Tester',
+    prompt: `Build a statistical hypothesis testing tool with:
+- Select test type (t-test, chi-square, ANOVA, correlation)
+- Input or generate sample data
+- Set significance level (alpha)
+- Show test statistic, p-value, and decision
+- Visualize the distribution and critical regions
+
+Explain the interpretation in plain language.`,
+    description: 'Statistics hypothesis sandbox',
+    category: 'Statistics + UI',
   },
 ];
 
@@ -179,38 +202,60 @@ const biologyPrompts: SamplePrompt[] = [
 ];
 
 /**
- * Robotics & Control Sample Prompts (WebAssembly-compatible)
+ * Robotics & Control Sample Prompts - Interactive Simulations
  */
 const roboticsPrompts: SamplePrompt[] = [
   {
-    title: 'Quantum Circuit Designer',
-    prompt: `Design a quantum computing experiment: Generate Qiskit code for a 4-qubit Quantum Fourier Transform (QFT) that I can run on IBM Quantum. Include:
-1. The complete Python code with proper imports
-2. Circuit analysis (depth, gate count, connectivity)
-3. Export to OpenQASM 2.0 format
-4. Instructions for running on IBM Quantum hardware
+    title: 'PID Tuning Dashboard',
+    prompt: `Build an interactive PID controller tuner with:
+- Sliders for Kp, Ki, Kd gains
+- System type selector (first order, second order, with delay)
+- Real-time step response plot
+- Show overshoot, settling time, steady-state error
+- Auto-tune button using Ziegler-Nichols method
 
-Don't execute the code - just generate it for download and external execution.`,
-    description: 'Design quantum circuits for external execution on real hardware',
-    category: 'Quantum Computing',
+Run the simulation with Python/SciPy in background.`,
+    description: 'Control systems tuning playground',
+    category: 'Controls + UI',
   },
   {
-    title: 'Forward Kinematics',
-    prompt: 'Calculate and visualize forward kinematics for a 3-link planar robot arm, showing workspace and joint configurations with matplotlib',
-    description: 'Kinematics analysis and visualization',
-    category: 'Kinematics',
+    title: 'Trajectory Planner',
+    prompt: `Create a motion trajectory designer with:
+- Click to add waypoints on a 2D canvas
+- Select interpolation (linear, cubic spline, quintic)
+- Velocity and acceleration limits
+- Visualize position, velocity, acceleration profiles
+- Export trajectory as CSV or Python code
+
+Animate the path traversal in real-time.`,
+    description: 'Path planning visualization tool',
+    category: 'Motion + UI',
   },
   {
-    title: 'Trajectory Planning',
-    prompt: 'Generate a smooth trajectory for a robot end-effector using cubic splines, plot position, velocity, and acceleration profiles',
-    description: 'Motion planning with visualization',
-    category: 'Path Planning',
+    title: 'State Space Explorer',
+    prompt: `Build a linear system analyzer where I can:
+- Enter state matrices A, B, C, D
+- Compute and display eigenvalues and stability
+- Plot pole-zero diagram
+- Show Bode plot and step response
+- Check controllability and observability
+
+Color-code stable vs unstable poles.`,
+    description: 'Control theory analysis tool',
+    category: 'Systems + UI',
   },
   {
-    title: 'PID Controller Simulation',
-    prompt: 'Simulate a PID controller for position control, plot step response and tune gains using scipy optimization',
-    description: 'Control system design',
-    category: 'Control Systems',
+    title: 'Sensor Fusion Simulator',
+    prompt: `Create a Kalman filter visualization with:
+- Simulated noisy GPS and accelerometer data
+- Adjustable process and measurement noise
+- Show raw vs filtered estimates
+- Display estimation error over time
+- Animate a moving object with true vs estimated position
+
+Explain the Kalman equations alongside.`,
+    description: 'Estimation and filtering sandbox',
+    category: 'Estimation + UI',
   },
 ];
 
@@ -239,48 +284,47 @@ const auditPrompts: SamplePrompt[] = [
 ];
 
 /**
- * General Professional Sample Prompts - Infinite App Store Focus
+ * General Professional Sample Prompts - Hybrid Scientific + Practical
  */
 const generalPrompts: SamplePrompt[] = [
   {
-    title: 'Invoice Generator',
-    prompt: `Build an invoice generator where I can:
-- Enter my business details and logo
-- Add client information
-- List items with quantity, rate, and tax
-- Auto-calculate totals and tax
-- Add payment terms and notes
-- Export to PDF format
+    title: 'Data Distribution Explorer',
+    prompt: `Build a statistical distribution explorer with:
+- Dropdown to select distribution (Normal, Poisson, Exponential, Uniform)
+- Sliders for distribution parameters (mean, std, lambda, etc.)
+- Live histogram visualization
+- Show key statistics (mean, median, std, skewness)
+- Generate random samples and run Python analysis
 
-Make it look professional with clean typography.`,
-    description: 'Professional billing tool',
-    category: 'Generative UI',
+Help me understand probability distributions visually.`,
+    description: 'Interactive statistics playground',
+    category: 'Statistics + UI',
   },
   {
-    title: 'Meeting Scheduler',
-    prompt: `Create a meeting time finder tool where:
-- I can add multiple participants with their timezones
-- Show overlapping available hours visually
-- Suggest optimal meeting times
-- Handle daylight saving differences
-- Copy formatted meeting invite
+    title: 'Physics Simulator',
+    prompt: `Create a projectile motion simulator where I can:
+- Set initial velocity and launch angle with sliders
+- Toggle air resistance on/off
+- Adjust gravity (Earth, Moon, Mars presets)
+- See trajectory path update in real-time
+- Display max height, range, and flight time
 
-Help me schedule with my international team.`,
-    description: 'Timezone-aware scheduling',
-    category: 'Generative UI',
+Show the physics equations alongside the visualization.`,
+    description: 'Interactive physics sandbox',
+    category: 'Physics + UI',
   },
   {
-    title: 'Expense Tracker',
-    prompt: `Build an expense tracking dashboard with:
-- Quick expense entry form
-- Category breakdown (pie chart)
-- Monthly spending trend (line chart)
-- Budget vs actual comparison
-- Export data functionality
+    title: 'Color Science Lab',
+    prompt: `Build a color space converter and analyzer with:
+- Input color in any format (HEX, RGB, HSL, CMYK)
+- Show all color space representations
+- Display complementary, analogous, triadic harmonies
+- Visualize on color wheel
+- Check WCAG contrast ratios against backgrounds
 
-I want to track my monthly spending habits.`,
-    description: 'Personal finance dashboard',
-    category: 'Generative UI',
+I want to understand color theory for my designs.`,
+    description: 'Color theory exploration tool',
+    category: 'Design + UI',
   },
 ];
 
