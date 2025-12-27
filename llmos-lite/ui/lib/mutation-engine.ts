@@ -6,12 +6,22 @@
  * Creates "Mutant" variants that are functionally equivalent but use
  * different mental models, giving the system genetic diversity.
  *
- * Uses requestIdleCallback for non-blocking background execution.
+ * Features:
+ * - Evolutionary lens selection based on fitness tracking
+ * - Intelligent lens matching via LensSelectorAgent
+ * - Lens population evolution (crossover, mutation, culling)
+ * - Background execution via requestIdleCallback
  */
 
 import { getVFS, VFSFile } from './virtual-fs';
 import { createLLMClient, LLMClient, Message } from './llm-client';
 import { executePython, ExecutionResult } from './pyodide-runtime';
+import {
+  getLensEvolutionService,
+  LensEvolutionService,
+  LensSelectionResult,
+  CodePattern,
+} from './lens-evolution';
 
 // ============================================================================
 // Types
@@ -42,6 +52,11 @@ export interface MutationResult {
   speedImprovement?: number;
   error?: string;
   timestamp: string;
+  // Evolutionary selection info
+  selectionConfidence?: number;
+  selectionReasoning?: string;
+  codePatterns?: string[];
+  alternativeLenses?: string[];
 }
 
 export interface MutationEngineConfig {
@@ -52,6 +67,11 @@ export interface MutationEngineConfig {
   minStabilityScore: number;
   skillsDirectory: string;
   domainsDirectory: string;
+  // Evolutionary selection options
+  useEvolutionarySelection: boolean;
+  useAgentSelection: boolean;
+  evolvePopulationEvery: number;  // Evolve lens population every N cycles
+  trackFitness: boolean;
 }
 
 export interface MutationEngineStatus {
@@ -62,6 +82,15 @@ export interface MutationEngineStatus {
   totalMutationsSuccessful: number;
   lastResult?: MutationResult;
   lastError?: string;
+  // Evolutionary stats
+  cycleCount: number;
+  lensPopulationSize: number;
+  topLenses: Array<{ id: string; fitness: number }>;
+  lastEvolution?: {
+    generated: string[];
+    culled: string[];
+    timestamp: string;
+  };
 }
 
 // ============================================================================
@@ -84,6 +113,11 @@ const DEFAULT_CONFIG: MutationEngineConfig = {
   minStabilityScore: 0.8,
   skillsDirectory: 'system/skills',
   domainsDirectory: '/system/domains',
+  // Evolutionary options - enabled by default
+  useEvolutionarySelection: true,
+  useAgentSelection: true,
+  evolvePopulationEvery: 10,  // Evolve population every 10 cycles
+  trackFitness: true,
 };
 
 const STORAGE_KEY = 'mutation_engine_state';
@@ -101,10 +135,12 @@ export class MutationEngine {
   private intervalId: ReturnType<typeof setTimeout> | null = null;
   private domainLenses: DomainLens[] = [];
   private mutationAgentPrompt: string = '';
+  private lensEvolution: LensEvolutionService;
 
   private constructor(config: Partial<MutationEngineConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.status = this.loadStatus();
+    this.lensEvolution = getLensEvolutionService();
   }
 
   static getInstance(config?: Partial<MutationEngineConfig>): MutationEngine {
@@ -202,6 +238,15 @@ export class MutationEngine {
 
     console.log(`[MutationEngine] Loaded ${this.domainLenses.length} domain lenses`);
 
+    // Also load generated lenses from VFS
+    await this.loadGeneratedLenses();
+
+    // Register lenses with evolution service
+    if (this.config.useEvolutionarySelection) {
+      this.lensEvolution.registerLenses(this.domainLenses);
+      console.log('[MutationEngine] Registered lenses with evolution service');
+    }
+
     // Load mutation agent prompt
     try {
       const response = await fetch(MUTATION_AGENT_PATH);
@@ -258,6 +303,29 @@ export class MutationEngine {
     return null;
   }
 
+  /**
+   * Load generated lenses from VFS (created by evolution)
+   */
+  private async loadGeneratedLenses(): Promise<void> {
+    const vfs = getVFS();
+    const generatedDir = 'system/domains/generated';
+
+    try {
+      const dir = vfs.listDirectory(generatedDir);
+      for (const file of dir.files) {
+        if (file.path.endsWith('.md')) {
+          const lens = this.parseDomainLens(file.content, file.path);
+          if (lens && !this.domainLenses.find(l => l.id === lens.id)) {
+            this.domainLenses.push(lens);
+            console.log(`[MutationEngine] Loaded generated lens: ${lens.name}`);
+          }
+        }
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Scheduling
   // --------------------------------------------------------------------------
@@ -302,7 +370,7 @@ export class MutationEngine {
   // --------------------------------------------------------------------------
 
   /**
-   * Run a single mutation cycle
+   * Run a single mutation cycle with evolutionary lens selection
    */
   async runMutationCycle(): Promise<MutationResult[]> {
     if (this.status.isRunning) {
@@ -312,12 +380,13 @@ export class MutationEngine {
 
     this.status.isRunning = true;
     this.status.lastRun = new Date();
+    this.status.cycleCount = (this.status.cycleCount || 0) + 1;
     this.saveStatus();
 
     const results: MutationResult[] = [];
 
     try {
-      console.log('[MutationEngine] Starting mutation cycle...');
+      console.log(`[MutationEngine] Starting mutation cycle #${this.status.cycleCount}...`);
 
       // 1. Select candidate skills
       const candidates = await this.selectCandidates();
@@ -328,22 +397,31 @@ export class MutationEngine {
 
       console.log(`[MutationEngine] Found ${candidates.length} candidates`);
 
-      // 2. Select random domain lens
-      const lens = this.selectRandomLens();
-      if (!lens) {
-        console.log('[MutationEngine] No domain lenses available');
-        return results;
-      }
-
-      console.log(`[MutationEngine] Using lens: ${lens.name}`);
-
-      // 3. Process candidates (up to max per run)
+      // 2. Process candidates (up to max per run)
       const toProcess = candidates.slice(0, this.config.maxMutationsPerRun);
 
       for (const candidate of toProcess) {
         try {
-          const result = await this.mutateSkill(candidate, lens);
+          // Select lens using evolutionary strategy
+          const lensSelection = await this.selectLensForCode(candidate.code);
+          const lens = lensSelection.selectedLens;
+
+          console.log(`[MutationEngine] Selected lens: ${lens.name} (confidence: ${(lensSelection.confidence * 100).toFixed(0)}%)`);
+          console.log(`[MutationEngine] Reasoning: ${lensSelection.reasoning}`);
+
+          // Mutate with selected lens
+          const result = await this.mutateSkillWithSelection(candidate, lens, lensSelection);
           results.push(result);
+
+          // Track fitness if enabled
+          if (this.config.trackFitness) {
+            this.lensEvolution.recordMutationResult(
+              lens.id,
+              candidate.code,
+              result.success,
+              result.speedImprovement || 0
+            );
+          }
 
           if (result.success) {
             this.status.totalMutationsSuccessful++;
@@ -355,7 +433,7 @@ export class MutationEngine {
           results.push({
             success: false,
             originalPath: candidate.path,
-            domainLens: lens.id,
+            domainLens: 'unknown',
             originalTime: 0,
             mutantTime: 0,
             error: error.message,
@@ -363,6 +441,16 @@ export class MutationEngine {
           });
         }
       }
+
+      // 3. Maybe evolve the lens population
+      if (this.config.useEvolutionarySelection &&
+          this.status.cycleCount % this.config.evolvePopulationEvery === 0) {
+        await this.evolveLensPopulation();
+      }
+
+      // 4. Update status with evolution stats
+      this.updateEvolutionStats();
+
     } catch (error: any) {
       console.error('[MutationEngine] Mutation cycle failed:', error);
       this.status.lastError = error.message;
@@ -373,6 +461,71 @@ export class MutationEngine {
     }
 
     return results;
+  }
+
+  /**
+   * Select the best lens for given code using evolutionary strategy
+   */
+  private async selectLensForCode(code: string): Promise<LensSelectionResult> {
+    if (this.config.useEvolutionarySelection && this.domainLenses.length > 0) {
+      return this.lensEvolution.selectLens(
+        code,
+        this.domainLenses,
+        this.config.useAgentSelection
+      );
+    }
+
+    // Fallback to random selection
+    const lens = this.selectRandomLens();
+    if (!lens) {
+      throw new Error('No domain lenses available');
+    }
+
+    return {
+      selectedLens: lens,
+      confidence: 0.5,
+      reasoning: 'Random selection (evolutionary selection disabled)',
+      alternatives: [],
+    };
+  }
+
+  /**
+   * Evolve the lens population (crossover, mutation, culling)
+   */
+  private async evolveLensPopulation(): Promise<void> {
+    console.log('[MutationEngine] Evolving lens population...');
+
+    try {
+      const result = await this.lensEvolution.evolvePopulation();
+
+      if (result.generated.length > 0 || result.culled.length > 0) {
+        console.log(`[MutationEngine] Evolution: +${result.generated.length} generated, -${result.culled.length} culled`);
+
+        this.status.lastEvolution = {
+          generated: result.generated.map(l => l.id),
+          culled: result.culled,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Reload lenses to include newly generated ones
+        await this.loadGeneratedLenses();
+        this.lensEvolution.registerLenses(this.domainLenses);
+      }
+    } catch (error) {
+      console.error('[MutationEngine] Lens evolution failed:', error);
+    }
+  }
+
+  /**
+   * Update status with evolution statistics
+   */
+  private updateEvolutionStats(): void {
+    const leaderboard = this.lensEvolution.getLeaderboard();
+
+    this.status.lensPopulationSize = leaderboard.length;
+    this.status.topLenses = leaderboard
+      .slice(0, 5)
+      .map(l => ({ id: l.lensId, fitness: l.fitness }));
   }
 
   /**
@@ -430,15 +583,35 @@ export class MutationEngine {
   }
 
   /**
-   * Mutate a skill using a domain lens
+   * Mutate a skill using a domain lens (legacy method)
    */
   private async mutateSkill(
     candidate: MutationCandidate,
     lens: DomainLens
   ): Promise<MutationResult> {
+    return this.mutateSkillWithSelection(candidate, lens, {
+      selectedLens: lens,
+      confidence: 0.5,
+      reasoning: 'Direct selection',
+      alternatives: [],
+    });
+  }
+
+  /**
+   * Mutate a skill using a domain lens with selection info
+   */
+  private async mutateSkillWithSelection(
+    candidate: MutationCandidate,
+    lens: DomainLens,
+    selection: LensSelectionResult
+  ): Promise<MutationResult> {
     const timestamp = new Date().toISOString();
 
     console.log(`[MutationEngine] Mutating ${candidate.name} with ${lens.name} lens`);
+
+    // Analyze code patterns for the result
+    const patterns = this.lensEvolution.analyzeCodePatterns(candidate.code);
+    const codePatterns = patterns.map(p => p.pattern.name);
 
     // 1. Generate mutant code using LLM
     const mutantCode = await this.generateMutant(candidate.code, lens);
@@ -451,6 +624,10 @@ export class MutationEngine {
         mutantTime: 0,
         error: 'Failed to generate mutant code',
         timestamp,
+        selectionConfidence: selection.confidence,
+        selectionReasoning: selection.reasoning,
+        codePatterns,
+        alternativeLenses: selection.alternatives.map(a => a.lens.id),
       };
     }
 
@@ -465,6 +642,10 @@ export class MutationEngine {
         mutantTime: validation.mutantTime,
         error: validation.error,
         timestamp,
+        selectionConfidence: selection.confidence,
+        selectionReasoning: selection.reasoning,
+        codePatterns,
+        alternativeLenses: selection.alternatives.map(a => a.lens.id),
       };
     }
 
@@ -490,6 +671,10 @@ export class MutationEngine {
       mutantTime: validation.mutantTime,
       speedImprovement,
       timestamp,
+      selectionConfidence: selection.confidence,
+      selectionReasoning: selection.reasoning,
+      codePatterns,
+      alternativeLenses: selection.alternatives.map(a => a.lens.id),
     };
   }
 
@@ -728,6 +913,9 @@ json.dumps(result if result is not None else "None")
       nextRun: null,
       totalMutationsGenerated: 0,
       totalMutationsSuccessful: 0,
+      cycleCount: 0,
+      lensPopulationSize: 3,  // Start with 3 base lenses
+      topLenses: [],
     };
   }
 
@@ -754,20 +942,6 @@ json.dumps(result if result is not None else "None")
       await this.loadResources();
     }
 
-    // Select lens
-    let lens: DomainLens | undefined;
-    if (domainLensId) {
-      lens = this.domainLenses.find((l) => l.id === domainLensId);
-      if (!lens) {
-        throw new Error(`Domain lens not found: ${domainLensId}`);
-      }
-    } else {
-      lens = this.selectRandomLens() || undefined;
-      if (!lens) {
-        throw new Error('No domain lenses available');
-      }
-    }
-
     const candidate: MutationCandidate = {
       path: skillPath,
       name: skillPath.split('/').pop() || skillPath,
@@ -775,7 +949,38 @@ json.dumps(result if result is not None else "None")
       lastModified: file.modified,
     };
 
-    return this.mutateSkill(candidate, lens);
+    // Select lens - either specified or evolutionary selection
+    let selection: LensSelectionResult;
+
+    if (domainLensId) {
+      const lens = this.domainLenses.find((l) => l.id === domainLensId);
+      if (!lens) {
+        throw new Error(`Domain lens not found: ${domainLensId}`);
+      }
+      selection = {
+        selectedLens: lens,
+        confidence: 1.0,
+        reasoning: 'Manually specified lens',
+        alternatives: [],
+      };
+    } else {
+      // Use evolutionary selection
+      selection = await this.selectLensForCode(candidate.code);
+    }
+
+    const result = await this.mutateSkillWithSelection(candidate, selection.selectedLens, selection);
+
+    // Track fitness if enabled
+    if (this.config.trackFitness) {
+      this.lensEvolution.recordMutationResult(
+        selection.selectedLens.id,
+        candidate.code,
+        result.success,
+        result.speedImprovement || 0
+      );
+    }
+
+    return result;
   }
 
   /**
@@ -786,6 +991,85 @@ json.dumps(result if result is not None else "None")
       await this.loadResources();
     }
     return [...this.domainLenses];
+  }
+
+  /**
+   * Get the lens evolution service
+   */
+  getLensEvolution(): LensEvolutionService {
+    return this.lensEvolution;
+  }
+
+  /**
+   * Get lens fitness leaderboard
+   */
+  getLensLeaderboard(): Array<{
+    lensId: string;
+    fitness: number;
+    generation: number;
+    usageCount: number;
+    successRate: number;
+  }> {
+    return this.lensEvolution.getLeaderboard();
+  }
+
+  /**
+   * Get the affinity matrix (lens vs code pattern fitness)
+   */
+  getAffinityMatrix(): Record<string, Record<string, number>> {
+    return this.lensEvolution.getAffinityMatrix();
+  }
+
+  /**
+   * Manually trigger lens population evolution
+   */
+  async evolveLensesNow(): Promise<{
+    generated: DomainLens[];
+    culled: string[];
+  }> {
+    await this.evolveLensPopulation();
+    const result = await this.lensEvolution.evolvePopulation();
+    return result;
+  }
+
+  /**
+   * Analyze code patterns without mutating
+   */
+  analyzeCode(code: string): Array<{ pattern: string; confidence: number }> {
+    const patterns = this.lensEvolution.analyzeCodePatterns(code);
+    return patterns.map(p => ({
+      pattern: p.pattern.name,
+      confidence: p.confidence,
+    }));
+  }
+
+  /**
+   * Get lens recommendation for code without mutating
+   */
+  async recommendLens(code: string): Promise<{
+    recommendedLens: string;
+    confidence: number;
+    reasoning: string;
+    patterns: string[];
+    alternatives: Array<{ lens: string; score: number }>;
+  }> {
+    if (this.domainLenses.length === 0) {
+      await this.loadResources();
+    }
+
+    const selection = await this.selectLensForCode(code);
+    const patterns = this.lensEvolution.analyzeCodePatterns(code);
+
+    return {
+      recommendedLens: selection.selectedLens.id,
+      confidence: selection.confidence,
+      reasoning: selection.reasoning,
+      patterns: patterns.map(p => p.pattern.name),
+      alternatives: selection.alternatives.map(a => ({
+        lens: a.lens.id,
+        score: a.score,
+      })),
+    };
   }
 }
 
