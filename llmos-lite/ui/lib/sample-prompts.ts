@@ -14,44 +14,71 @@ export interface SamplePrompt {
 }
 
 /**
- * Developer Sample Prompts (WebAssembly-compatible)
+ * Developer Sample Prompts - Showcasing Infinite App Store
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Quantum Circuit Designer',
-    prompt: `Design a quantum computing experiment: Generate Qiskit code for a 4-qubit Quantum Fourier Transform (QFT) that I can run on IBM Quantum. Include:
-1. The complete Python code with proper imports
-2. Circuit analysis (depth, gate count, connectivity)
-3. Export to OpenQASM 2.0 format
-4. Instructions for running on IBM Quantum hardware
+    title: 'Generate a Budget Calculator',
+    prompt: `Create an interactive budget calculator applet where I can:
+- Add multiple income sources
+- Track expenses by category (Housing, Food, Transport, etc.)
+- Set a savings goal percentage
+- See a visual breakdown of my spending
 
-Don't execute the code - just generate it for download and external execution.`,
-    description: 'Design quantum circuits for external execution on real hardware',
-    category: 'Quantum Computing',
+Make it beautiful with a dark theme and real-time calculations.`,
+    description: 'Interactive financial tool generated on demand',
+    category: 'Generative UI',
   },
   {
-    title: 'Signal Processing & FFT',
-    prompt: 'Create a sine wave signal, add noise, then apply FFT to show frequency spectrum. Plot both time and frequency domains.',
-    description: 'Signal analysis with visualization',
-    category: 'Data Science',
+    title: 'Build an NDA Generator',
+    prompt: `Help me create a Non-Disclosure Agreement. Build a wizard that walks me through:
+1. Party information (disclosing and receiving)
+2. Purpose of disclosure
+3. Jurisdiction and duration
+4. Optional clauses (non-compete, non-solicitation)
+5. Review and generate
+
+Make it a multi-step form with progress indicator.`,
+    description: 'Legal document wizard with form validation',
+    category: 'Generative UI',
   },
   {
-    title: '3D Surface Plot',
-    prompt: 'Create a 3D surface plot of z = sin(sqrt(x^2 + y^2)) using matplotlib with a colorful gradient',
-    description: 'Interactive 3D visualization',
-    category: 'Visualization',
+    title: 'Color Palette Generator',
+    prompt: `Create a color palette generator applet with:
+- A base hue slider (0-360)
+- Harmony modes (complementary, analogous, triadic, tetradic)
+- Saturation and lightness controls
+- Click-to-copy hex values
+- Visual preview of all colors
+
+I want to use it for designing my website.`,
+    description: 'Design tool with live color harmonies',
+    category: 'Generative UI',
   },
   {
-    title: 'Robot Kinematics',
-    prompt: 'Simulate a 2-link robot arm trajectory from (0,2) to (2,0) and animate it with matplotlib',
-    description: 'Robotics simulation and animation',
-    category: 'Robotics',
+    title: 'Unit Converter Dashboard',
+    prompt: `Build a universal unit converter with tabs for:
+- Length (meters, feet, inches, km, miles)
+- Weight (kg, lbs, oz, grams)
+- Temperature (C, F, K)
+- Volume (liters, gallons, cups)
+
+Each tab should have input fields and instant conversion.`,
+    description: 'Multi-purpose conversion tool',
+    category: 'Generative UI',
   },
   {
-    title: 'Machine Learning Model',
-    prompt: 'Train a K-means clustering model on synthetic 2D data and visualize the clusters with matplotlib',
-    description: 'ML with scikit-learn visualization',
-    category: 'Machine Learning',
+    title: 'Password Generator',
+    prompt: `Create a secure password generator with:
+- Length slider (8-64 characters)
+- Toggles for: uppercase, lowercase, numbers, symbols
+- Password strength indicator
+- One-click copy button
+- Generate multiple passwords at once
+
+Show visual strength meter (weak/medium/strong).`,
+    description: 'Security tool with strength analysis',
+    category: 'Generative UI',
   },
 ];
 
@@ -212,26 +239,48 @@ const auditPrompts: SamplePrompt[] = [
 ];
 
 /**
- * General Professional Sample Prompts
+ * General Professional Sample Prompts - Infinite App Store Focus
  */
 const generalPrompts: SamplePrompt[] = [
   {
-    title: 'Project Plan',
-    prompt: 'Create a comprehensive project plan for launching a new product, including timeline, milestones, resource allocation, and risk management',
-    description: 'Project management framework',
-    category: 'Project Management',
+    title: 'Invoice Generator',
+    prompt: `Build an invoice generator where I can:
+- Enter my business details and logo
+- Add client information
+- List items with quantity, rate, and tax
+- Auto-calculate totals and tax
+- Add payment terms and notes
+- Export to PDF format
+
+Make it look professional with clean typography.`,
+    description: 'Professional billing tool',
+    category: 'Generative UI',
   },
   {
-    title: 'Data Analysis',
-    prompt: 'Analyze customer survey data to identify trends, segment customers, and generate actionable insights with visualizations',
-    description: 'Exploratory data analysis',
-    category: 'Data Analytics',
+    title: 'Meeting Scheduler',
+    prompt: `Create a meeting time finder tool where:
+- I can add multiple participants with their timezones
+- Show overlapping available hours visually
+- Suggest optimal meeting times
+- Handle daylight saving differences
+- Copy formatted meeting invite
+
+Help me schedule with my international team.`,
+    description: 'Timezone-aware scheduling',
+    category: 'Generative UI',
   },
   {
-    title: 'Process Documentation',
-    prompt: 'Document a complex business process with flowcharts, decision trees, and step-by-step procedures for training purposes',
-    description: 'Workflow documentation',
-    category: 'Process Improvement',
+    title: 'Expense Tracker',
+    prompt: `Build an expense tracking dashboard with:
+- Quick expense entry form
+- Category breakdown (pie chart)
+- Monthly spending trend (line chart)
+- Budget vs actual comparison
+- Export data functionality
+
+I want to track my monthly spending habits.`,
+    description: 'Personal finance dashboard',
+    category: 'Generative UI',
   },
 ];
 
