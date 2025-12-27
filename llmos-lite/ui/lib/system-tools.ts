@@ -10,6 +10,17 @@ import { getSubAgentExecutor } from './subagents/subagent-executor';
 import { getSubAgentUsage, SubAgentUsageRecord } from './subagents/usage-tracker';
 import type { VolumeType } from './volumes/file-operations';
 
+// Dynamic import for applet runtime to avoid SSR issues
+let compileAppletFn: ((code: string) => Promise<any>) | null = null;
+
+async function getCompileApplet() {
+  if (!compileAppletFn) {
+    const { compileApplet } = await import('./runtime/applet-runtime');
+    compileAppletFn = compileApplet;
+  }
+  return compileAppletFn;
+}
+
 export interface ToolDefinition {
   id: string;
   name: string;
@@ -131,12 +142,41 @@ function Applet({ onSubmit }) {
       !code.includes('function App') &&
       !code.includes('const App')
     ) {
-      throw new Error('Code must export a component named Component, Applet, or App');
+      return {
+        success: false,
+        error: 'COMPILATION_ERROR: Code must define a component named Component, Applet, or App using "function" syntax.',
+        hint: 'Use "function Applet({ onSubmit }) { ... }" NOT "const Applet = () => { ... }"',
+        code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+      };
+    }
+
+    // Try to compile the code to catch errors BEFORE showing to user
+    try {
+      const compileApplet = await getCompileApplet();
+      const result = await compileApplet(code);
+
+      if (!result.success) {
+        // Return the error to the LLM so it can fix the code
+        return {
+          success: false,
+          error: `COMPILATION_ERROR: ${result.error}`,
+          hint: 'Fix the code and call generate-applet again. Common issues: 1) Arrow functions instead of function declarations, 2) TypeScript types, 3) Import/export statements, 4) Unescaped special characters in template strings.',
+          code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+        };
+      }
+    } catch (compileError: any) {
+      // Return compilation error to LLM
+      return {
+        success: false,
+        error: `COMPILATION_ERROR: ${compileError.message}`,
+        hint: 'The code failed to compile. Common issues: syntax errors, unclosed brackets, invalid JSX. Fix and retry.',
+        code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+      };
     }
 
     const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
 
-    // Emit event for the UI to pick up
+    // Emit event for the UI to pick up (only after successful validation)
     if (appletGeneratedCallback) {
       appletGeneratedCallback({
         id: appletId,
@@ -151,8 +191,8 @@ function Applet({ onSubmit }) {
       appletId,
       name,
       description,
-      message: `Applet "${name}" generated successfully. It will appear in the Applets panel.`,
-      _isApplet: true, // Flag for ChatPanel to detect
+      message: `Applet "${name}" compiled successfully and is now live in the Applets panel.`,
+      _isApplet: true,
     };
   },
 };
