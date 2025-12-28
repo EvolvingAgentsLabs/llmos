@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Transpile Three.js packages for proper ESM support
+  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
   webpack: (config, { isServer }) => {
     // Fix for Pyodide and WebAssembly
     config.resolve.fallback = {

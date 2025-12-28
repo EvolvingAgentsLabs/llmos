@@ -1,17 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
-import { useApplets } from '@/contexts/AppletContext';
 import CommandPalette from './CommandPalette';
 
 // Lazy load heavy 3D components
-const CoreEntity = dynamic(
-  () => import('@/components/system/CoreEntity'),
-  { ssr: false }
-);
 const HolographicBackground = dynamic(
   () => import('@/components/system/HolographicBackground'),
   { ssr: false }
@@ -20,81 +15,19 @@ const HolographicBackground = dynamic(
 // Lazy load panels
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
-const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
-const AppletPanel = lazy(() => import('../applets/AppletPanel'));
-const ThreeJSCanvas = lazy(() => import('../canvas/ThreeJSCanvas'));
-const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
-
-// ============================================================================
-// TYPES
-// ============================================================================
-
-type ProjectionType = 'empty' | 'artifact' | 'applet' | 'canvas' | 'code';
+const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 
 // ============================================================================
 // LOADING COMPONENT
 // ============================================================================
 
-function ProjectionLoader() {
+function PanelLoader() {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 border-3 border-accent-primary/20 border-t-accent-primary rounded-full animate-spin" />
-        <span className="text-sm text-fg-muted">Materializing...</span>
+        <span className="text-sm text-fg-muted">Loading...</span>
       </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// EMPTY STAGE - CoreEntity as the AI's presence
-// ============================================================================
-
-function EmptyStage() {
-  const { state } = useWorkspace();
-  const isActive = state.agentState !== 'idle';
-
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-8 p-8">
-      {/* The AI Core - always present */}
-      <div className="relative">
-        <CoreEntity size="lg" />
-
-        {/* Pulse effect when active */}
-        {isActive && (
-          <div className="absolute inset-0 -m-12 rounded-full border-2 border-accent-primary/30 animate-ping" />
-        )}
-      </div>
-
-      {/* Status */}
-      <div className="text-center space-y-3">
-        <h2 className="text-xl font-medium text-fg-primary">
-          {isActive ? 'Processing...' : 'Ready'}
-        </h2>
-        <p className="text-sm text-fg-muted max-w-sm">
-          {isActive
-            ? 'Your projection will materialize here.'
-            : 'Ask me to create something. It will appear here as a holographic projection.'}
-        </p>
-      </div>
-
-      {/* Quick actions */}
-      {!isActive && (
-        <div className="flex flex-wrap gap-2 justify-center">
-          {['Create an applet', 'Show my artifacts', 'Open canvas'].map((action) => (
-            <button
-              key={action}
-              className="px-4 py-2 text-sm rounded-full
-                         bg-white/5 border border-white/10
-                         text-fg-secondary hover:text-fg-primary
-                         hover:bg-white/10 hover:border-accent-primary/30
-                         transition-all duration-200"
-            >
-              {action}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -171,77 +104,12 @@ function CortexStatus() {
 // ============================================================================
 
 export default function FluidLayout() {
-  const { state, setActiveFile, setContextViewMode, openCommandPalette } = useWorkspace();
+  const { openCommandPalette } = useWorkspace();
   const { activeSession, setActiveSession } = useSessionContext();
-  const { activeApplets } = useApplets();
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [isTreeOpen, setIsTreeOpen] = useState(false);
-  const [projectionType, setProjectionType] = useState<ProjectionType>('empty');
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
-
-  // Determine current projection based on context
-  useEffect(() => {
-    if (activeApplets.length > 0) {
-      setProjectionType('applet');
-    } else if (state.activeFilePath) {
-      const ext = state.activeFilePath.split('.').pop()?.toLowerCase();
-      if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '')) {
-        setProjectionType('canvas');
-      } else {
-        setProjectionType('code');
-      }
-    } else if (state.contextViewMode === 'canvas') {
-      setProjectionType('canvas');
-    } else if (state.contextViewMode === 'artifacts' || state.contextViewMode === 'applets') {
-      setProjectionType('artifact');
-    } else {
-      setProjectionType('empty');
-    }
-  }, [activeApplets, state.activeFilePath, state.contextViewMode]);
-
-  // Render the current projection
-  const renderProjection = () => {
-    switch (projectionType) {
-      case 'applet':
-        return (
-          <Suspense fallback={<ProjectionLoader />}>
-            <AppletPanel mode="split" />
-          </Suspense>
-        );
-
-      case 'canvas':
-        return (
-          <Suspense fallback={<ProjectionLoader />}>
-            <ThreeJSCanvas />
-          </Suspense>
-        );
-
-      case 'code':
-        return (
-          <Suspense fallback={<ProjectionLoader />}>
-            <SplitViewCanvas
-              volume={activeVolume}
-              filePath={state.activeFilePath || ''}
-            />
-          </Suspense>
-        );
-
-      case 'artifact':
-        return (
-          <Suspense fallback={<ProjectionLoader />}>
-            <ArtifactPanel
-              activeSession={activeSession}
-              activeVolume={activeVolume}
-            />
-          </Suspense>
-        );
-
-      case 'empty':
-      default:
-        return <EmptyStage />;
-    }
-  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -332,7 +200,7 @@ export default function FluidLayout() {
 
           {/* Chat */}
           <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<ProjectionLoader />}>
+            <Suspense fallback={<PanelLoader />}>
               <ChatPanel
                 activeSession={activeSession}
                 activeVolume={activeVolume}
@@ -344,34 +212,12 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: Projection Stage */}
+        {/* RIGHT PANEL: Applets Only */}
         <div className="flex-1 flex flex-col overflow-hidden
                         bg-bg-secondary/20 backdrop-blur-md">
-          {/* Projection content */}
-          <div className="flex-1 overflow-hidden">
-            {renderProjection()}
-          </div>
-
-          {/* Minimal projection type indicator */}
-          {projectionType !== 'empty' && (
-            <div className="flex items-center justify-center gap-2 py-2
-                            border-t border-white/5 bg-bg-primary/20">
-              <div className="w-2 h-2 rounded-full bg-accent-primary" />
-              <span className="text-xs text-fg-muted capitalize">{projectionType}</span>
-              <button
-                onClick={() => {
-                  setActiveFile(null);
-                  setContextViewMode('artifacts');
-                }}
-                className="ml-2 p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary"
-                title="Clear projection"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          )}
+          <Suspense fallback={<PanelLoader />}>
+            <AppletGrid />
+          </Suspense>
         </div>
       </div>
     </div>

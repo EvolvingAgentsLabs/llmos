@@ -1,10 +1,28 @@
 'use client';
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+
+// Global mouse position hook
+function useMousePosition() {
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -(e.clientY / window.innerHeight) * 2 + 1;
+      setPosition({ x, y });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  return position;
+}
 
 // ============================================================================
 // HOLOGRAPHIC GRID
@@ -196,27 +214,16 @@ function Scene({ mousePosition }: SceneProps) {
 // ============================================================================
 
 export default function HolographicBackground() {
-  const mousePosition = useRef({ x: 0, y: 0 });
-
-  // Track mouse position
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const x = (e.clientX / window.innerWidth) * 2 - 1;
-    const y = -(e.clientY / window.innerHeight) * 2 + 1;
-    mousePosition.current = { x, y };
-  };
+  const mousePosition = useMousePosition();
 
   return (
-    <div
-      className="fixed inset-0 z-0 pointer-events-none"
-      onMouseMove={handleMouseMove}
-      style={{ pointerEvents: 'none' }}
-    >
+    <div className="fixed inset-0 z-0 pointer-events-none">
       <Canvas
         camera={{ position: [0, 2, 10], fov: 60 }}
         style={{ background: 'transparent' }}
         gl={{ alpha: true, antialias: true }}
       >
-        <Scene mousePosition={mousePosition.current} />
+        <Scene mousePosition={mousePosition} />
       </Canvas>
 
       {/* Gradient overlay for depth */}
