@@ -294,7 +294,7 @@ export default function ProjectionStage({
   const getTitle = () => {
     switch (projection.type) {
       case 'applet':
-        return activeApplets.find(a => a.id === projection.id)?.name || 'Applet';
+        return activeApplets.find(a => a.id === projection.id)?.metadata?.name || 'Applet';
       case 'canvas':
         return 'Visual Canvas';
       case 'split':
