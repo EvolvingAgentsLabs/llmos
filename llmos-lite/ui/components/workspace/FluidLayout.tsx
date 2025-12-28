@@ -1,16 +1,9 @@
 'use client';
 
 import { useState, useEffect, Suspense, lazy } from 'react';
-import dynamic from 'next/dynamic';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
 import CommandPalette from './CommandPalette';
-
-// Lazy load heavy 3D components
-const HolographicBackground = dynamic(
-  () => import('@/components/system/HolographicBackground'),
-  { ssr: false }
-);
 
 // Lazy load panels
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
@@ -131,15 +124,10 @@ export default function FluidLayout() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
       {/* ================================================================== */}
-      {/* 3D BACKGROUND - The Holodeck */}
-      {/* ================================================================== */}
-      <HolographicBackground />
-
-      {/* ================================================================== */}
       {/* HEADER - Minimal, glassmorphism */}
       {/* ================================================================== */}
-      <header className="relative z-20 h-12 flex items-center justify-between px-4
-                         bg-bg-secondary/30 backdrop-blur-xl border-b border-white/10">
+      <header className="h-12 flex items-center justify-between px-4
+                         bg-bg-secondary border-b border-border-primary">
         {/* Left: Logo + Tree toggle */}
         <div className="flex items-center gap-3">
           <button
@@ -167,8 +155,8 @@ export default function FluidLayout() {
         <button
           onClick={openCommandPalette}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-                     bg-white/5 border border-white/10
-                     text-fg-secondary hover:text-fg-primary hover:bg-white/10
+                     bg-bg-elevated border border-border-primary
+                     text-fg-secondary hover:text-fg-primary hover:bg-bg-hover
                      transition-all"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -184,10 +172,10 @@ export default function FluidLayout() {
       {/* ================================================================== */}
       {/* MAIN 2-PANEL LAYOUT */}
       {/* ================================================================== */}
-      <div className="flex-1 flex overflow-hidden relative z-10">
+      <div className="flex-1 flex overflow-hidden">
         {/* LEFT PANEL: Chat + Tree */}
         <div className="w-1/2 min-w-[400px] max-w-[600px] flex flex-col
-                        bg-bg-primary/40 backdrop-blur-xl border-r border-white/10">
+                        bg-bg-secondary border-r border-border-primary">
           {/* Collapsible Tree */}
           <TreePanel
             isOpen={isTreeOpen}
@@ -212,9 +200,8 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: Applets Only */}
-        <div className="flex-1 flex flex-col overflow-hidden
-                        bg-bg-secondary/20 backdrop-blur-md">
+        {/* RIGHT PANEL: J.A.R.V.I.S. Avatar + Applets */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
           <Suspense fallback={<PanelLoader />}>
             <AppletGrid />
           </Suspense>

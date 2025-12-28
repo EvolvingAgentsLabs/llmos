@@ -14,8 +14,14 @@ import React, { useState } from 'react';
 import { useApplets } from '@/contexts/AppletContext';
 import { AppletViewer } from './AppletViewer';
 import { ActiveApplet } from '@/lib/applets/applet-store';
-import { Code2, Play, X, RotateCcw, Sparkles, Plus } from 'lucide-react';
-import CoreEntity from '@/components/system/CoreEntity';
+import { Code2, Play, X, Sparkles } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+// Lazy load 3D avatar to avoid SSR issues
+const JarvisAvatar = dynamic(
+  () => import('@/components/system/JarvisAvatar'),
+  { ssr: false }
+);
 
 // ============================================================================
 // APPLET CARD WITH FLIP
@@ -155,7 +161,7 @@ function AppletCard({ applet, onClose, onSubmit, onSave }: AppletCardProps) {
 }
 
 // ============================================================================
-// EMPTY STATE - The J.A.R.V.I.S. standby mode
+// EMPTY STATE - J.A.R.V.I.S. Avatar as the AI presence
 // ============================================================================
 
 function EmptyState() {
@@ -167,39 +173,38 @@ function EmptyState() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-8 p-8">
-      {/* CoreEntity - the AI's presence */}
-      <div className="relative">
-        <CoreEntity size="lg" />
-        <div className="absolute inset-0 -m-8 rounded-full
-                        bg-gradient-to-r from-accent-primary/10 via-accent-secondary/10 to-accent-primary/10
-                        blur-xl animate-pulse" />
+    <div className="flex flex-col h-full">
+      {/* J.A.R.V.I.S. Avatar - the AI's presence (takes most of the space) */}
+      <div className="flex-1 min-h-[300px]">
+        <JarvisAvatar showLabel={false} />
       </div>
 
-      {/* Status */}
-      <div className="text-center space-y-3">
-        <h2 className="text-xl font-medium text-fg-primary">
-          Ready to Create
-        </h2>
-        <p className="text-sm text-fg-muted max-w-sm">
-          Ask me to build any tool and it will materialize here instantly.
-        </p>
-      </div>
+      {/* Status & Suggestions (bottom area) */}
+      <div className="p-6 space-y-4 bg-gradient-to-t from-bg-primary to-transparent">
+        <div className="text-center space-y-2">
+          <h2 className="text-lg font-medium text-fg-primary">
+            Ready to Create
+          </h2>
+          <p className="text-sm text-fg-muted">
+            Ask me to build any tool and it will appear here.
+          </p>
+        </div>
 
-      {/* Suggestions */}
-      <div className="flex flex-wrap gap-2 justify-center max-w-md">
-        {suggestions.map((suggestion) => (
-          <button
-            key={suggestion}
-            className="px-4 py-2 text-sm rounded-full
-                       bg-white/5 border border-white/10
-                       text-fg-secondary hover:text-fg-primary
-                       hover:bg-white/10 hover:border-accent-primary/30
-                       transition-all duration-200"
-          >
-            {suggestion}
-          </button>
-        ))}
+        {/* Suggestions */}
+        <div className="flex flex-wrap gap-2 justify-center">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              className="px-3 py-1.5 text-xs rounded-full
+                         bg-white/5 border border-white/10
+                         text-fg-secondary hover:text-fg-primary
+                         hover:bg-white/10 hover:border-accent-primary/30
+                         transition-all duration-200"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
