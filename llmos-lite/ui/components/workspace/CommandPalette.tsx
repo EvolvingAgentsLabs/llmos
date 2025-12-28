@@ -141,32 +141,40 @@ export default function CommandPalette() {
       setSelectedIndex(0);
 
       // Load files from VFS
-      const loadFiles = async () => {
+      const loadFiles = () => {
         try {
           const vfs = getVFS();
           const volumes: Array<'system' | 'team' | 'user'> = ['system', 'user'];
           const allFiles: VFSFile[] = [];
 
           for (const volume of volumes) {
-            const files = await vfs.listDirectory(volume, '');
-            // Recursively get files (limited depth)
-            const collectFiles = async (dir: string, depth: number = 0): Promise<void> => {
+            // Recursively collect files (limited depth)
+            const collectFiles = (dir: string, depth: number = 0): void => {
               if (depth > 2) return; // Limit depth to avoid too many files
-              const entries = await vfs.listDirectory(volume, dir);
-              for (const entry of entries) {
-                const fullPath = dir ? `${dir}/${entry.name}` : entry.name;
-                if (entry.type === 'file') {
-                  allFiles.push({
-                    path: fullPath,
-                    name: entry.name,
-                    volume,
-                  });
-                } else if (entry.type === 'directory' && depth < 2) {
-                  await collectFiles(fullPath, depth + 1);
+
+              const fullPath = dir ? `${volume}/${dir}` : volume;
+              const result = vfs.listDirectory(fullPath);
+
+              // Add files
+              for (const file of result.files) {
+                allFiles.push({
+                  path: file.path,
+                  name: file.path.split('/').pop() || file.path,
+                  volume,
+                });
+              }
+
+              // Recurse into directories
+              if (depth < 2) {
+                for (const subdir of result.directories) {
+                  const subdirName = subdir.split('/').pop() || subdir;
+                  const subdirPath = dir ? `${dir}/${subdirName}` : subdirName;
+                  collectFiles(subdirPath, depth + 1);
                 }
               }
             };
-            await collectFiles('');
+
+            collectFiles('');
           }
 
           setVfsFiles(allFiles.slice(0, 50)); // Limit to 50 files
