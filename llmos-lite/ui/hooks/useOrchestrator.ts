@@ -262,10 +262,10 @@ export function useOrchestrator() {
   // Auto-adjust layout when significant state changes occur
   useEffect(() => {
     // Don't auto-layout if user manually adjusted panels
-    if (workspace.state.preferences.autoSwitchViews) {
+    if (workspace.state.preferences.autoSwitchContext) {
       // Could add more sophisticated auto-layout logic here
     }
-  }, [workspace.state.preferences.autoSwitchViews, orchestratorState.hasActiveApplets]);
+  }, [workspace.state.preferences.autoSwitchContext, orchestratorState.hasActiveApplets]);
 
   return {
     // State
