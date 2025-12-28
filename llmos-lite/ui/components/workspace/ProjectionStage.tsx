@@ -6,9 +6,9 @@ import { useApplets } from '@/contexts/AppletContext';
 import CoreEntity from '@/components/system/CoreEntity';
 
 // Lazy load heavy components
-const ArtifactPanel = lazy(() => import('@/components/artifacts/ArtifactPanel'));
-const CanvasPanel = lazy(() => import('@/components/canvas/CanvasPanel'));
-const AppletRunner = lazy(() => import('@/components/applets/AppletRunner'));
+const ArtifactPanel = lazy(() => import('@/components/panel3-artifacts/ArtifactPanel'));
+const ThreeJSCanvas = lazy(() => import('@/components/canvas/ThreeJSCanvas'));
+const AppletPanel = lazy(() => import('@/components/applets/AppletPanel'));
 const SplitViewCanvas = lazy(() => import('@/components/canvas/SplitViewCanvas'));
 
 // ============================================================================
@@ -253,14 +253,14 @@ export default function ProjectionStage({
       case 'applet':
         return (
           <Suspense fallback={<ProjectionLoader />}>
-            <AppletRunner appletId={projection.id} />
+            <AppletPanel mode="split" />
           </Suspense>
         );
 
       case 'canvas':
         return (
           <Suspense fallback={<ProjectionLoader />}>
-            <CanvasPanel />
+            <ThreeJSCanvas />
           </Suspense>
         );
 
