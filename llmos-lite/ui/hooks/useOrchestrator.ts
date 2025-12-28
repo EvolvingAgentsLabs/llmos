@@ -112,14 +112,17 @@ export function useOrchestrator() {
 
   const lastOutputRef = useRef<AgentOutput | null>(null);
 
+  // Get the current session object from the ID
+  const currentSession = session.sessions.find(s => s.id === session.activeSession);
+
   // Derived state
   const orchestratorState: OrchestratorState = {
     isProcessing: workspace.state.agentState === 'thinking' || workspace.state.agentState === 'executing',
     agentState: workspace.state.agentState,
     taskType: workspace.state.taskType,
     contextViewMode: workspace.state.contextViewMode,
-    activeSessionId: session.activeSession?.id || null,
-    hasMessages: (session.activeSession?.messages.length || 0) > 0,
+    activeSessionId: session.activeSession,
+    hasMessages: (currentSession?.messages.length || 0) > 0,
     hasActiveApplets: applets.activeApplets.length > 0,
     activeAppletCount: applets.activeApplets.length,
   };
@@ -268,7 +271,8 @@ export function useOrchestrator() {
     // State
     state: orchestratorState,
     workspace: workspace.state,
-    activeSession: session.activeSession,
+    activeSessionId: session.activeSession,
+    activeSession: currentSession,
     sessions: session.sessions,
     applets: applets.activeApplets,
 
