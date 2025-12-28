@@ -13,6 +13,7 @@
  */
 
 import React from 'react';
+import { logger } from '@/lib/debug/logger';
 
 // Applet metadata and state
 export interface AppletMetadata {
@@ -177,7 +178,7 @@ function extractMetadata(code: string): Partial<AppletMetadata> {
     try {
       return JSON.parse(metadataMatch[1]);
     } catch {
-      console.warn('Failed to parse applet metadata');
+      logger.warn('applet', 'Failed to parse applet metadata');
     }
   }
   return {};
@@ -189,6 +190,8 @@ function extractMetadata(code: string): Partial<AppletMetadata> {
 export async function compileApplet(code: string): Promise<CompilationResult> {
   const warnings: string[] = [];
 
+  logger.time('applet-compile', 'applet', 'Compiling applet');
+
   try {
     // Extract metadata
     const extractedMetadata = extractMetadata(code);
@@ -198,6 +201,8 @@ export async function compileApplet(code: string): Promise<CompilationResult> {
     try {
       jsCode = await transpileTSX(code);
     } catch (transpileError: any) {
+      logger.error('applet', 'Transpilation failed', { error: transpileError.message });
+      logger.timeEnd('applet-compile', false);
       return {
         success: false,
         error: `Transpilation error: ${transpileError.message}`,
@@ -257,6 +262,8 @@ export async function compileApplet(code: string): Promise<CompilationResult> {
         }
       }
 
+      logger.error('applet', 'Runtime error', { error: errorMsg });
+      logger.timeEnd('applet-compile', false);
       return {
         success: false,
         error: `Runtime error: ${errorMsg}`,
@@ -292,12 +299,18 @@ export async function compileApplet(code: string): Promise<CompilationResult> {
       } as AppletMetadata;
     }
 
+    logger.timeEnd('applet-compile', true, {
+      name: exports.metadata?.name || 'Unnamed',
+    });
+
     return {
       success: true,
       exports,
       warnings: warnings.length > 0 ? warnings : undefined,
     };
   } catch (error: any) {
+    logger.error('applet', 'Compilation failed', { error: error.message });
+    logger.timeEnd('applet-compile', false);
     return {
       success: false,
       error: error.message || 'Unknown compilation error',

@@ -9,6 +9,8 @@
  * 5. Load standard library
  */
 
+import { logger } from '@/lib/debug/logger';
+
 export interface BootStage {
   name: string;
   description: string;
@@ -90,12 +92,12 @@ export class KernelBootLoader {
    */
   async boot(onProgress: BootProgressCallback): Promise<void> {
     if (this.isBooted) {
-      console.warn('[Kernel] Already booted');
+      logger.warn('system', 'Kernel already booted');
       return;
     }
 
     this.bootStartTime = Date.now();
-    console.log('[Kernel] Starting boot sequence...');
+    logger.boot('Boot sequence', 'start', 'Initializing LLMos kernel');
 
     let totalTime = 0;
     const allTime = this.stages.reduce((sum, stage) => sum + stage.duration, 0);
@@ -115,11 +117,11 @@ export class KernelBootLoader {
         await this.executeStage(stage);
 
         const elapsed = Date.now() - startTime;
-        console.log(`[Kernel] ${stage.name} completed in ${elapsed}ms`);
+        logger.boot(stage.name, 'complete', `${elapsed}ms`);
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[Kernel] ${stage.name} failed:`, error);
+        logger.boot(stage.name, 'error', errorMessage);
 
         // Report error
         onProgress({
@@ -133,7 +135,7 @@ export class KernelBootLoader {
         if (stage.critical) {
           throw new Error(`Boot failed at critical stage: ${stage.name}`);
         } else {
-          console.warn(`[Kernel] Non-critical stage ${stage.name} failed, continuing...`);
+          logger.warn('system', `Non-critical stage ${stage.name} failed, continuing...`);
         }
       }
 
@@ -142,7 +144,7 @@ export class KernelBootLoader {
 
     // Boot complete
     const bootTime = Date.now() - this.bootStartTime;
-    console.log(`[Kernel] Boot sequence completed in ${bootTime}ms`);
+    logger.success('system', `Boot sequence completed in ${bootTime}ms`);
 
     onProgress({
       stage: this.stages[this.stages.length - 1],
@@ -189,7 +191,7 @@ export class KernelBootLoader {
         break;
 
       default:
-        console.warn(`[Kernel] Unknown stage: ${stage.name}`);
+        logger.warn('system', `Unknown boot stage: ${stage.name}`);
     }
   }
 
@@ -210,7 +212,7 @@ export class KernelBootLoader {
     try {
       localStorage.setItem('llmos:kernel:version', '0.1.0');
     } catch (e) {
-      console.warn('[Kernel] localStorage not available');
+      logger.warn('system', 'localStorage not available');
     }
 
     // Simulate initialization work
@@ -226,7 +228,7 @@ export class KernelBootLoader {
     // 2. Validate access credentials
     // 3. Mount system, team, and user volumes
 
-    console.log('[Kernel] Mounting system volume...');
+    logger.boot('Volumes', 'start', 'Mounting system, team, user');
 
     // For now, just verify localStorage access
     try {
@@ -244,7 +246,7 @@ export class KernelBootLoader {
    * Stage 3: Load WASM runtime (QuickJS)
    */
   private async loadWASMRuntime(): Promise<void> {
-    console.log('[Kernel] Initializing QuickJS-WASM runtime...');
+    logger.boot('WASM', 'start', 'QuickJS-WASM runtime');
 
     try {
       // Dynamically import WASM runtime
@@ -263,9 +265,9 @@ export class KernelBootLoader {
         };
       }
 
-      console.log('[Kernel] WASM runtime initialized successfully');
+      logger.success('system', 'WASM runtime initialized');
     } catch (error) {
-      console.error('[Kernel] WASM initialization failed:', error);
+      logger.error('system', 'WASM initialization failed', { error });
 
       if (typeof window !== 'undefined') {
         (window as any).__LLMOS_KERNEL__.modules.wasm = {
@@ -282,7 +284,7 @@ export class KernelBootLoader {
    * Stage 4: Initialize Python (Pyodide)
    */
   private async initializePython(): Promise<void> {
-    console.log('[Kernel] Initializing Pyodide...');
+    logger.boot('Python', 'start', 'Pyodide WASM runtime');
 
     // Use existing Pyodide initialization
     // The actual loading is deferred until first use
@@ -302,7 +304,7 @@ export class KernelBootLoader {
    * Stage 5: Load standard library
    */
   private async loadStandardLibrary(): Promise<void> {
-    console.log('[Kernel] Loading standard library...');
+    logger.boot('StdLib', 'start', 'Loading kernel APIs');
 
     if (typeof window === 'undefined') {
       return;
@@ -311,11 +313,11 @@ export class KernelBootLoader {
     try {
       // Load init.js first (sets up kernel infrastructure)
       await this.loadScript('/system/kernel/init.js');
-      console.log('[Kernel] init.js loaded');
+      logger.debug('system', 'init.js loaded');
 
       // Load stdlib.js (provides APIs for artifacts)
       await this.loadScript('/system/kernel/stdlib.js');
-      console.log('[Kernel] stdlib.js loaded');
+      logger.debug('system', 'stdlib.js loaded');
 
       (window as any).__LLMOS_KERNEL__.modules.stdlib = {
         status: 'ready',
@@ -323,7 +325,7 @@ export class KernelBootLoader {
         loaded: true,
       };
     } catch (error) {
-      console.error('[Kernel] Failed to load standard library:', error);
+      logger.error('system', 'Failed to load standard library', { error });
       (window as any).__LLMOS_KERNEL__.modules.stdlib = {
         status: 'error',
         error: error instanceof Error ? error.message : String(error),
@@ -356,7 +358,10 @@ export class KernelBootLoader {
       kernel.bootComplete = Date.now();
       kernel.bootDuration = kernel.bootComplete - this.bootStartTime;
 
-      console.log('[Kernel] System ready:', kernel);
+      logger.success('system', 'Kernel ready', {
+        bootDuration: kernel.bootDuration,
+        modules: Object.keys(kernel.modules),
+      });
     }
 
     await this.sleep(100);

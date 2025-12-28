@@ -5,6 +5,8 @@
  * Similar to Jupyter but file-based with auto-execution
  */
 
+import { logger } from '@/lib/debug/logger';
+
 export interface ExecutionResult {
   success: boolean;
   stdout: string;
@@ -83,6 +85,8 @@ export class LivePreview {
       await this.initialize();
     }
 
+    logger.time(`python-exec-${filePath}`, 'python', `Executing ${filePath}`);
+
     const startTime = Date.now();
     const result: ExecutionResult = {
       success: false,
@@ -121,9 +125,17 @@ export class LivePreview {
       result.success = false;
       result.error = error instanceof Error ? error.message : String(error);
       result.stderr = result.error;
+      logger.error('python', `Execution failed: ${filePath}`, { error: result.error });
     }
 
     result.executionTime = Date.now() - startTime;
+
+    if (result.success) {
+      logger.timeEnd(`python-exec-${filePath}`, true, {
+        hasOutput: !!result.stdout,
+        plotCount: result.images?.length || 0,
+      });
+    }
 
     // Notify watchers
     const callback = this.watchCallbacks.get(filePath);
@@ -293,8 +305,9 @@ plt.show = _show_capture
     for (const pkg of packages) {
       try {
         await this.pyodide!.loadPackage(pkg);
+        logger.debug('python', `Package loaded: ${pkg}`);
       } catch (error) {
-        console.warn(`Failed to load package ${pkg}:`, error);
+        logger.warn('python', `Failed to load package ${pkg}`, { error });
       }
     }
   }
@@ -335,8 +348,9 @@ plt.show = _show_capture
       try {
         await this.installPackage(packageName);
         installedPackages.push(packageName);
+        logger.info('python', `Auto-installed package: ${packageName}`);
       } catch (error) {
-        console.warn(`Could not install ${packageName}:`, error);
+        logger.warn('python', `Could not install ${packageName}`, { error });
       }
     }
 

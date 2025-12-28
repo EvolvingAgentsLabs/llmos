@@ -8,6 +8,8 @@ import CanvasView from '../canvas/CanvasView';
 import { AppletPanel, AppletDock } from '../applets/AppletPanel';
 import { AppletProvider, useApplets } from '@/contexts/AppletContext';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
+import { DebugConsole } from '../debug';
+import { logger } from '@/lib/debug/logger';
 import { Sparkles } from 'lucide-react';
 
 type ViewMode = 'chat' | 'canvas' | 'applets';
@@ -38,7 +40,7 @@ function LayoutContent() {
   // Set up the applet generation callback when component mounts
   useEffect(() => {
     setAppletGeneratedCallback((applet) => {
-      console.log('[SimpleLayout] Applet generated via tool:', applet.name);
+      logger.applet(`Generated via tool: ${applet.name}`);
 
       // Create the applet in the store
       createApplet({
@@ -65,7 +67,7 @@ function LayoutContent() {
 
   // Handle applet submission - send data back to chat
   const handleAppletSubmit = useCallback((appletId: string, data: unknown) => {
-    console.log('[SimpleLayout] Applet submitted:', appletId, data);
+    logger.applet(`Applet submitted: ${appletId}`, { data });
     // TODO: Feed this back into the chat as a message
   }, []);
 
@@ -91,7 +93,7 @@ function LayoutContent() {
             activeVolume={activeVolume}
             onVolumeChange={setActiveVolume}
             onFileSelect={(node) => {
-              console.log('[SimpleLayout] File selected:', node);
+              logger.vfs(`File selected: ${node.path}`);
               setSelectedFile(node.id);
               setSelectedNode(node as TreeNode);
               // Switch to canvas view when file is selected
@@ -214,6 +216,9 @@ function LayoutContent() {
       {appletPanelMode === 'dock' && hasActiveApplets && (
         <AppletDock onExpand={() => setAppletPanelMode('split')} />
       )}
+
+      {/* Debug Console - Bottom Panel */}
+      <DebugConsole />
     </div>
   );
 }
