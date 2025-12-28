@@ -47,8 +47,8 @@ export default function SidebarPanel({
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg-secondary">
-      {/* VSCode File Tree - Takes significant space */}
-      <div className="flex-1 min-h-0 border-b border-border-primary/50">
+      {/* VSCode File Tree - Takes significant space with minimum height */}
+      <div className="flex-1 min-h-[250px] border-b border-border-primary/50 overflow-hidden">
         <VSCodeFileTree
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
@@ -60,8 +60,8 @@ export default function SidebarPanel({
         />
       </div>
 
-      {/* Sessions List - Compact */}
-      <div className="flex flex-col overflow-hidden border-b border-border-primary/50 max-h-64">
+      {/* Sessions List - Compact with limited height */}
+      <div className="flex flex-col overflow-hidden border-b border-border-primary/50 max-h-48 flex-shrink-0">
         <div className="px-3 py-2 flex items-center justify-between bg-bg-secondary/50">
           <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
             Sessions
