@@ -60,9 +60,15 @@ module.exports = {
       animation: {
         'pulse-smooth': 'pulse-smooth 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in': 'fade-in 0.3s ease-out',
+        'fade-out': 'fade-out 0.2s ease-in',
         'slide-in-from-right': 'slide-in-from-right 0.3s ease-out',
         'slide-in-from-left': 'slide-in-from-left 0.3s ease-out',
+        'slide-in-from-bottom': 'slide-in-from-bottom 0.3s ease-out',
         'scale-in': 'scale-in 0.2s ease-out',
+        'spin-slow': 'spin 3s linear infinite',
+        'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
+        'expand': 'expand 0.3s ease-out',
+        'collapse': 'collapse 0.2s ease-in',
       },
       keyframes: {
         'pulse-smooth': {
@@ -73,6 +79,10 @@ module.exports = {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
+        'fade-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
         'slide-in-from-right': {
           from: { transform: 'translateX(100%)', opacity: '0' },
           to: { transform: 'translateX(0)', opacity: '1' },
@@ -81,9 +91,25 @@ module.exports = {
           from: { transform: 'translateX(-100%)', opacity: '0' },
           to: { transform: 'translateX(0)', opacity: '1' },
         },
+        'slide-in-from-bottom': {
+          from: { transform: 'translateY(20px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
         'scale-in': {
           from: { transform: 'scale(0.9)', opacity: '0' },
           to: { transform: 'scale(1)', opacity: '1' },
+        },
+        'glow-pulse': {
+          '0%, 100%': { boxShadow: '0 0 20px rgb(var(--accent-primary) / 0.2)' },
+          '50%': { boxShadow: '0 0 40px rgb(var(--accent-primary) / 0.4)' },
+        },
+        'expand': {
+          from: { width: '0', opacity: '0' },
+          to: { width: 'var(--panel-width)', opacity: '1' },
+        },
+        'collapse': {
+          from: { width: 'var(--panel-width)', opacity: '1' },
+          to: { width: '0', opacity: '0' },
         },
       },
       boxShadow: {
@@ -100,6 +126,7 @@ module.exports = {
     // Custom plugin for utilities
     function({ addUtilities }) {
       addUtilities({
+        // Scrollbar utilities
         '.scrollbar-hide': {
           '-ms-overflow-style': 'none',
           'scrollbar-width': 'none',
@@ -109,6 +136,50 @@ module.exports = {
         },
         '.scrollbar-thin': {
           'scrollbar-width': 'thin',
+        },
+
+        // Panel utilities for adaptive layout
+        '.panel-transition': {
+          'transition-property': 'width, opacity, transform',
+          'transition-duration': '200ms',
+          'transition-timing-function': 'cubic-bezier(0.4, 0, 0.2, 1)',
+        },
+        '.panel-collapsed': {
+          width: '0',
+          opacity: '0',
+          overflow: 'hidden',
+        },
+
+        // Focus ring for panel focus indicator
+        '.focus-ring-panel': {
+          '&:focus-within': {
+            'box-shadow': 'inset 0 0 0 2px rgb(var(--accent-primary) / 0.3)',
+          },
+        },
+
+        // Glass panel effect
+        '.glass-panel': {
+          'background': 'rgb(var(--bg-secondary) / 0.8)',
+          'backdrop-filter': 'blur(12px)',
+          '-webkit-backdrop-filter': 'blur(12px)',
+          'border': '1px solid rgb(var(--border-primary) / 0.5)',
+        },
+
+        // Resize handle
+        '.resize-handle': {
+          cursor: 'col-resize',
+          'user-select': 'none',
+          'touch-action': 'none',
+        },
+        '.resize-handle-vertical': {
+          cursor: 'row-resize',
+          'user-select': 'none',
+          'touch-action': 'none',
+        },
+
+        // Cortex glow effect
+        '.cortex-glow': {
+          'box-shadow': '0 0 30px rgb(var(--accent-primary) / 0.3), 0 0 60px rgb(var(--accent-primary) / 0.1)',
         },
       });
     },

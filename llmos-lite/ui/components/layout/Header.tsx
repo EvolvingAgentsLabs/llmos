@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import dynamic from 'next/dynamic';
 import { Sparkles, Zap } from 'lucide-react';
+import AgentCortexHeader from '@/components/workspace/AgentCortexHeader';
 
 const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
   ssr: false,
@@ -24,7 +25,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="h-14 md:h-16 bg-bg-secondary/50 backdrop-blur-xl border-b border-border-primary/50 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+      <header className="relative z-20 h-14 md:h-16 bg-bg-secondary/30 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
         {/* Logo and branding */}
         <div className="flex items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
@@ -41,6 +42,11 @@ export default function Header() {
                 AI Operating System
               </p>
             </div>
+          </div>
+
+          {/* Agent Status Indicator - The "Cortex" */}
+          <div className="hidden md:block ml-4 pl-4 border-l border-border-primary/50">
+            <AgentCortexHeader />
           </div>
         </div>
 
