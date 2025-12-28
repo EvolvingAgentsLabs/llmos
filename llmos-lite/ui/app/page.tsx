@@ -25,7 +25,19 @@ const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
   ),
 });
 
-// New Adaptive Workbench Layout
+// New Fluid Desktop Layout (J.A.R.V.I.S. style)
+const FluidLayout = dynamic(() => import('@/components/workspace/FluidLayout'), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+      <div className="text-accent-primary animate-pulse">
+        Initializing Holodeck...
+      </div>
+    </div>
+  ),
+});
+
+// Legacy Adaptive Layout
 const AdaptiveLayout = dynamic(() => import('@/components/workspace/AdaptiveLayout'), {
   ssr: false,
   loading: () => (
@@ -48,13 +60,13 @@ const APIKeySetup = dynamic(() => import('@/components/setup/APIKeySetup'), {
   ),
 });
 
-type LayoutMode = 'simple' | 'adaptive';
+type LayoutMode = 'simple' | 'adaptive' | 'fluid';
 
 export default function Home() {
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('adaptive'); // Default to new adaptive layout
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('fluid'); // Default to J.A.R.V.I.S. Fluid layout
   const [bootProgress, setBootProgress] = useState<BootProgress>({
     stage: {
       name: 'init',
@@ -75,7 +87,7 @@ export default function Home() {
 
     // Load layout preference
     const savedLayout = localStorage.getItem(LAYOUT_MODE_KEY) as LayoutMode | null;
-    if (savedLayout && (savedLayout === 'simple' || savedLayout === 'adaptive')) {
+    if (savedLayout && (savedLayout === 'simple' || savedLayout === 'adaptive' || savedLayout === 'fluid')) {
       setLayoutMode(savedLayout);
     }
 
@@ -107,13 +119,15 @@ export default function Home() {
     startBoot();
   }, []);
 
-  // Toggle layout mode with Ctrl+Shift+L
+  // Toggle layout mode with Ctrl+Shift+L (cycles: fluid -> adaptive -> simple)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
         e.preventDefault();
         setLayoutMode(prev => {
-          const newMode = prev === 'simple' ? 'adaptive' : 'simple';
+          const modes: LayoutMode[] = ['fluid', 'adaptive', 'simple'];
+          const currentIndex = modes.indexOf(prev);
+          const newMode = modes[(currentIndex + 1) % modes.length];
           localStorage.setItem(LAYOUT_MODE_KEY, newMode);
           return newMode;
         });
@@ -146,16 +160,24 @@ export default function Home() {
   }
 
   // Render based on layout mode
-  // Use Ctrl+Shift+L to toggle between layouts
+  // Use Ctrl+Shift+L to toggle between layouts (fluid -> adaptive -> simple)
+  const renderLayout = () => {
+    switch (layoutMode) {
+      case 'fluid':
+        return <FluidLayout />;
+      case 'adaptive':
+        return <AdaptiveLayout />;
+      case 'simple':
+      default:
+        return <SimpleLayout />;
+    }
+  };
+
   return (
     <SessionProvider>
       <AppletProvider>
         <WorkspaceProvider>
-          {layoutMode === 'adaptive' ? (
-            <AdaptiveLayout />
-          ) : (
-            <SimpleLayout />
-          )}
+          {renderLayout()}
         </WorkspaceProvider>
       </AppletProvider>
     </SessionProvider>
