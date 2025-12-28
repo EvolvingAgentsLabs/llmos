@@ -26,13 +26,41 @@ View generated outputs directly in the Canvas tab with interactive visualization
 
 ## 🆕 What's New
 
-### Latest Updates
+### 🎯 Infinite App Store - Generative UI (NEW!)
+
+**The biggest update yet**: LLMos-Lite now generates **live, interactive React applets** on demand!
+
+Instead of just returning text or files, when you ask for interactive tools, calculators, or explorers, the AI generates a **fully functional UI applet** that appears instantly in your interface.
+
+```
+You: "Build an interactive 3D surface plotter with sliders for x/y range and colormap selection"
+
+SystemAgent:
+🎨 Generating React applet...
+✅ Compiling and validating...
+🚀 Applet deployed to Applets panel!
+📁 Project files saved to projects/surface_plotter/
+```
+
+**Key Features:**
+- **Instant UI Generation**: Ask for any tool and get a working React component
+- **Self-Healing Compilation**: Code is validated before deployment; errors auto-fixed
+- **Persistent Files**: Applets saved as `.tsx` files you can modify and reuse
+- **Complete Projects**: Every applet comes with source code, agents, and execution traces
+
+**Try These Prompts:**
+- "Build an interactive quantum circuit designer with drag-and-drop gates"
+- "Create a signal analyzer with FFT visualization and adjustable parameters"
+- "Make a color palette generator with hex/rgb conversion"
+
+### Recent Updates
 
 - **Multi-Step Agent Planning** - SystemAgent now shows detailed planning progress (e.g., "Planning step 5/10") with real-time status updates
 - **Sub-Agent Orchestration** - Intelligent task delegation to specialized agents like `SignalProcessorAgent` for domain-specific tasks
 - **Canvas Tab** - New dedicated visualization tab for viewing generated plots, images, and outputs with Code/Design toggle
+- **Applets Panel** - New panel for live interactive React applets generated on demand
 - **Enhanced File Explorer** - Improved sidebar with organized sections for System (agents, tools, skills), Team, and User volumes
-- **Project Structure** - Auto-generated project folders with components, memory, and output directories
+- **Project Structure** - Auto-generated project folders with applets, components, memory, and output directories
 - **Model Selection** - Choose from multiple LLM providers including Anthropic Claude models directly in the UI
 - **Real-time Progress Tracking** - Visual indicators for agent status, processing state, and execution timeline
 
@@ -65,6 +93,14 @@ The system doesn't stay static—it **evolves**:
 
 ## 💻 What You Can Do Now
 
+### 🎨 Generative UI - Infinite App Store (NEW!)
+- **Interactive Applets**: Ask for any tool and get a live React component
+- **Parameter Explorers**: Sliders, dropdowns, inputs for real-time parameter adjustment
+- **Calculators & Converters**: Unit converters, formula calculators, data transformers
+- **Visualizers**: Interactive plots, 3D explorers, data dashboards
+- **Form Builders**: NDA generators, configuration wizards, data entry forms
+- **Simulators**: Physics simulations, quantum circuits, signal processors
+
 ### Scientific Computing & Data Science
 - **Signal Processing**: FFT analysis, filtering, spectrograms, wavelet transforms
 - **Machine Learning**: Classification, regression, clustering with scikit-learn
@@ -74,14 +110,20 @@ The system doesn't stay static—it **evolves**:
 
 ### Interactive Development
 - **Live Python Execution**: Code runs instantly in your browser via Pyodide
-- **Real-time Previews**: See matplotlib plots and results as you code
+- **Live React Applets**: Dynamic React components compiled and rendered in-browser
+- **Real-time Previews**: See matplotlib plots and applet results as you code
 - **Canvas Visualization**: Dedicated tab for viewing generated plots with Code/Design views
+- **Applets Panel**: Interactive UI components with state, controls, and persistence
 - **File Management**: Full file tree with VFS storage and organized project structures
 - **Code Editor**: Split-view with syntax highlighting and auto-execution
 - **Agent Dashboard**: Real-time progress tracking with planning steps and execution timeline
 
-### Available Libraries (WebAssembly-Compatible)
+### Available Libraries
+**Python (WebAssembly via Pyodide):**
 ✅ numpy • scipy • matplotlib • pandas • scikit-learn • networkx • sympy
+
+**React Applets (Browser-native):**
+✅ React hooks • Tailwind CSS • Math/JSON APIs • Browser APIs
 
 ---
 
@@ -115,16 +157,19 @@ Your project is ready in the file tree!
 
 ## 🔮 What's Coming Next
 
-### Near Future
+### Near Future (Work in Progress)
+- **Applet Library**: Save and reuse generated applets across sessions
+- **Applet Sharing**: Export applets as standalone HTML files
 - **Enhanced Memory System**: Visual memory browser and pattern visualization
 - **Agent Evolution**: Agents that rewrite themselves based on success metrics
-- **Three.js Runtime**: Interactive 3D graphics and animations
+- **Three.js Runtime**: Interactive 3D graphics and animations in applets
 - **Cross-Project Learning**: Share learnings between different projects
 - **Session Replay**: Replay and analyze past executions
 
 ### Long-Term Vision
 - **Self-Improving OS**: System that adapts to any technical domain you teach it
 - **Research Accelerator**: Transform papers into implementations in minutes
+- **Applet Marketplace**: Community-shared interactive tools and components
 - **Community Knowledge**: Marketplace for sharing skills and agents
 - **Multi-Language Support**: Extend beyond Python to JavaScript, R, Julia
 - **Real-time Collaboration**: Multi-user sessions with shared memory
@@ -147,6 +192,12 @@ SystemAgent (Orchestrator)
     │   ├─ Executes code in browser sandbox
     │   └─ Captures matplotlib plots as images
     │
+    ├─ Applet Runtime (NEW!)
+    │   ├─ Browser-side TSX transpilation via Babel
+    │   ├─ Dynamic React component compilation
+    │   ├─ Self-healing with compile-time validation
+    │   └─ Scoped execution with React hooks + APIs
+    │
     └─ File Tree UI
         ├─ System volume (read-only)
         ├─ Team volume (shared)
@@ -156,14 +207,17 @@ SystemAgent (Orchestrator)
 **Every execution creates:**
 ```
 projects/[name]/
-├── components/agents/    # Agent definitions
+├── applets/              # React applet source files (.tsx)
+├── components/
+│   └── agents/           # Sub-agent definitions (.md)
+├── tools/                # Custom tool definitions
+├── skills/               # Skill nodes
 ├── output/
-│   ├── code/            # Generated Python files
-│   ├── data/            # Data files
-│   └── visualizations/  # Matplotlib plots
+│   ├── code/             # Generated Python files
+│   └── visualizations/   # Matplotlib plots
 └── memory/
-    ├── short_term/      # Execution logs
-    └── long_term/       # Learnings
+    ├── short_term/       # Execution traces
+    └── long_term/        # Consolidated learnings
 ```
 
 ---
@@ -192,6 +246,12 @@ See **llmos-lite/CONTRIBUTING.md** for guidelines.
 ---
 
 ## 📖 Philosophy
+
+**Infinite App Store**
+Don't download apps—describe what you need and the OS builds it. Every tool is generated on demand, compiled in real-time, and persisted for reuse.
+
+**Text-In, Reality-Out**
+Your words compile to code, UI, and visualizations. Input is natural language; output is working software.
 
 **File-First, Browser-Native**
 Inspired by Claude Code—files are the source of truth, everything is persistent, operations are transparent.
