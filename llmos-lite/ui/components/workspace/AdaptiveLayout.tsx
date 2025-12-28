@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
@@ -10,6 +10,7 @@ import ChatPanel from '../chat/ChatPanel';
 import ResizablePanel from './ResizablePanel';
 import ViewManager from './ViewManager';
 import CommandPalette from './CommandPalette';
+import AgentCortexHeader from './AgentCortexHeader';
 
 // Lazy load components
 const FirstTimeGuide = dynamic(() => import('../onboarding/FirstTimeGuide'), { ssr: false });
@@ -91,13 +92,74 @@ function KeyboardHint() {
 
 export default function AdaptiveLayout() {
   const { activeSession, setActiveSession } = useSessionContext();
-  const { state, toggleSidebar, toggleContext, resizePanel, setFocusedPanel } = useWorkspace();
+  const { state, toggleSidebar, toggleContext, resizePanel, setFocusedPanel, updatePreferences } = useWorkspace();
   const layout = useWorkspaceLayout();
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [mobileTab, setMobileTab] = useState<MobileTab>('chat');
   const [showGuide, setShowGuide] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+  // Track previous agent state for transitions
+  const prevAgentState = useRef(state.agentState);
+
+  // ========================================================================
+  // REACTIVE NERVOUS SYSTEM: Auto-open context panel when agent creates output
+  // ========================================================================
+  useEffect(() => {
+    // Only auto-switch if preference is enabled
+    if (!state.preferences.autoSwitchContext) return;
+
+    const wasIdle = prevAgentState.current === 'idle' || prevAgentState.current === 'thinking';
+    const isNowExecuting = state.agentState === 'executing';
+    const isNowSuccess = state.agentState === 'success';
+
+    // When agent starts executing or succeeds, auto-open the context panel
+    if ((wasIdle && isNowExecuting) || isNowSuccess) {
+      // Open the right panel if it's closed
+      if (layout.isContextCollapsed) {
+        updatePreferences({
+          collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
+        });
+      }
+    }
+
+    // Update previous state
+    prevAgentState.current = state.agentState;
+  }, [state.agentState, state.preferences.autoSwitchContext, layout.isContextCollapsed, updatePreferences, state.preferences.collapsedPanels]);
+
+  // ========================================================================
+  // FOCUS MODES: Adapt layout based on task type
+  // ========================================================================
+  useEffect(() => {
+    if (!state.preferences.autoSwitchContext) return;
+
+    // When task type changes, adapt the layout
+    switch (state.taskType) {
+      case 'coding':
+      case 'debugging':
+        // For coding, ensure context panel is visible for code preview
+        if (layout.isContextCollapsed) {
+          updatePreferences({
+            collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
+          });
+        }
+        break;
+
+      case 'designing':
+        // For designing, maximize context panel visibility
+        if (layout.isContextCollapsed) {
+          updatePreferences({
+            collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
+          });
+        }
+        break;
+
+      case 'chatting':
+        // For pure chatting, user might prefer panels closed (don't auto-change)
+        break;
+    }
+  }, [state.taskType, state.preferences.autoSwitchContext, layout.isContextCollapsed, updatePreferences, state.preferences.collapsedPanels]);
 
   // First-time guide
   useEffect(() => {

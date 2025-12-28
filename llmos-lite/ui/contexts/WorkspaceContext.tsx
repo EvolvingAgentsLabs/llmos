@@ -94,7 +94,7 @@ const defaultPanelSizes: PanelSizes = {
 
 const defaultPreferences: WorkspacePreferences = {
   panelSizes: defaultPanelSizes,
-  collapsedPanels: { sidebar: false, context: false },
+  collapsedPanels: { sidebar: false, context: true }, // Right panel closed by default for clean start
   defaultContextView: 'artifacts',
   showAgentVisualization: true,
   enableKeyboardShortcuts: true,
