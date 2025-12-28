@@ -186,7 +186,10 @@ export default function ViewManager({
         }
         return (
           <Suspense fallback={<ViewLoader />}>
-            <SplitViewCanvas />
+            <SplitViewCanvas
+              volume={activeVolume}
+              filePath={activeFilePath}
+            />
           </Suspense>
         );
 
@@ -196,7 +199,10 @@ export default function ViewManager({
         }
         return (
           <Suspense fallback={<ViewLoader />}>
-            <SplitViewCanvas />
+            <SplitViewCanvas
+              volume={activeVolume}
+              filePath={activeFilePath}
+            />
           </Suspense>
         );
 
