@@ -4,6 +4,8 @@
  * Supports multiple models through OpenRouter API
  */
 
+import { logger } from '@/lib/debug/logger';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -108,10 +110,10 @@ export class LLMClient {
       volume?: 'user' | 'team' | 'system';
     }
   ): Promise<string> {
-    console.log('[LLMClient] Making request to OpenRouter');
-    console.log('[LLMClient] Model:', this.config.model);
-    console.log('[LLMClient] API Key (first 20 chars):', this.config.apiKey.substring(0, 20) + '...');
-    console.log('[LLMClient] Messages count:', messages.length);
+    logger.time('llm-request', 'llm', 'OpenRouter API call', {
+      model: this.config.model,
+      messageCount: messages.length,
+    });
 
     // Prepare messages with optional skill context
     let finalMessages = [...messages];
@@ -126,10 +128,10 @@ export class LLMClient {
             { role: 'system', content: skillContext },
             ...messages
           ];
-          console.log('[LLMClient] Injected skill context from volume:', options.volume || 'user');
+          logger.debug('llm', `Injected skill context from ${options.volume || 'user'} volume`);
         }
       } catch (error) {
-        console.warn('[LLMClient] Failed to load skills, continuing without them:', error);
+        logger.warn('llm', 'Failed to load skills, continuing without them', { error });
       }
     }
 
@@ -148,11 +150,10 @@ export class LLMClient {
         }),
       });
 
-      console.log('[LLMClient] Response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[LLMClient] Error response:', errorText);
+        logger.error('llm', `OpenRouter API error (${response.status})`, { errorText });
+        logger.timeEnd('llm-request', false);
 
         // Try to parse error as JSON for better error messages
         try {
@@ -164,19 +165,21 @@ export class LLMClient {
       }
 
       const data = await response.json();
-      console.log('[LLMClient] Response received successfully');
-      console.log('[LLMClient] Response data:', JSON.stringify(data, null, 2));
 
       if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('[LLMClient] Unexpected response structure:', data);
+        logger.error('llm', 'Unexpected response structure', { data });
+        logger.timeEnd('llm-request', false);
         throw new Error('Invalid response structure from OpenRouter API');
       }
 
       const content = data.choices[0].message.content;
-      console.log('[LLMClient] Extracted content (first 200 chars):', content?.substring(0, 200));
+      logger.timeEnd('llm-request', true, {
+        tokensUsed: data.usage?.total_tokens,
+        model: data.model,
+      });
       return content;
     } catch (error) {
-      console.error('[LLMClient] Request failed:', error);
+      logger.error('llm', 'Request failed', { error: error instanceof Error ? error.message : error });
       throw error;
     }
   }
@@ -193,11 +196,11 @@ export class LLMClient {
       const skills = await GitService.fetchSkills(volume);
 
       if (skills.length === 0) {
-        console.log('[LLMClient] No skills found in volume:', volume);
+        logger.debug('llm', `No skills found in ${volume} volume`);
         return null;
       }
 
-      console.log('[LLMClient] Loaded', skills.length, 'skills from', volume, 'volume');
+      logger.info('llm', `Loaded ${skills.length} skills from ${volume} volume`);
 
       // Format skills as context
       const skillContext = `# Available Skills
@@ -214,7 +217,7 @@ Use these skills to provide better, more context-aware responses.`;
 
       return skillContext;
     } catch (error) {
-      console.error('[LLMClient] Failed to load skills:', error);
+      logger.error('llm', 'Failed to load skills', { error });
       return null;
     }
   }
@@ -310,12 +313,8 @@ export function createLLMClient(): LLMClient | null {
   const apiKey = LLMStorage.getApiKey();
   const modelId = LLMStorage.getModel();
 
-  console.log('[createLLMClient] Attempting to create client');
-  console.log('[createLLMClient] API Key:', apiKey ? `present (${apiKey.substring(0, 20)}...)` : 'missing');
-  console.log('[createLLMClient] Model ID from storage:', modelId);
-
   if (!apiKey || !modelId) {
-    console.error('[createLLMClient] Missing configuration:', { hasApiKey: !!apiKey, hasModelId: !!modelId });
+    logger.warn('llm', 'Missing configuration', { hasApiKey: !!apiKey, hasModelId: !!modelId });
     return null;
   }
 
@@ -326,14 +325,11 @@ export function createLLMClient(): LLMClient | null {
   // otherwise use the custom model ID directly
   const actualModelId = model ? model.id : modelId;
 
-  console.log('[createLLMClient] Model lookup in AVAILABLE_MODELS:', model ? 'found' : 'not found, using as-is');
-  console.log('[createLLMClient] Actual model ID to use:', actualModelId);
-
   const client = new LLMClient({
     apiKey,
     model: actualModelId,
   });
 
-  console.log('[createLLMClient] Client created successfully');
+  logger.success('llm', 'LLM client initialized', { model: actualModelId });
   return client;
 }
