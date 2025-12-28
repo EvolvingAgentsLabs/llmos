@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, Suspense, lazy } from 'react';
+import { useMemo, Suspense, lazy, useState } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
+import CoreEntity from '@/components/system/CoreEntity';
 
 // Lazy load view components for code splitting
 const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
@@ -35,64 +36,54 @@ function ViewLoader() {
   );
 }
 
-// Empty state when no content
+// Empty state when no content - Shows the CoreEntity as a standby visual
 function EmptyView({ mode }: { mode: ContextViewMode }) {
-  const messages: Record<ContextViewMode, { title: string; description: string; icon: React.ReactNode }> = {
+  const messages: Record<ContextViewMode, { title: string; description: string }> = {
     artifacts: {
-      title: 'No Artifacts',
-      description: 'Artifacts created during your session will appear here',
-      icon: (
-        <svg className="w-12 h-12 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
+      title: 'Projection Stage',
+      description: 'Ask me to create something and it will materialize here',
     },
     canvas: {
-      title: 'Canvas Ready',
+      title: 'Visual Canvas',
       description: 'Create 3D visualizations by asking the agent',
-      icon: (
-        <svg className="w-12 h-12 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-      ),
     },
     applets: {
-      title: 'No Applets',
-      description: 'Generated applets will appear here',
-      icon: (
-        <svg className="w-12 h-12 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-        </svg>
-      ),
+      title: 'Applet Space',
+      description: 'Interactive applications will appear here',
     },
     'code-editor': {
       title: 'Code Editor',
       description: 'Select a file to start editing',
-      icon: (
-        <svg className="w-12 h-12 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
-      ),
     },
     'split-view': {
       title: 'Split View',
-      description: 'Select a file to view code and preview side by side',
-      icon: (
-        <svg className="w-12 h-12 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-        </svg>
-      ),
+      description: 'Select a file to view code and preview',
     },
   };
 
-  const { title, description, icon } = messages[mode];
+  const { title, description } = messages[mode];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-      {icon}
-      <div>
+    <div className="flex flex-col items-center justify-center h-full gap-6 p-8 text-center
+                    bg-gradient-to-br from-bg-primary/50 via-bg-secondary/30 to-bg-primary/50">
+      {/* CoreEntity as the focal point */}
+      <div className="relative">
+        <CoreEntity size="lg" />
+        {/* Subtle glow ring */}
+        <div className="absolute inset-0 -m-8 rounded-full
+                        bg-gradient-to-r from-accent-primary/5 via-accent-secondary/5 to-accent-primary/5
+                        blur-xl animate-pulse" />
+      </div>
+
+      <div className="space-y-2">
         <h3 className="text-lg font-medium text-fg-primary">{title}</h3>
-        <p className="text-sm text-fg-secondary mt-1">{description}</p>
+        <p className="text-sm text-fg-muted max-w-xs">{description}</p>
+      </div>
+
+      {/* Suggestion hint */}
+      <div className="flex items-center gap-2 text-xs text-fg-muted">
+        <kbd className="px-2 py-0.5 rounded bg-bg-tertiary border border-border-primary">⌘K</kbd>
+        <span>for quick actions</span>
       </div>
     </div>
   );
@@ -211,43 +202,58 @@ export default function ViewManager({
     }
   };
 
+  const [isTabBarVisible, setIsTabBarVisible] = useState(false);
+
   return (
-    <div className="flex flex-col h-full bg-bg-secondary/30">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border-primary bg-bg-secondary/50">
+    <div
+      className="relative flex flex-col h-full bg-bg-secondary/20 backdrop-blur-sm"
+      onMouseEnter={() => setIsTabBarVisible(true)}
+      onMouseLeave={() => setIsTabBarVisible(false)}
+    >
+      {/* Minimal floating tab bar - appears on hover */}
+      <div
+        className={`absolute top-2 left-1/2 -translate-x-1/2 z-20
+                    flex items-center gap-1 px-2 py-1 rounded-full
+                    bg-bg-elevated/80 backdrop-blur-xl border border-border-primary/50
+                    shadow-lg shadow-black/20
+                    transition-all duration-300
+                    ${isTabBarVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
+      >
         {tabs.map((tab) => (
           <button
             key={tab.mode}
             onClick={() => setContextViewMode(tab.mode)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-all ${
               contextViewMode === tab.mode
-                ? 'bg-accent-primary/10 text-accent-primary'
+                ? 'bg-accent-primary text-white'
                 : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
             }`}
+            title={tab.label}
           >
             {tab.icon}
-            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* View actions */}
-        <button
-          className="p-1.5 text-fg-muted hover:text-fg-primary hover:bg-bg-tertiary rounded-md transition-colors"
-          title="Maximize panel"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        </button>
       </div>
 
-      {/* Active view */}
-      <div className="flex-1 overflow-hidden">
+      {/* Glassmorphism container for the view */}
+      <div className="flex-1 overflow-hidden m-2 rounded-xl
+                      bg-bg-elevated/50 backdrop-blur-md
+                      border border-border-primary/30
+                      shadow-inner">
         {renderView()}
       </div>
+
+      {/* Standby indicator when content is empty */}
+      {contextViewMode === 'artifacts' && !activeArtifactId && (
+        <div className="absolute bottom-4 right-4 z-10">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full
+                          bg-bg-elevated/80 backdrop-blur-xl border border-border-primary/50
+                          text-xs text-fg-muted">
+            <div className="w-2 h-2 rounded-full bg-accent-primary animate-pulse" />
+            <span>Ready for projections</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
