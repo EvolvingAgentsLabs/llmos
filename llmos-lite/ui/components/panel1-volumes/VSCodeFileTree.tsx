@@ -840,7 +840,7 @@ export default function VSCodeFileTree({
       </div>
 
       {/* File tree - Single unified tree with volumes as drives */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-2 scrollbar-thin">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 py-2 scrollbar-thin">
         {treeData.map((volumeNode) => renderTreeNode(volumeNode, 0))}
       </div>
 
