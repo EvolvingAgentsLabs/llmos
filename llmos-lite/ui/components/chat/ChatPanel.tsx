@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
@@ -27,6 +28,11 @@ export default function ChatPanel({
   onPromptProcessed,
 }: ChatPanelProps) {
   const { sessions, addSession, addMessage } = useSessionContext();
+
+  // Wire to Workspace Context for adaptive UI
+  const workspaceContext = useWorkspace();
+  const { setAgentState, setTaskType, setContextViewMode, setActiveFile } = workspaceContext || {};
+
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>('');
@@ -77,6 +83,10 @@ export default function ChatPanel({
     setIsLoading(true);
     setLoadingStatus('Initializing...');
     setAgentActivities([]); // Clear previous activities
+
+    // Wire: Update Workspace Context - Agent is now thinking
+    setAgentState?.('thinking');
+    setTaskType?.('chatting');
 
     // Auto-create session if none exists
     let sessionId = activeSession;
@@ -164,7 +174,18 @@ export default function ChatPanel({
       // Create orchestrator with progress callback
       const orchestrator = new SystemAgentOrchestrator(systemPrompt, (event) => {
         setAgentActivities(prev => [...prev, event]);
+
+        // Wire: Update Workspace Context based on activity type
+        if (event.type === 'execution' || event.type === 'tool-call') {
+          setAgentState?.('executing');
+          setTaskType?.('coding');
+        } else if (event.type === 'thinking') {
+          setAgentState?.('thinking');
+        }
       });
+
+      // Wire: Agent is now executing
+      setAgentState?.('executing');
 
       // Execute
       const result = await orchestrator.execute(messageText);
@@ -216,14 +237,38 @@ export default function ChatPanel({
           if (result.filesCreated.length > 10) {
             assistantResponse += `- ... and ${result.filesCreated.length - 10} more\n`;
           }
+
+          // Wire: Auto-switch view based on created file types
+          const firstFile = result.filesCreated[0];
+          if (firstFile) {
+            // If images were created, switch to canvas view
+            if (firstFile.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
+              setContextViewMode?.('canvas');
+              setActiveFile?.(firstFile);
+            }
+            // If code files were created, switch to split view
+            else if (firstFile.match(/\.(py|js|ts|tsx|jsx)$/i)) {
+              setContextViewMode?.('split-view');
+              setActiveFile?.(firstFile);
+            }
+            // If artifacts panel content
+            else {
+              setContextViewMode?.('artifacts');
+            }
+          }
         }
 
         // Show how to view files
         assistantResponse += `\n💡 Check the **User** volume in the left panel to browse your project files.`;
+
+        // Wire: Agent succeeded
+        setAgentState?.('success');
       }
 
       if (!result.success && result.error) {
         assistantResponse = `Error executing SystemAgent: ${result.error}`;
+        // Wire: Agent failed
+        setAgentState?.('error');
       }
 
       console.log('[ChatPanel] Adding assistant message to session:', sessionId);
@@ -238,6 +283,8 @@ export default function ChatPanel({
     } catch (error) {
       console.error('Failed to send message:', error);
       setLoadingStatus('Error occurred');
+      // Wire: Agent failed
+      setAgentState?.('error');
       if (sessionId) {
         addMessage(sessionId, {
           role: 'assistant',
@@ -247,6 +294,11 @@ export default function ChatPanel({
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
+      // Wire: Reset agent state after a delay (show success/error briefly)
+      setTimeout(() => {
+        setAgentState?.('idle');
+        setTaskType?.('idle');
+      }, 2000);
     }
   };
 

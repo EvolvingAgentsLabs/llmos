@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { getVFS } from '@/lib/virtual-fs';
 
 // ============================================================================
 // TYPES
@@ -95,6 +96,23 @@ const icons = {
 // COMPONENT
 // ============================================================================
 
+// File type to icon mapping
+function getFileIcon(path: string): React.ReactNode {
+  if (path.endsWith('.py')) return icons.code;
+  if (path.endsWith('.ts') || path.endsWith('.tsx')) return icons.code;
+  if (path.endsWith('.js') || path.endsWith('.jsx')) return icons.code;
+  if (path.endsWith('.md')) return icons.document;
+  if (path.endsWith('.json')) return icons.settings;
+  if (path.match(/\.(png|jpg|jpeg|svg|gif)$/i)) return icons.cube;
+  return icons.document;
+}
+
+interface VFSFile {
+  path: string;
+  name: string;
+  volume: 'system' | 'team' | 'user';
+}
+
 export default function CommandPalette() {
   const {
     state,
@@ -105,20 +123,59 @@ export default function CommandPalette() {
     resetLayout,
     suggestLayout,
     setFocusedPanel,
+    setActiveFile,
   } = useWorkspace();
   const { sessions, addSession, setActiveSession } = useSessionContext();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [vfsFiles, setVfsFiles] = useState<VFSFile[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Focus input when opened
+  // Load files from VFS when opened
   useEffect(() => {
     if (state.isCommandPaletteOpen) {
       inputRef.current?.focus();
       setQuery('');
       setSelectedIndex(0);
+
+      // Load files from VFS
+      const loadFiles = async () => {
+        try {
+          const vfs = getVFS();
+          const volumes: Array<'system' | 'team' | 'user'> = ['system', 'user'];
+          const allFiles: VFSFile[] = [];
+
+          for (const volume of volumes) {
+            const files = await vfs.listDirectory(volume, '');
+            // Recursively get files (limited depth)
+            const collectFiles = async (dir: string, depth: number = 0): Promise<void> => {
+              if (depth > 2) return; // Limit depth to avoid too many files
+              const entries = await vfs.listDirectory(volume, dir);
+              for (const entry of entries) {
+                const fullPath = dir ? `${dir}/${entry.name}` : entry.name;
+                if (entry.type === 'file') {
+                  allFiles.push({
+                    path: fullPath,
+                    name: entry.name,
+                    volume,
+                  });
+                } else if (entry.type === 'directory' && depth < 2) {
+                  await collectFiles(fullPath, depth + 1);
+                }
+              }
+            };
+            await collectFiles('');
+          }
+
+          setVfsFiles(allFiles.slice(0, 50)); // Limit to 50 files
+        } catch (error) {
+          console.error('[CommandPalette] Failed to load VFS files:', error);
+        }
+      };
+
+      loadFiles();
     }
   }, [state.isCommandPaletteOpen]);
 
@@ -285,7 +342,28 @@ export default function CommandPalette() {
       shortcut: '⌘↵',
       action: () => { closeCommandPalette(); /* TODO: Trigger code execution */ },
     },
-  ], [sessions, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, addSession, setActiveSession, closeCommandPalette]);
+
+    // Dynamic file commands from VFS
+    ...vfsFiles.map((file) => ({
+      id: `file-${file.volume}-${file.path}`,
+      label: file.name,
+      description: `${file.volume}:/${file.path}`,
+      icon: getFileIcon(file.path),
+      category: 'file' as const,
+      action: () => {
+        // Open file in appropriate view
+        setActiveFile?.(file.path);
+        if (file.path.match(/\.(py|js|ts|tsx|jsx)$/i)) {
+          setContextViewMode('split-view');
+        } else if (file.path.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
+          setContextViewMode('canvas');
+        } else {
+          setContextViewMode('artifacts');
+        }
+        closeCommandPalette();
+      },
+    })),
+  ], [sessions, vfsFiles, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, setActiveFile, addSession, setActiveSession, closeCommandPalette]);
 
   // Filter commands by query
   const filteredCommands = useMemo(() => {
