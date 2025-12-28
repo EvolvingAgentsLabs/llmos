@@ -25,7 +25,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="h-14 md:h-16 bg-bg-secondary/50 backdrop-blur-xl border-b border-border-primary/50 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+      <header className="relative z-20 h-14 md:h-16 bg-bg-secondary/30 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
         {/* Logo and branding */}
         <div className="flex items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">

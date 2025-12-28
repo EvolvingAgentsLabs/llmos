@@ -12,7 +12,17 @@ import ViewManager from './ViewManager';
 import CommandPalette from './CommandPalette';
 import AgentCortexHeader from './AgentCortexHeader';
 
-// Lazy load components
+// Lazy load heavy 3D components
+const CoreEntityBackground = dynamic(
+  () => import('@/components/system/CoreEntity').then(mod => ({ default: mod.CoreEntityBackground })),
+  { ssr: false }
+);
+const HolographicBackground = dynamic(
+  () => import('@/components/system/HolographicBackground'),
+  { ssr: false }
+);
+
+// Lazy load other components
 const FirstTimeGuide = dynamic(() => import('../onboarding/FirstTimeGuide'), { ssr: false });
 
 // ============================================================================
@@ -185,7 +195,19 @@ export default function AdaptiveLayout() {
   const handleContextFocus = useCallback(() => setFocusedPanel('context'), [setFocusedPanel]);
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
+      {/* ================================================================== */}
+      {/* 3D HOLOGRAPHIC BACKGROUND LAYER - The "Holodeck" */}
+      {/* ================================================================== */}
+      <HolographicBackground />
+
+      {/* CoreEntity floating in background - The AI's presence */}
+      <CoreEntityBackground />
+
+      {/* ================================================================== */}
+      {/* UI LAYER - Glassmorphism panels floating above 3D */}
+      {/* ================================================================== */}
+
       {/* Header */}
       <Header />
 
@@ -196,8 +218,8 @@ export default function AdaptiveLayout() {
       <KeyboardHint />
 
       {/* Desktop Layout: 3-panel adaptive design (lg+) */}
-      <div className="hidden lg:flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Resizable */}
+      <div className="hidden lg:flex flex-1 overflow-hidden relative z-10">
+        {/* Left Sidebar: Resizable - Glassmorphism */}
         <ResizablePanel
           width={layout.sidebarWidth}
           minWidth={200}
@@ -206,7 +228,7 @@ export default function AdaptiveLayout() {
           isCollapsed={layout.isSidebarCollapsed}
           onResize={(width) => resizePanel('sidebar', width)}
           onCollapse={toggleSidebar}
-          className="border-r border-border-primary/50 bg-bg-secondary/30"
+          className="border-r border-white/10 bg-bg-secondary/40 backdrop-blur-xl"
         >
           <div
             className="relative h-full"
@@ -222,9 +244,10 @@ export default function AdaptiveLayout() {
           </div>
         </ResizablePanel>
 
-        {/* Center: Chat (Flexible) */}
+        {/* Center: Chat (Flexible) - Glassmorphism */}
         <div
-          className="relative flex-1 flex flex-col overflow-hidden min-w-[400px]"
+          className="relative flex-1 flex flex-col overflow-hidden min-w-[400px]
+                     bg-bg-primary/30 backdrop-blur-md"
           onClick={handleChatFocus}
         >
           <FocusIndicator panel="chat" />
@@ -237,7 +260,7 @@ export default function AdaptiveLayout() {
           />
         </div>
 
-        {/* Right: Context/View Manager - Resizable */}
+        {/* Right: Context/View Manager - Resizable - Glassmorphism */}
         <ResizablePanel
           width={layout.contextWidth}
           minWidth={280}
@@ -246,7 +269,7 @@ export default function AdaptiveLayout() {
           isCollapsed={layout.isContextCollapsed}
           onResize={(width) => resizePanel('context', width)}
           onCollapse={toggleContext}
-          className="border-l border-border-primary/50"
+          className="border-l border-white/10 bg-bg-secondary/40 backdrop-blur-xl"
         >
           <div
             className="relative h-full"
