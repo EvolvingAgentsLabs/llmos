@@ -157,7 +157,10 @@ export default function ViewManager({
       case 'artifacts':
         return (
           <Suspense fallback={<ViewLoader />}>
-            <ArtifactPanel />
+            <ArtifactPanel
+              activeSession={activeSession}
+              activeVolume={activeVolume}
+            />
           </Suspense>
         );
 
@@ -173,7 +176,7 @@ export default function ViewManager({
       case 'applets':
         return (
           <Suspense fallback={<ViewLoader />}>
-            <AppletPanel />
+            <AppletPanel mode="split" />
           </Suspense>
         );
 
