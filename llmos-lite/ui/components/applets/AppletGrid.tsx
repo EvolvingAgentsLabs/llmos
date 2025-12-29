@@ -988,18 +988,33 @@ interface EmptyDesktopProps {
 function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpenRecent }: EmptyDesktopProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  // Type for applet items
+  type AppletItem = {
+    icon: React.ReactNode;
+    label: string;
+    type: string;
+  };
+
+  type AppletCategory = {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+    applets: AppletItem[];
+  };
+
   // All system applets organized by category
-  const appletCategories = [
+  const appletCategories: AppletCategory[] = [
     {
       id: 'utilities',
       label: 'Utilities',
       icon: <Calculator className="w-4 h-4" />,
       color: 'from-blue-500 to-cyan-500',
       applets: [
-        { icon: <Calculator className="w-5 h-5" />, label: 'Calculator', type: 'calculator' as const },
-        { icon: <Clock className="w-5 h-5" />, label: 'Timer', type: 'timer' as const },
-        { icon: <Palette className="w-5 h-5" />, label: 'Color Picker', type: 'colorPicker' as const },
-        { icon: <FileText className="w-5 h-5" />, label: 'Notes', type: 'notes' as const },
+        { icon: <Calculator className="w-5 h-5" />, label: 'Calculator', type: 'calculator' },
+        { icon: <Clock className="w-5 h-5" />, label: 'Timer', type: 'timer' },
+        { icon: <Palette className="w-5 h-5" />, label: 'Color Picker', type: 'colorPicker' },
+        { icon: <FileText className="w-5 h-5" />, label: 'Notes', type: 'notes' },
       ],
     },
     {
@@ -1008,7 +1023,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
       icon: <Atom className="w-4 h-4" />,
       color: 'from-purple-500 to-pink-500',
       applets: [
-        { icon: <CircuitBoard className="w-5 h-5" />, label: 'Quantum Circuit', type: 'quantumCircuit' as const },
+        { icon: <CircuitBoard className="w-5 h-5" />, label: 'Quantum Circuit', type: 'quantumCircuit' },
       ],
     },
     {
@@ -1017,7 +1032,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
       icon: <Boxes className="w-4 h-4" />,
       color: 'from-green-500 to-emerald-500',
       applets: [
-        { icon: <Box className="w-5 h-5" />, label: '3D Scene', type: 'scene3D' as const },
+        { icon: <Box className="w-5 h-5" />, label: '3D Scene', type: 'scene3D' },
       ],
     },
     {
@@ -1026,7 +1041,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
       icon: <Workflow className="w-4 h-4" />,
       color: 'from-orange-500 to-amber-500',
       applets: [
-        { icon: <Workflow className="w-5 h-5" />, label: 'Workflow', type: 'workflowBuilder' as const },
+        { icon: <Workflow className="w-5 h-5" />, label: 'Workflow', type: 'workflowBuilder' },
       ],
     },
   ];
