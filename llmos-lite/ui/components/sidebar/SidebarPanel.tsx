@@ -7,7 +7,7 @@ import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { Plus, MessageSquarePlus } from 'lucide-react';
+import { Plus, MessageSquarePlus, ChevronDown, Users, User } from 'lucide-react';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -29,6 +29,7 @@ export default function SidebarPanel({
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(true);
+  const [showNewSessionDropdown, setShowNewSessionDropdown] = useState(false);
 
   // Get sessions to display - either all or filtered by volume
   const displaySessions = showAllSessions
@@ -46,6 +47,20 @@ export default function SidebarPanel({
 
   const handleNewSession = () => {
     setShowNewSessionDialog(true);
+    setShowNewSessionDropdown(false);
+  };
+
+  // Quick create session with default name
+  const handleQuickCreateSession = (type: SessionType) => {
+    const defaultName = type === 'user' ? 'Personal Session' : 'Team Collaboration';
+    const newSession = addSession({
+      name: defaultName,
+      type: type,
+      status: 'temporal',
+      volume: activeVolume,
+    });
+    onSessionChange(newSession.id);
+    setShowNewSessionDropdown(false);
   };
 
   const handleCreateSession = (data: {
@@ -132,10 +147,10 @@ export default function SidebarPanel({
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg-secondary">
-      {/* Prominent New Session Button */}
-      <div className="px-3 py-3 border-b border-border-primary/50 bg-gradient-to-r from-accent-primary/10 to-transparent">
+      {/* Prominent New Session Dropdown */}
+      <div className="px-3 py-3 border-b border-border-primary/50 bg-gradient-to-r from-accent-primary/10 to-transparent relative">
         <button
-          onClick={handleNewSession}
+          onClick={() => setShowNewSessionDropdown(!showNewSessionDropdown)}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
                    bg-accent-primary hover:bg-accent-primary/90
                    text-white font-medium text-sm rounded-lg
@@ -144,7 +159,64 @@ export default function SidebarPanel({
         >
           <MessageSquarePlus className="w-4 h-4" />
           <span>New Session</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showNewSessionDropdown ? 'rotate-180' : ''}`} />
         </button>
+
+        {/* Dropdown Menu */}
+        {showNewSessionDropdown && (
+          <>
+            {/* Backdrop to close dropdown */}
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setShowNewSessionDropdown(false)}
+            />
+            <div className="absolute left-3 right-3 top-full mt-1 z-20
+                          bg-bg-elevated border border-border-primary rounded-lg shadow-xl
+                          overflow-hidden animate-fade-in">
+              {/* User Session */}
+              <button
+                onClick={() => handleQuickCreateSession('user')}
+                className="w-full flex items-center gap-3 px-4 py-3
+                         hover:bg-accent-primary/10 transition-colors text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <User className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-fg-primary">User Session</p>
+                  <p className="text-[10px] text-fg-tertiary">Personal conversation</p>
+                </div>
+              </button>
+
+              {/* Team Session */}
+              <button
+                onClick={() => handleQuickCreateSession('team')}
+                className="w-full flex items-center gap-3 px-4 py-3
+                         hover:bg-accent-primary/10 transition-colors text-left
+                         border-t border-border-primary/50"
+              >
+                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-fg-primary">Team Session</p>
+                  <p className="text-[10px] text-fg-tertiary">Collaborative workspace</p>
+                </div>
+              </button>
+
+              {/* Advanced - Opens dialog */}
+              <button
+                onClick={handleNewSession}
+                className="w-full flex items-center gap-3 px-4 py-2.5
+                         hover:bg-bg-tertiary transition-colors text-left
+                         border-t border-border-primary/50 bg-bg-secondary/50"
+              >
+                <Plus className="w-4 h-4 text-fg-tertiary" />
+                <span className="text-xs text-fg-secondary">Advanced options...</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* VSCode File Tree - Takes available space but caps at 50% to leave room for sessions */}

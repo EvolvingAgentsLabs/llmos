@@ -193,7 +193,11 @@ function FullAppletView({ applet, onClose, onMinimize, onSubmit, onSave }: FullA
 // EMPTY STATE - Desktop with JARVIS
 // ============================================================================
 
-function EmptyDesktop() {
+interface EmptyDesktopProps {
+  customMessage?: string;
+}
+
+function EmptyDesktop({ customMessage }: EmptyDesktopProps) {
   const suggestions = [
     { icon: <Calculator className="w-5 h-5" />, label: 'Calculator' },
     { icon: <Clock className="w-5 h-5" />, label: 'Timer' },
@@ -213,7 +217,7 @@ function EmptyDesktop() {
                        bg-bg-elevated/80 backdrop-blur-xl
                        border border-white/10 shadow-lg">
           <p className="text-sm text-fg-secondary text-center">
-            Ask me to build something!
+            {customMessage || 'Ask me to build something!'}
           </p>
         </div>
       </div>
@@ -311,9 +315,11 @@ type ViewMode = 'grid' | 'full';
 
 interface AppletGridProps {
   className?: string;
+  showEmptyState?: boolean;
+  emptyMessage?: string;
 }
 
-export default function AppletGrid({ className = '' }: AppletGridProps) {
+export default function AppletGrid({ className = '', showEmptyState = false, emptyMessage }: AppletGridProps) {
   const {
     activeApplets,
     currentApplet,
@@ -362,10 +368,10 @@ export default function AppletGrid({ className = '' }: AppletGridProps) {
   };
 
   // No applets - show empty desktop with JARVIS
-  if (activeApplets.length === 0) {
+  if (activeApplets.length === 0 || showEmptyState) {
     return (
       <div className={`h-full ${className}`}>
-        <EmptyDesktop />
+        <EmptyDesktop customMessage={emptyMessage} />
       </div>
     );
   }

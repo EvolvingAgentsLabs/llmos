@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense, lazy } from 'react';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
 import CommandPalette from './CommandPalette';
 
@@ -9,6 +9,9 @@ import CommandPalette from './CommandPalette';
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
 const AppletGrid = lazy(() => import('../applets/AppletGrid'));
+const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
+const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
+const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
 
 // ============================================================================
 // LOADING COMPONENT
@@ -47,7 +50,7 @@ function TreePanel({
   onSessionChange,
 }: TreePanelProps) {
   return (
-    <div className={`transition-all duration-300 overflow-hidden ${isOpen ? 'h-48' : 'h-0'}`}>
+    <div className={`transition-all duration-300 overflow-hidden ${isOpen ? 'h-80' : 'h-0'}`}>
       <div className="h-full border-b border-white/10 bg-bg-secondary/30">
         <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
           <SidebarPanel
@@ -93,15 +96,70 @@ function CortexStatus() {
 }
 
 // ============================================================================
+// RIGHT PANEL CONTENT - Renders based on contextViewMode
+// ============================================================================
+
+interface RightPanelContentProps {
+  contextViewMode: ContextViewMode;
+  activeFilePath: string | null;
+  activeVolume: 'system' | 'team' | 'user';
+  activeSession: string | null;
+}
+
+function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, activeSession }: RightPanelContentProps) {
+  // Render content based on context view mode
+  switch (contextViewMode) {
+    case 'split-view':
+    case 'code-editor':
+      if (activeFilePath) {
+        return (
+          <Suspense fallback={<PanelLoader />}>
+            <SplitViewCanvas
+              volume={activeVolume}
+              filePath={activeFilePath}
+            />
+          </Suspense>
+        );
+      }
+      // Fall through to applets if no file selected
+      return (
+        <Suspense fallback={<PanelLoader />}>
+          <AppletGrid showEmptyState emptyMessage="Select a file from the tree to view and edit code" />
+        </Suspense>
+      );
+
+    case 'artifacts':
+      return (
+        <Suspense fallback={<PanelLoader />}>
+          <ArtifactPanel
+            activeSession={activeSession}
+            activeVolume={activeVolume}
+          />
+        </Suspense>
+      );
+
+    case 'canvas':
+    case 'applets':
+    default:
+      return (
+        <Suspense fallback={<PanelLoader />}>
+          <AppletGrid />
+        </Suspense>
+      );
+  }
+}
+
+// ============================================================================
 // MAIN FLUID LAYOUT
 // ============================================================================
 
 export default function FluidLayout() {
-  const { openCommandPalette } = useWorkspace();
+  const { openCommandPalette, state, setContextViewMode } = useWorkspace();
   const { activeSession, setActiveSession } = useSessionContext();
+  const { contextViewMode, activeFilePath } = state;
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
-  const [isTreeOpen, setIsTreeOpen] = useState(false);
+  const [isTreeOpen, setIsTreeOpen] = useState(true); // Start with tree open
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   // Keyboard shortcuts
@@ -121,6 +179,10 @@ export default function FluidLayout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openCommandPalette]);
 
+  // Check if we're showing content (not just applets/desktop)
+  const isShowingContent = contextViewMode === 'split-view' || contextViewMode === 'code-editor' ||
+                           (contextViewMode === 'artifacts' && activeFilePath);
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
       {/* ================================================================== */}
@@ -132,11 +194,22 @@ export default function FluidLayout() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsTreeOpen(!isTreeOpen)}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className={`p-2 rounded-lg transition-colors ${isTreeOpen ? 'bg-accent-primary/20 text-accent-primary' : 'hover:bg-white/10 text-fg-secondary'}`}
             title="Toggle files (⌘B)"
           >
-            <svg className="w-5 h-5 text-fg-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          {/* Desktop/Start Button */}
+          <button
+            onClick={() => setContextViewMode('applets')}
+            className={`p-2 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-accent-primary text-white' : 'hover:bg-white/10 text-fg-secondary'}`}
+            title="Desktop"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
             </svg>
           </button>
 
@@ -148,8 +221,24 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        {/* Center: Status */}
-        <CortexStatus />
+        {/* Center: Status + View Mode */}
+        <div className="flex items-center gap-4">
+          <CortexStatus />
+
+          {/* View mode indicator */}
+          {activeFilePath && (
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-elevated text-xs text-fg-secondary">
+              <span className="truncate max-w-[150px]">{activeFilePath.split('/').pop()}</span>
+              <button
+                onClick={() => setContextViewMode('applets')}
+                className="text-fg-tertiary hover:text-fg-primary"
+                title="Close file"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Right: Command palette trigger */}
         <button
@@ -200,13 +289,23 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: J.A.R.V.I.S. Avatar + Applets */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
-          <Suspense fallback={<PanelLoader />}>
-            <AppletGrid />
-          </Suspense>
+        {/* RIGHT PANEL: Dynamic content based on contextViewMode */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary relative">
+          <RightPanelContent
+            contextViewMode={contextViewMode}
+            activeFilePath={activeFilePath}
+            activeVolume={activeVolume}
+            activeSession={activeSession}
+          />
         </div>
       </div>
+
+      {/* Floating JARVIS - minimizes when content is shown */}
+      <Suspense fallback={null}>
+        <FloatingJarvis
+          position={isShowingContent ? 'bottom-right' : 'bottom-right'}
+        />
+      </Suspense>
     </div>
   );
 }
