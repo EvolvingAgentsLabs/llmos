@@ -4,7 +4,7 @@
 
 LLMos-Lite is a self-evolving AI operating system that learns from every interaction, builds institutional knowledge, and gets smarter over time. Built for scientific computing, data science, and 3D visualization—all running in your browser.
 
-https://github.com/EvolvingAgentsLabs/llmos/raw/main/assets/llmos.mp4
+<video src="https://github.com/user-attachments/assets/e7574fa5-a8be-4386-994a-232bd3224cb7" width="600" controls></video>
 
 *JARVIS-powered Desktop experience with floating AI avatar, system applets, and intelligent task orchestration.*
 
