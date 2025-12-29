@@ -2,6 +2,7 @@
 
 import SessionView from './SessionView';
 import CronView from './CronView';
+import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 interface SessionPanelProps {
   viewMode: 'session' | 'cron';
@@ -15,12 +16,18 @@ export default function SessionPanel({
   activeVolume,
 }: SessionPanelProps) {
   return (
-    <div className="h-full flex flex-col bg-terminal-bg-secondary">
-      {viewMode === 'session' ? (
-        <SessionView activeSession={activeSession} activeVolume={activeVolume} />
-      ) : (
-        <CronView />
-      )}
-    </div>
+    <PanelErrorBoundary panelName="Session Panel">
+      <div className="h-full flex flex-col bg-terminal-bg-secondary">
+        {viewMode === 'session' ? (
+          <PanelErrorBoundary panelName="Session View">
+            <SessionView activeSession={activeSession} activeVolume={activeVolume} />
+          </PanelErrorBoundary>
+        ) : (
+          <PanelErrorBoundary panelName="Cron View">
+            <CronView />
+          </PanelErrorBoundary>
+        )}
+      </div>
+    </PanelErrorBoundary>
   );
 }
