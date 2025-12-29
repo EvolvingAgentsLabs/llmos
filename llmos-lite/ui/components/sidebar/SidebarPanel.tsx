@@ -96,6 +96,25 @@ export default function SidebarPanel({
     setContextViewMode('split-view');
   };
 
+  // Handle any file selection - display in main panel based on type
+  const handleFileSelect = (node: any) => {
+    console.log('[SidebarPanel] File selected:', node);
+
+    // Check file extension to determine view mode
+    const ext = node.name?.split('.').pop()?.toLowerCase() || '';
+    const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html'];
+
+    if (codeExtensions.includes(ext)) {
+      // Code files - open in split view for editing/running
+      setActiveFile(node.path);
+      setContextViewMode('split-view');
+    } else {
+      // Other files (markdown, etc.) - open in artifacts view
+      setActiveFile(node.path);
+      setContextViewMode('artifacts');
+    }
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg-secondary">
       {/* Prominent New Session Button */}
@@ -118,9 +137,7 @@ export default function SidebarPanel({
         <VSCodeFileTree
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
-          onFileSelect={(node) => {
-            console.log('[SidebarPanel] File selected:', node);
-          }}
+          onFileSelect={handleFileSelect}
           onDesktopSelect={handleDesktopSelect}
           onCodeFileSelect={handleCodeFileSelect}
           selectedFile={null}
