@@ -2,13 +2,15 @@
 
 import { useMemo, Suspense, lazy, useState } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
+import { useApplets } from '@/contexts/AppletContext';
 import CoreEntity from '@/components/system/CoreEntity';
 
 // Lazy load view components for code splitting
 const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
-const AppletPanel = lazy(() => import('../applets/AppletPanel'));
+const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
 const ThreeJSCanvas = lazy(() => import('../canvas/ThreeJSCanvas'));
+const FloatingJarvis = lazy(() => import('@/components/system/FloatingJarvis'));
 
 // ============================================================================
 // TYPES
@@ -101,9 +103,11 @@ export default function ViewManager({
 }: ViewManagerProps) {
   const { state, setContextViewMode } = useWorkspace();
   const { contextViewMode, activeFilePath, activeArtifactId, activeAppletId } = state;
+  const { activeApplets } = useApplets();
+  const hasActiveApplets = activeApplets.length > 0;
 
   // Tab configuration
-  const tabs: { mode: ContextViewMode; label: string; icon: React.ReactNode }[] = useMemo(() => [
+  const tabs: { mode: ContextViewMode; label: string; icon: React.ReactNode; badge?: number }[] = useMemo(() => [
     {
       mode: 'artifacts',
       label: 'Artifacts',
@@ -130,6 +134,7 @@ export default function ViewManager({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
         </svg>
       ),
+      badge: activeApplets.length > 0 ? activeApplets.length : undefined,
     },
     {
       mode: 'split-view',
@@ -140,7 +145,7 @@ export default function ViewManager({
         </svg>
       ),
     },
-  ], []);
+  ], [activeApplets.length]);
 
   // Render the active view
   const renderView = () => {
@@ -167,7 +172,7 @@ export default function ViewManager({
       case 'applets':
         return (
           <Suspense fallback={<ViewLoader />}>
-            <AppletPanel mode="split" />
+            <AppletGrid />
           </Suspense>
         );
 
@@ -223,7 +228,7 @@ export default function ViewManager({
           <button
             key={tab.mode}
             onClick={() => setContextViewMode(tab.mode)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-all ${
+            className={`relative flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-all ${
               contextViewMode === tab.mode
                 ? 'bg-accent-primary text-white'
                 : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
@@ -231,6 +236,13 @@ export default function ViewManager({
             title={tab.label}
           >
             {tab.icon}
+            {tab.badge && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center
+                             text-[9px] font-bold rounded-full
+                             bg-accent-success text-white shadow-sm">
+                {tab.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>

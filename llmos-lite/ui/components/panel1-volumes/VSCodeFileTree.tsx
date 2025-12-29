@@ -107,7 +107,7 @@ const SpecialIcon = ({ type }: { type: string }) => {
 interface TreeNode {
   id: string;
   name: string;
-  type: 'volume' | 'folder' | 'file';
+  type: 'volume' | 'folder' | 'file' | 'special';
   path: string;
   children?: TreeNode[];
   metadata?: {
@@ -116,6 +116,7 @@ interface TreeNode {
     fileType?: string;
     size?: string;
     modified?: string;
+    action?: 'desktop' | 'applet' | 'code' | 'file';
   };
 }
 
@@ -123,11 +124,33 @@ interface VSCodeFileTreeProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
   onFileSelect?: (node: TreeNode) => void;
+  onDesktopSelect?: () => void;
+  onCodeFileSelect?: (path: string) => void;
   selectedFile?: string | null;
 }
 
+// Desktop icon component
+const DesktopIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3z" fill="#3B82F6" opacity="0.8"/>
+    <path d="M5 13h6v1H5v-1z" fill="#60A5FA"/>
+    <rect x="4" y="4" width="2" height="2" rx="0.5" fill="#60A5FA"/>
+    <rect x="7" y="4" width="2" height="2" rx="0.5" fill="#60A5FA"/>
+    <rect x="10" y="4" width="2" height="2" rx="0.5" fill="#60A5FA"/>
+    <rect x="4" y="7" width="2" height="2" rx="0.5" fill="#60A5FA"/>
+  </svg>
+);
+
 // Mock data structure - Single tree with volumes as root drives
 const ROOT_TREE: TreeNode[] = [
+  // Desktop - Special item at the top
+  {
+    id: 'desktop',
+    name: 'Desktop',
+    type: 'special',
+    path: '/desktop',
+    metadata: { action: 'desktop' },
+  },
   {
     id: 'system',
     name: 'System',
@@ -326,11 +349,21 @@ export default function VSCodeFileTree({
   activeVolume,
   onVolumeChange,
   onFileSelect,
+  onDesktopSelect,
+  onCodeFileSelect,
   selectedFile,
 }: VSCodeFileTreeProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
     new Set(['system', 'system-agents', 'system-tools', 'system-skills'])
   );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Check if a file is a code file based on extension
+  const isCodeFile = (filename: string): boolean => {
+    const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html', 'md'];
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    return codeExtensions.includes(ext);
+  };
   const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
 
   // Context menu state
@@ -676,6 +709,13 @@ export default function VSCodeFileTree({
   }, [closeContextMenu, handleDeleteClick, handleRename]);
 
   const getNodeIcon = (node: TreeNode, isExpanded: boolean): JSX.Element => {
+    // Special items (Desktop, etc.)
+    if (node.type === 'special') {
+      if (node.metadata?.action === 'desktop') {
+        return <DesktopIcon />;
+      }
+    }
+
     // Volume/Drive icon
     if (node.type === 'volume' && node.metadata?.volume) {
       return <DriveIcon type={node.metadata.volume as 'system' | 'team' | 'user'} />;
@@ -703,12 +743,42 @@ export default function VSCodeFileTree({
 
   const renderTreeNode = (node: TreeNode, depth: number = 0): JSX.Element => {
     const isExpanded = expandedNodes.has(node.id);
-    const isSelected = selectedFile === node.id;
+    const isSelected = selectedFile === node.id || selectedNodeId === node.id;
     const hasChildren = node.children && node.children.length > 0;
     const isReadOnly = node.metadata?.readonly;
     const isVolume = node.type === 'volume';
+    const isSpecial = node.type === 'special';
     const isRenaming = renameNode?.id === node.id;
     const isVFSNode = node.id.startsWith('vfs-');
+
+    // Handle node click
+    const handleNodeClick = () => {
+      setSelectedNodeId(node.id);
+
+      // Handle special nodes (Desktop, etc.)
+      if (isSpecial) {
+        if (node.metadata?.action === 'desktop' && onDesktopSelect) {
+          onDesktopSelect();
+        }
+        return;
+      }
+
+      // Handle folders and volumes - toggle expand
+      if (node.type === 'folder' || node.type === 'volume') {
+        toggleNode(node.id, node.metadata?.volume as 'system' | 'team' | 'user' | undefined);
+        return;
+      }
+
+      // Handle files
+      if (node.type === 'file') {
+        // Check if it's a code file
+        if (isCodeFile(node.name) && onCodeFileSelect) {
+          onCodeFileSelect(node.path);
+        } else if (onFileSelect) {
+          onFileSelect(node);
+        }
+      }
+    };
 
     return (
       <div key={node.id}>
@@ -718,16 +788,10 @@ export default function VSCodeFileTree({
             group flex items-center gap-1 py-0.5 px-1 cursor-pointer
             transition-colors duration-100
             ${isSelected ? 'bg-accent-primary/20' : 'hover:bg-bg-tertiary'}
-            ${isVolume ? 'font-semibold' : ''}
+            ${isVolume || isSpecial ? 'font-semibold' : ''}
           `}
           style={{ paddingLeft: `${depth * 8 + 4}px` }}
-          onClick={() => {
-            if (node.type === 'folder' || node.type === 'volume') {
-              toggleNode(node.id, node.metadata?.volume as 'system' | 'team' | 'user' | undefined);
-            } else if (onFileSelect) {
-              onFileSelect(node);
-            }
-          }}
+          onClick={handleNodeClick}
           onContextMenu={(e) => handleContextMenu(e, node)}
         >
           {/* Chevron (only for nodes with children) */}
