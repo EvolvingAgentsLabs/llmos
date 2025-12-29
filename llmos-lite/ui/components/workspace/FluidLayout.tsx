@@ -12,6 +12,7 @@ const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
 const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
 const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
+const MediaViewer = lazy(() => import('../media/MediaViewer'));
 
 // ============================================================================
 // LOADING COMPONENT
@@ -109,6 +110,25 @@ interface RightPanelContentProps {
 function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, activeSession }: RightPanelContentProps) {
   // Render content based on context view mode
   switch (contextViewMode) {
+    case 'media':
+      // Media files (images, videos)
+      if (activeFilePath) {
+        return (
+          <Suspense fallback={<PanelLoader />}>
+            <MediaViewer
+              filePath={activeFilePath}
+              volume={activeVolume}
+            />
+          </Suspense>
+        );
+      }
+      // Fall through to desktop if no file
+      return (
+        <Suspense fallback={<PanelLoader />}>
+          <AppletGrid />
+        </Suspense>
+      );
+
     case 'split-view':
     case 'code-editor':
       if (activeFilePath) {
@@ -121,7 +141,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
           </Suspense>
         );
       }
-      // Fall through to applets if no file selected
+      // Fall through to desktop if no file selected
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid showEmptyState emptyMessage="Select a file from the tree to view and edit code" />
@@ -129,6 +149,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
       );
 
     case 'artifacts':
+      // Only show artifact panel if explicitly requested (not for file viewing)
       return (
         <Suspense fallback={<PanelLoader />}>
           <ArtifactPanel
@@ -141,6 +162,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
     case 'canvas':
     case 'applets':
     default:
+      // Desktop view - always show AppletGrid with JARVIS
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />

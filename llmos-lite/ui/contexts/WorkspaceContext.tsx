@@ -27,9 +27,10 @@ export type FocusedPanel =
 export type ContextViewMode =
   | 'artifacts'      // File/artifact viewer
   | 'canvas'         // 3D/visual canvas
-  | 'applets'        // Generated applets
+  | 'applets'        // Generated applets (Desktop)
   | 'code-editor'    // Full code editing
-  | 'split-view';    // Code + preview side-by-side
+  | 'split-view'     // Code + preview side-by-side
+  | 'media';         // Image/video viewer
 
 /** Agent state for visualization */
 export type AgentState =
@@ -94,8 +95,8 @@ const defaultPanelSizes: PanelSizes = {
 
 const defaultPreferences: WorkspacePreferences = {
   panelSizes: defaultPanelSizes,
-  collapsedPanels: { sidebar: false, context: true }, // Right panel closed by default for clean start
-  defaultContextView: 'artifacts',
+  collapsedPanels: { sidebar: false, context: false }, // Both panels open for Desktop experience
+  defaultContextView: 'applets', // Desktop with JARVIS as default
   showAgentVisualization: true,
   enableKeyboardShortcuts: true,
   autoSwitchContext: true,
@@ -104,7 +105,7 @@ const defaultPreferences: WorkspacePreferences = {
 const defaultWorkspaceState: WorkspaceState = {
   taskType: 'idle',
   focusedPanel: 'chat',
-  contextViewMode: 'artifacts',
+  contextViewMode: 'applets', // Desktop with JARVIS as default view
   agentState: 'idle',
   isCommandPaletteOpen: false,
   preferences: defaultPreferences,

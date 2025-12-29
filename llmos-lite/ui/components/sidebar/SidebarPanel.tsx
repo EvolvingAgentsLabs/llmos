@@ -172,15 +172,19 @@ export default function SidebarPanel({
     // Check file extension to determine view mode
     const ext = node.name?.split('.').pop()?.toLowerCase() || '';
     const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html', 'md'];
+    const mediaExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'mp4', 'webm', 'ogg', 'mov'];
+
+    setActiveFile(node.path);
 
     if (codeExtensions.includes(ext)) {
       // Code files - open in split view for editing/running
-      setActiveFile(node.path);
       setContextViewMode('split-view');
+    } else if (mediaExtensions.includes(ext)) {
+      // Media files - open in media viewer
+      setContextViewMode('media');
     } else {
-      // Other files - open in artifacts view
-      setActiveFile(node.path);
-      setContextViewMode('artifacts');
+      // Other files - open in split view as fallback (can show raw content)
+      setContextViewMode('split-view');
     }
 
     // Always open the context panel to show the file
