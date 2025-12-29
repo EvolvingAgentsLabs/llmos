@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { Plus, MessageSquarePlus, ChevronDown, Users, User } from 'lucide-react';
+import { Plus, MessageSquarePlus, ChevronDown, Users, User, GripHorizontal } from 'lucide-react';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -30,6 +30,48 @@ export default function SidebarPanel({
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(true);
   const [showNewSessionDropdown, setShowNewSessionDropdown] = useState(false);
+
+  // Vertical resize state
+  const [treeHeight, setTreeHeight] = useState(250); // Default height in pixels
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const startY = useRef(0);
+  const startHeight = useRef(0);
+
+  // Handle resize drag
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    startY.current = e.clientY;
+    startHeight.current = treeHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, [treeHeight]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = e.clientY - startY.current;
+      const newHeight = Math.max(100, Math.min(startHeight.current + delta, 500));
+      setTreeHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   // Get sessions to display - either all or filtered by volume
   const displaySessions = showAllSessions
@@ -146,81 +188,12 @@ export default function SidebarPanel({
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-bg-secondary">
-      {/* Prominent New Session Dropdown */}
-      <div className="px-3 py-3 border-b border-border-primary/50 bg-gradient-to-r from-accent-primary/10 to-transparent relative">
-        <button
-          onClick={() => setShowNewSessionDropdown(!showNewSessionDropdown)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5
-                   bg-accent-primary hover:bg-accent-primary/90
-                   text-white font-medium text-sm rounded-lg
-                   shadow-lg shadow-accent-primary/25
-                   transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <MessageSquarePlus className="w-4 h-4" />
-          <span>New Session</span>
-          <ChevronDown className={`w-4 h-4 transition-transform ${showNewSessionDropdown ? 'rotate-180' : ''}`} />
-        </button>
-
-        {/* Dropdown Menu */}
-        {showNewSessionDropdown && (
-          <>
-            {/* Backdrop to close dropdown */}
-            <div
-              className="fixed inset-0 z-10"
-              onClick={() => setShowNewSessionDropdown(false)}
-            />
-            <div className="absolute left-3 right-3 top-full mt-1 z-20
-                          bg-bg-elevated border border-border-primary rounded-lg shadow-xl
-                          overflow-hidden animate-fade-in">
-              {/* User Session */}
-              <button
-                onClick={() => handleQuickCreateSession('user')}
-                className="w-full flex items-center gap-3 px-4 py-3
-                         hover:bg-accent-primary/10 transition-colors text-left"
-              >
-                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <User className="w-4 h-4 text-green-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-fg-primary">User Session</p>
-                  <p className="text-[10px] text-fg-tertiary">Personal conversation</p>
-                </div>
-              </button>
-
-              {/* Team Session */}
-              <button
-                onClick={() => handleQuickCreateSession('team')}
-                className="w-full flex items-center gap-3 px-4 py-3
-                         hover:bg-accent-primary/10 transition-colors text-left
-                         border-t border-border-primary/50"
-              >
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-fg-primary">Team Session</p>
-                  <p className="text-[10px] text-fg-tertiary">Collaborative workspace</p>
-                </div>
-              </button>
-
-              {/* Advanced - Opens dialog */}
-              <button
-                onClick={handleNewSession}
-                className="w-full flex items-center gap-3 px-4 py-2.5
-                         hover:bg-bg-tertiary transition-colors text-left
-                         border-t border-border-primary/50 bg-bg-secondary/50"
-              >
-                <Plus className="w-4 h-4 text-fg-tertiary" />
-                <span className="text-xs text-fg-secondary">Advanced options...</span>
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* VSCode File Tree - Takes available space but caps at 50% to leave room for sessions */}
-      <div className="flex-1 min-h-[180px] max-h-[50%] border-b border-border-primary/50 overflow-hidden">
+    <div ref={containerRef} className="h-full flex flex-col overflow-hidden bg-bg-secondary">
+      {/* VSCode File Tree - Resizable height */}
+      <div
+        className="overflow-hidden flex-shrink-0"
+        style={{ height: treeHeight }}
+      >
         <VSCodeFileTree
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
@@ -231,10 +204,20 @@ export default function SidebarPanel({
         />
       </div>
 
-      {/* Sessions List - Always visible with minimum height */}
-      <div className="flex flex-col overflow-hidden border-b border-border-primary/50 min-h-[200px] max-h-72 flex-shrink-0">
+      {/* Resize Handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="h-2 flex-shrink-0 flex items-center justify-center cursor-row-resize
+                   bg-bg-secondary hover:bg-accent-primary/20 border-y border-border-primary/50
+                   transition-colors group"
+      >
+        <GripHorizontal className="w-4 h-4 text-fg-muted group-hover:text-accent-primary transition-colors" />
+      </div>
+
+      {/* Sessions List - Takes remaining space */}
+      <div className="flex flex-col overflow-hidden flex-1 min-h-[100px]">
         {/* Header with filters */}
-        <div className="px-3 py-2 flex items-center justify-between bg-bg-secondary/50 border-b border-border-primary/30">
+        <div className="px-3 py-2 flex items-center justify-between bg-bg-secondary/50 border-b border-border-primary/30 relative flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
               Sessions
@@ -256,16 +239,76 @@ export default function SidebarPanel({
             >
               {showAllSessions ? 'All' : activeVolume}
             </button>
-            {/* New Session Button */}
-            <button
-              onClick={handleNewSession}
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-tertiary transition-colors"
-              title="New Session"
-            >
-              <svg className="w-3 h-3 text-fg-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
+            {/* New Session Button with Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNewSessionDropdown(!showNewSessionDropdown)}
+                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  showNewSessionDropdown
+                    ? 'bg-accent-primary/20 text-accent-primary'
+                    : 'hover:bg-bg-tertiary text-fg-tertiary hover:text-fg-secondary'
+                }`}
+                title="New Session"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showNewSessionDropdown && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowNewSessionDropdown(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 z-20 w-48
+                                bg-bg-elevated border border-border-primary rounded-lg shadow-xl
+                                overflow-hidden animate-fade-in">
+                    {/* User Session */}
+                    <button
+                      onClick={() => handleQuickCreateSession('user')}
+                      className="w-full flex items-center gap-3 px-3 py-2.5
+                               hover:bg-accent-primary/10 transition-colors text-left"
+                    >
+                      <div className="w-6 h-6 rounded-md bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                        <User className="w-3 h-3 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-fg-primary">User Session</p>
+                        <p className="text-[9px] text-fg-tertiary">Personal</p>
+                      </div>
+                    </button>
+
+                    {/* Team Session */}
+                    <button
+                      onClick={() => handleQuickCreateSession('team')}
+                      className="w-full flex items-center gap-3 px-3 py-2.5
+                               hover:bg-accent-primary/10 transition-colors text-left
+                               border-t border-border-primary/50"
+                    >
+                      <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-3 h-3 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-fg-primary">Team Session</p>
+                        <p className="text-[9px] text-fg-tertiary">Collaborative</p>
+                      </div>
+                    </button>
+
+                    {/* Advanced - Opens dialog */}
+                    <button
+                      onClick={handleNewSession}
+                      className="w-full flex items-center gap-2 px-3 py-2
+                               hover:bg-bg-tertiary transition-colors text-left
+                               border-t border-border-primary/50 bg-bg-secondary/50"
+                    >
+                      <MessageSquarePlus className="w-3.5 h-3.5 text-fg-tertiary" />
+                      <span className="text-[10px] text-fg-secondary">Advanced...</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
