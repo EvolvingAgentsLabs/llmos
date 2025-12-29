@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { UserStorage } from '@/lib/user-storage';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import dynamic from 'next/dynamic';
 import { Sparkles, Zap, LayoutGrid } from 'lucide-react';
 import AgentCortexHeader from '@/components/workspace/AgentCortexHeader';
@@ -19,15 +19,22 @@ export default function Header() {
   const [userDisplay, setUserDisplay] = useState('loading...');
   const [showSettings, setShowSettings] = useState(false);
   const [showEvolution, setShowEvolution] = useState(false);
-  const { setContextViewMode } = useWorkspace();
+  const { setContextViewMode, updatePreferences, state } = useWorkspace();
+  const layout = useWorkspaceLayout();
 
   useEffect(() => {
     setUserDisplay(UserStorage.getUserDisplay());
   }, []);
 
-  // Handle Start/Desktop button click
+  // Handle Start/Desktop button click - opens applet grid
   const handleStartClick = () => {
     setContextViewMode('applets');
+    // Also open the context panel if it's collapsed
+    if (layout.isContextCollapsed) {
+      updatePreferences({
+        collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
+      });
+    }
   };
 
   return (

@@ -3,19 +3,16 @@
 /**
  * FloatingJarvis - Persistent AI avatar like Siri on macOS
  *
- * A floating, draggable avatar that:
+ * A floating avatar that:
  * - Shows in a corner of the screen
  * - Displays current agent state (idle, thinking, executing)
  * - Can be minimized to a small orb
  * - Expands on hover/click to show status
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useWorkspace, AgentState } from '@/contexts/WorkspaceContext';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Float, MeshDistortMaterial } from '@react-three/drei';
-import * as THREE from 'three';
-import { MessageCircle, X, Minimize2, Maximize2 } from 'lucide-react';
+import { MessageCircle, X, Minimize2 } from 'lucide-react';
 
 // ============================================================================
 // STATE CONFIGURATIONS
@@ -23,120 +20,75 @@ import { MessageCircle, X, Minimize2, Maximize2 } from 'lucide-react';
 
 interface StateConfig {
   color: string;
-  emissive: string;
+  bgColor: string;
   label: string;
-  pulseSpeed: number;
-  distortion: number;
+  pulseSpeed: string;
 }
 
 const stateConfigs: Record<AgentState, StateConfig> = {
   idle: {
     color: '#3B82F6',
-    emissive: '#1E40AF',
+    bgColor: 'from-blue-500 to-blue-600',
     label: 'Ready',
-    pulseSpeed: 1,
-    distortion: 0.2,
+    pulseSpeed: '3s',
   },
   thinking: {
     color: '#8B5CF6',
-    emissive: '#5B21B6',
+    bgColor: 'from-purple-500 to-purple-600',
     label: 'Thinking...',
-    pulseSpeed: 3,
-    distortion: 0.4,
+    pulseSpeed: '1s',
   },
   executing: {
     color: '#F59E0B',
-    emissive: '#B45309',
+    bgColor: 'from-amber-500 to-orange-600',
     label: 'Working...',
-    pulseSpeed: 2,
-    distortion: 0.35,
+    pulseSpeed: '0.5s',
   },
   success: {
     color: '#10B981',
-    emissive: '#047857',
+    bgColor: 'from-emerald-500 to-green-600',
     label: 'Done!',
-    pulseSpeed: 0.5,
-    distortion: 0.15,
+    pulseSpeed: '2s',
   },
   error: {
     color: '#EF4444',
-    emissive: '#B91C1C',
+    bgColor: 'from-red-500 to-red-600',
     label: 'Error',
-    pulseSpeed: 4,
-    distortion: 0.5,
+    pulseSpeed: '0.3s',
   },
 };
 
 // ============================================================================
-// MINI CORE - Compact 3D orb
+// CSS ORB COMPONENT - Simple animated orb without Three.js
 // ============================================================================
 
-function MiniCore({ config }: { config: StateConfig }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-
-  useFrame((state) => {
-    if (!meshRef.current || !glowRef.current) return;
-
-    const t = state.clock.getElapsedTime();
-
-    // Breathing effect
-    const breathe = Math.sin(t * config.pulseSpeed) * 0.1 + 1;
-    meshRef.current.scale.setScalar(breathe);
-
-    // Rotation
-    meshRef.current.rotation.y = t * 0.5;
-    meshRef.current.rotation.x = Math.sin(t * 0.3) * 0.2;
-
-    // Glow pulse
-    const glowScale = 1.3 + Math.sin(t * config.pulseSpeed * 0.5) * 0.1;
-    glowRef.current.scale.setScalar(glowScale);
-  });
+function CSSOrb({ config, size = 'md' }: { config: StateConfig; size?: 'sm' | 'md' | 'lg' }) {
+  const sizes = {
+    sm: 'w-8 h-8',
+    md: 'w-12 h-12',
+    lg: 'w-20 h-20',
+  };
 
   return (
-    <Float speed={2} rotationIntensity={0.2} floatIntensity={0.3}>
-      <group>
-        {/* Outer glow */}
-        <mesh ref={glowRef}>
-          <sphereGeometry args={[1.2, 32, 32]} />
-          <meshBasicMaterial
-            color={config.color}
-            transparent
-            opacity={0.2}
-          />
-        </mesh>
-
-        {/* Main orb */}
-        <mesh ref={meshRef}>
-          <icosahedronGeometry args={[1, 2]} />
-          <MeshDistortMaterial
-            color={config.color}
-            emissive={config.emissive}
-            emissiveIntensity={0.6}
-            roughness={0.2}
-            metalness={0.8}
-            distort={config.distortion}
-            speed={config.pulseSpeed}
-          />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-// ============================================================================
-// MINI SCENE
-// ============================================================================
-
-function MiniScene({ agentState }: { agentState: AgentState }) {
-  const config = stateConfigs[agentState];
-
-  return (
-    <>
-      <ambientLight intensity={0.4} />
-      <pointLight position={[5, 5, 5]} intensity={0.6} color={config.color} />
-      <MiniCore config={config} />
-    </>
+    <div className={`relative ${sizes[size]}`}>
+      {/* Outer glow */}
+      <div
+        className={`absolute inset-0 rounded-full bg-gradient-to-br ${config.bgColor} opacity-30 blur-md animate-pulse`}
+        style={{ animationDuration: config.pulseSpeed }}
+      />
+      {/* Middle ring */}
+      <div
+        className={`absolute inset-1 rounded-full border-2 opacity-50 animate-spin`}
+        style={{ borderColor: config.color, animationDuration: '8s' }}
+      />
+      {/* Core orb */}
+      <div
+        className={`absolute inset-2 rounded-full bg-gradient-to-br ${config.bgColor} shadow-lg animate-pulse`}
+        style={{ animationDuration: config.pulseSpeed }}
+      />
+      {/* Inner highlight */}
+      <div className="absolute inset-3 rounded-full bg-white/20" />
+    </div>
   );
 }
 
@@ -212,7 +164,7 @@ export default function FloatingJarvis({
                    bg-bg-elevated/90 backdrop-blur-xl
                    border border-white/20 shadow-2xl shadow-black/40
                    transition-all duration-300
-                   ${isExpanded ? 'w-64 h-72' : 'w-16 h-16'}`}
+                   ${isExpanded ? 'w-56 h-64' : 'w-16 h-16'}`}
         style={{
           boxShadow: `0 0 30px ${config.color}30, 0 8px 32px rgba(0,0,0,0.4)`
         }}
@@ -224,15 +176,7 @@ export default function FloatingJarvis({
             className="w-full h-full flex items-center justify-center
                       hover:scale-105 transition-transform"
           >
-            <div className="w-12 h-12">
-              <Canvas
-                camera={{ position: [0, 0, 4], fov: 45 }}
-                style={{ background: 'transparent' }}
-                gl={{ alpha: true, antialias: true }}
-              >
-                <MiniScene agentState={state.agentState} />
-              </Canvas>
-            </div>
+            <CSSOrb config={config} size="md" />
           </button>
         )}
 
@@ -266,15 +210,9 @@ export default function FloatingJarvis({
               </div>
             </div>
 
-            {/* 3D Avatar */}
-            <div className="flex-1 min-h-0">
-              <Canvas
-                camera={{ position: [0, 0, 5], fov: 45 }}
-                style={{ background: 'transparent' }}
-                gl={{ alpha: true, antialias: true }}
-              >
-                <MiniScene agentState={state.agentState} />
-              </Canvas>
+            {/* Avatar - CSS animated orb */}
+            <div className="flex-1 flex items-center justify-center bg-bg-primary/30">
+              <CSSOrb config={config} size="lg" />
             </div>
 
             {/* Status */}
@@ -283,7 +221,7 @@ export default function FloatingJarvis({
                 <div>
                   <p className="text-sm font-medium text-fg-primary">{config.label}</p>
                   <p className="text-[10px] text-fg-muted">
-                    {state.taskType ? `Mode: ${state.taskType}` : 'Awaiting commands'}
+                    {state.taskType && state.taskType !== 'idle' ? `Mode: ${state.taskType}` : 'Awaiting commands'}
                   </p>
                 </div>
                 {onChatClick && (

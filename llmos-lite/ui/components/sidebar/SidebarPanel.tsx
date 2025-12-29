@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
@@ -23,7 +23,8 @@ export default function SidebarPanel({
   onSessionChange,
 }: SidebarPanelProps) {
   const { sessions, activeSessions, addSession, deleteSession } = useSessionContext();
-  const { setContextViewMode, setActiveFile } = useWorkspace();
+  const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
+  const layout = useWorkspaceLayout();
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
@@ -85,15 +86,26 @@ export default function SidebarPanel({
     user: 'bg-green-500/20 text-green-400',
   };
 
+  // Helper to open the context panel if collapsed
+  const ensureContextPanelOpen = () => {
+    if (layout.isContextCollapsed) {
+      updatePreferences({
+        collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
+      });
+    }
+  };
+
   // Handle Desktop selection - switch to applets view
   const handleDesktopSelect = () => {
     setContextViewMode('applets');
+    ensureContextPanelOpen();
   };
 
   // Handle code file selection - open in split view
   const handleCodeFileSelect = (path: string) => {
     setActiveFile(path);
     setContextViewMode('split-view');
+    ensureContextPanelOpen();
   };
 
   // Handle any file selection - display in main panel based on type
@@ -102,17 +114,20 @@ export default function SidebarPanel({
 
     // Check file extension to determine view mode
     const ext = node.name?.split('.').pop()?.toLowerCase() || '';
-    const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html'];
+    const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html', 'md'];
 
     if (codeExtensions.includes(ext)) {
       // Code files - open in split view for editing/running
       setActiveFile(node.path);
       setContextViewMode('split-view');
     } else {
-      // Other files (markdown, etc.) - open in artifacts view
+      // Other files - open in artifacts view
       setActiveFile(node.path);
       setContextViewMode('artifacts');
     }
+
+    // Always open the context panel to show the file
+    ensureContextPanelOpen();
   };
 
   return (
@@ -132,8 +147,8 @@ export default function SidebarPanel({
         </button>
       </div>
 
-      {/* VSCode File Tree - Takes significant space with minimum height */}
-      <div className="flex-1 min-h-[200px] border-b border-border-primary/50 overflow-hidden">
+      {/* VSCode File Tree - Takes available space but caps at 50% to leave room for sessions */}
+      <div className="flex-1 min-h-[180px] max-h-[50%] border-b border-border-primary/50 overflow-hidden">
         <VSCodeFileTree
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
@@ -144,8 +159,8 @@ export default function SidebarPanel({
         />
       </div>
 
-      {/* Sessions List - Expanded with better management */}
-      <div className="flex flex-col overflow-hidden border-b border-border-primary/50 max-h-64 flex-shrink-0">
+      {/* Sessions List - Always visible with minimum height */}
+      <div className="flex flex-col overflow-hidden border-b border-border-primary/50 min-h-[200px] max-h-72 flex-shrink-0">
         {/* Header with filters */}
         <div className="px-3 py-2 flex items-center justify-between bg-bg-secondary/50 border-b border-border-primary/30">
           <div className="flex items-center gap-2">
