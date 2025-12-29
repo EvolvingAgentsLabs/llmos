@@ -4,33 +4,35 @@
 
 LLMos-Lite is a self-evolving AI operating system that learns from every interaction, builds institutional knowledge, and gets smarter over time. Built for scientific computing, data science, and 3D visualization—all running in your browser.
 
-![LLMos-Lite in Action](./assets/screen1.png)
+https://github.com/EvolvingAgentsLabs/llmos/raw/main/assets/llmos.mp4
 
-### Agent Workflow in Action
-
-Watch the SystemAgent orchestrate complex tasks through intelligent planning and sub-agent delegation:
-
-![SystemAgent Workflow](./assets/screen2.png)
-
-*The Chat interface shows real-time agent execution with planning steps, sub-agent invocations, and progress tracking.*
-
-### Canvas Visualization
-
-View generated outputs directly in the Canvas tab with interactive visualizations:
-
-![Canvas Visualization](./assets/screen3.png)
-
-*FFT analysis output showing time domain signal with noise and frequency domain spectrum—all generated and rendered in-browser.*
+*JARVIS-powered Desktop experience with floating AI avatar, system applets, and intelligent task orchestration.*
 
 ---
 
 ## 🆕 What's New
 
-### 🎯 Infinite App Store - Generative UI (NEW!)
+### 🤖 JARVIS AI Avatar - Your Personal AI Assistant
 
-**The biggest update yet**: LLMos-Lite now generates **live, interactive React applets** on demand!
+Experience a truly intelligent OS with **JARVIS**, a persistent floating AI avatar inspired by Iron Man's assistant:
 
-Instead of just returning text or files, when you ask for interactive tools, calculators, or explorers, the AI generates a **fully functional UI applet** that appears instantly in your interface.
+- **Always Present**: Floating orb avatar visible across all views, like Siri on macOS
+- **State-Aware Animation**: Visual feedback showing idle, thinking, executing, success, and error states
+- **Interactive Expansion**: Click to expand for detailed status, minimize to a subtle indicator
+- **Contextual Awareness**: Shows current task type and agent state in real-time
+
+### 🖥️ Desktop-First Experience
+
+A complete **desktop operating system** running in your browser:
+
+- **Desktop View**: macOS/Windows-style desktop with app icons and quick launch
+- **System Applets**: Pre-built utilities ready to use - Calculator, Timer, Color Picker, Notes
+- **Category Organization**: Applets organized into Utilities, Quantum, 3D & Visual, and Automation
+- **Quick Create**: Launch any system applet with one click from the desktop
+
+### 🎯 Infinite App Store - Generative UI
+
+**The biggest update yet**: LLMos-Lite generates **live, interactive React applets** on demand!
 
 ```
 You: "Build an interactive 3D surface plotter with sliders for x/y range and colormap selection"
@@ -38,7 +40,7 @@ You: "Build an interactive 3D surface plotter with sliders for x/y range and col
 SystemAgent:
 🎨 Generating React applet...
 ✅ Compiling and validating...
-🚀 Applet deployed to Applets panel!
+🚀 Applet deployed to Desktop!
 📁 Project files saved to projects/surface_plotter/
 ```
 
@@ -53,16 +55,28 @@ SystemAgent:
 - "Create a signal analyzer with FFT visualization and adjustable parameters"
 - "Make a color palette generator with hex/rgb conversion"
 
+### 🧰 Built-in System Applets
+
+Ready-to-use tools that showcase the platform's capabilities:
+
+| Category | Applets |
+|----------|---------|
+| **Utilities** | Calculator, Timer/Stopwatch, Color Picker, Quick Notes |
+| **Quantum** | Quantum Circuit Designer with gate palette |
+| **3D & Visual** | 3D Scene Builder with object manipulation |
+| **Automation** | Visual Workflow Builder with node connections |
+
 ### Recent Updates
 
-- **Multi-Step Agent Planning** - SystemAgent now shows detailed planning progress (e.g., "Planning step 5/10") with real-time status updates
-- **Sub-Agent Orchestration** - Intelligent task delegation to specialized agents like `SignalProcessorAgent` for domain-specific tasks
-- **Canvas Tab** - New dedicated visualization tab for viewing generated plots, images, and outputs with Code/Design toggle
-- **Applets Panel** - New panel for live interactive React applets generated on demand
-- **Enhanced File Explorer** - Improved sidebar with organized sections for System (agents, tools, skills), Team, and User volumes
-- **Project Structure** - Auto-generated project folders with applets, components, memory, and output directories
-- **Model Selection** - Choose from multiple LLM providers including Anthropic Claude models directly in the UI
-- **Real-time Progress Tracking** - Visual indicators for agent status, processing state, and execution timeline
+- **JARVIS Avatar** - Persistent floating AI assistant with animated state feedback
+- **Desktop View** - Default view showing system applets and quick launchers
+- **Applet Categories** - Organized system applets by domain (Utilities, Quantum, 3D, Automation)
+- **Multi-Step Agent Planning** - Detailed planning progress with real-time status updates
+- **Sub-Agent Orchestration** - Intelligent task delegation to specialized agents
+- **Canvas Tab** - Dedicated visualization tab for plots, images, and outputs
+- **Enhanced File Explorer** - Organized sections for System, Team, and User volumes
+- **Media Viewer** - Full support for images and media file display
+- **Session Management** - Compact dropdown for session switching
 
 ---
 
@@ -93,7 +107,14 @@ The system doesn't stay static—it **evolves**:
 
 ## 💻 What You Can Do Now
 
-### 🎨 Generative UI - Infinite App Store (NEW!)
+### 🖥️ Desktop Experience
+- **JARVIS Avatar**: Your persistent AI companion with visual state feedback
+- **System Applets**: Launch Calculator, Timer, Color Picker, Notes instantly
+- **Quantum Tools**: Design quantum circuits with drag-and-drop gates
+- **3D Scene Builder**: Create and animate 3D objects with CSS 3D transforms
+- **Workflow Builder**: Visual automation designer with nodes and connections
+
+### 🎨 Generative UI - Infinite App Store
 - **Interactive Applets**: Ask for any tool and get a live React component
 - **Parameter Explorers**: Sliders, dropdowns, inputs for real-time parameter adjustment
 - **Calculators & Converters**: Unit converters, formula calculators, data transformers
@@ -179,30 +200,43 @@ Your project is ready in the file tree!
 ## 🏗️ Architecture Highlights
 
 ```
-SystemAgent (Orchestrator)
-    ├─ Memory System (/system/memory_log.md)
-    │   ├─ Queries past experiences before planning
-    │   └─ Records outcomes for continuous learning
-    │
-    ├─ Virtual File System (VFS)
-    │   ├─ Browser localStorage persistence
-    │   └─ Organized project structures
-    │
-    ├─ Python Runtime (Pyodide)
-    │   ├─ Executes code in browser sandbox
-    │   └─ Captures matplotlib plots as images
-    │
-    ├─ Applet Runtime (NEW!)
-    │   ├─ Browser-side TSX transpilation via Babel
-    │   ├─ Dynamic React component compilation
-    │   ├─ Self-healing with compile-time validation
-    │   └─ Scoped execution with React hooks + APIs
-    │
-    └─ File Tree UI
-        ├─ System volume (read-only)
-        ├─ Team volume (shared)
-        └─ User volume (projects)
+┌─────────────────────────────────────────────────────────────────┐
+│                         LLMos Desktop                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐  ┌────────────────────────────────────────┐  │
+│  │   JARVIS     │  │           Desktop View                 │  │
+│  │   Avatar     │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐      │  │
+│  │  ┌───────┐   │  │  │Calc │ │Timer│ │Color│ │Notes│      │  │
+│  │  │  ◉◉◉  │   │  │  └─────┘ └─────┘ └─────┘ └─────┘      │  │
+│  │  │ ╱   ╲ │   │  │  ┌─────┐ ┌─────┐ ┌─────┐              │  │
+│  │  └───────┘   │  │  │Quant│ │ 3D  │ │Work │              │  │
+│  │  Thinking... │  │  │ um  │ │Scene│ │flow │              │  │
+│  └──────────────┘  │  └─────┘ └─────┘ └─────┘              │  │
+│                    └────────────────────────────────────────┘  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                        SystemAgent                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ Memory System│  │  VFS Storage │  │ Applet Store │          │
+│  │ Short + Long │  │ localStorage │  │ Active/Recent│          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │Python Runtime│  │Applet Runtime│  │  View Manager│          │
+│  │   Pyodide    │  │ Babel + React│  │Desktop/Canvas│          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+**Core Components:**
+- **JARVIS Avatar** - Floating AI assistant showing agent state (idle/thinking/executing/success/error)
+- **Desktop View** - macOS-style app grid with system applets and user-generated applets
+- **Applet Store** - Manages active, recent, and system applets with state persistence
+- **View Manager** - Handles Desktop, Canvas, Chat, and Media view modes
 
 **Every execution creates:**
 ```
