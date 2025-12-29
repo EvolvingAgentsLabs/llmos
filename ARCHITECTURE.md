@@ -2298,3 +2298,278 @@ All components are designed to be modular, testable, and performant while provid
 
 For user-facing documentation, see **README.md**.
 For implementation status, see **IMPLEMENTATION-STATUS.md**.
+
+---
+
+## Current Architecture Assessment (December 2024)
+
+### Updated Directory Structure
+
+After the recent refactoring, the directory structure has been improved:
+
+```
+llmos-lite/ui/
+├── app/                          # Next.js App Router
+│   ├── layout.tsx               # Root layout with providers
+│   ├── page.tsx                 # Main entry with kernel boot
+│   └── api/                     # API routes
+│
+├── components/
+│   ├── workspace/               # Layout orchestration
+│   │   ├── AdaptiveLayout.tsx   # Three-panel adaptive layout
+│   │   ├── FluidLayout.tsx      # JARVIS/Holodeck layout
+│   │   └── ViewManager.tsx      # Context view routing
+│   ├── panels/                  # ← RENAMED from panel1-3
+│   │   ├── artifacts/           # Artifact viewers/editors
+│   │   ├── session/             # Session management
+│   │   └── volumes/             # File tree (icons.tsx extracted)
+│   ├── chat/                    # Chat interface
+│   ├── applets/                 # Interactive applets (extracted)
+│   │   ├── AppletGrid.tsx       # Main grid (reduced from 1369→405 lines)
+│   │   ├── AppletIconCard.tsx   # Extracted icon component
+│   │   ├── FullAppletView.tsx   # Extracted full view
+│   │   └── system-applets.ts    # Extracted applet definitions
+│   ├── common/                  # Shared UI components
+│   │   ├── LoadingSpinner.tsx
+│   │   └── CollapsibleSection.tsx
+│   └── layout/                  # Layout primitives
+│
+├── contexts/                    # React Context providers
+│   ├── WorkspaceContext.tsx     # Layout & agent state
+│   ├── SessionContext.tsx       # Chat sessions
+│   └── AppletContext.tsx        # Applet lifecycle
+│
+├── hooks/                       # Custom React hooks
+│   ├── useChat.ts              # ← NEW: Chat business logic
+│   ├── useCodeExecution.ts     # ← NEW: Code execution
+│   ├── useOrchestrator.ts      # State coordination
+│   └── useWorkflowExecution.ts # Workflow orchestration
+│
+├── lib/
+│   ├── llm/                     # ← CONSOLIDATED LLM module
+│   │   ├── client.ts           # OpenRouter client
+│   │   ├── storage.ts          # Config persistence
+│   │   ├── types.ts            # Shared types
+│   │   └── index.ts            # Public API
+│   ├── artifacts/               # Artifact management
+│   ├── kernel/                  # WASM runtime
+│   │   ├── error-supervisor.ts  # ← STUB: Error handling
+│   │   └── refinement-service.ts # ← STUB: Refinement
+│   ├── llm-tools/               # LLM tool implementations
+│   │   ├── file-tools.ts       # Updated with 'tool' property
+│   │   ├── applet-tools.ts     # Updated with 'tool' property
+│   │   └── git-tools-enhanced.ts
+│   └── [services]/
+│
+└── styles/
+```
+
+### State Management Summary
+
+| Layer | Technology | Responsibility |
+|-------|------------|----------------|
+| **Contexts** | React Context | UI state, sessions, applets |
+| **Stores** | Zustand | Artifacts, console logs |
+| **Singletons** | Module instances | VFS, AppletStore, LLMClient |
+| **Hooks** | Custom hooks | Business logic encapsulation |
+
+### Current Architecture Strengths
+
+1. **Modular Context System** - Clear separation of workspace, session, applet concerns
+2. **Event-Driven Applets** - Decoupled lifecycle with EventEmitter pattern
+3. **Lazy Loading** - Heavy 3D components load on-demand
+4. **Dual Views** - Artifacts support code + visual representation
+5. **Orchestration Layer** - `useOrchestrator` unifies state coordination
+6. **Token-Aware Context** - Intelligent context summarization
+7. **Sandboxed Execution** - QuickJS WASM, Pyodide, Babel scope isolation
+8. **Browser-Native** - No backend required, direct OpenRouter calls
+9. **Persistent Workspace** - All state survives page refresh
+10. **Adaptive Layout** - Auto-adjusts based on task type
+
+---
+
+## Architecture Improvement Roadmap
+
+### Priority 1: Data Access Layer
+
+**Problem**: Direct localStorage access scattered across services
+
+**Solution**: Implement Repository Pattern with Storage Adapters
+
+```typescript
+// Proposed: lib/repositories/base.ts
+interface Repository<T, ID = string> {
+  findById(id: ID): Promise<T | null>;
+  findAll(): Promise<T[]>;
+  save(entity: T): Promise<T>;
+  delete(id: ID): Promise<void>;
+  query(predicate: (item: T) => boolean): Promise<T[]>;
+}
+
+interface StorageAdapter {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<void>;
+  keys(prefix?: string): Promise<string[]>;
+}
+
+// Implementations
+class LocalStorageAdapter implements StorageAdapter { ... }
+class IndexedDBAdapter implements StorageAdapter { ... }  // For large data
+class MemoryAdapter implements StorageAdapter { ... }     // For testing
+```
+
+**Benefits**:
+- Testability - Easy to mock storage
+- Flexibility - Swap localStorage for IndexedDB when needed
+- Consistency - Unified data access patterns
+
+### Priority 2: Error Handling Strategy
+
+**Problem**: Inconsistent error handling, some errors silently caught
+
+**Solution**: Implement Result Pattern
+
+```typescript
+// Proposed: lib/core/result.ts
+type Result<T, E = Error> =
+  | { success: true; data: T }
+  | { success: false; error: E };
+
+// Usage
+async function executeCode(code: string): Promise<Result<ExecutionOutput, ExecutionError>> {
+  try {
+    const output = await runtime.execute(code);
+    return { success: true, data: output };
+  } catch (e) {
+    return {
+      success: false,
+      error: { type: 'EXECUTION_ERROR', message: e.message, code }
+    };
+  }
+}
+```
+
+### Priority 3: Performance Optimizations
+
+**Problem**: localStorage limits (5-10MB), WASM init blocks UI
+
+**Solutions**:
+
+1. **IndexedDB for Large Artifacts**
+```typescript
+import { openDB } from 'idb';
+
+const db = await openDB('llmos', 1, {
+  upgrade(db) {
+    db.createObjectStore('artifacts', { keyPath: 'id' });
+  }
+});
+```
+
+2. **Web Worker for WASM**
+```typescript
+// worker.ts
+importScripts('pyodide.js');
+const pyodide = await loadPyodide();
+self.postMessage({ type: 'ready' });
+```
+
+3. **Virtualization for Long Lists**
+```typescript
+import { FixedSizeList } from 'react-window';
+
+function SessionList({ sessions }) {
+  return (
+    <FixedSizeList height={400} itemCount={sessions.length} itemSize={60}>
+      {({ index, style }) => (
+        <SessionItem session={sessions[index]} style={style} />
+      )}
+    </FixedSizeList>
+  );
+}
+```
+
+### Priority 4: Testing Infrastructure
+
+**Problem**: No visible test files, tight coupling
+
+**Solution**: Add testing layers
+
+```
+test/
+├── unit/
+│   └── hooks/useChat.test.ts
+├── integration/
+│   └── artifact-manager.test.ts
+└── e2e/
+    └── chat-flow.spec.ts
+```
+
+### Priority 5: API Resilience
+
+**Problem**: No retry logic, limited offline support
+
+**Solution**: Service Layer with resilience patterns
+
+```typescript
+class LLMService {
+  private retryPolicy: RetryPolicy;
+  private circuitBreaker: CircuitBreaker;
+
+  async chat(messages: Message[]): Promise<Result<ChatResponse>> {
+    if (!navigator.onLine) {
+      return this.handleOffline(messages);
+    }
+
+    return this.circuitBreaker.execute(() =>
+      this.retryPolicy.execute(() =>
+        this.client.chatDirect(messages)
+      )
+    );
+  }
+}
+```
+
+### Priority 6: Security Hardening
+
+**Current Issues**:
+- API key in localStorage (accessible via devtools)
+- No CSP headers configured
+
+**Solutions**:
+1. Basic API key encryption using Web Crypto API
+2. Configure CSP headers in `next.config.js`
+3. Stricter Babel compilation whitelist
+
+---
+
+## Quick Wins (Immediate Actions)
+
+| Action | Impact | Effort |
+|--------|--------|--------|
+| Add `Result<T>` type for consistent errors | High | Low |
+| Add `useCallback`/`useMemo` where missing | Medium | Low |
+| Add error boundaries around major panels | High | Low |
+| Create `StorageAdapter` interface | Medium | Low |
+| Add basic unit tests for critical hooks | High | Medium |
+
+---
+
+## Implementation Priority Matrix
+
+| Improvement | Impact | Effort | Priority |
+|-------------|--------|--------|----------|
+| Repository Pattern | High | Medium | P1 |
+| Error Handling (Result) | High | Low | P1 |
+| IndexedDB Migration | High | Medium | P1 |
+| Testing Infrastructure | High | High | P2 |
+| State Consolidation | Medium | High | P2 |
+| Component Composition | Medium | Medium | P2 |
+| API Resilience | Medium | Medium | P3 |
+| Security Hardening | Medium | Medium | P3 |
+
+---
+
+*Last Updated: 2024-12-29*
+*Assessment Version: 2.0*
