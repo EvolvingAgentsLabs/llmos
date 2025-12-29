@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * FluidLayout - Main workspace layout with Desktop-first experience
+ * Updated: 2024-12-29 - Forces Desktop (applets) view on startup
+ */
+
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
@@ -12,6 +17,7 @@ const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
 const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
 const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
+const MediaViewer = lazy(() => import('../media/MediaViewer'));
 
 // ============================================================================
 // LOADING COMPONENT
@@ -49,8 +55,13 @@ function TreePanel({
   activeSession,
   onSessionChange,
 }: TreePanelProps) {
+  // Use a larger height (50% of viewport minus header) for better usability
+  // SidebarPanel has its own internal resize handle for file tree vs sessions
   return (
-    <div className={`transition-all duration-300 overflow-hidden ${isOpen ? 'h-80' : 'h-0'}`}>
+    <div
+      className={`transition-all duration-300 overflow-hidden flex-shrink-0 ${isOpen ? '' : 'h-0'}`}
+      style={{ height: isOpen ? 'calc(50vh - 48px)' : 0 }}
+    >
       <div className="h-full border-b border-white/10 bg-bg-secondary/30">
         <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
           <SidebarPanel
@@ -109,6 +120,25 @@ interface RightPanelContentProps {
 function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, activeSession }: RightPanelContentProps) {
   // Render content based on context view mode
   switch (contextViewMode) {
+    case 'media':
+      // Media files (images, videos)
+      if (activeFilePath) {
+        return (
+          <Suspense fallback={<PanelLoader />}>
+            <MediaViewer
+              filePath={activeFilePath}
+              volume={activeVolume}
+            />
+          </Suspense>
+        );
+      }
+      // Fall through to desktop if no file
+      return (
+        <Suspense fallback={<PanelLoader />}>
+          <AppletGrid />
+        </Suspense>
+      );
+
     case 'split-view':
     case 'code-editor':
       if (activeFilePath) {
@@ -121,7 +151,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
           </Suspense>
         );
       }
-      // Fall through to applets if no file selected
+      // Fall through to desktop if no file selected
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid showEmptyState emptyMessage="Select a file from the tree to view and edit code" />
@@ -129,6 +159,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
       );
 
     case 'artifacts':
+      // Only show artifact panel if explicitly requested (not for file viewing)
       return (
         <Suspense fallback={<PanelLoader />}>
           <ArtifactPanel
@@ -141,6 +172,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
     case 'canvas':
     case 'applets':
     default:
+      // Desktop view - always show AppletGrid with JARVIS
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />

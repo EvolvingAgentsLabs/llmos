@@ -16,7 +16,8 @@ import { AppletViewer } from './AppletViewer';
 import { ActiveApplet } from '@/lib/applets/applet-store';
 import {
   Code2, Play, X, Sparkles, Grid3X3, Maximize2, Minimize2,
-  Calculator, FileText, Clock, Palette, Zap, Box
+  Calculator, FileText, Clock, Palette, Zap, Box,
+  Atom, Workflow, Boxes, CircuitBoard
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
@@ -544,6 +545,433 @@ const SYSTEM_APPLETS = {
   );
 }`,
   },
+  // ============================================================================
+  // QUANTUM COMPUTING APPLETS
+  // ============================================================================
+  quantumCircuit: {
+    name: 'Quantum Circuit',
+    description: 'Design and visualize quantum circuits',
+    category: 'quantum',
+    code: `function Component({ onSubmit }) {
+  const [qubits, setQubits] = useState(3);
+  const [gates, setGates] = useState([]);
+  const [selectedGate, setSelectedGate] = useState('H');
+
+  const gateTypes = [
+    { name: 'H', label: 'Hadamard', color: 'bg-blue-500' },
+    { name: 'X', label: 'Pauli-X', color: 'bg-red-500' },
+    { name: 'Y', label: 'Pauli-Y', color: 'bg-green-500' },
+    { name: 'Z', label: 'Pauli-Z', color: 'bg-purple-500' },
+    { name: 'CNOT', label: 'CNOT', color: 'bg-orange-500' },
+    { name: 'T', label: 'T Gate', color: 'bg-pink-500' },
+  ];
+
+  const addGate = (qubit, step) => {
+    setGates([...gates, { type: selectedGate, qubit, step, id: Date.now() }]);
+  };
+
+  const removeGate = (id) => {
+    setGates(gates.filter(g => g.id !== id));
+  };
+
+  const steps = Math.max(5, ...gates.map(g => g.step + 1));
+
+  return (
+    <div className="p-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-white">Quantum Circuit Designer</h2>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-400">Qubits:</label>
+          <input
+            type="number"
+            min="1"
+            max="8"
+            value={qubits}
+            onChange={(e) => setQubits(Math.max(1, Math.min(8, Number(e.target.value))))}
+            className="w-16 p-1 bg-gray-700 border border-gray-600 rounded text-white text-center"
+          />
+        </div>
+      </div>
+
+      {/* Gate Palette */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {gateTypes.map(gate => (
+          <button
+            key={gate.name}
+            onClick={() => setSelectedGate(gate.name)}
+            className={\`px-3 py-1.5 rounded-lg text-xs font-medium transition-all \${
+              selectedGate === gate.name
+                ? \`\${gate.color} text-white ring-2 ring-white/50\`
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }\`}
+          >
+            {gate.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Circuit Grid */}
+      <div className="flex-1 overflow-auto bg-gray-900/50 rounded-lg p-4">
+        <div className="min-w-[400px]">
+          {Array.from({ length: qubits }).map((_, qubit) => (
+            <div key={qubit} className="flex items-center h-12 border-b border-gray-700/50">
+              <div className="w-12 text-sm text-gray-400 font-mono">q[{qubit}]</div>
+              <div className="flex-1 flex items-center relative">
+                {/* Qubit line */}
+                <div className="absolute inset-y-1/2 left-0 right-0 h-px bg-gray-600" />
+                {/* Steps */}
+                {Array.from({ length: steps }).map((_, step) => {
+                  const gate = gates.find(g => g.qubit === qubit && g.step === step);
+                  const gateConfig = gate ? gateTypes.find(t => t.name === gate.type) : null;
+                  return (
+                    <div
+                      key={step}
+                      onClick={() => gate ? removeGate(gate.id) : addGate(qubit, step)}
+                      className="w-12 h-10 flex items-center justify-center cursor-pointer relative z-10"
+                    >
+                      {gate ? (
+                        <div className={\`w-8 h-8 rounded flex items-center justify-center text-xs font-bold text-white \${gateConfig?.color || 'bg-gray-500'}\`}>
+                          {gate.type}
+                        </div>
+                      ) : (
+                        <div className="w-8 h-8 rounded border-2 border-dashed border-gray-600 hover:border-blue-400 transition-colors" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Export */}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => onSubmit({ qubits, gates })}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+        >
+          Export Circuit
+        </button>
+      </div>
+    </div>
+  );
+}`,
+  },
+  // ============================================================================
+  // 3D VISUALIZATION APPLETS
+  // ============================================================================
+  scene3D: {
+    name: '3D Scene',
+    description: 'Create and animate 3D objects',
+    category: '3d',
+    code: `function Component({ onSubmit }) {
+  const [objects, setObjects] = useState([
+    { id: 1, type: 'cube', x: 0, y: 0, z: 0, color: '#3B82F6', size: 1 }
+  ]);
+  const [selectedId, setSelectedId] = useState(1);
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRotation(r => (r + 1) % 360);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  const selected = objects.find(o => o.id === selectedId);
+
+  const addObject = (type) => {
+    const newObj = {
+      id: Date.now(),
+      type,
+      x: Math.random() * 2 - 1,
+      y: Math.random() * 2 - 1,
+      z: 0,
+      color: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][Math.floor(Math.random() * 5)],
+      size: 0.5 + Math.random() * 0.5
+    };
+    setObjects([...objects, newObj]);
+    setSelectedId(newObj.id);
+  };
+
+  const updateSelected = (prop, value) => {
+    setObjects(objects.map(o => o.id === selectedId ? { ...o, [prop]: value } : o));
+  };
+
+  const deleteSelected = () => {
+    if (objects.length > 1) {
+      setObjects(objects.filter(o => o.id !== selectedId));
+      setSelectedId(objects.find(o => o.id !== selectedId)?.id || null);
+    }
+  };
+
+  return (
+    <div className="p-4 h-full flex gap-4">
+      {/* 3D Canvas (CSS 3D simulation) */}
+      <div className="flex-1 bg-gray-900 rounded-xl overflow-hidden relative" style={{ perspective: '800px' }}>
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ transformStyle: 'preserve-3d', transform: \`rotateY(\${rotation}deg)\` }}
+        >
+          {objects.map(obj => (
+            <div
+              key={obj.id}
+              onClick={() => setSelectedId(obj.id)}
+              className={\`absolute cursor-pointer transition-all \${selectedId === obj.id ? 'ring-2 ring-white' : ''}\`}
+              style={{
+                width: \`\${obj.size * 60}px\`,
+                height: \`\${obj.size * 60}px\`,
+                backgroundColor: obj.color,
+                borderRadius: obj.type === 'sphere' ? '50%' : obj.type === 'cylinder' ? '20%' : '0',
+                transform: \`translate3d(\${obj.x * 100}px, \${obj.y * 100}px, \${obj.z * 100}px)\`,
+                boxShadow: \`0 0 20px \${obj.color}40\`
+              }}
+            />
+          ))}
+        </div>
+        {/* Grid floor */}
+        <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-gray-800/50 to-transparent" />
+      </div>
+
+      {/* Controls Panel */}
+      <div className="w-64 flex flex-col gap-4">
+        {/* Add Objects */}
+        <div className="bg-gray-800 rounded-lg p-3">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Add Object</h3>
+          <div className="flex gap-2">
+            {['cube', 'sphere', 'cylinder'].map(type => (
+              <button
+                key={type}
+                onClick={() => addObject(type)}
+                className="flex-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white capitalize"
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Object Properties */}
+        {selected && (
+          <div className="bg-gray-800 rounded-lg p-3 flex-1">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">Properties</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500">Color</label>
+                <input
+                  type="color"
+                  value={selected.color}
+                  onChange={(e) => updateSelected('color', e.target.value)}
+                  className="w-full h-8 rounded cursor-pointer"
+                />
+              </div>
+              {['x', 'y', 'z'].map(axis => (
+                <div key={axis}>
+                  <label className="text-xs text-gray-500 uppercase">{axis}</label>
+                  <input
+                    type="range"
+                    min="-2"
+                    max="2"
+                    step="0.1"
+                    value={selected[axis]}
+                    onChange={(e) => updateSelected(axis, parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-xs text-gray-500">Size</label>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="2"
+                  step="0.1"
+                  value={selected.size}
+                  onChange={(e) => updateSelected('size', parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <button
+                onClick={deleteSelected}
+                className="w-full px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs"
+              >
+                Delete Object
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => onSubmit({ objects })}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+        >
+          Export Scene
+        </button>
+      </div>
+    </div>
+  );
+}`,
+  },
+  // ============================================================================
+  // WORKFLOW/AUTOMATION APPLETS
+  // ============================================================================
+  workflowBuilder: {
+    name: 'Workflow Builder',
+    description: 'Create visual automation workflows',
+    category: 'automation',
+    code: `function Component({ onSubmit }) {
+  const [nodes, setNodes] = useState([
+    { id: 1, type: 'start', x: 50, y: 100, label: 'Start' },
+    { id: 2, type: 'action', x: 200, y: 100, label: 'Process' },
+    { id: 3, type: 'end', x: 350, y: 100, label: 'End' },
+  ]);
+  const [connections, setConnections] = useState([
+    { from: 1, to: 2 },
+    { from: 2, to: 3 },
+  ]);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [dragging, setDragging] = useState(null);
+
+  const nodeTypes = {
+    start: { color: 'bg-green-500', shape: 'rounded-full' },
+    action: { color: 'bg-blue-500', shape: 'rounded-lg' },
+    condition: { color: 'bg-yellow-500', shape: 'rotate-45' },
+    end: { color: 'bg-red-500', shape: 'rounded-full' },
+  };
+
+  const addNode = (type) => {
+    const newNode = {
+      id: Date.now(),
+      type,
+      x: 100 + Math.random() * 200,
+      y: 50 + Math.random() * 150,
+      label: type.charAt(0).toUpperCase() + type.slice(1),
+    };
+    setNodes([...nodes, newNode]);
+    setSelectedNode(newNode.id);
+  };
+
+  const handleDrag = (e, nodeId) => {
+    if (!dragging) return;
+    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+    setNodes(nodes.map(n => n.id === nodeId ? {
+      ...n,
+      x: Math.max(0, Math.min(e.clientX - rect.left - 40, 400)),
+      y: Math.max(0, Math.min(e.clientY - rect.top - 20, 200)),
+    } : n));
+  };
+
+  return (
+    <div className="p-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-white">Workflow Builder</h2>
+        <div className="flex gap-2">
+          {Object.keys(nodeTypes).map(type => (
+            <button
+              key={type}
+              onClick={() => addNode(type)}
+              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white capitalize"
+            >
+              + {type}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div className="flex-1 bg-gray-900/50 rounded-xl relative overflow-hidden">
+        {/* Grid */}
+        <div className="absolute inset-0 opacity-20" style={{
+          backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)',
+          backgroundSize: '20px 20px'
+        }} />
+
+        {/* Connections */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          {connections.map((conn, i) => {
+            const fromNode = nodes.find(n => n.id === conn.from);
+            const toNode = nodes.find(n => n.id === conn.to);
+            if (!fromNode || !toNode) return null;
+            return (
+              <line
+                key={i}
+                x1={fromNode.x + 40}
+                y1={fromNode.y + 20}
+                x2={toNode.x + 40}
+                y2={toNode.y + 20}
+                stroke="#4B5563"
+                strokeWidth="2"
+                markerEnd="url(#arrow)"
+              />
+            );
+          })}
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="#4B5563" />
+            </marker>
+          </defs>
+        </svg>
+
+        {/* Nodes */}
+        {nodes.map(node => {
+          const config = nodeTypes[node.type];
+          return (
+            <div
+              key={node.id}
+              onClick={() => setSelectedNode(node.id)}
+              onMouseDown={() => setDragging(node.id)}
+              onMouseUp={() => setDragging(null)}
+              onMouseMove={(e) => handleDrag(e, node.id)}
+              onMouseLeave={() => setDragging(null)}
+              className={\`absolute w-20 h-10 flex items-center justify-center cursor-move
+                         \${config.color} \${config.shape} text-white text-xs font-medium
+                         \${selectedNode === node.id ? 'ring-2 ring-white' : ''}\`}
+              style={{ left: node.x, top: node.y }}
+            >
+              <span className={node.type === 'condition' ? '-rotate-45' : ''}>{node.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex justify-between">
+        <span className="text-xs text-gray-500">{nodes.length} nodes, {connections.length} connections</span>
+        <button
+          onClick={() => onSubmit({ nodes, connections })}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+        >
+          Export Workflow
+        </button>
+      </div>
+    </div>
+  );
+}`,
+  },
+};
+
+// Applet categories for organized display
+const APPLET_CATEGORIES = {
+  utilities: {
+    label: 'Utilities',
+    icon: 'Calculator',
+    applets: ['calculator', 'timer', 'colorPicker', 'notes'],
+  },
+  quantum: {
+    label: 'Quantum',
+    icon: 'Atom',
+    applets: ['quantumCircuit'],
+  },
+  visualization: {
+    label: '3D & Visual',
+    icon: 'Box',
+    applets: ['scene3D'],
+  },
+  automation: {
+    label: 'Automation',
+    icon: 'Workflow',
+    applets: ['workflowBuilder'],
+  },
 };
 
 // ============================================================================
@@ -558,17 +986,72 @@ interface EmptyDesktopProps {
 }
 
 function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpenRecent }: EmptyDesktopProps) {
-  const suggestions = [
-    { icon: <Calculator className="w-5 h-5" />, label: 'Calculator', type: 'calculator' as const },
-    { icon: <Clock className="w-5 h-5" />, label: 'Timer', type: 'timer' as const },
-    { icon: <Palette className="w-5 h-5" />, label: 'Color Picker', type: 'colorPicker' as const },
-    { icon: <FileText className="w-5 h-5" />, label: 'Notes', type: 'notes' as const },
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  // Type for applet items - must match SYSTEM_APPLETS keys
+  type SystemAppletType = keyof typeof SYSTEM_APPLETS;
+
+  type AppletItem = {
+    icon: React.ReactNode;
+    label: string;
+    type: SystemAppletType;
+  };
+
+  type AppletCategory = {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+    applets: AppletItem[];
+  };
+
+  // All system applets organized by category
+  const appletCategories: AppletCategory[] = [
+    {
+      id: 'utilities',
+      label: 'Utilities',
+      icon: <Calculator className="w-4 h-4" />,
+      color: 'from-blue-500 to-cyan-500',
+      applets: [
+        { icon: <Calculator className="w-5 h-5" />, label: 'Calculator', type: 'calculator' },
+        { icon: <Clock className="w-5 h-5" />, label: 'Timer', type: 'timer' },
+        { icon: <Palette className="w-5 h-5" />, label: 'Color Picker', type: 'colorPicker' },
+        { icon: <FileText className="w-5 h-5" />, label: 'Notes', type: 'notes' },
+      ],
+    },
+    {
+      id: 'quantum',
+      label: 'Quantum',
+      icon: <Atom className="w-4 h-4" />,
+      color: 'from-purple-500 to-pink-500',
+      applets: [
+        { icon: <CircuitBoard className="w-5 h-5" />, label: 'Quantum Circuit', type: 'quantumCircuit' },
+      ],
+    },
+    {
+      id: 'visualization',
+      label: '3D & Visual',
+      icon: <Boxes className="w-4 h-4" />,
+      color: 'from-green-500 to-emerald-500',
+      applets: [
+        { icon: <Box className="w-5 h-5" />, label: '3D Scene', type: 'scene3D' },
+      ],
+    },
+    {
+      id: 'automation',
+      label: 'Automation',
+      icon: <Workflow className="w-4 h-4" />,
+      color: 'from-orange-500 to-amber-500',
+      applets: [
+        { icon: <Workflow className="w-5 h-5" />, label: 'Workflow', type: 'workflowBuilder' },
+      ],
+    },
   ];
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* JARVIS Avatar - Main presence */}
-      <div className="flex-1 min-h-[200px] relative">
+      <div className="flex-1 min-h-[180px] relative">
         <JarvisAvatar showLabel={false} />
 
         {/* Floating suggestion bubble */}
@@ -577,20 +1060,41 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
                        bg-bg-elevated/80 backdrop-blur-xl
                        border border-white/10 shadow-lg">
           <p className="text-sm text-fg-secondary text-center">
-            {customMessage || 'Ask me to build something!'}
+            {customMessage || 'Ask me to build anything - or launch a system app below!'}
           </p>
         </div>
       </div>
 
       {/* Bottom Section - System Apps & Recent */}
-      <div className="flex-shrink-0 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent">
-        {/* Quick Launch Grid */}
-        <div className="px-6 pt-4 pb-2">
-          <p className="text-[10px] text-fg-muted uppercase tracking-wider mb-3 text-center">
-            System Apps
-          </p>
-          <div className="flex justify-center gap-4">
-            {suggestions.map((item) => (
+      <div className="flex-shrink-0 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent pb-4">
+        {/* Category Pills */}
+        <div className="px-6 pt-4 pb-3">
+          <div className="flex justify-center gap-2 flex-wrap">
+            {appletCategories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
+                           transition-all duration-200 ${
+                  activeCategory === cat.id
+                    ? `bg-gradient-to-r ${cat.color} text-white shadow-lg`
+                    : 'bg-white/5 text-fg-secondary hover:bg-white/10 border border-white/10'
+                }`}
+              >
+                {cat.icon}
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Applet Grid - Show active category or all */}
+        <div className="px-6 pb-2">
+          <div className="flex justify-center gap-3 flex-wrap">
+            {(activeCategory
+              ? appletCategories.find(c => c.id === activeCategory)?.applets || []
+              : appletCategories.flatMap(c => c.applets.slice(0, 1)) // Show first from each category
+            ).map((item) => (
               <button
                 key={item.label}
                 onClick={() => onLaunchApplet?.(item.type)}
@@ -598,12 +1102,12 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
                           bg-white/5 border border-white/10
                           hover:bg-white/10 hover:border-accent-primary/30
                           transition-all duration-200 group
-                          hover:scale-105 active:scale-95"
+                          hover:scale-105 active:scale-95 min-w-[70px]"
               >
                 <div className="text-fg-muted group-hover:text-accent-primary transition-colors">
                   {item.icon}
                 </div>
-                <span className="text-[10px] text-fg-tertiary group-hover:text-fg-secondary">
+                <span className="text-[10px] text-fg-tertiary group-hover:text-fg-secondary text-center">
                   {item.label}
                 </span>
               </button>
