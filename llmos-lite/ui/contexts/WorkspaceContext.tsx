@@ -167,7 +167,13 @@ function loadPreferences(): WorkspacePreferences {
   try {
     const stored = localStorage.getItem(WORKSPACE_PREFERENCES_KEY);
     if (stored) {
-      return { ...defaultPreferences, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      // Migrate old preferences: force 'applets' (Desktop) as default view
+      // This ensures users with old 'artifacts' preference get the new Desktop experience
+      if (parsed.defaultContextView === 'artifacts') {
+        parsed.defaultContextView = 'applets';
+      }
+      return { ...defaultPreferences, ...parsed };
     }
   } catch (e) {
     console.error('Failed to load workspace preferences:', e);
@@ -195,9 +201,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return {
       ...defaultWorkspaceState,
       preferences,
-      // Use preferences.defaultContextView to initialize contextViewMode
-      // This ensures stored preferences are respected, with 'applets' (Desktop) as fallback
-      contextViewMode: preferences.defaultContextView || 'applets',
+      // ALWAYS start with Desktop view (applets) - this is the main landing experience
+      // Users can navigate to other views (artifacts, canvas) via UI interactions
+      contextViewMode: 'applets',
     };
   });
 
