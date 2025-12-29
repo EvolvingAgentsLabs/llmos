@@ -21,6 +21,10 @@ const HolographicBackground = dynamic(
   () => import('@/components/system/HolographicBackground'),
   { ssr: false }
 );
+const FloatingJarvis = dynamic(
+  () => import('@/components/system/FloatingJarvis'),
+  { ssr: false }
+);
 
 // Lazy load other components
 const FirstTimeGuide = dynamic(() => import('../onboarding/FirstTimeGuide'), { ssr: false });
@@ -428,6 +432,9 @@ export default function AdaptiveLayout() {
           onSendPrompt={handleSendPromptFromGuide}
         />
       )}
+
+      {/* Floating JARVIS Avatar - Always visible like Siri */}
+      <FloatingJarvis position="bottom-right" />
     </div>
   );
 }
