@@ -8,6 +8,57 @@ interface BootScreenProps {
   onComplete?: () => void;
 }
 
+// JARVIS Boot Avatar - Simple CSS animated orb
+function JarvisBootOrb({ progress }: { progress: number }) {
+  const isActive = progress < 100;
+
+  return (
+    <div className="relative w-32 h-32 mx-auto mb-8">
+      {/* Outer glow ring */}
+      <div
+        className={`absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 opacity-20 blur-xl ${isActive ? 'animate-pulse' : ''}`}
+        style={{ animationDuration: '2s' }}
+      />
+
+      {/* Orbital ring 1 */}
+      <div
+        className="absolute inset-2 rounded-full border-2 border-blue-400/30"
+        style={{
+          animation: isActive ? 'spin 8s linear infinite' : 'none',
+        }}
+      />
+
+      {/* Orbital ring 2 */}
+      <div
+        className="absolute inset-4 rounded-full border border-blue-300/20"
+        style={{
+          animation: isActive ? 'spin 12s linear infinite reverse' : 'none',
+        }}
+      />
+
+      {/* Core orb */}
+      <div className="absolute inset-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/50">
+        {/* Progress fill */}
+        <div
+          className="absolute inset-0 rounded-full bg-gradient-to-t from-blue-300 to-transparent transition-all duration-500"
+          style={{
+            clipPath: `inset(${100 - progress}% 0 0 0)`,
+          }}
+        />
+        {/* Highlight */}
+        <div className="absolute inset-2 rounded-full bg-white/20" />
+      </div>
+
+      {/* Progress percentage */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-white/80 text-sm font-mono font-bold">
+          {Math.round(progress)}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function BootScreen({ progress, onComplete }: BootScreenProps) {
   const [dots, setDots] = useState('');
   const [isComplete, setIsComplete] = useState(false);
@@ -39,15 +90,18 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
       }`}
     >
       <div className="w-full max-w-2xl px-8">
+        {/* JARVIS Avatar - Boot animation */}
+        <JarvisBootOrb progress={progress.percent} />
+
         {/* Logo/Title */}
-        <div className="text-center mb-12 animate-fade-in">
-          <div className="text-6xl font-bold mb-4 text-accent-primary">
-            LLMos
+        <div className="text-center mb-8 animate-fade-in">
+          <div className="text-4xl font-bold mb-2 text-accent-primary">
+            J.A.R.V.I.S.
           </div>
-          <div className="text-xl text-fg-secondary font-light tracking-wider">
-            Autonomous Runtime Environment
+          <div className="text-lg text-fg-secondary font-light tracking-wider">
+            LLMos Autonomous Runtime
           </div>
-          <div className="text-sm text-fg-tertiary mt-2">v0.1.0</div>
+          <div className="text-xs text-fg-tertiary mt-1">v0.1.0</div>
         </div>
 
         {/* Progress Bar */}

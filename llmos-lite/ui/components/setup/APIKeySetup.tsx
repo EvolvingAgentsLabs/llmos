@@ -10,6 +10,42 @@ interface APIKeySetupProps {
 
 type SetupStep = 'welcome' | 'profile' | 'api-key' | 'model';
 
+// JARVIS Setup Orb - Simple CSS animated orb for setup screens
+function JarvisSetupOrb({ step }: { step: SetupStep }) {
+  const stepProgress = {
+    'welcome': 0,
+    'profile': 33,
+    'api-key': 66,
+    'model': 100,
+  };
+  const progress = stepProgress[step];
+
+  return (
+    <div className="relative w-20 h-20 mx-auto mb-6">
+      {/* Outer glow */}
+      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 opacity-20 blur-lg animate-pulse" />
+
+      {/* Orbital ring */}
+      <div
+        className="absolute inset-1 rounded-full border border-blue-400/30"
+        style={{ animation: 'spin 10s linear infinite' }}
+      />
+
+      {/* Core orb */}
+      <div className="absolute inset-3 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/40">
+        <div className="absolute inset-1 rounded-full bg-white/20" />
+      </div>
+
+      {/* Step indicator */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-white/90 text-xs font-bold">
+          {step === 'welcome' ? '👋' : step === 'model' ? '✓' : `${Math.round(progress)}%`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
@@ -101,9 +137,11 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // Render different steps
   const renderWelcome = () => (
     <div className="text-center max-w-md mx-auto">
-      <h1 className="text-2xl font-medium mb-3 text-fg-primary">Welcome to LLMos-Lite</h1>
-      <p className="text-fg-secondary mb-8">
-        Get set up in 3 quick steps
+      <JarvisSetupOrb step="welcome" />
+      <h1 className="text-2xl font-medium mb-2 text-fg-primary">Hello, I'm J.A.R.V.I.S.</h1>
+      <p className="text-lg text-accent-primary mb-1">Welcome to LLMos</p>
+      <p className="text-fg-secondary text-sm mb-8">
+        Let's get you set up in 3 quick steps
       </p>
       <button onClick={() => setCurrentStep('profile')} className="btn-primary w-full py-3">
         Get Started
@@ -118,6 +156,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
   const renderProfile = () => (
     <>
+      <JarvisSetupOrb step="profile" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">Your Profile</h1>
         <p className="text-fg-secondary text-sm">
@@ -184,6 +223,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
   const renderApiKey = () => (
     <>
+      <JarvisSetupOrb step="api-key" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">API Key</h1>
         <p className="text-fg-secondary text-sm">
@@ -239,10 +279,11 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
   const renderModel = () => (
     <>
+      <JarvisSetupOrb step="model" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">Choose Model</h1>
         <p className="text-fg-secondary text-sm">
-          Step 3 of 3
+          Step 3 of 3 - Almost ready!
         </p>
       </div>
 
