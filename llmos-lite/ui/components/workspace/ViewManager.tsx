@@ -61,6 +61,10 @@ function EmptyView({ mode }: { mode: ContextViewMode }) {
       title: 'Split View',
       description: 'Select a file to view code and preview',
     },
+    media: {
+      title: 'Media Viewer',
+      description: 'View images and videos',
+    },
   };
 
   const { title, description } = messages[mode];
