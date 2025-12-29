@@ -23,6 +23,12 @@ export interface ToolResult {
   success: boolean;
   output?: string;
   error?: string;
+  fileChanges?: {
+    path: string;
+    volume: string;
+    operation: 'write' | 'edit' | 'delete';
+    diff?: string[];
+  }[];
 }
 
 export interface ChatRequest {

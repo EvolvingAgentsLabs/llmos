@@ -19,6 +19,7 @@ export interface ToolDefinition {
 }
 
 export interface ToolResult {
+  tool: string;
   success: boolean;
   output?: string;
   error?: string;
@@ -190,33 +191,45 @@ export class FileTools {
    */
   async executeTool(toolName: string, parameters: any): Promise<ToolResult> {
     try {
+      let result: Omit<ToolResult, 'tool'>;
+
       switch (toolName) {
         case 'read_file':
-          return await this.readFile(parameters);
+          result = await this.readFile(parameters);
+          break;
 
         case 'write_file':
-          return await this.writeFile(parameters);
+          result = await this.writeFile(parameters);
+          break;
 
         case 'edit_file':
-          return await this.editFile(parameters);
+          result = await this.editFile(parameters);
+          break;
 
         case 'delete_file':
-          return await this.deleteFile(parameters);
+          result = await this.deleteFile(parameters);
+          break;
 
         case 'list_files':
-          return await this.listFiles(parameters);
+          result = await this.listFiles(parameters);
+          break;
 
         case 'git_commit':
-          return await this.gitCommit(parameters);
+          result = await this.gitCommit(parameters);
+          break;
 
         default:
           return {
+            tool: toolName,
             success: false,
             error: `Unknown tool: ${toolName}`
           };
       }
+
+      return { tool: toolName, ...result };
     } catch (error) {
       return {
+        tool: toolName,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -229,7 +242,7 @@ export class FileTools {
   private async readFile(params: {
     volume: VolumeType;
     path: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const content = await this.fs.readFile(params.volume, params.path);
 
     return {
@@ -245,7 +258,7 @@ export class FileTools {
     volume: VolumeType;
     path: string;
     content: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     await this.fs.writeFile(params.volume, params.path, params.content);
 
     return {
@@ -270,7 +283,7 @@ export class FileTools {
     path: string;
     old_content: string;
     new_content: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     await this.fs.editFile(
       params.volume,
       params.path,
@@ -301,7 +314,7 @@ export class FileTools {
   private async deleteFile(params: {
     volume: VolumeType;
     path: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     await this.fs.deleteFile(params.volume, params.path);
 
     return {
@@ -323,7 +336,7 @@ export class FileTools {
   private async listFiles(params: {
     volume: VolumeType;
     directory?: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const files = await this.fs.listFiles(params.volume, params.directory || '');
 
     const output = files.length > 0
@@ -344,7 +357,7 @@ export class FileTools {
     volume: VolumeType;
     message: string;
     files?: string[];
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     // Get modified files
     const modifiedFiles = this.fs.getModifiedFiles(params.volume);
 

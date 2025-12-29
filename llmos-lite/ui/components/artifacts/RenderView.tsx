@@ -1,9 +1,9 @@
 'use client';
 
 import { Artifact } from '@/lib/artifacts/types';
-import CircuitRenderer from '../panel3-artifacts/CircuitRenderer';
-import ThreeRenderer from '../panel3-artifacts/ThreeRenderer';
-import PlotRenderer from '../panel3-artifacts/PlotRenderer';
+import CircuitRenderer from '../panels/artifacts/CircuitRenderer';
+import ThreeRenderer from '../panels/artifacts/ThreeRenderer';
+import PlotRenderer from '../panels/artifacts/PlotRenderer';
 
 interface RenderViewProps {
   artifact: Artifact;

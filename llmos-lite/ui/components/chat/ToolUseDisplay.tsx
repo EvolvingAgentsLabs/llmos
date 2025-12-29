@@ -53,14 +53,14 @@ export default function ToolUseDisplay({ toolCall, toolResult }: ToolUseDisplayP
   };
 
   const renderFileOperation = () => {
-    const params = toolCall.parameters;
+    const params = toolCall.parameters as Record<string, string | undefined>;
 
     switch (toolCall.name) {
       case 'write_file':
         return (
           <div className="space-y-1">
             <div className="text-xs font-mono text-fg-secondary">
-              {params.volume}-volume/{params.path}
+              {params.volume || 'unknown'}-volume/{params.path || ''}
             </div>
             {toolResult?.fileChanges && toolResult.fileChanges[0]?.diff && (
               <div className="mt-2 p-2 bg-bg-tertiary rounded text-[10px] font-mono max-h-32 overflow-y-auto scrollbar-thin">
@@ -92,7 +92,7 @@ export default function ToolUseDisplay({ toolCall, toolResult }: ToolUseDisplayP
         return (
           <div className="space-y-1">
             <div className="text-xs font-mono text-fg-secondary">
-              {params.volume}-volume/{params.path}
+              {params.volume || 'unknown'}-volume/{params.path || ''}
             </div>
             {toolResult?.fileChanges && toolResult.fileChanges[0]?.diff && (
               <div className="mt-2 p-2 bg-bg-tertiary rounded text-[10px] font-mono max-h-32 overflow-y-auto scrollbar-thin">
@@ -118,40 +118,42 @@ export default function ToolUseDisplay({ toolCall, toolResult }: ToolUseDisplayP
       case 'read_file':
         return (
           <div className="text-xs font-mono text-fg-secondary">
-            {params.volume}-volume/{params.path}
+            {params.volume || 'unknown'}-volume/{params.path || ''}
           </div>
         );
 
       case 'delete_file':
         return (
           <div className="text-xs font-mono text-fg-secondary">
-            {params.volume}-volume/{params.path}
+            {params.volume || 'unknown'}-volume/{params.path || ''}
           </div>
         );
 
       case 'list_files':
         return (
           <div className="text-xs font-mono text-fg-secondary">
-            {params.volume}-volume/{params.directory || '/'}
+            {params.volume || 'unknown'}-volume/{params.directory || '/'}
           </div>
         );
 
-      case 'git_commit':
+      case 'git_commit': {
+        const files = toolCall.parameters.files as string[] | undefined;
         return (
           <div className="space-y-1">
             <div className="text-xs text-fg-secondary">
-              {params.volume} volume
+              {params.volume || 'unknown'} volume
             </div>
             <div className="text-xs text-fg-primary italic">
-              "{params.message}"
+              "{params.message || ''}"
             </div>
-            {params.files && params.files.length > 0 && (
+            {files && files.length > 0 && (
               <div className="text-[10px] text-fg-tertiary">
-                {params.files.length} file{params.files.length !== 1 ? 's' : ''}
+                {files.length} file{files.length !== 1 ? 's' : ''}
               </div>
             )}
           </div>
         );
+      }
 
       default:
         return (

@@ -6,7 +6,7 @@ import { useApplets } from '@/contexts/AppletContext';
 import CoreEntity from '@/components/system/CoreEntity';
 
 // Lazy load view components for code splitting
-const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
+const ArtifactPanel = lazy(() => import('../panels/artifacts/ArtifactPanel'));
 const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
 const ThreeJSCanvas = lazy(() => import('../canvas/ThreeJSCanvas'));

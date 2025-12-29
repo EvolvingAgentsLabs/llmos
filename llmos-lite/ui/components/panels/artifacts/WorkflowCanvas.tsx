@@ -14,7 +14,7 @@ import ReactFlow, {
   BackgroundVariant,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
+import { useWorkflowExecution } from '@/hooks/useWorkflowExecution';
 
 interface WorkflowCanvasProps {
   onNodeSelect: (nodeId: string | null) => void;

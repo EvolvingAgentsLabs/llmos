@@ -1,6 +1,6 @@
 'use client';
 
-import QuantumCircuitDesigner from '@/components/panel3-artifacts/QuantumCircuitDesigner';
+import QuantumCircuitDesigner from '@/components/panels/artifacts/QuantumCircuitDesigner';
 
 /**
  * Quantum Circuit Designer Page
