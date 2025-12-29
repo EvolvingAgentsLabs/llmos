@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { Plus, MessageSquarePlus } from 'lucide-react';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -21,6 +23,7 @@ export default function SidebarPanel({
   onSessionChange,
 }: SidebarPanelProps) {
   const { sessions, activeSessions, addSession, deleteSession } = useSessionContext();
+  const { setContextViewMode, setActiveFile } = useWorkspace();
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
@@ -82,17 +85,44 @@ export default function SidebarPanel({
     user: 'bg-green-500/20 text-green-400',
   };
 
+  // Handle Desktop selection - switch to applets view
+  const handleDesktopSelect = () => {
+    setContextViewMode('applets');
+  };
+
+  // Handle code file selection - open in split view
+  const handleCodeFileSelect = (path: string) => {
+    setActiveFile(path);
+    setContextViewMode('split-view');
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg-secondary">
+      {/* Prominent New Session Button */}
+      <div className="px-3 py-3 border-b border-border-primary/50 bg-gradient-to-r from-accent-primary/10 to-transparent">
+        <button
+          onClick={handleNewSession}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5
+                   bg-accent-primary hover:bg-accent-primary/90
+                   text-white font-medium text-sm rounded-lg
+                   shadow-lg shadow-accent-primary/25
+                   transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <MessageSquarePlus className="w-4 h-4" />
+          <span>New Session</span>
+        </button>
+      </div>
+
       {/* VSCode File Tree - Takes significant space with minimum height */}
-      <div className="flex-1 min-h-[250px] border-b border-border-primary/50 overflow-hidden">
+      <div className="flex-1 min-h-[200px] border-b border-border-primary/50 overflow-hidden">
         <VSCodeFileTree
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
           onFileSelect={(node) => {
             console.log('[SidebarPanel] File selected:', node);
-            // TODO: Handle file selection (open in editor, show preview, etc.)
           }}
+          onDesktopSelect={handleDesktopSelect}
+          onCodeFileSelect={handleCodeFileSelect}
           selectedFile={null}
         />
       </div>
