@@ -190,10 +190,16 @@ function savePreferences(preferences: WorkspacePreferences) {
 // ============================================================================
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<WorkspaceState>(() => ({
-    ...defaultWorkspaceState,
-    preferences: loadPreferences(),
-  }));
+  const [state, setState] = useState<WorkspaceState>(() => {
+    const preferences = loadPreferences();
+    return {
+      ...defaultWorkspaceState,
+      preferences,
+      // Use preferences.defaultContextView to initialize contextViewMode
+      // This ensures stored preferences are respected, with 'applets' (Desktop) as fallback
+      contextViewMode: preferences.defaultContextView || 'applets',
+    };
+  });
 
   // Save preferences whenever they change
   useEffect(() => {
