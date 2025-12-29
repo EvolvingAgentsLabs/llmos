@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * FluidLayout - Main workspace layout with Desktop-first experience
+ * Updated: 2024-12-29 - Forces Desktop (applets) view on startup
+ */
+
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
