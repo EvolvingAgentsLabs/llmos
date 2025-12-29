@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Header from './Header';
-import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
+import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
 import ChatPanel from '../chat/ChatPanel';
 import CanvasView from '../canvas/CanvasView';
 import { AppletPanel, AppletDock } from '../applets/AppletPanel';

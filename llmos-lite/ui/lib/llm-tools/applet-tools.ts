@@ -190,27 +190,37 @@ function Component({ onSubmit }) {
    */
   async executeTool(toolName: string, parameters: any): Promise<AppletToolResult> {
     try {
+      let result: Omit<AppletToolResult, 'tool'>;
+
       switch (toolName) {
         case 'generate_applet':
-          return await this.generateApplet(parameters);
+          result = await this.generateApplet(parameters);
+          break;
 
         case 'load_applet':
-          return await this.loadApplet(parameters);
+          result = await this.loadApplet(parameters);
+          break;
 
         case 'list_applets':
-          return await this.listApplets(parameters);
+          result = await this.listApplets(parameters);
+          break;
 
         case 'update_applet_state':
-          return await this.updateAppletState(parameters);
+          result = await this.updateAppletState(parameters);
+          break;
 
         default:
           return {
+            tool: toolName,
             success: false,
             error: `Unknown applet tool: ${toolName}`,
           };
       }
+
+      return { tool: toolName, ...result };
     } catch (error) {
       return {
+        tool: toolName,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
@@ -227,7 +237,7 @@ function Component({ onSubmit }) {
     tags?: string[];
     save_to_volume?: 'team' | 'user' | 'none';
     save_path?: string;
-  }): Promise<AppletToolResult> {
+  }): Promise<Omit<AppletToolResult, 'tool'>> {
     // Validate the code
     const validation = AppletRuntime.validate(params.code);
     if (!validation.valid) {
@@ -285,7 +295,7 @@ function Component({ onSubmit }) {
   private async loadApplet(params: {
     volume: VolumeType;
     path: string;
-  }): Promise<AppletToolResult> {
+  }): Promise<Omit<AppletToolResult, 'tool'>> {
     const content = await this.fs.readFile(params.volume, params.path);
     const appletFile = AppletRuntime.parseFile(content);
 
@@ -308,7 +318,7 @@ function Component({ onSubmit }) {
   private async listApplets(params: {
     volume: VolumeType;
     directory?: string;
-  }): Promise<AppletToolResult> {
+  }): Promise<Omit<AppletToolResult, 'tool'>> {
     const directory = params.directory || 'applets';
     const files = await this.fs.listFiles(params.volume, directory);
 
@@ -333,7 +343,7 @@ function Component({ onSubmit }) {
     volume: VolumeType;
     path: string;
     state: Record<string, unknown>;
-  }): Promise<AppletToolResult> {
+  }): Promise<Omit<AppletToolResult, 'tool'>> {
     // Read existing applet
     const content = await this.fs.readFile(params.volume, params.path);
     const appletFile = AppletRuntime.parseFile(content);

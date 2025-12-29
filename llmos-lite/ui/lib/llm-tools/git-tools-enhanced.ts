@@ -229,66 +229,80 @@ export class GitToolsEnhanced {
    */
   async executeTool(toolName: string, parameters: Record<string, unknown>): Promise<ToolResult> {
     try {
+      let result: Omit<ToolResult, 'tool'>;
+
       switch (toolName) {
         case 'git_clone':
-          return await this.gitClone(parameters as {
+          result = await this.gitClone(parameters as {
             volume: VolumeType;
             url: string;
             branch?: string;
             shallow?: boolean;
           });
+          break;
 
         case 'git_pull':
-          return await this.gitPull(parameters as {
+          result = await this.gitPull(parameters as {
             volume: VolumeType;
             branch?: string;
           });
+          break;
 
         case 'git_push':
-          return await this.gitPush(parameters as {
+          result = await this.gitPush(parameters as {
             volume: VolumeType;
             force?: boolean;
           });
+          break;
 
         case 'git_status':
-          return await this.gitStatus(parameters as {
+          result = await this.gitStatus(parameters as {
             volume: VolumeType;
           });
+          break;
 
         case 'git_log':
-          return await this.gitLog(parameters as {
+          result = await this.gitLog(parameters as {
             volume: VolumeType;
             limit?: number;
           });
+          break;
 
         case 'git_branch':
-          return await this.gitBranch(parameters as {
+          result = await this.gitBranch(parameters as {
             volume: VolumeType;
             action: 'list' | 'create' | 'checkout' | 'delete';
             branch?: string;
           });
+          break;
 
         case 'git_diff':
-          return await this.gitDiff(parameters as {
+          result = await this.gitDiff(parameters as {
             volume: VolumeType;
             path?: string;
           });
+          break;
 
         case 'git_stash':
-          return await this.gitStash(parameters as {
+          result = await this.gitStash(parameters as {
             volume: VolumeType;
             action?: 'push' | 'pop' | 'list' | 'drop';
             message?: string;
           });
+          break;
 
         default:
           return {
+            tool: toolName,
             success: false,
             error: `Unknown Git tool: ${toolName}`
           };
       }
+
+      return { tool: toolName, ...result };
     } catch (error) {
       return {
+        tool: toolName,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -303,7 +317,7 @@ export class GitToolsEnhanced {
     url: string;
     branch?: string;
     shallow?: boolean;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     if (params.volume === 'system') {
       return {
         success: false,
@@ -346,7 +360,7 @@ export class GitToolsEnhanced {
   private async gitPull(params: {
     volume: VolumeType;
     branch?: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const client = this.getClient(params.volume);
     await client.initialize();
 
@@ -391,7 +405,7 @@ export class GitToolsEnhanced {
   private async gitPush(params: {
     volume: VolumeType;
     force?: boolean;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     if (params.volume === 'system') {
       return {
         success: false,
@@ -417,7 +431,7 @@ export class GitToolsEnhanced {
    */
   private async gitStatus(params: {
     volume: VolumeType;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const client = this.getClient(params.volume);
     await client.initialize();
 
@@ -465,7 +479,7 @@ export class GitToolsEnhanced {
   private async gitLog(params: {
     volume: VolumeType;
     limit?: number;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const client = this.getClient(params.volume);
     await client.initialize();
 
@@ -506,7 +520,7 @@ export class GitToolsEnhanced {
     volume: VolumeType;
     action: 'list' | 'create' | 'checkout' | 'delete';
     branch?: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     if (params.volume === 'system' && params.action !== 'list') {
       return {
         success: false,
@@ -574,7 +588,7 @@ export class GitToolsEnhanced {
   private async gitDiff(params: {
     volume: VolumeType;
     path?: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     const client = this.getClient(params.volume);
     await client.initialize();
 
@@ -616,7 +630,7 @@ export class GitToolsEnhanced {
     volume: VolumeType;
     action?: 'push' | 'pop' | 'list' | 'drop';
     message?: string;
-  }): Promise<ToolResult> {
+  }): Promise<Omit<ToolResult, 'tool'>> {
     // Note: isomorphic-git doesn't have native stash support
     // This is a simplified implementation using branches
 

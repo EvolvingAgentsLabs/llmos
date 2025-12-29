@@ -6,7 +6,7 @@ import { useApplets } from '@/contexts/AppletContext';
 import CoreEntity from '@/components/system/CoreEntity';
 
 // Lazy load heavy components
-const ArtifactPanel = lazy(() => import('@/components/panel3-artifacts/ArtifactPanel'));
+const ArtifactPanel = lazy(() => import('@/components/panels/artifacts/ArtifactPanel'));
 const ThreeJSCanvas = lazy(() => import('@/components/canvas/ThreeJSCanvas'));
 const AppletPanel = lazy(() => import('@/components/applets/AppletPanel'));
 const SplitViewCanvas = lazy(() => import('@/components/canvas/SplitViewCanvas'));

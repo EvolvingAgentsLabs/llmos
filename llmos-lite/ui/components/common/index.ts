@@ -1,3 +1,8 @@
-export { default as ConfirmDialog } from './ConfirmDialog';
-export { default as ContextMenu } from './ContextMenu';
-export type { ContextMenuItem } from './ContextMenu';
+/**
+ * Common UI Components
+ *
+ * Shared, reusable UI components used across the application
+ */
+
+export { LoadingSpinner } from './LoadingSpinner';
+export { CollapsibleSection } from './CollapsibleSection';

@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
-import VSCodeFileTree from '../panel1-volumes/VSCodeFileTree';
+import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
 import ConfirmDialog from '../common/ConfirmDialog';

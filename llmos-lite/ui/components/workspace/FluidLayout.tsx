@@ -15,7 +15,7 @@ const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
 const AppletGrid = lazy(() => import('../applets/AppletGrid'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
-const ArtifactPanel = lazy(() => import('../panel3-artifacts/ArtifactPanel'));
+const ArtifactPanel = lazy(() => import('../panels/artifacts/ArtifactPanel'));
 const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
 const MediaViewer = lazy(() => import('../media/MediaViewer'));
 
