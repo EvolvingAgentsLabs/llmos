@@ -988,11 +988,13 @@ interface EmptyDesktopProps {
 function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpenRecent }: EmptyDesktopProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // Type for applet items
+  // Type for applet items - must match SYSTEM_APPLETS keys
+  type SystemAppletType = keyof typeof SYSTEM_APPLETS;
+
   type AppletItem = {
     icon: React.ReactNode;
     label: string;
-    type: string;
+    type: SystemAppletType;
   };
 
   type AppletCategory = {
