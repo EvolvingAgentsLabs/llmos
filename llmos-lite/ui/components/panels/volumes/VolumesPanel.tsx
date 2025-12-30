@@ -5,6 +5,7 @@ import VolumeTree from './VolumeTree';
 import SessionList from './SessionList';
 import CronList from './CronList';
 import GitStatus from './GitStatus';
+import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 interface VolumesPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -25,63 +26,73 @@ export default function VolumesPanel({
   const [gitExpanded, setGitExpanded] = useState(false);
 
   return (
-    <div className="h-full flex flex-col bg-terminal-bg-secondary">
-      {/* Volume Tree */}
-      <div className="p-4 border-b border-terminal-border">
-        <h2 className="terminal-heading text-xs mb-3">VOLUMES</h2>
-        <VolumeTree
-          activeVolume={activeVolume}
-          onVolumeChange={onVolumeChange}
-        />
-      </div>
+    <PanelErrorBoundary panelName="Volumes Panel">
+      <div className="h-full flex flex-col bg-terminal-bg-secondary">
+        {/* Volume Tree */}
+        <div className="p-4 border-b border-terminal-border">
+          <h2 className="terminal-heading text-xs mb-3">VOLUMES</h2>
+          <PanelErrorBoundary panelName="Volume Tree">
+            <VolumeTree
+              activeVolume={activeVolume}
+              onVolumeChange={onVolumeChange}
+            />
+          </PanelErrorBoundary>
+        </div>
 
-      {/* Sessions List */}
-      <div className="flex-1 p-4 border-b border-terminal-border overflow-auto">
-        <h2 className="terminal-heading text-xs mb-3">
-          SESSIONS ({activeVolume})
-        </h2>
-        <SessionList
-          activeVolume={activeVolume}
-          activeSession={activeSession}
-          onSessionChange={onSessionChange}
-        />
-      </div>
+        {/* Sessions List */}
+        <div className="flex-1 p-4 border-b border-terminal-border overflow-auto">
+          <h2 className="terminal-heading text-xs mb-3">
+            SESSIONS ({activeVolume})
+          </h2>
+          <PanelErrorBoundary panelName="Session List">
+            <SessionList
+              activeVolume={activeVolume}
+              activeSession={activeSession}
+              onSessionChange={onSessionChange}
+            />
+          </PanelErrorBoundary>
+        </div>
 
-      {/* Cron Updates - Collapsible */}
-      <div className="border-b border-terminal-border">
-        <button
-          onClick={() => setCronExpanded(!cronExpanded)}
-          className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
-        >
-          <h2 className="terminal-heading text-xs">CRON UPDATES</h2>
-          <span className="text-terminal-fg-secondary text-xs">
-            {cronExpanded ? '▼' : '▶'}
-          </span>
-        </button>
-        {cronExpanded && (
-          <div className="px-4 pb-4">
-            <CronList onCronClick={onCronClick} />
-          </div>
-        )}
-      </div>
+        {/* Cron Updates - Collapsible */}
+        <div className="border-b border-terminal-border">
+          <button
+            onClick={() => setCronExpanded(!cronExpanded)}
+            className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
+          >
+            <h2 className="terminal-heading text-xs">CRON UPDATES</h2>
+            <span className="text-terminal-fg-secondary text-xs">
+              {cronExpanded ? '▼' : '▶'}
+            </span>
+          </button>
+          {cronExpanded && (
+            <div className="px-4 pb-4">
+              <PanelErrorBoundary panelName="Cron List">
+                <CronList onCronClick={onCronClick} />
+              </PanelErrorBoundary>
+            </div>
+          )}
+        </div>
 
-      {/* Git Status - Collapsible */}
-      <div>
-        <button
-          onClick={() => setGitExpanded(!gitExpanded)}
-          className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
-        >
-          <h2 className="terminal-heading text-xs">GIT STATUS</h2>
-          <span className="text-terminal-fg-secondary text-xs">
-            {gitExpanded ? '▼' : '▶'}
-          </span>
-        </button>
-        {gitExpanded && (
-          <div className="px-4 pb-4">
-            <GitStatus activeVolume={activeVolume} />
-          </div>
-        )}
+        {/* Git Status - Collapsible */}
+        <div>
+          <button
+            onClick={() => setGitExpanded(!gitExpanded)}
+            className="w-full p-4 flex items-center justify-between hover:bg-terminal-bg-tertiary transition-colors touch-manipulation"
+          >
+            <h2 className="terminal-heading text-xs">GIT STATUS</h2>
+            <span className="text-terminal-fg-secondary text-xs">
+              {gitExpanded ? '▼' : '▶'}
+            </span>
+          </button>
+          {gitExpanded && (
+            <div className="px-4 pb-4">
+              <PanelErrorBoundary panelName="Git Status">
+                <GitStatus activeVolume={activeVolume} />
+              </PanelErrorBoundary>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </PanelErrorBoundary>
   );
 }

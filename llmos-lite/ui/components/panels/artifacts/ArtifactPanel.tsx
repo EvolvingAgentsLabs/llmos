@@ -12,6 +12,7 @@ import { PlotData } from './PlotRenderer';
 import QuantumCircuitDesigner from './QuantumCircuitDesigner';
 import { useArtifactStore } from '@/lib/artifacts/store';
 import { Artifact } from '@/lib/artifacts/types';
+import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 interface ArtifactPanelProps {
   activeSession: string | null;
@@ -197,13 +198,16 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
   }, [updateArtifact]);
 
   return (
-    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      {/* Left: Node Library (collapsible) */}
-      {!isFullscreen && (
-        <div className="hidden lg:block w-64 border-r border-terminal-border bg-terminal-bg-secondary">
-          <NodeLibraryPanel />
-        </div>
-      )}
+    <PanelErrorBoundary panelName="Artifact Panel">
+      <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+        {/* Left: Node Library (collapsible) */}
+        {!isFullscreen && (
+          <div className="hidden lg:block w-64 border-r border-terminal-border bg-terminal-bg-secondary">
+            <PanelErrorBoundary panelName="Node Library">
+              <NodeLibraryPanel />
+            </PanelErrorBoundary>
+          </div>
+        )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col bg-terminal-bg-secondary">
@@ -269,10 +273,12 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
               {/* Workflow Canvas */}
               <div className={`${isFullscreen ? 'h-full' : 'h-2/3'} border-b border-terminal-border`}>
                 <div className="h-full">
-                  <WorkflowCanvas
-                    onNodeSelect={setSelectedNode}
-                    selectedNode={selectedNode}
-                  />
+                  <PanelErrorBoundary panelName="Workflow Canvas">
+                    <WorkflowCanvas
+                      onNodeSelect={setSelectedNode}
+                      selectedNode={selectedNode}
+                    />
+                  </PanelErrorBoundary>
                 </div>
               </div>
 
@@ -283,7 +289,9 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
                     <h2 className="terminal-heading text-xs">NODE DETAIL</h2>
                   </div>
                   <div className="p-4">
-                    <NodeEditor selectedNode={selectedNode} />
+                    <PanelErrorBoundary panelName="Node Editor">
+                      <NodeEditor selectedNode={selectedNode} />
+                    </PanelErrorBoundary>
                   </div>
                 </div>
               )}
@@ -292,28 +300,35 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
 
           {activeTab === 'artifacts' && (
             <div className="h-full">
-              <ArtifactGallery
-                artifacts={allArtifacts}
-                defaultView="split"
-                onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
-                onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
-              />
+              <PanelErrorBoundary panelName="Artifact Gallery">
+                <ArtifactGallery
+                  artifacts={allArtifacts}
+                  defaultView="split"
+                  onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
+                  onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
+                />
+              </PanelErrorBoundary>
             </div>
           )}
 
           {activeTab === 'library' && (
             <div className="h-full lg:hidden">
-              <NodeLibraryPanel />
+              <PanelErrorBoundary panelName="Node Library Mobile">
+                <NodeLibraryPanel />
+              </PanelErrorBoundary>
             </div>
           )}
 
           {activeTab === 'quantum-designer' && (
             <div className="h-full p-4">
-              <QuantumCircuitDesigner />
+              <PanelErrorBoundary panelName="Quantum Designer">
+                <QuantumCircuitDesigner />
+              </PanelErrorBoundary>
             </div>
           )}
         </div>
       </div>
     </div>
+    </PanelErrorBoundary>
   );
 }

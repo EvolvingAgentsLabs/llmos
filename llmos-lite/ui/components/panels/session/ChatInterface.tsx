@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
@@ -28,15 +28,24 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  const handleSend = async () => {
+  // Memoize conversation history to avoid recreating on each render
+  const conversationHistory = useMemo(() =>
+    messages.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    })),
+    [messages]
+  );
+
+  const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
 
     const messageText = inputValue.trim();
@@ -64,18 +73,15 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
 
       // Send message directly to OpenRouter (client-side only)
       // API key goes: Browser → OpenRouter (never touches our server)
-      const conversationHistory = messages.map((msg) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      }));
+      const history = [...conversationHistory];
 
       // Add current user message to history
-      conversationHistory.push({
+      history.push({
         role: 'user' as const,
         content: messageText,
       });
 
-      const assistantResponse = await client.chatDirect(conversationHistory);
+      const assistantResponse = await client.chatDirect(history);
 
       console.log('Response:', assistantResponse);
 
@@ -88,7 +94,17 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [inputValue, isLoading, conversationHistory]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  }, []);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSend();
+    }
+  }, [handleSend]);
 
   return (
     <div className="h-full flex flex-col">
@@ -143,8 +159,8 @@ export default function ChatInterface({ messages, activeSession }: ChatInterface
           <input
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
             placeholder="Type your message..."
             className="flex-1 terminal-input min-h-[44px]"
           />
