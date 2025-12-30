@@ -275,6 +275,7 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
   const [originalContent, setOriginalContent] = useState<string>('');
   const [imageData, setImageData] = useState<{ base64: string; format: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -283,9 +284,40 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
   const [runOutput, setRunOutput] = useState<{ stdout: string; stderr: string } | null>(null);
   const [showOutput, setShowOutput] = useState(false);
 
-  const isReadOnly = node.metadata?.readonly || node.path.startsWith('/system/') || node.path.startsWith('system/');
+  // Normalize tree path to VFS path format
+  // Tree uses: /volumes/user/projects/... or /volumes/system/...
+  // VFS expects: projects/... or system/...
+  const normalizePathForVFS = useCallback((treePath: string): string => {
+    let normalized = treePath;
+
+    // Handle /volumes/user/projects/... -> projects/...
+    if (normalized.startsWith('/volumes/user/projects/')) {
+      normalized = normalized.replace('/volumes/user/projects/', 'projects/');
+    }
+    // Handle /volumes/user/... (other user paths) -> ...
+    else if (normalized.startsWith('/volumes/user/')) {
+      normalized = normalized.replace('/volumes/user/', '');
+    }
+    // Handle /volumes/team/... -> team/...
+    else if (normalized.startsWith('/volumes/team/')) {
+      normalized = normalized.replace('/volumes/team/', '');
+    }
+    // Handle /volumes/system/... -> system/...
+    else if (normalized.startsWith('/volumes/system/')) {
+      normalized = normalized.replace('/volumes/system/', 'system/');
+    }
+    // Remove any leading slash
+    else if (normalized.startsWith('/')) {
+      normalized = normalized.substring(1);
+    }
+
+    return normalized;
+  }, []);
+
+  const vfsPath = normalizePathForVFS(node.path);
+  const isReadOnly = node.metadata?.readonly || vfsPath.startsWith('system/');
   const isPythonFile = node.name.endsWith('.py');
-  const isVFSFile = node.path.startsWith('projects/') || node.id.startsWith('vfs-');
+  const isVFSFile = vfsPath.startsWith('projects/') || node.id.startsWith('vfs-');
 
   // Get language for Monaco Editor
   const getLanguage = useCallback(() => {
@@ -312,20 +344,27 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
     async function loadFile() {
       try {
         setLoading(true);
+        setLoadError(null);
         setRunOutput(null);
         setShowOutput(false);
 
+        console.log('[CodeView] Loading file:', { original: node.path, vfsPath });
+
         // Handle system files (from public/system/)
-        if (node.path.startsWith('/system/') || node.path.startsWith('system/')) {
-          const systemPath = node.path.replace(/^\//, '');
-          const response = await fetch(`/${systemPath}`);
+        if (vfsPath.startsWith('system/')) {
+          console.log('[CodeView] Fetching system file:', vfsPath);
+          const response = await fetch(`/${vfsPath}`);
           if (response.ok) {
             const content = await response.text();
             setFileContent(content);
             setOriginalContent(content);
             setImageData(null);
+            setLoadError(null);
           } else {
-            setFileContent(`Error: System file not found: ${node.path}`);
+            const errorMsg = `System file not found: ${vfsPath}`;
+            console.error('[CodeView]', errorMsg);
+            setLoadError(errorMsg);
+            setFileContent('');
             setOriginalContent('');
           }
           setLoading(false);
@@ -333,18 +372,23 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
         }
 
         // Handle VFS files (projects/*)
+        console.log('[CodeView] Loading from VFS:', vfsPath);
         const { getVFS } = await import('@/lib/virtual-fs');
         const vfs = getVFS();
-        const file = vfs.readFile(node.path);
+        const file = vfs.readFile(vfsPath);
 
         if (!file) {
-          const mockContent = getMockFileContent();
-          setFileContent(mockContent);
-          setOriginalContent(mockContent);
+          console.warn('[CodeView] File not found in VFS:', vfsPath);
+          // Show error instead of mock content
+          setLoadError(`File not found: ${vfsPath}`);
+          setFileContent('');
+          setOriginalContent('');
           setImageData(null);
           setLoading(false);
           return;
         }
+
+        console.log('[CodeView] File loaded from VFS:', vfsPath, 'size:', file.size);
 
         // Check if this is a .png file with JSON image data
         if (node.name.endsWith('.png')) {
@@ -372,11 +416,12 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
           setOriginalContent(file.content);
           setImageData(null);
         }
+        setLoadError(null);
       } catch (error) {
-        console.error('Failed to load file:', error);
-        const mockContent = getMockFileContent();
-        setFileContent(mockContent);
-        setOriginalContent(mockContent);
+        console.error('[CodeView] Failed to load file:', error);
+        setLoadError(`Error loading file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setFileContent('');
+        setOriginalContent('');
         setImageData(null);
       } finally {
         setLoading(false);
@@ -386,7 +431,7 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
     }
 
     loadFile();
-  }, [node.path, node.name, node.id]);
+  }, [vfsPath, node.name, node.id]);
 
   // Handle content change
   const handleContentChange = useCallback((value: string | undefined) => {
@@ -404,16 +449,16 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
       setSaving(true);
       const { getVFS } = await import('@/lib/virtual-fs');
       const vfs = getVFS();
-      vfs.writeFile(node.path, fileContent);
+      vfs.writeFile(vfsPath, fileContent);
       setOriginalContent(fileContent);
       setIsDirty(false);
-      console.log('File saved:', node.path);
+      console.log('[CodeView] File saved:', vfsPath);
     } catch (error) {
-      console.error('Failed to save file:', error);
+      console.error('[CodeView] Failed to save file:', error);
     } finally {
       setSaving(false);
     }
-  }, [isDirty, isVFSFile, node.path, fileContent]);
+  }, [isDirty, isVFSFile, vfsPath, fileContent]);
 
   // Cancel editing
   const handleCancel = useCallback(() => {
@@ -564,6 +609,24 @@ This is a placeholder file.
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-sm text-fg-tertiary">Loading file...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (loadError) {
+    return (
+      <div className="h-full bg-bg-primary flex items-center justify-center">
+        <div className="text-center max-w-md px-8">
+          <svg className="w-16 h-16 mx-auto mb-4 text-red-400 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h3 className="text-lg font-semibold text-fg-primary mb-2">Unable to Load File</h3>
+          <p className="text-sm text-fg-secondary mb-4">{loadError}</p>
+          <p className="text-xs text-fg-tertiary">
+            Path: {vfsPath}
+          </p>
         </div>
       </div>
     );

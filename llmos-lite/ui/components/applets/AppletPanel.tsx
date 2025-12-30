@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import { useApplets, useHasActiveApplets } from '@/contexts/AppletContext';
 import { AppletViewer, AppletCard } from './AppletViewer';
+import { FullAppletView } from './FullAppletView';
 import { ActiveApplet } from '@/lib/applets/applet-store';
 import {
   X,
@@ -47,6 +48,7 @@ export function AppletPanel({
     closeAllApplets,
     handleAppletSubmit,
     updateAppletState,
+    updateAppletCode,
   } = useApplets();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -61,6 +63,14 @@ export function AppletPanel({
 
   const handleSave = (appletId: string) => (state: Record<string, unknown>) => {
     updateAppletState(appletId, state);
+  };
+
+  const handleCodeUpdate = (appletId: string) => (code: string) => {
+    updateAppletCode(appletId, code);
+  };
+
+  const handleMinimize = () => {
+    onModeChange?.('dock');
   };
 
   // Render dock mode (minimized at bottom)
@@ -262,16 +272,15 @@ export function AppletPanel({
               </div>
             )}
 
-            {/* Current Applet Viewer */}
+            {/* Current Applet Viewer - Using FullAppletView for Monaco editor support */}
             {currentApplet && (
-              <AppletViewer
-                code={currentApplet.code}
-                metadata={currentApplet.metadata}
-                initialState={currentApplet.state}
-                onSubmit={handleSubmit(currentApplet.id)}
+              <FullAppletView
+                applet={currentApplet}
                 onClose={() => closeApplet(currentApplet.id)}
+                onMinimize={handleMinimize}
+                onSubmit={handleSubmit(currentApplet.id)}
                 onSave={handleSave(currentApplet.id)}
-                className="min-h-[400px]"
+                onCodeUpdate={handleCodeUpdate(currentApplet.id)}
               />
             )}
           </div>
