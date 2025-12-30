@@ -3,4 +3,6 @@
 __pycache__/
 .env
 .env.local
-core/
+# Ignore Python core directory (not lib/core which is TypeScript)
+../core/
+__tests__/
