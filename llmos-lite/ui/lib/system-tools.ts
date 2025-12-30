@@ -35,17 +35,41 @@ export interface ToolDefinition {
 }
 
 // Event emitter for applet generation
-type AppletGeneratedCallback = (applet: {
+export interface GeneratedApplet {
   id: string;
   name: string;
   description: string;
   code: string;
-}) => void;
+}
+
+type AppletGeneratedCallback = (applet: GeneratedApplet) => void;
 
 let appletGeneratedCallback: AppletGeneratedCallback | null = null;
 
+// Queue for applets generated before callback is registered
+const pendingApplets: GeneratedApplet[] = [];
+
 export function setAppletGeneratedCallback(callback: AppletGeneratedCallback | null) {
   appletGeneratedCallback = callback;
+
+  // If callback is being set and we have pending applets, flush them
+  if (callback && pendingApplets.length > 0) {
+    console.log(`[AppletTool] Flushing ${pendingApplets.length} pending applet(s)`);
+    const toFlush = [...pendingApplets];
+    pendingApplets.length = 0; // Clear the queue
+    toFlush.forEach(applet => {
+      try {
+        callback(applet);
+      } catch (err) {
+        console.error('[AppletTool] Error flushing pending applet:', err);
+      }
+    });
+  }
+}
+
+// Get pending applets (for debugging)
+export function getPendingApplets(): GeneratedApplet[] {
+  return [...pendingApplets];
 }
 
 /**
@@ -176,14 +200,27 @@ function Applet({ onSubmit }) {
 
     const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
 
+    const generatedApplet: GeneratedApplet = {
+      id: appletId,
+      name,
+      description: description || '',
+      code,
+    };
+
     // Emit event for the UI to pick up (only after successful validation)
     if (appletGeneratedCallback) {
-      appletGeneratedCallback({
-        id: appletId,
-        name,
-        description: description || '',
-        code,
-      });
+      console.log(`[AppletTool] Emitting applet: ${name}`);
+      try {
+        appletGeneratedCallback(generatedApplet);
+      } catch (err) {
+        console.error('[AppletTool] Error in applet callback:', err);
+        // Queue it for retry
+        pendingApplets.push(generatedApplet);
+      }
+    } else {
+      // No callback registered yet - queue the applet for when UI is ready
+      console.log(`[AppletTool] No callback registered, queuing applet: ${name}`);
+      pendingApplets.push(generatedApplet);
     }
 
     return {
@@ -193,6 +230,7 @@ function Applet({ onSubmit }) {
       description,
       message: `Applet "${name}" compiled successfully and is now live in the Applets panel.`,
       _isApplet: true,
+      _queued: !appletGeneratedCallback, // Indicate if it was queued
     };
   },
 };
