@@ -156,8 +156,13 @@ class AppletStoreClass {
       isMinimized: false,
     };
 
+    console.log('[AppletStore] Creating applet:', applet.id, applet.metadata.name);
     this.state.activeApplets.set(applet.id, applet);
+    console.log('[AppletStore] Active applets count:', this.state.activeApplets.size);
     this.addToRecent(applet.metadata);
+
+    const listenerCount = this.listeners.get('applet:created')?.size || 0;
+    console.log('[AppletStore] Emitting applet:created event, listeners:', listenerCount);
     this.emit('applet:created', applet);
 
     return applet;

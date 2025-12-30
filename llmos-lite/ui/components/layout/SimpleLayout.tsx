@@ -39,28 +39,40 @@ function LayoutContent() {
 
   // Set up the applet generation callback when component mounts
   useEffect(() => {
-    setAppletGeneratedCallback((applet) => {
-      logger.applet(`Generated via tool: ${applet.name}`);
+    logger.applet('Registering applet generation callback');
 
-      // Create the applet in the store
-      createApplet({
-        code: applet.code,
-        metadata: {
-          id: applet.id,
-          name: applet.name,
-          description: applet.description,
-          version: '1.0.0',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      });
+    const handleAppletGenerated = (applet: { id: string; name: string; description: string; code: string }) => {
+      logger.applet(`Generated via tool: ${applet.name} (id: ${applet.id})`);
 
-      // Auto-open the applet panel
-      setAppletPanelMode('split');
-    });
+      try {
+        // Create the applet in the store
+        const createdApplet = createApplet({
+          code: applet.code,
+          metadata: {
+            id: applet.id,
+            name: applet.name,
+            description: applet.description,
+            version: '1.0.0',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+
+        logger.applet(`Applet created in store: ${createdApplet.id}`);
+
+        // Auto-open the applet panel
+        setAppletPanelMode('split');
+      } catch (err) {
+        logger.error('applet', 'Failed to create applet', { error: err });
+        console.error('[SimpleLayout] Failed to create applet:', err);
+      }
+    };
+
+    setAppletGeneratedCallback(handleAppletGenerated);
 
     // Cleanup on unmount
     return () => {
+      logger.applet('Unregistering applet generation callback');
       setAppletGeneratedCallback(null);
     };
   }, [createApplet]);

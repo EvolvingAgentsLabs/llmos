@@ -71,12 +71,17 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
 
   // Subscribe to store events
   useEffect(() => {
+    console.log('[AppletContext] Setting up store subscriptions');
+
     const unsubscribers = [
       AppletStore.on('applet:created', (applet) => {
+        console.log('[AppletContext] applet:created event received:', applet.id, applet.metadata?.name);
         syncState();
         setCurrentApplet(applet);
+        console.log('[AppletContext] currentApplet set to:', applet.id);
       }),
       AppletStore.on('applet:closed', () => {
+        console.log('[AppletContext] applet:closed event received');
         syncState();
         // Clear current if it was closed
         setCurrentApplet((prev) => {
@@ -93,8 +98,10 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
 
     // Initial sync
     syncState();
+    console.log('[AppletContext] Initial sync complete, activeApplets:', AppletStore.getActiveApplets().length);
 
     return () => {
+      console.log('[AppletContext] Cleaning up store subscriptions');
       unsubscribers.forEach((unsub) => unsub());
     };
   }, [syncState]);
