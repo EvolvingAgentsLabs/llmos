@@ -3,36 +3,77 @@
  *
  * Claude Agent SDK-inspired agentic architecture for LLMos.
  *
- * This module provides:
- * - MCP-compatible tool definitions
- * - LLM-based pattern matching
- * - Agentic orchestration with planning
- * - Evolution integration for continuous learning
+ * ## Philosophy
  *
- * Usage:
+ * Following the LLMos core principles:
+ * - **Agents are markdown files** that can be created, modified, and evolved
+ * - **Skills are markdown files** that encode learned knowledge
+ * - **Tools are markdown files** that define capabilities
+ * - **TypeScript is just a thin runtime** that loads and executes markdown agents
+ *
+ * ## Architecture
+ *
+ * ```
+ * system/agents/*.md     → Agent definitions (prompts + frontmatter)
+ * system/tools/*.md      → Tool definitions (capabilities)
+ * system/skills/*.md     → Learned skills and patterns
+ * lib/agents/*.ts        → Thin runtime executors
+ * ```
+ *
+ * ## Key Agents (Markdown Files)
+ *
+ * - `PatternMatcherAgent.md` - Semantic pattern matching using LLM
+ * - `PlanningAgent.md` - Creates execution plans before tasks
+ * - `SystemAgent.md` - Master orchestrator
+ * - `MutationAgent.md` - Cross-domain code transformation
+ *
+ * ## Usage
+ *
  * ```typescript
  * import {
- *   executeAgenticTask,
- *   getMCPToolRegistry,
- *   getLLMPatternMatcher,
- *   runEvolutionCycle
+ *   loadAndInvokeAgent,
+ *   invokePatternMatcher,
+ *   invokePlanningAgent,
+ *   executeAgenticTask
  * } from '@/lib/agents';
+ *
+ * // Invoke a markdown-defined agent directly
+ * const result = await loadAndInvokeAgent(
+ *   'system/agents/PatternMatcherAgent.md',
+ *   'Find similar tasks to: Create FFT visualization',
+ *   { traces: [...] }
+ * );
  *
  * // Execute a task with planning and memory
  * const result = await executeAgenticTask('Create a data visualization', {
  *   planFirst: true,
  *   queryMemory: true
  * });
- *
- * // Get pattern analysis
- * const patterns = await getLLMPatternMatcher().extractPatterns();
- *
- * // Run evolution cycle
- * const report = await runEvolutionCycle();
  * ```
  */
 
-// MCP-Compatible Tools
+// =============================================================================
+// Agent Loader (Thin Runtime for Markdown Agents)
+// =============================================================================
+
+export {
+  type AgentFrontmatter,
+  type LoadedAgent,
+  type AgentInvocation,
+  type AgentResponse,
+  loadAgent,
+  invokeAgent,
+  loadAndInvokeAgent,
+  invokePatternMatcher,
+  invokePlanningAgent,
+  discoverAgents,
+  loadAgentRegistry
+} from './agent-loader';
+
+// =============================================================================
+// MCP-Compatible Tools (Runtime Executors)
+// =============================================================================
+
 export {
   type MCPToolDefinition,
   type MCPToolCall,
@@ -53,7 +94,10 @@ export {
   toAnthropicTools
 } from './mcp-tools';
 
-// LLM Pattern Matcher
+// =============================================================================
+// LLM Pattern Matcher (Uses PatternMatcherAgent.md)
+// =============================================================================
+
 export {
   type ExecutionTrace,
   type PatternMatch,
@@ -64,7 +108,10 @@ export {
   getLLMPatternMatcher
 } from './llm-pattern-matcher';
 
-// Agentic Orchestrator
+// =============================================================================
+// Agentic Orchestrator (Coordinates Markdown Agents)
+// =============================================================================
+
 export {
   type AgentPlan,
   type PlanStep,
@@ -78,7 +125,10 @@ export {
   executeAgenticTask
 } from './agentic-orchestrator';
 
-// Evolution Integration
+// =============================================================================
+// Evolution Integration (Skill Generation from Patterns)
+// =============================================================================
+
 export {
   type EvolutionTrigger,
   type SkillCandidate,
