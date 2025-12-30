@@ -275,6 +275,7 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     focusApplet,
     handleAppletSubmit,
     updateAppletState,
+    updateAppletCode,
     createApplet,
     recentApplets,
   } = useApplets();
@@ -327,6 +328,10 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     updateAppletState(appletId, state);
   };
 
+  const handleCodeUpdate = (appletId: string) => (code: string) => {
+    updateAppletCode(appletId, code);
+  };
+
   const handleClose = (appletId: string) => {
     closeApplet(appletId);
     if (selectedAppletId === appletId) {
@@ -370,6 +375,7 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
           onMinimize={handleMinimize}
           onSubmit={handleSubmit(fullViewApplet.id)}
           onSave={handleSave(fullViewApplet.id)}
+          onCodeUpdate={handleCodeUpdate(fullViewApplet.id)}
         />
       </div>
     );

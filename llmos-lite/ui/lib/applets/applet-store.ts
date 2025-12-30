@@ -48,6 +48,7 @@ type AppletEventType =
   | 'applet:maximized'
   | 'applet:submitted'
   | 'applet:state-updated'
+  | 'applet:code-updated'
   | 'applet:saved';
 
 type AppletEventCallback = (applet: ActiveApplet, data?: unknown) => void;
@@ -212,6 +213,19 @@ class AppletStoreClass {
     if (applet) {
       applet.state = { ...applet.state, ...state };
       this.emit('applet:state-updated', applet, state);
+    }
+  }
+
+  /**
+   * Update applet code
+   */
+  updateAppletCode(id: string, code: string): void {
+    const applet = this.state.activeApplets.get(id);
+    if (applet) {
+      console.log('[AppletStore] Updating applet code:', id);
+      applet.code = code;
+      applet.metadata.updatedAt = new Date().toISOString();
+      this.emit('applet:code-updated', applet, code);
     }
   }
 

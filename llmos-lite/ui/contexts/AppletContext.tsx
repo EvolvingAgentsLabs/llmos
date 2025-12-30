@@ -44,6 +44,7 @@ interface AppletContextValue {
   focusApplet: (id: string) => void;
   toggleMinimize: (id: string) => void;
   updateAppletState: (id: string, state: AppletState) => void;
+  updateAppletCode: (id: string, code: string) => void;
   handleAppletSubmit: (appletId: string, data: unknown) => void;
   getSubmissions: (appletId: string) => AppletSubmission[];
 
@@ -94,6 +95,10 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
       AppletStore.on('applet:minimized', syncState),
       AppletStore.on('applet:maximized', syncState),
       AppletStore.on('applet:state-updated', syncState),
+      AppletStore.on('applet:code-updated', (applet) => {
+        console.log('[AppletContext] applet:code-updated event received:', applet.id);
+        syncState();
+      }),
     ];
 
     // Initial sync
@@ -152,6 +157,11 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
     AppletStore.updateAppletState(id, state);
   }, []);
 
+  // Update applet code
+  const updateAppletCode = useCallback((id: string, code: string) => {
+    AppletStore.updateAppletCode(id, code);
+  }, []);
+
   // Handle applet submission
   const handleAppletSubmit = useCallback(
     (appletId: string, data: unknown) => {
@@ -178,6 +188,7 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
     focusApplet,
     toggleMinimize,
     updateAppletState,
+    updateAppletCode,
     handleAppletSubmit,
     getSubmissions,
     onAppletSubmit,
