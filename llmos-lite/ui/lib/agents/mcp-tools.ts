@@ -462,7 +462,7 @@ async function executeQueryMemory(args: Record<string, any>): Promise<MCPToolRes
     const queryTerms = query.toLowerCase().split(/\s+/);
     const scored = entries.map(entry => {
       const lower = entry.toLowerCase();
-      const score = queryTerms.reduce((sum, term) =>
+      const score = queryTerms.reduce((sum: number, term: string) =>
         sum + (lower.includes(term) ? 1 : 0), 0);
       return { entry, score };
     });
