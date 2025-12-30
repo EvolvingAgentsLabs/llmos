@@ -12,7 +12,8 @@
  * - Agents can be created, modified, and evolved as files
  */
 
-import { createLLMClient, Message } from '../llm/client';
+import { createLLMClient } from '../llm/client';
+import { Message } from '../llm/types';
 
 // =============================================================================
 // Types (matching markdown frontmatter structure)
