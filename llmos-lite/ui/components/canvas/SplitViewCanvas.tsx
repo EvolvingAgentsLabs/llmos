@@ -12,6 +12,17 @@ import { useState, useEffect } from 'react';
 import { getLivePreview, ExecutionResult } from '@/lib/runtime/live-preview';
 import { getVolumeFileSystem, VolumeType } from '@/lib/volumes/file-operations';
 import { getVFS } from '@/lib/virtual-fs';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Monaco Editor to avoid SSR issues
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center bg-bg-primary">
+      <div className="text-fg-tertiary text-sm">Loading editor...</div>
+    </div>
+  ),
+});
 
 interface SplitViewCanvasProps {
   volume: VolumeType;
@@ -111,6 +122,35 @@ export default function SplitViewCanvas({
       'bash': 'Bash',
     };
     return typeMap[ext] || ext.toUpperCase() || 'Text';
+  };
+
+  // Get Monaco language from file extension
+  const getMonacoLanguage = (path: string): string => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const languageMap: Record<string, string> = {
+      'py': 'python',
+      'js': 'javascript',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'jsx': 'javascript',
+      'json': 'json',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'md': 'markdown',
+      'css': 'css',
+      'html': 'html',
+      'sql': 'sql',
+      'sh': 'shell',
+      'bash': 'shell',
+      'xml': 'xml',
+      'go': 'go',
+      'rust': 'rust',
+      'rs': 'rust',
+      'cpp': 'cpp',
+      'c': 'c',
+      'java': 'java',
+    };
+    return languageMap[ext] || 'plaintext';
   };
 
   // Load file content on mount
@@ -281,13 +321,42 @@ export default function SplitViewCanvas({
             </span>
           </div>
 
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="flex-1 w-full p-4 bg-bg-primary text-fg-primary font-mono text-sm resize-none focus:outline-none"
-            placeholder="# Write your Python code here..."
-            spellCheck={false}
-          />
+          <div className="flex-1 min-h-0">
+            <MonacoEditor
+              height="100%"
+              language={getMonacoLanguage(relativePath)}
+              value={code}
+              onChange={(value) => setCode(value || '')}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                automaticLayout: true,
+                tabSize: 2,
+                padding: { top: 12, bottom: 12 },
+                folding: true,
+                renderLineHighlight: 'line',
+                cursorBlinking: 'smooth',
+                smoothScrolling: true,
+              }}
+              onMount={(editor) => {
+                // Add keyboard shortcuts
+                editor.addCommand(
+                  // Ctrl/Cmd + S to save
+                  2097 /* KeyMod.CtrlCmd */ | 49 /* KeyCode.KeyS */,
+                  () => saveFile()
+                );
+                editor.addCommand(
+                  // Ctrl/Cmd + Enter to run
+                  2097 /* KeyMod.CtrlCmd */ | 3 /* KeyCode.Enter */,
+                  () => executeCode()
+                );
+              }}
+            />
+          </div>
         </div>
 
         {/* Resize Handle */}
@@ -352,28 +421,48 @@ export default function SplitViewCanvas({
                       ✗ Error
                     </span>
                   )}
+                  <span className="text-[10px] text-fg-muted">
+                    {executionResult.executionTime}ms
+                  </span>
                 </div>
 
-                {/* Stdout */}
-                {executionResult.stdout && (
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wide">
-                      Output
+                {/* Error Details - Show prominently when there's an error */}
+                {!executionResult.success && executionResult.error && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold text-accent-error uppercase tracking-wide flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Error Details
                     </div>
-                    <pre className="p-3 bg-bg-secondary rounded text-xs font-mono text-fg-secondary whitespace-pre-wrap">
-                      {executionResult.stdout}
+                    <div className="p-4 bg-accent-error/10 border border-accent-error/30 rounded-lg">
+                      <pre className="text-sm font-mono text-accent-error whitespace-pre-wrap break-words">
+                        {executionResult.error}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stderr - Show if different from error */}
+                {executionResult.stderr && executionResult.stderr !== executionResult.error && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide">
+                      Standard Error (stderr)
+                    </div>
+                    <pre className="p-3 bg-orange-500/10 border border-orange-500/30 rounded text-xs font-mono text-orange-300 whitespace-pre-wrap overflow-x-auto">
+                      {executionResult.stderr}
                     </pre>
                   </div>
                 )}
 
-                {/* Stderr/Errors */}
-                {executionResult.stderr && (
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold text-accent-error uppercase tracking-wide">
-                      Errors
+                {/* Stdout */}
+                {executionResult.stdout && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wide">
+                      Output (stdout)
                     </div>
-                    <pre className="p-3 bg-accent-error/10 border border-accent-error/30 rounded text-xs font-mono text-accent-error whitespace-pre-wrap">
-                      {executionResult.stderr}
+                    <pre className="p-3 bg-bg-secondary rounded text-xs font-mono text-fg-secondary whitespace-pre-wrap overflow-x-auto">
+                      {executionResult.stdout}
                     </pre>
                   </div>
                 )}
@@ -399,13 +488,22 @@ export default function SplitViewCanvas({
 
                 {/* Return Value */}
                 {executionResult.returnValue !== undefined && executionResult.returnValue !== null && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wide">
                       Return Value
                     </div>
-                    <pre className="p-3 bg-bg-secondary rounded text-xs font-mono text-fg-secondary">
-                      {String(executionResult.returnValue)}
+                    <pre className="p-3 bg-bg-secondary rounded text-xs font-mono text-fg-secondary overflow-x-auto">
+                      {typeof executionResult.returnValue === 'object'
+                        ? JSON.stringify(executionResult.returnValue, null, 2)
+                        : String(executionResult.returnValue)}
                     </pre>
+                  </div>
+                )}
+
+                {/* Debug Info - Show when no output at all */}
+                {!executionResult.stdout && !executionResult.stderr && !executionResult.error && executionResult.success && (
+                  <div className="text-center py-4 text-fg-muted text-sm">
+                    Code executed successfully with no output
                   </div>
                 )}
               </div>
