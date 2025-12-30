@@ -14,7 +14,8 @@
  * 4. ITERATE: Continue until task complete or max iterations
  */
 
-import { createLLMClient, Message } from '../llm/client';
+import { createLLMClient } from '../llm/client';
+import { Message } from '../llm/types';
 import { getMCPToolRegistry, MCPToolDefinition, MCPToolCall, MCPToolResult, toAnthropicTools } from './mcp-tools';
 import { getLLMPatternMatcher, ExecutionTrace, PatternMatch } from './llm-pattern-matcher';
 import { getVFS } from '../virtual-fs';

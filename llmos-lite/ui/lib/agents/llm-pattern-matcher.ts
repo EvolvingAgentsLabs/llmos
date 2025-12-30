@@ -11,7 +11,8 @@
  * - Learning consolidation from experiences
  */
 
-import { createLLMClient, Message } from '../llm/client';
+import { createLLMClient } from '../llm/client';
+import { Message } from '../llm/types';
 
 // =============================================================================
 // Types
