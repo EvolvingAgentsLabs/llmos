@@ -23,14 +23,46 @@ export interface VFSDirectory {
 const VFS_PREFIX = 'vfs:';
 const VFS_INDEX_KEY = 'vfs:index';
 
+// Event types for VFS
+export type VFSEventType = 'file:created' | 'file:updated' | 'file:deleted' | 'directory:created' | 'directory:deleted';
+export type VFSEventCallback = (path: string, file?: VFSFile) => void;
+
 /**
  * Virtual File System
  */
 export class VirtualFileSystem {
   private static instance: VirtualFileSystem;
+  private listeners: Map<VFSEventType, Set<VFSEventCallback>> = new Map();
 
   private constructor() {
     this.ensureIndex();
+  }
+
+  /**
+   * Add an event listener
+   */
+  on(event: VFSEventType, callback: VFSEventCallback): () => void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+
+    return () => {
+      this.listeners.get(event)?.delete(callback);
+    };
+  }
+
+  /**
+   * Emit an event
+   */
+  private emit(event: VFSEventType, path: string, file?: VFSFile): void {
+    this.listeners.get(event)?.forEach((callback) => {
+      try {
+        callback(path, file);
+      } catch (error) {
+        console.error(`Error in VFS event handler for ${event}:`, error);
+      }
+    });
   }
 
   static getInstance(): VirtualFileSystem {
@@ -137,6 +169,7 @@ export class VirtualFileSystem {
 
     const now = new Date().toISOString();
     const existingFile = this.readFile(normalizedPath);
+    const isNewFile = !existingFile;
 
     const file: VFSFile = {
       path: normalizedPath,
@@ -156,6 +189,9 @@ export class VirtualFileSystem {
       index.files.push(normalizedPath);
       this.updateIndex(index);
     }
+
+    // Emit event
+    this.emit(isNewFile ? 'file:created' : 'file:updated', normalizedPath, file);
   }
 
   /**
@@ -246,6 +282,9 @@ export class VirtualFileSystem {
 
     const normalizedPath = this.normalizePath(path);
 
+    // Get file before deleting for event
+    const file = this.readFile(normalizedPath);
+
     // Remove from storage
     localStorage.removeItem(VFS_PREFIX + normalizedPath);
 
@@ -253,6 +292,9 @@ export class VirtualFileSystem {
     const index = this.getIndex();
     index.files = index.files.filter(f => f !== normalizedPath);
     this.updateIndex(index);
+
+    // Emit event
+    this.emit('file:deleted', normalizedPath, file || undefined);
 
     return true;
   }
@@ -276,15 +318,20 @@ export class VirtualFileSystem {
       d === normalizedPath || d.startsWith(normalizedPath + '/')
     );
 
-    // Delete all files
+    // Delete all files and emit events
     for (const filePath of filesToDelete) {
+      const file = this.readFile(filePath);
       localStorage.removeItem(VFS_PREFIX + filePath);
+      this.emit('file:deleted', filePath, file || undefined);
     }
 
     // Update index - remove files and directories
     index.files = index.files.filter(f => !filesToDelete.includes(f));
     index.directories = index.directories.filter(d => !dirsToDelete.includes(d));
     this.updateIndex(index);
+
+    // Emit directory deleted event
+    this.emit('directory:deleted', normalizedPath);
 
     return true;
   }

@@ -24,6 +24,7 @@ import {
 } from '@/lib/applets/applet-store';
 import { AppletMetadata, AppletState } from '@/lib/runtime/applet-runtime';
 import { VolumeType } from '@/lib/volumes/file-operations';
+import { useDesktopAppletSync } from '@/hooks/useDesktopAppletSync';
 
 interface AppletContextValue {
   // State
@@ -63,6 +64,9 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
   const [activeApplets, setActiveApplets] = useState<ActiveApplet[]>([]);
   const [recentApplets, setRecentApplets] = useState<AppletMetadata[]>([]);
   const [currentApplet, setCurrentApplet] = useState<ActiveApplet | null>(null);
+
+  // Enable desktop applet sync with VFS
+  useDesktopAppletSync();
 
   // Sync state with store
   const syncState = useCallback(() => {
