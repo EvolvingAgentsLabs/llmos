@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { getLivePreview, ExecutionResult } from '@/lib/runtime/live-preview';
 import { getVolumeFileSystem, VolumeType } from '@/lib/volumes/file-operations';
+import { getVFS } from '@/lib/virtual-fs';
 
 interface SplitViewCanvasProps {
   volume: VolumeType;
@@ -130,26 +131,46 @@ export default function SplitViewCanvas({
   }, [relativePath, autoExecute]);
 
   const loadFile = async () => {
+    console.log('[SplitViewCanvas] Loading file:', { actualVolume, relativePath, displayPath, filePath });
+
+    // For user volume files starting with 'projects/', read directly from VFS
+    if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+      try {
+        const vfs = getVFS();
+        const content = vfs.readFileContent(relativePath);
+        if (content !== null) {
+          console.log('[SplitViewCanvas] Loaded from VFS:', relativePath);
+          setCode(content);
+          return;
+        }
+      } catch (vfsError) {
+        console.error('[SplitViewCanvas] Failed to load from VFS:', vfsError);
+      }
+    }
+
+    // For system files, try loading from public folder first
+    if (actualVolume === 'system') {
+      try {
+        const response = await fetch(`/system/${relativePath}`);
+        if (response.ok) {
+          const content = await response.text();
+          console.log('[SplitViewCanvas] Loaded system file from public folder:', relativePath);
+          setCode(content);
+          return;
+        }
+      } catch (fetchError) {
+        console.error('[SplitViewCanvas] Failed to fetch system file:', fetchError);
+      }
+    }
+
+    // Fallback to volume file system (GitHub-backed)
     try {
-      console.log('[SplitViewCanvas] Loading file:', { actualVolume, relativePath, displayPath });
       const content = await fileSystem.readFile(actualVolume, relativePath);
+      console.log('[SplitViewCanvas] Loaded from volume file system:', relativePath);
       setCode(content);
     } catch (error) {
       console.error('[SplitViewCanvas] Failed to load file:', error);
-      // Try loading as a system file from public folder
-      if (actualVolume === 'system') {
-        try {
-          const response = await fetch(`/system/${relativePath}`);
-          if (response.ok) {
-            const content = await response.text();
-            setCode(content);
-            return;
-          }
-        } catch (fetchError) {
-          console.error('[SplitViewCanvas] Failed to fetch system file:', fetchError);
-        }
-      }
-      setCode(`// Failed to load file: ${displayPath}`);
+      setCode(`// Failed to load file: ${displayPath}\n// Path: ${relativePath}\n// Volume: ${actualVolume}`);
     }
   };
 
@@ -177,6 +198,23 @@ export default function SplitViewCanvas({
   };
 
   const saveFile = async () => {
+    // For user volume files starting with 'projects/', save directly to VFS
+    if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+      try {
+        const vfs = getVFS();
+        vfs.writeFile(relativePath, code);
+        console.log('[SplitViewCanvas] Saved to VFS:', relativePath);
+
+        if (autoExecute) {
+          executeCode();
+        }
+        return;
+      } catch (vfsError) {
+        console.error('[SplitViewCanvas] Failed to save to VFS:', vfsError);
+      }
+    }
+
+    // Fallback to volume file system
     try {
       const originalContent = await fileSystem.readFile(actualVolume, relativePath);
       await fileSystem.editFile(actualVolume, relativePath, originalContent, code);
