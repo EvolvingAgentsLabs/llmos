@@ -32,29 +32,124 @@ export default function SplitViewCanvas({
   const livePreview = getLivePreview();
   const fileSystem = getVolumeFileSystem();
 
+  // Parse the file path to extract actual volume and relative path
+  // filePath might be: "/volumes/system/agents/file.md" or "projects/myproject/file.py"
+  const parseFilePath = (path: string): { actualVolume: VolumeType; relativePath: string; displayPath: string } => {
+    let actualVolume: VolumeType = volume;
+    let relativePath = path;
+    let displayPath = path;
+
+    // Handle /volumes/system/... paths
+    if (path.startsWith('/volumes/system/')) {
+      actualVolume = 'system';
+      relativePath = path.replace('/volumes/system/', '');
+      displayPath = `system/${relativePath}`;
+    }
+    // Handle /volumes/team/... paths
+    else if (path.startsWith('/volumes/team/')) {
+      actualVolume = 'team';
+      relativePath = path.replace('/volumes/team/', '');
+      displayPath = `team/${relativePath}`;
+    }
+    // Handle /volumes/user/projects/... paths
+    else if (path.startsWith('/volumes/user/projects/')) {
+      actualVolume = 'user';
+      relativePath = path.replace('/volumes/user/', '');
+      displayPath = `user/${relativePath}`;
+    }
+    // Handle /volumes/user/... paths
+    else if (path.startsWith('/volumes/user/')) {
+      actualVolume = 'user';
+      relativePath = path.replace('/volumes/user/', '');
+      displayPath = `user/${relativePath}`;
+    }
+    // Handle paths starting with projects/ (VFS paths)
+    else if (path.startsWith('projects/')) {
+      actualVolume = 'user';
+      relativePath = path;
+      displayPath = `user/${path}`;
+    }
+    // Handle system/ paths
+    else if (path.startsWith('system/')) {
+      actualVolume = 'system';
+      relativePath = path.replace('system/', '');
+      displayPath = path;
+    }
+    // Handle leading slash
+    else if (path.startsWith('/')) {
+      relativePath = path.substring(1);
+      displayPath = `${volume}/${relativePath}`;
+    }
+    // Default - use as-is with provided volume
+    else {
+      displayPath = `${volume}/${path}`;
+    }
+
+    return { actualVolume, relativePath, displayPath };
+  };
+
+  const { actualVolume, relativePath, displayPath } = parseFilePath(filePath);
+
+  // Get file type label from file extension
+  const getFileType = (path: string): string => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const typeMap: Record<string, string> = {
+      'py': 'Python',
+      'js': 'JavaScript',
+      'ts': 'TypeScript',
+      'tsx': 'TypeScript React',
+      'jsx': 'JavaScript React',
+      'json': 'JSON',
+      'yaml': 'YAML',
+      'yml': 'YAML',
+      'md': 'Markdown',
+      'css': 'CSS',
+      'html': 'HTML',
+      'sql': 'SQL',
+      'sh': 'Shell',
+      'bash': 'Bash',
+    };
+    return typeMap[ext] || ext.toUpperCase() || 'Text';
+  };
+
   // Load file content on mount
   useEffect(() => {
     loadFile();
-  }, [volume, filePath]);
+  }, [actualVolume, relativePath]);
 
   // Watch for auto-execute
   useEffect(() => {
     if (!autoExecute) return;
 
-    const unwatch = livePreview.watchFile(filePath, (result) => {
+    const unwatch = livePreview.watchFile(relativePath, (result) => {
       setExecutionResult(result);
       setIsExecuting(false);
     });
 
     return unwatch;
-  }, [filePath, autoExecute]);
+  }, [relativePath, autoExecute]);
 
   const loadFile = async () => {
     try {
-      const content = await fileSystem.readFile(volume, filePath);
+      console.log('[SplitViewCanvas] Loading file:', { actualVolume, relativePath, displayPath });
+      const content = await fileSystem.readFile(actualVolume, relativePath);
       setCode(content);
     } catch (error) {
-      console.error('Failed to load file:', error);
+      console.error('[SplitViewCanvas] Failed to load file:', error);
+      // Try loading as a system file from public folder
+      if (actualVolume === 'system') {
+        try {
+          const response = await fetch(`/system/${relativePath}`);
+          if (response.ok) {
+            const content = await response.text();
+            setCode(content);
+            return;
+          }
+        } catch (fetchError) {
+          console.error('[SplitViewCanvas] Failed to fetch system file:', fetchError);
+        }
+      }
+      setCode(`// Failed to load file: ${displayPath}`);
     }
   };
 
@@ -62,7 +157,7 @@ export default function SplitViewCanvas({
     setIsExecuting(true);
 
     try {
-      const result = await livePreview.executeFile(filePath, code, {
+      const result = await livePreview.executeFile(relativePath, code, {
         autoExecute: false,
         capturePlots: true
       });
@@ -83,14 +178,14 @@ export default function SplitViewCanvas({
 
   const saveFile = async () => {
     try {
-      const originalContent = await fileSystem.readFile(volume, filePath);
-      await fileSystem.editFile(volume, filePath, originalContent, code);
+      const originalContent = await fileSystem.readFile(actualVolume, relativePath);
+      await fileSystem.editFile(actualVolume, relativePath, originalContent, code);
 
       if (autoExecute) {
         executeCode();
       }
     } catch (error) {
-      console.error('Failed to save file:', error);
+      console.error('[SplitViewCanvas] Failed to save file:', error);
     }
   };
 
@@ -100,10 +195,10 @@ export default function SplitViewCanvas({
       <div className="px-4 py-2 border-b border-border-primary/50 bg-bg-secondary/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-fg-secondary">
-            {volume}-volume/{filePath}
+            {displayPath}
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-primary/20 text-accent-primary">
-            Python
+            {getFileType(relativePath)}
           </span>
         </div>
 
