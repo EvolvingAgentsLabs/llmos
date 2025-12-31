@@ -7,12 +7,16 @@
  * - Icon cards in a grid (like macOS Launchpad or Windows Start)
  * - Click to open/expand an applet
  * - Full view mode for running applets
- * - JARVIS avatar when empty
+ * - Organized desktop with regions when empty
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApplets } from '@/contexts/AppletContext';
 import { ActiveApplet } from '@/lib/applets/applet-store';
+import {
+  DesktopAppletManager,
+  DesktopApplet,
+} from '@/lib/applets/desktop-applet-manager';
 import {
   Grid3X3, Sparkles,
   Calculator, FileText, Clock, Palette,
@@ -24,6 +28,7 @@ import dynamic from 'next/dynamic';
 import { AppletIconCard } from './AppletIconCard';
 import { FullAppletView } from './FullAppletView';
 import { SYSTEM_APPLETS, SystemAppletType } from './system-applets';
+import OrganizedDesktop from './OrganizedDesktop';
 
 // Lazy load 3D avatar to avoid SSR issues
 const JarvisAvatar = dynamic(
@@ -351,15 +356,60 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     }
   };
 
-  // No applets - show empty desktop with JARVIS
+  // Handle opening applet from organized desktop
+  const handleOpenDesktopApplet = useCallback(async (desktopApplet: DesktopApplet) => {
+    // Check if already active
+    const existingApplet = activeApplets.find(
+      a => a.filePath === desktopApplet.filePath || a.metadata.id === desktopApplet.id
+    );
+
+    if (existingApplet) {
+      focusApplet(existingApplet.id);
+      setSelectedAppletId(existingApplet.id);
+      setViewMode('full');
+      return;
+    }
+
+    // Load applet code from VFS
+    try {
+      const { getVFS } = await import('@/lib/virtual-fs');
+      const vfs = getVFS();
+      const file = vfs.readFile(desktopApplet.filePath);
+
+      if (!file || !file.content) {
+        console.error('Failed to load applet code from:', desktopApplet.filePath);
+        return;
+      }
+
+      const applet = createApplet({
+        code: file.content,
+        metadata: {
+          id: desktopApplet.id,
+          name: desktopApplet.name,
+          description: desktopApplet.description || '',
+          version: '1.0.0',
+          createdAt: desktopApplet.createdAt,
+          updatedAt: new Date().toISOString(),
+          tags: [desktopApplet.volume],
+        },
+        filePath: desktopApplet.filePath,
+        volume: desktopApplet.volume,
+      });
+
+      setSelectedAppletId(applet.id);
+      setViewMode('full');
+    } catch (error) {
+      console.error('Failed to open desktop applet:', error);
+    }
+  }, [activeApplets, createApplet, focusApplet]);
+
+  // No applets - show organized desktop with regions
   if (activeApplets.length === 0 || showEmptyState) {
     return (
       <div className={`h-full ${className}`}>
-        <EmptyDesktop
-          customMessage={emptyMessage}
+        <OrganizedDesktop
           onLaunchApplet={handleLaunchSystemApplet}
-          recentApplets={recentApplets.map(a => ({ id: a.id, name: a.name, description: a.description }))}
-          onOpenRecent={handleOpenRecentApplet}
+          onOpenApplet={handleOpenDesktopApplet}
         />
       </div>
     );

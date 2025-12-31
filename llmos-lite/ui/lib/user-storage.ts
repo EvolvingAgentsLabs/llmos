@@ -22,6 +22,14 @@ export const UserStorage = {
   STORAGE_KEYS: {
     USER: 'llmos_user',
     TEAM: 'llmos_team',
+    // Additional keys to clear on logout
+    SESSIONS: 'llmos_sessions',
+    CRON_JOBS: 'llmos_cron_jobs',
+    ACTIVE_SESSION: 'llmos_active_session',
+    WORKSPACE_PREFERENCES: 'llmos_workspace_preferences',
+    APPLET_STORE: 'llmos-applet-store',
+    DESKTOP_APPLETS: 'llmos-desktop-applets',
+    VFS_INDEX: 'vfs:index',
   },
 
   /**
@@ -72,13 +80,24 @@ export const UserStorage = {
   },
 
   /**
-   * Clear all user/team data
+   * Clear all user/team data and application state
    */
   clearAll(): void {
     if (typeof window !== 'undefined') {
+      // Clear all defined storage keys
       Object.values(this.STORAGE_KEYS).forEach(key => {
         localStorage.removeItem(key);
       });
+
+      // Clear all VFS files (items with 'vfs:' prefix)
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('vfs:')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
     }
   },
 

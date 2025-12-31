@@ -22,8 +22,9 @@ import {
   ActiveApplet,
   AppletSubmission,
 } from '@/lib/applets/applet-store';
-import { AppletMetadata, AppletState } from '@/lib/runtime/applet-runtime';
+import { AppletMetadata, AppletState, preloadBabel } from '@/lib/runtime/applet-runtime';
 import { VolumeType } from '@/lib/volumes/file-operations';
+import { useDesktopAppletSync } from '@/hooks/useDesktopAppletSync';
 
 interface AppletContextValue {
   // State
@@ -63,6 +64,20 @@ export function AppletProvider({ children, onAppletSubmit }: AppletProviderProps
   const [activeApplets, setActiveApplets] = useState<ActiveApplet[]>([]);
   const [recentApplets, setRecentApplets] = useState<AppletMetadata[]>([]);
   const [currentApplet, setCurrentApplet] = useState<ActiveApplet | null>(null);
+
+  // Enable desktop applet sync with VFS
+  useDesktopAppletSync();
+
+  // Preload Babel for applet compilation
+  useEffect(() => {
+    preloadBabel().then((loaded) => {
+      if (loaded) {
+        console.log('[AppletContext] Babel preloaded successfully');
+      } else {
+        console.warn('[AppletContext] Babel preload failed, will retry on first compile');
+      }
+    });
+  }, []);
 
   // Sync state with store
   const syncState = useCallback(() => {
