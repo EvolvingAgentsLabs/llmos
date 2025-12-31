@@ -9,6 +9,7 @@
  * - Saving applet state
  * - Viewing applet code
  * - Closing/minimizing
+ * - AI-powered error fixing (uses LLM to analyze and fix code errors)
  */
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
@@ -19,6 +20,7 @@ import {
   AppletExports,
   AppletProps,
 } from '@/lib/runtime/applet-runtime';
+import { fixAppletError, isCodeError } from '@/lib/applets/applet-error-fixer';
 import {
   X,
   Minimize2,
@@ -32,6 +34,7 @@ import {
   Loader2,
   FileCode,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 
 interface AppletViewerProps {
@@ -42,12 +45,13 @@ interface AppletViewerProps {
   onClose?: () => void;
   onSave?: (state: AppletState) => void;
   onCodeView?: () => void;
+  onCodeUpdate?: (code: string) => void;  // Callback when AI fixes the code
   className?: string;
   showControls?: boolean;
   autoCompile?: boolean;
 }
 
-type ViewerStatus = 'idle' | 'compiling' | 'running' | 'error';
+type ViewerStatus = 'idle' | 'compiling' | 'running' | 'error' | 'fixing';
 
 export function AppletViewer({
   code,
@@ -57,6 +61,7 @@ export function AppletViewer({
   onClose,
   onSave,
   onCodeView,
+  onCodeUpdate,
   className = '',
   showControls = true,
   autoCompile = true,
@@ -69,19 +74,92 @@ export function AppletViewer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [fixAttempt, setFixAttempt] = useState(0);
+  const [currentCode, setCurrentCode] = useState(code);
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
   const MAX_AUTO_RETRIES = 3;
+  const MAX_FIX_ATTEMPTS = 3;
+
+  // Update currentCode when code prop changes
+  useEffect(() => {
+    setCurrentCode(code);
+  }, [code]);
+
+  // AI-powered error fixing
+  const attemptAIFix = useCallback(async (errorMsg: string, codeToFix: string) => {
+    if (fixAttempt >= MAX_FIX_ATTEMPTS) {
+      console.log('[AppletViewer] Max AI fix attempts reached');
+      return false;
+    }
+
+    setStatus('fixing');
+    setError(`AI is analyzing and fixing the error... (attempt ${fixAttempt + 1}/${MAX_FIX_ATTEMPTS})`);
+
+    try {
+      const result = await fixAppletError(
+        codeToFix,
+        errorMsg,
+        initialMetadata?.name,
+        fixAttempt + 1
+      );
+
+      if (result.success && result.fixedCode) {
+        console.log(`[AppletViewer] AI fix attempt ${fixAttempt + 1} successful`);
+        setCurrentCode(result.fixedCode);
+        setFixAttempt(prev => prev + 1);
+
+        // Notify parent of code update if callback provided
+        if (onCodeUpdate) {
+          onCodeUpdate(result.fixedCode);
+        }
+
+        // Try to compile the fixed code
+        setStatus('compiling');
+        setError(null);
+
+        const compileResult = await AppletRuntime.compile(result.fixedCode);
+
+        if (compileResult.success && compileResult.exports) {
+          setExports(compileResult.exports);
+          setWarnings(compileResult.warnings || []);
+          setStatus('running');
+          setFixAttempt(0);
+          return true;
+        } else {
+          // Still has errors, try again if attempts remaining
+          const newError = compileResult.error || 'Unknown compilation error';
+          if (fixAttempt + 1 < MAX_FIX_ATTEMPTS) {
+            console.log('[AppletViewer] Fixed code still has errors, retrying...');
+            return attemptAIFix(newError, result.fixedCode);
+          } else {
+            setError(newError);
+            setStatus('error');
+            return false;
+          }
+        }
+      } else {
+        console.log('[AppletViewer] AI fix failed:', result.error);
+        return false;
+      }
+    } catch (err: any) {
+      console.error('[AppletViewer] AI fix error:', err);
+      return false;
+    }
+  }, [fixAttempt, initialMetadata?.name, onCodeUpdate]);
 
   // Compile the applet with auto-retry for transient errors
-  const compile = useCallback(async (isAutoRetry = false) => {
+  const compile = useCallback(async (isAutoRetry = false, codeToCompile?: string) => {
+    const compileCode = codeToCompile || currentCode;
     setStatus('compiling');
     if (!isAutoRetry) {
       setError(null);
       setRetryCount(0);
+      setFixAttempt(0);
     }
     setWarnings([]);
 
     try {
-      const result = await AppletRuntime.compile(code);
+      const result = await AppletRuntime.compile(compileCode);
 
       if (result.success && result.exports) {
         setExports(result.exports);
@@ -91,7 +169,7 @@ export function AppletViewer({
       } else {
         const errorMsg = result.error || 'Unknown compilation error';
 
-        // Auto-retry for Babel loading errors
+        // Check if it's a Babel loading error (infrastructure issue)
         const isBabelError = errorMsg.toLowerCase().includes('babel');
         const currentRetry = isAutoRetry ? retryCount : 0;
 
@@ -99,9 +177,14 @@ export function AppletViewer({
           console.log(`[AppletViewer] Babel error, auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
           setRetryCount(currentRetry + 1);
           setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
-          // Wait with exponential backoff before retrying
-          setTimeout(() => compile(true), 1500 * (currentRetry + 1));
+          setTimeout(() => compile(true, compileCode), 1500 * (currentRetry + 1));
           return;
+        }
+
+        // For code errors, attempt AI fix if auto-fixing is enabled
+        if (isAutoFixing && isCodeError(errorMsg) && fixAttempt < MAX_FIX_ATTEMPTS) {
+          const fixed = await attemptAIFix(errorMsg, compileCode);
+          if (fixed) return;
         }
 
         setError(errorMsg);
@@ -110,7 +193,7 @@ export function AppletViewer({
     } catch (err: any) {
       const errorMsg = err.message || 'Compilation failed';
 
-      // Auto-retry for Babel loading errors
+      // Check if it's a Babel loading error
       const isBabelError = errorMsg.toLowerCase().includes('babel');
       const currentRetry = isAutoRetry ? retryCount : 0;
 
@@ -118,14 +201,29 @@ export function AppletViewer({
         console.log(`[AppletViewer] Babel error (exception), auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
         setRetryCount(currentRetry + 1);
         setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
-        setTimeout(() => compile(true), 1500 * (currentRetry + 1));
+        setTimeout(() => compile(true, codeToCompile), 1500 * (currentRetry + 1));
         return;
+      }
+
+      // For code errors, attempt AI fix if auto-fixing is enabled
+      if (isAutoFixing && isCodeError(errorMsg) && fixAttempt < MAX_FIX_ATTEMPTS) {
+        const fixed = await attemptAIFix(errorMsg, compileCode);
+        if (fixed) return;
       }
 
       setError(errorMsg);
       setStatus('error');
     }
-  }, [code, retryCount]);
+  }, [currentCode, retryCount, isAutoFixing, fixAttempt, attemptAIFix]);
+
+  // Manual AI fix trigger
+  const triggerAIFix = useCallback(async () => {
+    if (!error) return;
+    setFixAttempt(0); // Reset attempts for manual trigger
+    setIsAutoFixing(true);
+    await attemptAIFix(error, currentCode);
+    setIsAutoFixing(false);
+  }, [error, currentCode, attemptAIFix]);
 
   // Auto-compile on mount or code change
   useEffect(() => {
@@ -217,6 +315,12 @@ export function AppletViewer({
               <span className="flex items-center gap-1 text-xs text-red-400">
                 <AlertCircle className="w-3 h-3" />
                 Error
+              </span>
+            )}
+            {status === 'fixing' && (
+              <span className="flex items-center gap-1 text-xs text-purple-400">
+                <Wand2 className="w-3 h-3 animate-pulse" />
+                AI Fixing
               </span>
             )}
           </div>
@@ -314,19 +418,44 @@ export function AppletViewer({
           </div>
         )}
 
+        {status === 'fixing' && (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <Wand2 className="w-12 h-12 mb-4 animate-pulse text-purple-500" />
+            <p className="text-purple-400 mb-2">AI is Fixing the Code</p>
+            <p className="text-sm text-gray-500">{error}</p>
+          </div>
+        )}
+
         {status === 'error' && (
           <div className="flex flex-col items-center justify-center h-full">
             <AlertCircle className="w-12 h-12 mb-4 text-red-500" />
             <p className="text-red-400 mb-2">Compilation Error</p>
-            <div className="max-w-md p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <div className="max-w-md p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
               <pre className="text-sm text-red-300 whitespace-pre-wrap font-mono">{error}</pre>
             </div>
-            <button
-              onClick={() => compile()}
-              className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-            >
-              Try Again
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => compile()}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Try Again
+              </button>
+              {isCodeError(error || '') && (
+                <button
+                  onClick={triggerAIFix}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                  title="Use AI to analyze and fix the error"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  Fix with AI
+                </button>
+              )}
+            </div>
+            {fixAttempt > 0 && (
+              <p className="mt-3 text-xs text-gray-500">
+                AI fix attempts: {fixAttempt}/{MAX_FIX_ATTEMPTS}
+              </p>
+            )}
           </div>
         )}
 
