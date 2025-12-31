@@ -12,6 +12,8 @@ import type { VolumeType } from './volumes/file-operations';
 
 // Dynamic import for applet runtime to avoid SSR issues
 let compileAppletFn: ((code: string) => Promise<any>) | null = null;
+let fixAppletErrorFn: ((originalCode: string, errorMessage: string, appletName?: string, attemptNumber?: number) => Promise<any>) | null = null;
+let isCodeErrorFn: ((errorMessage: string) => boolean) | null = null;
 
 async function getCompileApplet() {
   if (!compileAppletFn) {
@@ -19,6 +21,15 @@ async function getCompileApplet() {
     compileAppletFn = compileApplet;
   }
   return compileAppletFn;
+}
+
+async function getErrorFixer() {
+  if (!fixAppletErrorFn || !isCodeErrorFn) {
+    const { fixAppletError, isCodeError } = await import('./applets/applet-error-fixer');
+    fixAppletErrorFn = fixAppletError;
+    isCodeErrorFn = isCodeError;
+  }
+  return { fixAppletError: fixAppletErrorFn, isCodeError: isCodeErrorFn };
 }
 
 export interface ToolDefinition {
@@ -148,6 +159,7 @@ function Applet({ onSubmit }) {
   ],
   execute: async (inputs) => {
     const { name, description, code } = inputs;
+    const MAX_FIX_ATTEMPTS = 3;
 
     if (!name || typeof name !== 'string') {
       throw new Error('Invalid name parameter');
@@ -174,63 +186,115 @@ function Applet({ onSubmit }) {
       };
     }
 
-    // Try to compile the code to catch errors BEFORE showing to user
-    try {
-      const compileApplet = await getCompileApplet();
-      const result = await compileApplet(code);
+    // Try to compile the code with auto-fix loop
+    let currentCode = code;
+    let lastError = '';
+    const fixAttempts: string[] = [];
 
-      if (!result.success) {
-        // Return the error to the LLM so it can fix the code
-        return {
-          success: false,
-          error: `COMPILATION_ERROR: ${result.error}`,
-          hint: 'Fix the code and call generate-applet again. Common issues: 1) Arrow functions instead of function declarations, 2) TypeScript types, 3) Import/export statements, 4) Unescaped special characters in template strings.',
-          code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
-        };
-      }
-    } catch (compileError: any) {
-      // Return compilation error to LLM
-      return {
-        success: false,
-        error: `COMPILATION_ERROR: ${compileError.message}`,
-        hint: 'The code failed to compile. Common issues: syntax errors, unclosed brackets, invalid JSX. Fix and retry.',
-        code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
-      };
-    }
-
-    const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-
-    const generatedApplet: GeneratedApplet = {
-      id: appletId,
-      name,
-      description: description || '',
-      code,
-    };
-
-    // Emit event for the UI to pick up (only after successful validation)
-    if (appletGeneratedCallback) {
-      console.log(`[AppletTool] Emitting applet: ${name}`);
+    for (let attempt = 1; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
       try {
-        appletGeneratedCallback(generatedApplet);
-      } catch (err) {
-        console.error('[AppletTool] Error in applet callback:', err);
-        // Queue it for retry
-        pendingApplets.push(generatedApplet);
+        const compileApplet = await getCompileApplet();
+        const result = await compileApplet(currentCode);
+
+        if (result.success) {
+          // Compilation succeeded!
+          const appletId = `applet-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+          const generatedApplet: GeneratedApplet = {
+            id: appletId,
+            name,
+            description: description || '',
+            code: currentCode,
+          };
+
+          // Emit event for the UI to pick up (only after successful validation)
+          if (appletGeneratedCallback) {
+            console.log(`[AppletTool] Emitting applet: ${name}${attempt > 1 ? ` (fixed on attempt ${attempt})` : ''}`);
+            try {
+              appletGeneratedCallback(generatedApplet);
+            } catch (err) {
+              console.error('[AppletTool] Error in applet callback:', err);
+              pendingApplets.push(generatedApplet);
+            }
+          } else {
+            console.log(`[AppletTool] No callback registered, queuing applet: ${name}`);
+            pendingApplets.push(generatedApplet);
+          }
+
+          return {
+            success: true,
+            appletId,
+            name,
+            description,
+            message: attempt > 1
+              ? `Applet "${name}" compiled successfully after ${attempt} attempt(s) and is now live in the Applets panel.`
+              : `Applet "${name}" compiled successfully and is now live in the Applets panel.`,
+            _isApplet: true,
+            _queued: !appletGeneratedCallback,
+            _fixAttempts: attempt > 1 ? fixAttempts : undefined,
+          };
+        }
+
+        // Compilation failed - try to auto-fix
+        lastError = result.error || 'Unknown compilation error';
+        console.log(`[AppletTool] Compilation failed (attempt ${attempt}/${MAX_FIX_ATTEMPTS}): ${lastError}`);
+
+        // Check if this is a code error that can be fixed (not infrastructure error)
+        const { fixAppletError, isCodeError } = await getErrorFixer();
+
+        if (!isCodeError(lastError)) {
+          // Infrastructure error (like Babel not loading) - can't fix with LLM
+          console.log('[AppletTool] Infrastructure error detected, cannot auto-fix');
+          break;
+        }
+
+        // Try to fix with LLM
+        if (attempt < MAX_FIX_ATTEMPTS) {
+          console.log(`[AppletTool] Attempting AI fix (attempt ${attempt}/${MAX_FIX_ATTEMPTS})...`);
+          const fixResult = await fixAppletError(currentCode, lastError, name, attempt);
+
+          if (fixResult.success && fixResult.fixedCode) {
+            fixAttempts.push(`Attempt ${attempt}: ${lastError.substring(0, 100)}... -> Fixed`);
+            currentCode = fixResult.fixedCode;
+            console.log(`[AppletTool] AI fix applied, retrying compilation...`);
+            continue;
+          } else {
+            fixAttempts.push(`Attempt ${attempt}: ${lastError.substring(0, 100)}... -> Fix failed: ${fixResult.error}`);
+            console.log(`[AppletTool] AI fix failed: ${fixResult.error}`);
+          }
+        }
+      } catch (compileError: any) {
+        lastError = compileError.message || 'Unknown error';
+        console.log(`[AppletTool] Compilation exception (attempt ${attempt}/${MAX_FIX_ATTEMPTS}): ${lastError}`);
+
+        // Check if we can fix this
+        const { fixAppletError, isCodeError } = await getErrorFixer();
+
+        if (!isCodeError(lastError)) {
+          break;
+        }
+
+        if (attempt < MAX_FIX_ATTEMPTS) {
+          const fixResult = await fixAppletError(currentCode, lastError, name, attempt);
+
+          if (fixResult.success && fixResult.fixedCode) {
+            fixAttempts.push(`Attempt ${attempt}: ${lastError.substring(0, 100)}... -> Fixed`);
+            currentCode = fixResult.fixedCode;
+            continue;
+          } else {
+            fixAttempts.push(`Attempt ${attempt}: ${lastError.substring(0, 100)}... -> Fix failed: ${fixResult.error}`);
+          }
+        }
       }
-    } else {
-      // No callback registered yet - queue the applet for when UI is ready
-      console.log(`[AppletTool] No callback registered, queuing applet: ${name}`);
-      pendingApplets.push(generatedApplet);
     }
 
+    // All attempts failed - return error to LLM
     return {
-      success: true,
-      appletId,
-      name,
-      description,
-      message: `Applet "${name}" compiled successfully and is now live in the Applets panel.`,
-      _isApplet: true,
-      _queued: !appletGeneratedCallback, // Indicate if it was queued
+      success: false,
+      error: `COMPILATION_ERROR: ${lastError}`,
+      hint: 'The code failed to compile after multiple auto-fix attempts. Please review and fix manually. Common issues: 1) Arrow functions instead of function declarations, 2) TypeScript types, 3) Import/export statements, 4) Unescaped special characters in template strings.',
+      code_received: code.substring(0, 500) + (code.length > 500 ? '...' : ''),
+      fixAttempts: fixAttempts.length > 0 ? fixAttempts : undefined,
     };
   },
 };
