@@ -68,11 +68,16 @@ export function AppletViewer({
   const [appletState, setAppletState] = useState<AppletState>(initialState || {});
   const [isMaximized, setIsMaximized] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_AUTO_RETRIES = 3;
 
-  // Compile the applet
-  const compile = useCallback(async () => {
+  // Compile the applet with auto-retry for transient errors
+  const compile = useCallback(async (isAutoRetry = false) => {
     setStatus('compiling');
-    setError(null);
+    if (!isAutoRetry) {
+      setError(null);
+      setRetryCount(0);
+    }
     setWarnings([]);
 
     try {
@@ -82,15 +87,45 @@ export function AppletViewer({
         setExports(result.exports);
         setWarnings(result.warnings || []);
         setStatus('running');
+        setRetryCount(0);
       } else {
-        setError(result.error || 'Unknown compilation error');
+        const errorMsg = result.error || 'Unknown compilation error';
+
+        // Auto-retry for Babel loading errors
+        const isBabelError = errorMsg.toLowerCase().includes('babel');
+        const currentRetry = isAutoRetry ? retryCount : 0;
+
+        if (isBabelError && currentRetry < MAX_AUTO_RETRIES) {
+          console.log(`[AppletViewer] Babel error, auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
+          setRetryCount(currentRetry + 1);
+          setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
+          // Wait with exponential backoff before retrying
+          setTimeout(() => compile(true), 1500 * (currentRetry + 1));
+          return;
+        }
+
+        setError(errorMsg);
         setStatus('error');
       }
     } catch (err: any) {
-      setError(err.message || 'Compilation failed');
+      const errorMsg = err.message || 'Compilation failed';
+
+      // Auto-retry for Babel loading errors
+      const isBabelError = errorMsg.toLowerCase().includes('babel');
+      const currentRetry = isAutoRetry ? retryCount : 0;
+
+      if (isBabelError && currentRetry < MAX_AUTO_RETRIES) {
+        console.log(`[AppletViewer] Babel error (exception), auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
+        setRetryCount(currentRetry + 1);
+        setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
+        setTimeout(() => compile(true), 1500 * (currentRetry + 1));
+        return;
+      }
+
+      setError(errorMsg);
       setStatus('error');
     }
-  }, [code]);
+  }, [code, retryCount]);
 
   // Auto-compile on mount or code change
   useEffect(() => {
@@ -189,7 +224,7 @@ export function AppletViewer({
           <div className="flex items-center gap-1">
             {/* Recompile button */}
             <button
-              onClick={compile}
+              onClick={() => compile()}
               className="p-1.5 hover:bg-gray-700 rounded transition-colors"
               title="Recompile"
             >
@@ -264,7 +299,7 @@ export function AppletViewer({
             <Play className="w-12 h-12 mb-4" />
             <p>Click to compile and run applet</p>
             <button
-              onClick={compile}
+              onClick={() => compile()}
               className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               Run Applet
@@ -287,7 +322,7 @@ export function AppletViewer({
               <pre className="text-sm text-red-300 whitespace-pre-wrap font-mono">{error}</pre>
             </div>
             <button
-              onClick={compile}
+              onClick={() => compile()}
               className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
               Try Again

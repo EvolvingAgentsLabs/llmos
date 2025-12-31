@@ -8,6 +8,8 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { UserStorage } from '@/lib/user-storage';
+import { LLMStorage } from '@/lib/llm-client';
 import CommandPalette from './CommandPalette';
 
 // Lazy load panels
@@ -272,19 +274,39 @@ export default function FluidLayout() {
           )}
         </div>
 
-        {/* Right: Command palette trigger */}
-        <button
-          onClick={openCommandPalette}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-                     bg-bg-elevated border border-border-primary
-                     text-fg-secondary hover:text-fg-primary hover:bg-bg-hover
-                     transition-all"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className="text-xs">⌘K</span>
-        </button>
+        {/* Right: Settings + Command palette trigger */}
+        <div className="flex items-center gap-2">
+          {/* Logout/Settings button */}
+          <button
+            onClick={() => {
+              if (confirm('Are you sure you want to logout?\n\nThis will clear all local data including your API key, profile, and preferences.')) {
+                UserStorage.clearAll();
+                LLMStorage.clearAll();
+                window.location.reload();
+              }
+            }}
+            className="p-2 rounded-lg text-fg-secondary hover:text-red-400 hover:bg-red-500/10 transition-all"
+            title="Logout & Clear Data"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+
+          {/* Command palette trigger */}
+          <button
+            onClick={openCommandPalette}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg
+                       bg-bg-elevated border border-border-primary
+                       text-fg-secondary hover:text-fg-primary hover:bg-bg-hover
+                       transition-all"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span className="text-xs">⌘K</span>
+          </button>
+        </div>
       </header>
 
       {/* Command Palette */}
