@@ -62,9 +62,11 @@ export interface AppletFile {
 // Babel standalone loader
 let babelLoaded = false;
 let babelLoadPromise: Promise<void> | null = null;
+let babelLoadRetries = 0;
+const MAX_BABEL_RETRIES = 3;
 
 async function loadBabel(): Promise<void> {
-  if (babelLoaded) return;
+  if (babelLoaded && (window as any).Babel) return;
   if (babelLoadPromise) return babelLoadPromise;
 
   babelLoadPromise = new Promise((resolve, reject) => {
@@ -80,20 +82,71 @@ async function loadBabel(): Promise<void> {
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@babel/standalone@7.23.6/babel.min.js';
-    script.async = true;
-    script.onload = () => {
-      babelLoaded = true;
-      resolve();
+    const attemptLoad = (retryCount: number) => {
+      // Remove any existing failed script
+      const existingScript = document.querySelector('script[data-babel-loader]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/@babel/standalone@7.23.6/babel.min.js';
+      script.async = true;
+      script.setAttribute('data-babel-loader', 'true');
+
+      script.onload = () => {
+        // Verify Babel is actually available
+        if ((window as any).Babel) {
+          babelLoaded = true;
+          babelLoadRetries = 0;
+          resolve();
+        } else {
+          // Script loaded but Babel not available - retry
+          if (retryCount < MAX_BABEL_RETRIES) {
+            console.warn(`[AppletRuntime] Babel script loaded but Babel object not found, retrying (${retryCount + 1}/${MAX_BABEL_RETRIES})`);
+            setTimeout(() => attemptLoad(retryCount + 1), 500 * (retryCount + 1));
+          } else {
+            reject(new Error('Babel script loaded but Babel object not available'));
+          }
+        }
+      };
+
+      script.onerror = () => {
+        if (retryCount < MAX_BABEL_RETRIES) {
+          console.warn(`[AppletRuntime] Failed to load Babel, retrying (${retryCount + 1}/${MAX_BABEL_RETRIES})`);
+          setTimeout(() => attemptLoad(retryCount + 1), 1000 * (retryCount + 1));
+        } else {
+          reject(new Error('Failed to load Babel standalone after multiple attempts'));
+        }
+      };
+
+      document.head.appendChild(script);
     };
-    script.onerror = () => {
-      reject(new Error('Failed to load Babel standalone'));
-    };
-    document.head.appendChild(script);
+
+    attemptLoad(0);
   });
 
   return babelLoadPromise;
+}
+
+/**
+ * Preload Babel - call this early to avoid delays when compiling
+ */
+export async function preloadBabel(): Promise<boolean> {
+  try {
+    await loadBabel();
+    return true;
+  } catch (error) {
+    console.error('[AppletRuntime] Failed to preload Babel:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if Babel is loaded
+ */
+export function isBabelLoaded(): boolean {
+  return babelLoaded && !!(window as any)?.Babel;
 }
 
 // Available libraries in the applet scope
@@ -146,13 +199,38 @@ const createAppletScope = () => {
 
 /**
  * Transpile TSX code to JavaScript using Babel Standalone
+ * Includes retry logic if Babel fails to load
  */
-async function transpileTSX(code: string): Promise<string> {
-  await loadBabel();
+async function transpileTSX(code: string, retryCount = 0): Promise<string> {
+  const MAX_RETRIES = 3;
+
+  try {
+    await loadBabel();
+  } catch (loadError: any) {
+    // Reset the promise to allow retry
+    babelLoadPromise = null;
+    babelLoaded = false;
+
+    if (retryCount < MAX_RETRIES) {
+      console.warn(`[AppletRuntime] Babel load failed, retrying transpilation (${retryCount + 1}/${MAX_RETRIES})`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+      return transpileTSX(code, retryCount + 1);
+    }
+    throw new Error(`Failed to load Babel after ${MAX_RETRIES} attempts: ${loadError.message}`);
+  }
 
   const Babel = (window as any).Babel;
   if (!Babel) {
-    throw new Error('Babel not available');
+    // Reset and retry
+    babelLoadPromise = null;
+    babelLoaded = false;
+
+    if (retryCount < MAX_RETRIES) {
+      console.warn(`[AppletRuntime] Babel not available after load, retrying (${retryCount + 1}/${MAX_RETRIES})`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+      return transpileTSX(code, retryCount + 1);
+    }
+    throw new Error('Babel not available after multiple load attempts. Please refresh the page.');
   }
 
   try {
@@ -434,6 +512,8 @@ export const AppletRuntime = {
   createBoilerplate: createAppletBoilerplate,
   generateId: generateAppletId,
   validate: validateAppletCode,
+  preloadBabel,
+  isBabelLoaded,
 };
 
 export default AppletRuntime;
