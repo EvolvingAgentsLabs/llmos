@@ -614,6 +614,13 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
         'code-debugger.md',
         'MemoryAnalysisAgent.md',
         'MemoryConsolidationAgent.md',
+        'AppletDebuggerAgent.md',
+        'LensSelectorAgent.md',
+        'MutationAgent.md',
+        'PatternMatcherAgent.md',
+        'PlanningAgent.md',
+        'SystemAgent.md',
+        'UXDesigner.md',
       ];
 
       for (const fileName of knownSystemAgents) {
