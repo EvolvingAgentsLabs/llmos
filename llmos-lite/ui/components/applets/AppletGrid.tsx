@@ -358,17 +358,25 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
 
   // Handle opening applet from organized desktop
   const handleOpenDesktopApplet = useCallback(async (desktopApplet: DesktopApplet) => {
-    // Check if already active
+    console.log('[AppletGrid] Opening desktop applet:', desktopApplet.id, desktopApplet.filePath);
+    console.log('[AppletGrid] Active applets:', activeApplets.map(a => ({ id: a.id, metaId: a.metadata.id, filePath: a.filePath })));
+
+    // Check if already active - match by filePath, metadata.id, or top-level id
     const existingApplet = activeApplets.find(
-      a => a.filePath === desktopApplet.filePath || a.metadata.id === desktopApplet.id
+      a => a.filePath === desktopApplet.filePath ||
+           a.metadata.id === desktopApplet.id ||
+           a.id === desktopApplet.id
     );
 
     if (existingApplet) {
+      console.log('[AppletGrid] Found existing applet, opening:', existingApplet.id);
       focusApplet(existingApplet.id);
       setSelectedAppletId(existingApplet.id);
       setViewMode('full');
       return;
     }
+
+    console.log('[AppletGrid] Applet not in active list, loading from VFS:', desktopApplet.filePath);
 
     // Load applet code from VFS
     try {

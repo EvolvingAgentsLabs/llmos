@@ -211,6 +211,8 @@ export default function FluidLayout() {
         const now = new Date().toISOString();
 
         // Create the applet in the store (for runtime)
+        // IMPORTANT: Use same filePath as DesktopAppletManager for matching
+        const generatedFilePath = `generated/${applet.id}`;
         const createdApplet = createApplet({
           code: applet.code,
           metadata: {
@@ -222,6 +224,7 @@ export default function FluidLayout() {
             updatedAt: now,
           },
           volume: 'user',
+          filePath: generatedFilePath,
         });
 
         console.log(`[FluidLayout] Applet created in store: ${createdApplet.id}`);
@@ -231,7 +234,7 @@ export default function FluidLayout() {
           id: applet.id,
           name: applet.name,
           description: applet.description,
-          filePath: `generated/${applet.id}`,
+          filePath: generatedFilePath,
           volume: 'user',
           createdAt: now,
           isActive: true,
