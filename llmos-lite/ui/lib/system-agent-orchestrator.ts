@@ -15,6 +15,12 @@ import {
   SummarizationStrategy,
   ContextManagerConfig,
 } from './workflow-context-manager';
+import {
+  validateProjectAgents,
+  formatValidationForLLM,
+  MIN_AGENTS_REQUIRED,
+  MultiAgentValidation,
+} from './agents/multi-agent-validator';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -35,10 +41,21 @@ export interface SystemAgentResult {
     memoryUpdated: boolean;
     learnings: string[];
   };
+  multiAgentValidation?: {
+    isValid: boolean;
+    agentCount: number;
+    minimumRequired: number;
+    agents: Array<{
+      name: string;
+      origin: 'copied' | 'evolved' | 'created';
+      type: string;
+    }>;
+    message: string;
+  };
 }
 
 export interface AgentProgressEvent {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation';
   agent?: string;
   action?: string;
   tool?: string;
@@ -423,6 +440,44 @@ export class SystemAgentOrchestrator {
         await this.contextManager.save();
       }
 
+      // Multi-agent validation: ensure project has at least 3 agents
+      let multiAgentValidation: SystemAgentResult['multiAgentValidation'] | undefined;
+      if (projectPath) {
+        this.emitProgress({
+          type: 'multi-agent-validation',
+          agent: 'SystemAgent',
+          action: 'Validating multi-agent requirement',
+          details: `Checking if project has at least ${MIN_AGENTS_REQUIRED} agents`,
+        });
+
+        const validation = validateProjectAgents(projectPath);
+        multiAgentValidation = {
+          isValid: validation.isValid,
+          agentCount: validation.agentCount,
+          minimumRequired: validation.minimumRequired,
+          agents: validation.agents.map(a => ({
+            name: a.name,
+            origin: a.origin,
+            type: a.type,
+          })),
+          message: validation.message,
+        };
+
+        this.emitProgress({
+          type: 'multi-agent-validation',
+          agent: 'SystemAgent',
+          action: validation.isValid ? 'Multi-agent validation passed' : 'Multi-agent validation warning',
+          details: validation.message,
+        });
+
+        // If validation fails, add warning to final response
+        if (!validation.isValid) {
+          console.warn(`[SystemAgent] Multi-agent validation failed: ${validation.message}`);
+          // Append validation report to final response
+          finalResponse += `\n\n---\n\n⚠️ **Multi-Agent Requirement Warning**\n\n${formatValidationForLLM(validation)}`;
+        }
+      }
+
       // Emit completion event
       this.emitProgress({
         type: 'completed',
@@ -446,6 +501,7 @@ export class SystemAgentOrchestrator {
           strategy: this.config.strategy,
         },
         evolution: evolutionResult,
+        multiAgentValidation,
       };
     } catch (error: any) {
       const executionTime = performance.now() - startTime;

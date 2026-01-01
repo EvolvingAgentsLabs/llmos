@@ -9,6 +9,12 @@ import { executePython } from './pyodide-runtime';
 import { getSubAgentExecutor } from './subagents/subagent-executor';
 import { getSubAgentUsage, SubAgentUsageRecord } from './subagents/usage-tracker';
 import type { VolumeType } from './volumes/file-operations';
+import {
+  validateProjectAgents,
+  formatValidationForLLM,
+  suggestAgentsForProject,
+  MIN_AGENTS_REQUIRED,
+} from './agents/multi-agent-validator';
 
 // Dynamic import for applet runtime to avoid SSR issues
 let compileAppletFn: ((code: string) => Promise<any>) | null = null;
@@ -621,6 +627,7 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
         'PlanningAgent.md',
         'SystemAgent.md',
         'UXDesigner.md',
+        'ProjectAgentPlanner.md',
       ];
 
       for (const fileName of knownSystemAgents) {
@@ -871,6 +878,78 @@ export const InvokeSubAgentTool: ToolDefinition = {
 };
 
 /**
+ * Validate Project Agents Tool
+ * Validates that a project meets the 3-agent minimum requirement
+ */
+export const ValidateProjectAgentsTool: ToolDefinition = {
+  id: 'validate-project-agents',
+  name: 'Validate Project Agents',
+  description: `Validates that a project meets the multi-agent requirement (minimum ${MIN_AGENTS_REQUIRED} agents).
+
+Use this tool to:
+- Check if a project has enough agents before completion
+- Get recommendations for additional agents if needed
+- See breakdown of agents by origin (copied, evolved, created)
+
+Returns validation status, agent inventory, and recommendations for missing agents.`,
+  inputs: [
+    {
+      name: 'projectPath',
+      type: 'string',
+      description: 'Path to the project (e.g., "projects/my_project")',
+      required: true,
+    },
+    {
+      name: 'userGoal',
+      type: 'string',
+      description: 'Optional user goal to provide context-aware recommendations for missing agents',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { projectPath, userGoal } = inputs;
+
+    if (!projectPath || typeof projectPath !== 'string') {
+      throw new Error('Invalid projectPath parameter');
+    }
+
+    // Validate the project
+    const validation = validateProjectAgents(projectPath);
+
+    // Get context-aware suggestions if goal provided and validation failed
+    let suggestions: any[] = [];
+    if (!validation.isValid && userGoal) {
+      suggestions = await suggestAgentsForProject(projectPath, userGoal);
+    }
+
+    return {
+      success: true,
+      isValid: validation.isValid,
+      agentCount: validation.agentCount,
+      minimumRequired: validation.minimumRequired,
+      missingCount: validation.missingCount,
+      agents: validation.agents.map(a => ({
+        name: a.name,
+        path: a.path,
+        type: a.type,
+        origin: a.origin,
+        evolvedFrom: a.evolvedFrom,
+        capabilities: a.capabilities,
+      })),
+      breakdown: {
+        copied: validation.agentsByOrigin.copied.length,
+        evolved: validation.agentsByOrigin.evolved.length,
+        created: validation.agentsByOrigin.created.length,
+      },
+      recommendations: validation.isValid ? undefined : validation.recommendations,
+      suggestions: suggestions.length > 0 ? suggestions : undefined,
+      message: validation.message,
+      formattedReport: formatValidationForLLM(validation),
+    };
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -882,6 +961,7 @@ export function getSystemTools(): ToolDefinition[] {
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
     GenerateAppletTool,
+    ValidateProjectAgentsTool,
   ];
 }
 
