@@ -350,10 +350,24 @@ export class SystemAgentOrchestrator {
             if (toolCall.toolId === 'write-file' && toolCall.inputs.path) {
               filesCreated.push(toolCall.inputs.path);
 
-              // Detect project path
+              // Detect project path - only for actual project structures
+              // A project must have a proper directory structure (not just a file in /projects/)
               if (!projectPath && toolCall.inputs.path.startsWith('projects/')) {
                 const parts = toolCall.inputs.path.split('/');
-                if (parts.length >= 2) {
+                // Only consider it a project if:
+                // 1. Path has at least 3 parts (projects/projectName/something)
+                // 2. The path suggests project structure (components/, agents/, output/, etc.)
+                const isProjectStructure = parts.length >= 3 && (
+                  parts.includes('components') ||
+                  parts.includes('agents') ||
+                  parts.includes('output') ||
+                  parts.includes('memory') ||
+                  // Or if explicitly creating a project config file
+                  parts[parts.length - 1] === 'project.json' ||
+                  parts[parts.length - 1] === 'README.md'
+                );
+
+                if (isProjectStructure && parts.length >= 2) {
                   projectPath = `projects/${parts[1]}`;
                 }
               }

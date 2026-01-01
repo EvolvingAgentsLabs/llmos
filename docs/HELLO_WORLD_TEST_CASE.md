@@ -243,9 +243,13 @@ Delete the file at /projects/hello-world-test.txt from the user volume.
 ```
 
 **Expected Behavior**:
-1. Agent removes the file
+1. Agent removes the file (or overwrites with empty content)
 2. Confirmation shown
-3. File removed from GitHub
+3. File removed/emptied in GitHub
+
+**Known Limitations**:
+- No native `delete-file` tool exists - the agent uses `write-file` with empty content as a workaround
+- File entry may remain in VFS with 0 bytes rather than being truly deleted
 
 **Note**: If delete is not available, you can verify by listing `/projects/` to confirm file operations work.
 
@@ -633,6 +637,10 @@ Use this for rapid system validation:
 **Cause**: Project has fewer than 3 agents
 **Fix**: Ensure project includes at least 3 agent definitions
 
+#### Multi-agent validation triggers on file operations (FIXED in v1.1)
+**Cause**: Previously, any file write to `/projects/` would trigger multi-agent validation, even for simple file operations like creating or deleting a single file.
+**Fix**: Fixed in `system-agent-orchestrator.ts` - validation now only triggers when creating proper project structures (directories with `components/`, `agents/`, `output/`, etc.)
+
 ### Debug Commands
 
 Open browser console and run:
@@ -727,9 +735,10 @@ By completing all tests successfully, you can confirm that LLMos-Lite is fully o
 |---------|------|---------|
 | 1.0 | 2026-01-01 | Initial document |
 | 1.1 | 2026-01-01 | Updated file system tests with correct paths (`/projects/`), corrected tool names to kebab-case, added file system structure documentation |
+| 1.2 | 2026-01-01 | Added Test 3.5 known limitations (no delete-file tool), documented and fixed multi-agent validation bug that incorrectly triggered on simple file operations |
 
 ---
 
-*Document Version: 1.1*
+*Document Version: 1.2*
 *Last Updated: 2026-01-01*
 *For LLMos-Lite v1.x*
