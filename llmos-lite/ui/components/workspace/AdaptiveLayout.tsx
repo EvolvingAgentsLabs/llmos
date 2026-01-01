@@ -134,6 +134,8 @@ export default function AdaptiveLayout() {
         const now = new Date().toISOString();
 
         // Create the applet in the store (for runtime)
+        // IMPORTANT: Use same filePath as DesktopAppletManager for matching
+        const generatedFilePath = `generated/${applet.id}`;
         createApplet({
           code: applet.code,
           metadata: {
@@ -145,6 +147,7 @@ export default function AdaptiveLayout() {
             updatedAt: now,
           },
           volume: 'user',
+          filePath: generatedFilePath,
         });
         console.log(`[AdaptiveLayout] Applet created in store: ${applet.id}`);
 
@@ -153,7 +156,7 @@ export default function AdaptiveLayout() {
           id: applet.id,
           name: applet.name,
           description: applet.description,
-          filePath: `generated/${applet.id}`,
+          filePath: generatedFilePath,
           volume: 'user',
           createdAt: now,
           isActive: true,

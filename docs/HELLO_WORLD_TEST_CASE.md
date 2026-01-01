@@ -650,6 +650,17 @@ Use this for rapid system validation:
 - Added `setAppletGeneratedCallback` registration to `FluidLayout.tsx` and `AdaptiveLayout.tsx`
 - Also added `DesktopAppletManager.addApplet()` call so applets appear in the "Personal Applets" region
 
+#### Applets displayed but not launching on click (FIXED in v1.5)
+**Cause**: After v1.4 fix, applets appeared in the "Personal Applets" region but clicking on them had no effect. The issue was a mismatch between how applets were stored:
+1. `createApplet()` was called WITHOUT a `filePath` parameter
+2. `DesktopAppletManager.addApplet()` was called WITH `filePath: 'generated/${applet.id}'`
+3. When clicking an applet, `handleOpenDesktopApplet` tried to match by `filePath` or `metadata.id`, but the AppletStore entry had no `filePath`
+
+**Fix**:
+- In `FluidLayout.tsx` and `AdaptiveLayout.tsx`: Pass consistent `filePath` to both `createApplet()` and `DesktopAppletManager.addApplet()`
+- In `AppletGrid.tsx`: Improved matching logic to also check `a.id === desktopApplet.id`
+- Added debug logging to trace applet opening flow
+
 ### Debug Commands
 
 Open browser console and run:
@@ -747,9 +758,10 @@ By completing all tests successfully, you can confirm that LLMos-Lite is fully o
 | 1.2 | 2026-01-01 | Added Test 3.5 known limitations (no delete-file tool), documented and fixed multi-agent validation bug that incorrectly triggered on simple file operations |
 | 1.3 | 2026-01-01 | Fixed applet callback registration for FluidLayout and AdaptiveLayout |
 | 1.4 | 2026-01-01 | Complete applet fix - also add to DesktopAppletManager so applets appear in Personal Applets region |
+| 1.5 | 2026-01-01 | Fixed applet click/launch - ensure filePath is passed to createApplet() and improve matching in handleOpenDesktopApplet |
 
 ---
 
-*Document Version: 1.4*
+*Document Version: 1.5*
 *Last Updated: 2026-01-01*
 *For LLMos-Lite v1.x*
