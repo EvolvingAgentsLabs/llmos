@@ -12,6 +12,7 @@ import { useApplets } from '@/contexts/AppletContext';
 import { UserStorage } from '@/lib/user-storage';
 import { LLMStorage } from '@/lib/llm-client';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
+import { DesktopAppletManager } from '@/lib/applets/desktop-applet-manager';
 import CommandPalette from './CommandPalette';
 
 // Lazy load panels
@@ -207,7 +208,9 @@ export default function FluidLayout() {
       console.log(`[FluidLayout] Applet generated via tool: ${applet.name} (id: ${applet.id})`);
 
       try {
-        // Create the applet in the store
+        const now = new Date().toISOString();
+
+        // Create the applet in the store (for runtime)
         const createdApplet = createApplet({
           code: applet.code,
           metadata: {
@@ -215,12 +218,26 @@ export default function FluidLayout() {
             name: applet.name,
             description: applet.description,
             version: '1.0.0',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: now,
+            updatedAt: now,
           },
+          volume: 'user',
         });
 
         console.log(`[FluidLayout] Applet created in store: ${createdApplet.id}`);
+
+        // Also add to DesktopAppletManager (for UI regions display)
+        DesktopAppletManager.addApplet({
+          id: applet.id,
+          name: applet.name,
+          description: applet.description,
+          filePath: `generated/${applet.id}`,
+          volume: 'user',
+          createdAt: now,
+          isActive: true,
+        });
+
+        console.log(`[FluidLayout] Applet added to desktop: ${applet.id}`);
 
         // Switch to applets view to show the new applet
         setContextViewMode('applets');
