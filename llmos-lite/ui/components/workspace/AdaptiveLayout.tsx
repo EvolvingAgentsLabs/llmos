@@ -6,6 +6,7 @@ import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
 import { useApplets } from '@/contexts/AppletContext';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
+import { DesktopAppletManager } from '@/lib/applets/desktop-applet-manager';
 import Header from '../layout/Header';
 import SidebarPanel from '../sidebar/SidebarPanel';
 import ChatPanel from '../chat/ChatPanel';
@@ -130,6 +131,9 @@ export default function AdaptiveLayout() {
       console.log(`[AdaptiveLayout] Applet generated via tool: ${applet.name} (id: ${applet.id})`);
 
       try {
+        const now = new Date().toISOString();
+
+        // Create the applet in the store (for runtime)
         createApplet({
           code: applet.code,
           metadata: {
@@ -137,11 +141,24 @@ export default function AdaptiveLayout() {
             name: applet.name,
             description: applet.description,
             version: '1.0.0',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: now,
+            updatedAt: now,
           },
+          volume: 'user',
         });
         console.log(`[AdaptiveLayout] Applet created in store: ${applet.id}`);
+
+        // Also add to DesktopAppletManager (for UI regions display)
+        DesktopAppletManager.addApplet({
+          id: applet.id,
+          name: applet.name,
+          description: applet.description,
+          filePath: `generated/${applet.id}`,
+          volume: 'user',
+          createdAt: now,
+          isActive: true,
+        });
+        console.log(`[AdaptiveLayout] Applet added to desktop: ${applet.id}`);
       } catch (err) {
         console.error('[AdaptiveLayout] Failed to create applet:', err);
       }
