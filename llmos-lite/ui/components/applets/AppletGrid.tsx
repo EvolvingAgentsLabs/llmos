@@ -12,7 +12,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApplets } from '@/contexts/AppletContext';
-import { ActiveApplet } from '@/lib/applets/applet-store';
+import { ActiveApplet, AppletStore } from '@/lib/applets/applet-store';
 import {
   DesktopAppletManager,
   DesktopApplet,
@@ -359,10 +359,13 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
   // Handle opening applet from organized desktop
   const handleOpenDesktopApplet = useCallback(async (desktopApplet: DesktopApplet) => {
     console.log('[AppletGrid] Opening desktop applet:', desktopApplet.id, desktopApplet.filePath);
-    console.log('[AppletGrid] Active applets:', activeApplets.map(a => ({ id: a.id, metaId: a.metadata.id, filePath: a.filePath })));
 
-    // Check if already active - match by filePath, metadata.id, or top-level id
-    const existingApplet = activeApplets.find(
+    // Check AppletStore directly (React state might be stale due to async updates)
+    const storeApplets = AppletStore.getActiveApplets();
+    console.log('[AppletGrid] Store applets:', storeApplets.map(a => ({ id: a.id, metaId: a.metadata.id, filePath: a.filePath })));
+
+    // Check in AppletStore first (most reliable source of truth)
+    const existingApplet = storeApplets.find(
       a => a.filePath === desktopApplet.filePath ||
            a.metadata.id === desktopApplet.id ||
            a.id === desktopApplet.id
@@ -370,6 +373,7 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
 
     if (existingApplet) {
       console.log('[AppletGrid] Found existing applet, opening:', existingApplet.id);
+      // Focus and select the applet
       focusApplet(existingApplet.id);
       setSelectedAppletId(existingApplet.id);
       setViewMode('full');
@@ -411,8 +415,17 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     }
   }, [activeApplets, createApplet, focusApplet]);
 
+  // Check AppletStore directly as React state might be stale
+  const storeActiveCount = AppletStore.getActiveCount();
+  const hasActiveApplets = activeApplets.length > 0 || storeActiveCount > 0;
+
+  // Get full view applet from store if not in context (handles race condition)
+  const resolvedFullViewApplet = fullViewApplet || (
+    selectedAppletId ? AppletStore.getApplet(selectedAppletId) : null
+  );
+
   // No applets - show organized desktop with regions
-  if (activeApplets.length === 0 || showEmptyState) {
+  if (!hasActiveApplets || showEmptyState) {
     return (
       <div className={`h-full ${className}`}>
         <OrganizedDesktop
@@ -424,26 +437,29 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
   }
 
   // Full view mode - show single applet expanded
-  if (viewMode === 'full' && fullViewApplet) {
+  if (viewMode === 'full' && resolvedFullViewApplet) {
     return (
       <div className={`h-full ${className}`}>
         <FullAppletView
-          applet={fullViewApplet}
-          onClose={() => handleClose(fullViewApplet.id)}
+          applet={resolvedFullViewApplet}
+          onClose={() => handleClose(resolvedFullViewApplet.id)}
           onMinimize={handleMinimize}
-          onSubmit={handleSubmit(fullViewApplet.id)}
-          onSave={handleSave(fullViewApplet.id)}
-          onCodeUpdate={handleCodeUpdate(fullViewApplet.id)}
+          onSubmit={handleSubmit(resolvedFullViewApplet.id)}
+          onSave={handleSave(resolvedFullViewApplet.id)}
+          onCodeUpdate={handleCodeUpdate(resolvedFullViewApplet.id)}
         />
       </div>
     );
   }
 
   // Grid view - show all applets as icons
+  // Use applets from store if React state is stale
+  const displayApplets = activeApplets.length > 0 ? activeApplets : AppletStore.getActiveApplets();
+
   return (
     <div className={`h-full ${className}`}>
       <DesktopGrid
-        applets={activeApplets}
+        applets={displayApplets}
         currentAppletId={currentApplet?.id || null}
         onAppletClick={handleAppletClick}
         onAppletClose={handleClose}
