@@ -628,6 +628,7 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
         'SystemAgent.md',
         'UXDesigner.md',
         'ProjectAgentPlanner.md',
+        'HardwareControlAgent.md',
       ];
 
       for (const fileName of knownSystemAgents) {
@@ -950,6 +951,232 @@ Returns validation status, agent inventory, and recommendations for missing agen
 };
 
 /**
+ * Connect Device Tool
+ */
+export const ConnectDeviceTool: ToolDefinition = {
+  id: 'connect-device',
+  name: 'Connect Device',
+  description: 'Connect to ESP32-S3 device via Web Serial. Opens browser device picker.',
+  inputs: [],
+  execute: async () => {
+    const { SerialManager } = await import('./hardware/serial-manager');
+
+    if (!SerialManager.isSupported()) {
+      throw new Error('Web Serial API not supported. Use Chrome/Edge 89+ on HTTPS or localhost.');
+    }
+
+    const deviceId = await SerialManager.connect();
+    const conn = SerialManager.getConnection(deviceId);
+
+    return {
+      success: true,
+      deviceId,
+      metadata: conn?.metadata,
+      message: `Connected to device ${deviceId}. Use send-device-command to interact.`,
+    };
+  },
+};
+
+/**
+ * Send Device Command Tool
+ */
+export const SendDeviceCommandTool: ToolDefinition = {
+  id: 'send-device-command',
+  name: 'Send Device Command',
+  description: 'Send JSON command to connected device and wait for response.',
+  inputs: [
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Device ID from connect-device',
+      required: true,
+    },
+    {
+      name: 'command',
+      type: 'object',
+      description: 'JSON command object (e.g., {"action":"set_gpio","pin":4,"state":1})',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceId, command } = inputs;
+    const { SerialManager } = await import('./hardware/serial-manager');
+
+    if (!SerialManager.isConnected(deviceId)) {
+      throw new Error(`Device ${deviceId} not connected. Use connect-device first.`);
+    }
+
+    const response = await SerialManager.sendCommand(deviceId, command);
+
+    return {
+      success: response.status === 'ok',
+      response,
+      message: response.status === 'ok'
+        ? `Command ${command.action} executed successfully`
+        : `Error: ${response.msg || 'Unknown error'}`,
+    };
+  },
+};
+
+/**
+ * List Devices Tool
+ */
+export const ListDevicesTool: ToolDefinition = {
+  id: 'list-devices',
+  name: 'List Devices',
+  description: 'List all currently connected devices',
+  inputs: [],
+  execute: async () => {
+    const { SerialManager } = await import('./hardware/serial-manager');
+    const connections = SerialManager.getAllConnections();
+
+    return {
+      success: true,
+      devices: connections.map(conn => ({
+        id: conn.id,
+        name: conn.metadata.name,
+        connected: conn.connected,
+        connectedAt: conn.connectedAt,
+        vendorId: conn.metadata.vendorId,
+        productId: conn.metadata.productId,
+      })),
+      count: connections.length,
+      message: `Found ${connections.length} connected device(s)`,
+    };
+  },
+};
+
+/**
+ * Create Device Project Tool
+ */
+export const CreateDeviceProjectTool: ToolDefinition = {
+  id: 'create-device-project',
+  name: 'Create Device Project',
+  description: 'Create a device monitoring project with cron polling and state management.',
+  inputs: [
+    {
+      name: 'projectName',
+      type: 'string',
+      description: 'Project name (e.g., "esp32-bench-monitor")',
+      required: true,
+    },
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Connected device ID',
+      required: true,
+    },
+    {
+      name: 'pollInterval',
+      type: 'number',
+      description: 'Polling interval in milliseconds (default: 1000)',
+      required: false,
+    },
+    {
+      name: 'commands',
+      type: 'array',
+      description: 'Array of commands to execute on each poll (e.g., [{"action":"read_i2c","sensor":"ina219"}])',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { projectName, deviceId, pollInterval = 1000, commands = [] } = inputs;
+    const vfs = getVFS();
+    const { SerialManager } = await import('./hardware/serial-manager');
+
+    if (!SerialManager.isConnected(deviceId)) {
+      throw new Error(`Device ${deviceId} not connected`);
+    }
+
+    const projectPath = `projects/${projectName}`;
+
+    // Create project structure
+    const deviceConfig = {
+      deviceId,
+      name: projectName,
+      created: new Date().toISOString(),
+      pollInterval,
+    };
+
+    vfs.writeFile(`${projectPath}/device.config.json`, JSON.stringify(deviceConfig, null, 2));
+    vfs.writeFile(`${projectPath}/state/connection.json`, JSON.stringify({
+      connected: true,
+      deviceId,
+      lastUpdate: new Date().toISOString()
+    }, null, 2));
+    vfs.writeFile(`${projectPath}/state/sensors.json`, JSON.stringify({}, null, 2));
+    vfs.writeFile(`${projectPath}/state/gpio.json`, JSON.stringify({}, null, 2));
+
+    // Create cron job for polling
+    const cronConfig = {
+      id: `device-poll-${deviceId}`,
+      name: `Poll ${projectName}`,
+      projectPath,
+      deviceId,
+      interval: pollInterval,
+      enabled: true,
+      commands: commands.length > 0 ? commands : [
+        { action: 'get_info' },
+      ],
+    };
+
+    vfs.writeFile(`${projectPath}/cron/poll-device.json`, JSON.stringify(cronConfig, null, 2));
+
+    // Register cron with device handler
+    const { registerDeviceCron } = await import('./hardware/device-cron-handler');
+    await registerDeviceCron(cronConfig);
+
+    return {
+      success: true,
+      projectPath,
+      cronId: cronConfig.id,
+      pollInterval,
+      message: `Device project created at ${projectPath}. Polling every ${pollInterval}ms.`,
+    };
+  },
+};
+
+/**
+ * Disconnect Device Tool
+ */
+export const DisconnectDeviceTool: ToolDefinition = {
+  id: 'disconnect-device',
+  name: 'Disconnect Device',
+  description: 'Disconnect a device and stop its cron polling',
+  inputs: [
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Device ID to disconnect',
+      required: true,
+    },
+    {
+      name: 'stopCron',
+      type: 'boolean',
+      description: 'Stop associated cron job (default: true)',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceId, stopCron = true } = inputs;
+    const { SerialManager } = await import('./hardware/serial-manager');
+
+    if (stopCron) {
+      const { unregisterDeviceCron } = await import('./hardware/device-cron-handler');
+      unregisterDeviceCron(`device-poll-${deviceId}`);
+    }
+
+    await SerialManager.disconnect(deviceId);
+
+    return {
+      success: true,
+      deviceId,
+      message: `Device ${deviceId} disconnected${stopCron ? ' and cron stopped' : ''}`,
+    };
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -962,6 +1189,11 @@ export function getSystemTools(): ToolDefinition[] {
     InvokeSubAgentTool,
     GenerateAppletTool,
     ValidateProjectAgentsTool,
+    ConnectDeviceTool,
+    SendDeviceCommandTool,
+    ListDevicesTool,
+    CreateDeviceProjectTool,
+    DisconnectDeviceTool,
   ];
 }
 
