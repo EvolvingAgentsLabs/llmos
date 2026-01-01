@@ -637,9 +637,13 @@ Use this for rapid system validation:
 **Cause**: Project has fewer than 3 agents
 **Fix**: Ensure project includes at least 3 agent definitions
 
-#### Multi-agent validation triggers on file operations (FIXED in v1.1)
+#### Multi-agent validation triggers on file operations (FIXED in v1.2)
 **Cause**: Previously, any file write to `/projects/` would trigger multi-agent validation, even for simple file operations like creating or deleting a single file.
 **Fix**: Fixed in `system-agent-orchestrator.ts` - validation now only triggers when creating proper project structures (directories with `components/`, `agents/`, `output/`, etc.)
+
+#### Applets generated but not displayed (FIXED in v1.3)
+**Cause**: The `generate-applet` tool completed successfully but applets didn't appear in the Applets panel. This was because the applet callback was only registered in `SimpleLayout`, not in `FluidLayout` (JARVIS) or `AdaptiveLayout`.
+**Fix**: Added `setAppletGeneratedCallback` registration to both `FluidLayout.tsx` and `AdaptiveLayout.tsx` so applets are properly created in the store regardless of which layout is active.
 
 ### Debug Commands
 
@@ -736,9 +740,10 @@ By completing all tests successfully, you can confirm that LLMos-Lite is fully o
 | 1.0 | 2026-01-01 | Initial document |
 | 1.1 | 2026-01-01 | Updated file system tests with correct paths (`/projects/`), corrected tool names to kebab-case, added file system structure documentation |
 | 1.2 | 2026-01-01 | Added Test 3.5 known limitations (no delete-file tool), documented and fixed multi-agent validation bug that incorrectly triggered on simple file operations |
+| 1.3 | 2026-01-01 | Fixed applet display bug - applets now appear in panel for FluidLayout (JARVIS) and AdaptiveLayout |
 
 ---
 
-*Document Version: 1.2*
+*Document Version: 1.3*
 *Last Updated: 2026-01-01*
 *For LLMos-Lite v1.x*

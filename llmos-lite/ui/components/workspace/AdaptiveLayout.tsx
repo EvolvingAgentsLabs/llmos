@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { useApplets } from '@/contexts/AppletContext';
+import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import Header from '../layout/Header';
 import SidebarPanel from '../sidebar/SidebarPanel';
 import ChatPanel from '../chat/ChatPanel';
@@ -107,6 +109,7 @@ function KeyboardHint() {
 export default function AdaptiveLayout() {
   const { activeSession, setActiveSession } = useSessionContext();
   const { state, toggleSidebar, toggleContext, resizePanel, setFocusedPanel, updatePreferences } = useWorkspace();
+  const { createApplet } = useApplets();
   const layout = useWorkspaceLayout();
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
@@ -116,6 +119,41 @@ export default function AdaptiveLayout() {
 
   // Track previous agent state for transitions
   const prevAgentState = useRef(state.agentState);
+
+  // ========================================================================
+  // APPLET GENERATION CALLBACK
+  // ========================================================================
+  useEffect(() => {
+    console.log('[AdaptiveLayout] Registering applet generation callback');
+
+    const handleAppletGenerated = (applet: { id: string; name: string; description: string; code: string }) => {
+      console.log(`[AdaptiveLayout] Applet generated via tool: ${applet.name} (id: ${applet.id})`);
+
+      try {
+        createApplet({
+          code: applet.code,
+          metadata: {
+            id: applet.id,
+            name: applet.name,
+            description: applet.description,
+            version: '1.0.0',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[AdaptiveLayout] Applet created in store: ${applet.id}`);
+      } catch (err) {
+        console.error('[AdaptiveLayout] Failed to create applet:', err);
+      }
+    };
+
+    setAppletGeneratedCallback(handleAppletGenerated);
+
+    return () => {
+      console.log('[AdaptiveLayout] Unregistering applet generation callback');
+      setAppletGeneratedCallback(null);
+    };
+  }, [createApplet]);
 
   // ========================================================================
   // REACTIVE NERVOUS SYSTEM: Auto-open context panel when agent creates output

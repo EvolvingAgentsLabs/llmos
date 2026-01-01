@@ -8,8 +8,10 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
+import { useApplets } from '@/contexts/AppletContext';
 import { UserStorage } from '@/lib/user-storage';
 import { LLMStorage } from '@/lib/llm-client';
+import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import CommandPalette from './CommandPalette';
 
 // Lazy load panels
@@ -190,11 +192,51 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 export default function FluidLayout() {
   const { openCommandPalette, state, setContextViewMode } = useWorkspace();
   const { activeSession, setActiveSession } = useSessionContext();
+  const { createApplet } = useApplets();
   const { contextViewMode, activeFilePath } = state;
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [isTreeOpen, setIsTreeOpen] = useState(true); // Start with tree open
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+  // Register applet generation callback so generate-applet tool works
+  useEffect(() => {
+    console.log('[FluidLayout] Registering applet generation callback');
+
+    const handleAppletGenerated = (applet: { id: string; name: string; description: string; code: string }) => {
+      console.log(`[FluidLayout] Applet generated via tool: ${applet.name} (id: ${applet.id})`);
+
+      try {
+        // Create the applet in the store
+        const createdApplet = createApplet({
+          code: applet.code,
+          metadata: {
+            id: applet.id,
+            name: applet.name,
+            description: applet.description,
+            version: '1.0.0',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(`[FluidLayout] Applet created in store: ${createdApplet.id}`);
+
+        // Switch to applets view to show the new applet
+        setContextViewMode('applets');
+      } catch (err) {
+        console.error('[FluidLayout] Failed to create applet:', err);
+      }
+    };
+
+    setAppletGeneratedCallback(handleAppletGenerated);
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[FluidLayout] Unregistering applet generation callback');
+      setAppletGeneratedCallback(null);
+    };
+  }, [createApplet, setContextViewMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
