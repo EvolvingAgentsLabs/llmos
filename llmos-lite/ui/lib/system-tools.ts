@@ -956,24 +956,59 @@ Returns validation status, agent inventory, and recommendations for missing agen
 export const ConnectDeviceTool: ToolDefinition = {
   id: 'connect-device',
   name: 'Connect Device',
-  description: 'Connect to ESP32-S3 device via Web Serial. Opens browser device picker.',
-  inputs: [],
-  execute: async () => {
+  description: 'Connect to ESP32-S3 device via Web Serial or virtual device for testing.',
+  inputs: [
+    {
+      name: 'useVirtual',
+      type: 'boolean',
+      description: 'Use virtual device for testing without physical hardware (default: false)',
+      required: false,
+    },
+    {
+      name: 'deviceName',
+      type: 'string',
+      description: 'Optional name for virtual device (only used if useVirtual=true)',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { useVirtual = false, deviceName } = inputs;
     const { SerialManager } = await import('./hardware/serial-manager');
 
-    if (!SerialManager.isSupported()) {
-      throw new Error('Web Serial API not supported. Use Chrome/Edge 89+ on HTTPS or localhost.');
+    let deviceId: string;
+    let metadata: any;
+
+    if (useVirtual) {
+      // Connect to virtual device (no browser picker needed)
+      deviceId = await SerialManager.connectVirtual(deviceName);
+      const conn = SerialManager.getConnection(deviceId);
+      metadata = conn?.metadata;
+
+      return {
+        success: true,
+        deviceId,
+        metadata,
+        virtual: true,
+        message: `Connected to virtual device ${deviceId}. Use send-device-command to interact.`,
+      };
+    } else {
+      // Connect to physical device
+      if (!SerialManager.isSupported()) {
+        throw new Error('Web Serial API not supported. Use Chrome/Edge 89+ on HTTPS or localhost. Or use useVirtual=true for testing.');
+      }
+
+      deviceId = await SerialManager.connect();
+      const conn = SerialManager.getConnection(deviceId);
+      metadata = conn?.metadata;
+
+      return {
+        success: true,
+        deviceId,
+        metadata,
+        virtual: false,
+        message: `Connected to physical device ${deviceId}. Use send-device-command to interact.`,
+      };
     }
-
-    const deviceId = await SerialManager.connect();
-    const conn = SerialManager.getConnection(deviceId);
-
-    return {
-      success: true,
-      deviceId,
-      metadata: conn?.metadata,
-      message: `Connected to device ${deviceId}. Use send-device-command to interact.`,
-    };
   },
 };
 
