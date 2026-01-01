@@ -9,9 +9,11 @@
  * - Multi-device support
  */
 
+/// <reference path="./serial-types.d.ts" />
+
 export interface DeviceConnection {
   id: string;
-  port: SerialPort;
+  port: any; // SerialPort from Web Serial API
   reader: ReadableStreamDefaultReader<Uint8Array>;
   writer: WritableStreamDefaultWriter<Uint8Array>;
   connected: boolean;
