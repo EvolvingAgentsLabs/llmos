@@ -661,6 +661,28 @@ Use this for rapid system validation:
 - In `AppletGrid.tsx`: Improved matching logic to also check `a.id === desktopApplet.id`
 - Added debug logging to trace applet opening flow
 
+#### Applets still not launching (race condition) (FIXED in v1.6)
+**Cause**: Even after v1.5 fix, applets sometimes didn't launch when clicked immediately after creation. This was a React state timing issue where:
+1. `activeApplets` from React context was stale (still empty)
+2. The condition `activeApplets.length === 0` would render `OrganizedDesktop`
+3. But the applet existed in `AppletStore` (synchronous)
+
+**Fix**:
+- In `AppletGrid.tsx`: Check `AppletStore` directly instead of relying on React state
+- Use `AppletStore.getActiveCount()` to determine if applets exist
+- Use `AppletStore.getApplet()` as fallback for fullViewApplet
+- Use `AppletStore.getActiveApplets()` as fallback for DesktopGrid
+
+#### Session dropdown hidden and session list not visible (FIXED in v1.6)
+**Cause**: Two related issues in `FluidLayout`:
+1. TreePanel had `overflow-hidden` which clipped the session dropdown
+2. TreePanel height (`calc(50vh - 48px)`) was too small on some screens
+
+**Fix**:
+- Changed session dropdown from `absolute` to `fixed` positioning with dynamically calculated position
+- Increased TreePanel height from 50vh to 60vh
+- Added `overflow-y-auto` to inner container for proper scrolling
+
 ### Debug Commands
 
 Open browser console and run:
@@ -759,9 +781,10 @@ By completing all tests successfully, you can confirm that LLMos-Lite is fully o
 | 1.3 | 2026-01-01 | Fixed applet callback registration for FluidLayout and AdaptiveLayout |
 | 1.4 | 2026-01-01 | Complete applet fix - also add to DesktopAppletManager so applets appear in Personal Applets region |
 | 1.5 | 2026-01-01 | Fixed applet click/launch - ensure filePath is passed to createApplet() and improve matching in handleOpenDesktopApplet |
+| 1.6 | 2026-01-01 | Fixed applet race condition (use AppletStore directly), fixed session dropdown visibility (fixed positioning), fixed TreePanel height |
 
 ---
 
-*Document Version: 1.5*
+*Document Version: 1.6*
 *Last Updated: 2026-01-01*
 *For LLMos-Lite v1.x*

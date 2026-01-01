@@ -30,6 +30,8 @@ export default function SidebarPanel({
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(true);
   const [showNewSessionDropdown, setShowNewSessionDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const dropdownButtonRef = useRef<HTMLDivElement>(null);
 
   // Vertical resize state
   const [treeHeight, setTreeHeight] = useState(250); // Default height in pixels
@@ -37,6 +39,18 @@ export default function SidebarPanel({
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
+
+  // Handle dropdown toggle with position calculation
+  const handleDropdownToggle = useCallback(() => {
+    if (!showNewSessionDropdown && dropdownButtonRef.current) {
+      const rect = dropdownButtonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 192, // 192px = w-48 dropdown width
+      });
+    }
+    setShowNewSessionDropdown(!showNewSessionDropdown);
+  }, [showNewSessionDropdown]);
 
   // Handle resize drag
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -244,9 +258,9 @@ export default function SidebarPanel({
               {showAllSessions ? 'All' : activeVolume}
             </button>
             {/* New Session Button with Dropdown */}
-            <div className="relative">
+            <div className="relative" ref={dropdownButtonRef}>
               <button
-                onClick={() => setShowNewSessionDropdown(!showNewSessionDropdown)}
+                onClick={handleDropdownToggle}
                 className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
                   showNewSessionDropdown
                     ? 'bg-accent-primary/20 text-accent-primary'
@@ -257,17 +271,23 @@ export default function SidebarPanel({
                 <Plus className="w-4 h-4" />
               </button>
 
-              {/* Dropdown Menu */}
+              {/* Dropdown Menu - Fixed positioning to escape overflow:hidden */}
               {showNewSessionDropdown && (
                 <>
                   {/* Backdrop to close dropdown */}
                   <div
-                    className="fixed inset-0 z-10"
+                    className="fixed inset-0 z-40"
                     onClick={() => setShowNewSessionDropdown(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1 z-20 w-48
-                                bg-bg-elevated border border-border-primary rounded-lg shadow-xl
-                                overflow-hidden animate-fade-in">
+                  <div
+                    className="fixed z-50 w-48
+                              bg-bg-elevated border border-border-primary rounded-lg shadow-xl
+                              overflow-hidden animate-fade-in"
+                    style={{
+                      top: dropdownPosition.top,
+                      left: dropdownPosition.left,
+                    }}
+                  >
                     {/* User Session */}
                     <button
                       onClick={() => handleQuickCreateSession('user')}
