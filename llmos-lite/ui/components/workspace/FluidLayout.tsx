@@ -60,14 +60,15 @@ function TreePanel({
   activeSession,
   onSessionChange,
 }: TreePanelProps) {
-  // Use a larger height (50% of viewport minus header) for better usability
+  // Use a larger height (60% of viewport minus header) for better usability
   // SidebarPanel has its own internal resize handle for file tree vs sessions
+  // IMPORTANT: Don't use overflow-hidden here as it clips dropdowns
   return (
     <div
-      className={`transition-all duration-300 overflow-hidden flex-shrink-0 ${isOpen ? '' : 'h-0'}`}
-      style={{ height: isOpen ? 'calc(50vh - 48px)' : 0 }}
+      className={`transition-all duration-300 flex-shrink-0 ${isOpen ? '' : 'h-0 overflow-hidden'}`}
+      style={{ height: isOpen ? 'calc(60vh - 48px)' : 0 }}
     >
-      <div className="h-full border-b border-white/10 bg-bg-secondary/30">
+      <div className="h-full border-b border-white/10 bg-bg-secondary/30 overflow-y-auto">
         <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
           <SidebarPanel
             activeVolume={activeVolume}
