@@ -346,7 +346,9 @@ export async function discoverAgents(basePath: string = 'system/agents'): Promis
     'MemoryAnalysisAgent.md',
     'MemoryConsolidationAgent.md',
     'LensSelectorAgent.md',
-    'UXDesigner.md'
+    'UXDesigner.md',
+    'AppletDebuggerAgent.md',
+    'ProjectAgentPlanner.md',
   ];
 
   const discoveredAgents: string[] = [];
