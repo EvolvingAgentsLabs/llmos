@@ -5,9 +5,39 @@
  * Wasmer SDK and clang.wasm. No backend server required.
  *
  * Philosophy: "OS in the Browser" - all compilation happens client-side.
+ *
+ * NOTE: Wasmer SDK is loaded dynamically from CDN to avoid bundling issues
+ * with import.meta.url in Next.js builds.
  */
 
-import { init, Wasmer } from '@wasmer/sdk';
+// Wasmer SDK will be loaded dynamically from CDN
+declare global {
+  interface Window {
+    Wasmer?: any;
+  }
+}
+
+// Dynamic import of Wasmer SDK from CDN
+async function loadWasmerSDK(): Promise<any> {
+  // Check if already loaded
+  if (typeof window !== 'undefined' && window.Wasmer) {
+    return window.Wasmer;
+  }
+
+  // Load from CDN via dynamic import
+  // Using unpkg.com for reliable CDN delivery
+  const WasmerModule = await import(
+    /* webpackIgnore: true */
+    'https://unpkg.com/@wasmer/sdk@0.8.0/dist/index.mjs'
+  );
+
+  // Store globally for reuse
+  if (typeof window !== 'undefined') {
+    window.Wasmer = WasmerModule;
+  }
+
+  return WasmerModule;
+}
 
 export interface CompileOptions {
   source: string;
@@ -58,8 +88,11 @@ export class WasmCompiler {
     if (this.isInitialized) return;
 
     try {
-      console.log('[WasmCompiler] Initializing Wasmer SDK...');
-      await init();
+      console.log('[WasmCompiler] Loading Wasmer SDK from CDN...');
+      const WasmerModule = await loadWasmerSDK();
+
+      console.log('[WasmCompiler] Initializing Wasmer runtime...');
+      await WasmerModule.init();
       this.wasmerReady = true;
 
       console.log('[WasmCompiler] Loading ESP32 SDK headers...');
@@ -133,17 +166,19 @@ export class WasmCompiler {
 
       console.log(`[WasmCompiler] Compiling ${name}...`);
 
+      // Get Wasmer SDK module
+      const WasmerModule = await loadWasmerSDK();
+
       // Load clang package from Wasmer registry (cached after first load)
       if (!this.clangPackage) {
         console.log('[WasmCompiler] Loading clang from Wasmer registry...');
         console.log('[WasmCompiler] Note: First load may take 30-60 seconds (~30MB download)');
-        this.clangPackage = await Wasmer.fromRegistry('clang/clang');
+        this.clangPackage = await WasmerModule.Wasmer.fromRegistry('clang/clang');
         console.log('[WasmCompiler] Clang loaded successfully');
       }
 
       // Create virtual directory for compilation
-      const { Directory } = await import('@wasmer/sdk');
-      const projectDir = new Directory();
+      const projectDir = new WasmerModule.Directory();
 
       // Write source file
       const sourceFilename = `${name}.c`;
@@ -246,9 +281,12 @@ export class WasmCompiler {
     console.log('[WasmCompiler] Preloading compiler assets...');
     await this.initialize();
 
+    // Get Wasmer SDK module
+    const WasmerModule = await loadWasmerSDK();
+
     // Preload clang package
     if (!this.clangPackage) {
-      this.clangPackage = await Wasmer.fromRegistry('clang/clang');
+      this.clangPackage = await WasmerModule.Wasmer.fromRegistry('clang/clang');
     }
 
     console.log('[WasmCompiler] Preload complete');
