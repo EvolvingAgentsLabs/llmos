@@ -139,12 +139,23 @@ The system doesn't stay static—it **evolves**:
 - **Code Editor**: Split-view with syntax highlighting and auto-execution
 - **Agent Dashboard**: Real-time progress tracking with planning steps and execution timeline
 
+### ESP32 Hardware Integration
+- **Browser-Based WASM Compilation**: Compile C code to WebAssembly entirely in browser using Wasmer SDK
+- **Zero Backend Required**: Clang/LLVM runs client-side, no Docker or server needed
+- **Web Serial API**: Direct browser-to-ESP32 communication for deployment
+- **ESP32 WASMachine Support**: Deploy compiled apps to ESP32 devices running WebAssembly runtime
+- **Virtual Device Testing**: Test without hardware using virtual ESP32 simulator
+- **Privacy-First**: Code never leaves your browser during compilation
+
 ### Available Libraries
 **Python (WebAssembly via Pyodide):**
 ✅ numpy • scipy • matplotlib • pandas • scikit-learn • networkx • sympy
 
 **React Applets (Browser-native):**
 ✅ React hooks • Tailwind CSS • Math/JSON APIs • Browser APIs
+
+**C/C++ to WebAssembly (Browser-compiled):**
+✅ Clang/LLVM in browser • ESP32 SDK headers • WASI runtime • Zero backend needed
 
 ---
 
@@ -229,6 +240,11 @@ Your project is ready in the file tree!
 │  │   Pyodide    │  │ Babel + React│  │Desktop/Canvas│          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 │                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ WASM Compiler│  │ Serial/Device│  │ ESP32 Runtime│          │
+│  │Browser Clang │  │  Web Serial  │  │ WASMachine   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -237,6 +253,8 @@ Your project is ready in the file tree!
 - **Desktop View** - macOS-style app grid with system applets and user-generated applets
 - **Applet Store** - Manages active, recent, and system applets with state persistence
 - **View Manager** - Handles Desktop, Canvas, Chat, and Media view modes
+- **WASM Compiler** - Browser-based C to WebAssembly compilation using Wasmer SDK and Clang
+- **ESP32 Runtime** - Deploy compiled WASM apps to ESP32 devices via Web Serial API
 
 **Every execution creates:**
 ```
@@ -262,6 +280,8 @@ projects/[name]/
 - **llmos-lite/README.md** - Detailed feature documentation
 - **llmos-lite/ARCHITECTURE.md** - Technical architecture
 - **llmos-lite/LLMUNIX_COMPLETE.md** - Complete implementation guide
+- **llmos-lite/docs/BROWSER_COMPILATION.md** - Browser-based WASM compilation guide
+- **ESP32_COMPLETE_TUTORIAL.md** - ESP32 hardware integration tutorial
 
 ---
 
@@ -295,6 +315,9 @@ Unlike static tools, learns from every execution and builds institutional knowle
 
 **Domain-Ready, Not Domain-Specific**
 Start with scientific computing, teach it your domain through use, watch it become fluent over time.
+
+**OS in the Browser**
+Everything runs client-side—Python via Pyodide, React applets via Babel, C via Clang in WebAssembly. Zero backend, zero servers, maximum privacy. Your code never leaves your browser.
 
 ---
 

@@ -2284,6 +2284,191 @@ class CollaborationSync {
 
 ---
 
+## Hardware Integration: ESP32 WASM Compilation
+
+### Browser-Based C to WebAssembly Compiler
+
+LLMos includes a **fully browser-based WASM compiler** for deploying C applications to ESP32 WASMachine devices. This aligns with the "OS in the Browser" philosophy - no backend server required.
+
+#### Architecture
+
+```
+User writes C code (via deploy-wasm-app tool)
+       ↓
+Browser loads Clang.wasm from CDN (Wasmer SDK)
+       ↓
+Compile C → WASM (in browser, ~2-5 sec)
+       ↓
+Deploy to ESP32 via TCP (wasm-deployer)
+       ↓
+App runs autonomously on device
+```
+
+#### Implementation
+
+```typescript
+// lib/runtime/wasm-compiler.ts
+
+export class WasmCompiler {
+  async compile(options: CompileOptions): Promise<CompileResult> {
+    // Load Wasmer SDK from CDN (cached after first use)
+    const WasmerModule = await loadWasmerSDK();
+    await WasmerModule.init();
+
+    // Load clang package from Wasmer registry
+    const clang = await WasmerModule.Wasmer.fromRegistry('clang/clang');
+
+    // Create virtual directory with source + headers
+    const projectDir = new WasmerModule.Directory();
+    await projectDir.writeFile('main.c', options.source);
+    await projectDir.writeFile('wm_ext_wasm_native.h', headerContent);
+
+    // Compile with wasi-sdk flags
+    const instance = await clang.entrypoint.run({
+      args: [
+        '/project/main.c',
+        '-o', '/project/main.wasm',
+        '--target=wasm32-wasi',
+        '-O3',
+        '-Wl,--export=main',
+        '-I/project'
+      ],
+      mount: { '/project': projectDir }
+    });
+
+    // Extract compiled binary
+    return await projectDir.readFile('main.wasm');
+  }
+}
+```
+
+#### CDN Loading Strategy
+
+To avoid Next.js bundling issues with `import.meta.url`, Wasmer SDK is loaded dynamically from CDN:
+
+```typescript
+async function loadWasmerSDK(): Promise<any> {
+  if (window.Wasmer) return window.Wasmer;
+
+  // Use string variable to bypass TypeScript static analysis
+  const cdnUrl = 'https://unpkg.com/@wasmer/sdk@0.8.0/dist/index.mjs';
+  const WasmerModule = await import(/* webpackIgnore: true */ cdnUrl);
+
+  window.Wasmer = WasmerModule; // Cache globally
+  return WasmerModule;
+}
+```
+
+#### System Tools Integration
+
+Three system tools enable WASM deployment:
+
+```typescript
+// lib/system-tools.ts
+
+export const DeployWasmAppTool: ToolDefinition = {
+  id: 'deploy-wasm-app',
+  execute: async ({ sourceCode, appName, deviceIp, heapSize }) => {
+    // Step 1: Compile C to WASM (browser-based)
+    const { compileWasm } = await import('./runtime/wasm-compiler');
+    const result = await compileWasm({
+      source: sourceCode,
+      name: appName,
+      optimizationLevel: '3'
+    });
+
+    // Step 2: Deploy to ESP32 via TCP
+    const { installWasmApp } = await import('./hardware/wasm-deployer');
+    await installWasmApp(
+      { deviceIp },
+      { appName, wasmBinary: result.wasmBinary, heapSize }
+    );
+  }
+};
+
+export const QueryWasmAppsTool: ToolDefinition = {
+  id: 'query-wasm-apps',
+  // Lists installed WASM apps on device
+};
+
+export const UninstallWasmAppTool: ToolDefinition = {
+  id: 'uninstall-wasm-app',
+  // Removes WASM app from device
+};
+```
+
+#### TCP Deployment Protocol
+
+```typescript
+// lib/hardware/wasm-deployer.ts
+
+const LEADING_BYTES = Buffer.from([0x12, 0x34]);
+const MSG_TYPE_REQUEST = 0;
+const REQ_INSTALL = 1;
+
+export async function installWasmApp(
+  config: { deviceIp: string },
+  options: { appName: string; wasmBinary: Buffer; heapSize: number }
+): Promise<{ success: boolean }> {
+  // Build protocol message
+  const metadata = {
+    cmd: REQ_INSTALL,
+    app_name: options.appName,
+    heap_size: options.heapSize,
+    size: options.wasmBinary.length
+  };
+
+  const payload = Buffer.concat([
+    Buffer.from([metadataLength]),
+    Buffer.from(JSON.stringify(metadata)),
+    options.wasmBinary
+  ]);
+
+  // Send via TCP to ESP32 (port 8080)
+  const response = await sendTCPRequest(config, payload);
+  return { success: response.status === 'ok' };
+}
+```
+
+#### ESP32 SDK Headers
+
+Headers are provided in `/public/sdk/wasi-headers/` and loaded into the compiler's virtual filesystem:
+
+- `wm_ext_wasm_native.h` - GPIO, WiFi, HTTP APIs
+- `wm_ext_wasm_native_mqtt.h` - MQTT client API
+- `wm_ext_wasm_native_rainmaker.h` - ESP RainMaker cloud API
+
+#### Performance Characteristics
+
+| Metric | First Compilation | Subsequent |
+|--------|------------------|------------|
+| SDK Load | ~30MB (~10sec on 3G) | Instant (cached) |
+| Compile Time | 2-5 seconds | 1-3 seconds |
+| Deploy Time | 1-2 seconds | 1-2 seconds |
+| **Total** | ~15 seconds | ~3 seconds |
+
+#### Benefits
+
+- ✅ **Zero Backend** - No Docker, no server-side compilation
+- ✅ **Privacy** - Code never leaves browser
+- ✅ **Vercel Compatible** - Works on serverless platforms
+- ✅ **Cost** - $0 infrastructure (uses user's CPU)
+- ✅ **Philosophy** - True "OS in the Browser"
+
+#### Trade-offs
+
+- ⚠️ **First Load** - 30MB download for compiler (one-time)
+- ⚠️ **CDN Dependency** - Requires unpkg.com availability
+- ⚠️ **Compile Speed** - 2-5sec vs 1-2sec on server
+
+#### Documentation
+
+- **User Guide**: `ESP32_COMPLETE_TUTORIAL.md`
+- **Browser Compilation**: `docs/BROWSER_COMPILATION.md`
+- **Skills**: `volumes/system/skills/esp32-wasm-development.md`
+
+---
+
 ## Conclusion
 
 This architecture implements a Claude Code-style file-first development environment entirely in the browser, with:
@@ -2291,13 +2476,16 @@ This architecture implements a Claude Code-style file-first development environm
 - **Git-backed volumes** for persistence
 - **LLM tool system** for file operations
 - **Live Python runtime** with Pyodide
+- **Browser-based C compiler** with Wasmer SDK (NEW)
+- **ESP32 hardware integration** for IoT deployment (NEW)
 - **VSCode-inspired UI** for familiarity
 - **Sub-agent system** for extensibility
 
-All components are designed to be modular, testable, and performant while providing a seamless developer experience.
+All components are designed to be modular, testable, and performant while providing a seamless developer experience - entirely client-side with zero backend infrastructure.
 
 For user-facing documentation, see **README.md**.
 For implementation status, see **IMPLEMENTATION-STATUS.md**.
+For browser compilation details, see **docs/BROWSER_COMPILATION.md**.
 
 ---
 
