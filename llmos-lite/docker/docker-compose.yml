@@ -1,0 +1,21 @@
+# Docker Compose for LLMos Development
+# Provides WASI-SDK compilation environment
+
+version: '3.8'
+
+services:
+  # WASI-SDK Compiler (used by /api/compile-wasm)
+  wasi-sdk:
+    image: ghcr.io/webassembly/wasi-sdk:latest
+    container_name: llmos-wasi-sdk
+    volumes:
+      - /tmp/llmos-wasm-compile:/work
+    working_dir: /work
+    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    restart: unless-stopped
+    networks:
+      - llmos-net
+
+networks:
+  llmos-net:
+    driver: bridge
