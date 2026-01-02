@@ -14,15 +14,17 @@
 export interface DeviceConnection {
   id: string;
   port: any; // SerialPort from Web Serial API
-  reader: ReadableStreamDefaultReader<Uint8Array>;
-  writer: WritableStreamDefaultWriter<Uint8Array>;
+  reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  writer: WritableStreamDefaultWriter<Uint8Array> | null;
   connected: boolean;
   metadata: {
     vendorId?: number;
     productId?: number;
     name: string;
+    virtual?: boolean;
   };
   connectedAt: string;
+  virtual?: boolean; // True if this is a virtual device
 }
 
 export interface DeviceCommand {
@@ -41,6 +43,7 @@ class SerialManagerClass {
   private connections = new Map<string, DeviceConnection>();
   private responseCallbacks = new Map<string, ResponseCallback>();
   private eventListeners = new Map<string, Set<(data: DeviceResponse) => void>>();
+  private virtualDevices = new Map<string, any>(); // VirtualESP32 instances
 
   /**
    * Check if Web Serial API is supported
@@ -98,6 +101,39 @@ class SerialManagerClass {
   }
 
   /**
+   * Connect to a virtual device (for testing without hardware)
+   */
+  async connectVirtual(deviceName = 'ESP32-S3-Virtual'): Promise<string> {
+    const { VirtualESP32 } = await import('./virtual-esp32');
+
+    // Generate unique device ID
+    const deviceId = `virtual-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+    // Create virtual device instance
+    const virtualDevice = new VirtualESP32();
+    this.virtualDevices.set(deviceId, virtualDevice);
+
+    const connection: DeviceConnection = {
+      id: deviceId,
+      port: null,
+      reader: null,
+      writer: null,
+      connected: true,
+      virtual: true,
+      metadata: {
+        name: deviceName,
+        virtual: true,
+      },
+      connectedAt: new Date().toISOString(),
+    };
+
+    this.connections.set(deviceId, connection);
+
+    console.log(`[SerialManager] Connected virtual device: ${deviceId}`, connection.metadata);
+    return deviceId;
+  }
+
+  /**
    * Send command and wait for response
    */
   async sendCommand(
@@ -110,16 +146,38 @@ class SerialManagerClass {
       throw new Error(`Device ${deviceId} not connected`);
     }
 
+    console.log(`[SerialManager] Sending to ${deviceId}:`, command);
+
+    // Handle virtual device
+    if (conn.virtual) {
+      const virtualDevice = this.virtualDevices.get(deviceId);
+      if (!virtualDevice) {
+        throw new Error(`Virtual device ${deviceId} not found`);
+      }
+
+      try {
+        const response = await virtualDevice.processCommand(command);
+        console.log(`[SerialManager] Virtual device response:`, response);
+
+        // Notify event listeners
+        this.notifyListeners(deviceId, response);
+
+        return response;
+      } catch (error) {
+        console.error(`[SerialManager] Virtual device error:`, error);
+        throw error;
+      }
+    }
+
+    // Handle physical device
     // Encode command as JSON + newline
     const commandJson = JSON.stringify(command) + '\n';
     const encoder = new TextEncoder();
     const data = encoder.encode(commandJson);
 
-    console.log(`[SerialManager] Sending to ${deviceId}:`, command);
-
     try {
       // Send command
-      await conn.writer.write(data);
+      await conn.writer!.write(data);
 
       // Wait for response
       return await new Promise<DeviceResponse>((resolve, reject) => {
@@ -152,20 +210,26 @@ class SerialManagerClass {
     try {
       conn.connected = false;
 
-      // Cancel reader
-      if (conn.reader) {
-        await conn.reader.cancel();
-        conn.reader.releaseLock();
-      }
+      // Handle virtual device
+      if (conn.virtual) {
+        this.virtualDevices.delete(deviceId);
+      } else {
+        // Handle physical device
+        // Cancel reader
+        if (conn.reader) {
+          await conn.reader.cancel();
+          conn.reader.releaseLock();
+        }
 
-      // Close writer
-      if (conn.writer) {
-        await conn.writer.close();
-      }
+        // Close writer
+        if (conn.writer) {
+          await conn.writer.close();
+        }
 
-      // Close port
-      if (conn.port) {
-        await conn.port.close();
+        // Close port
+        if (conn.port) {
+          await conn.port.close();
+        }
       }
 
       this.connections.delete(deviceId);
@@ -218,11 +282,11 @@ class SerialManagerClass {
   }
 
   /**
-   * Start reading from device
+   * Start reading from device (physical devices only)
    */
   private async startReading(deviceId: string): Promise<void> {
     const conn = this.connections.get(deviceId);
-    if (!conn) return;
+    if (!conn || !conn.reader) return;
 
     const decoder = new TextDecoder();
     let buffer = '';
@@ -230,7 +294,7 @@ class SerialManagerClass {
     console.log(`[SerialManager] Started reading from ${deviceId}`);
 
     try {
-      while (conn.connected) {
+      while (conn.connected && conn.reader) {
         const { value, done } = await conn.reader.read();
 
         if (done) {
