@@ -22,7 +22,8 @@
       "Bash(git branch:*)",
       "Bash(git add:*)",
       "Bash(npm run build)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "WebFetch(domain:wasmer.io)"
     ],
     "deny": [],
     "ask": []
