@@ -1212,6 +1212,271 @@ export const DisconnectDeviceTool: ToolDefinition = {
 };
 
 /**
+ * Deploy WASM App Tool
+ * Compiles C code to WebAssembly and deploys to ESP32 WASMachine
+ */
+export const DeployWasmAppTool: ToolDefinition = {
+  id: 'deploy-wasm-app',
+  name: 'Deploy WASM App',
+  description: `Compile C source code to WebAssembly and deploy to ESP32 WASMachine device.
+
+Use this tool when:
+- User needs autonomous/offline operation
+- Complex logic with state machines
+- MQTT, HTTP, or cloud integration (RainMaker)
+- Production deployment
+- Battery-powered devices (sleep modes)
+
+The C code will be compiled using wasi-sdk, then deployed via TCP to the ESP32's WAMR runtime.
+
+Available native APIs (see esp32-wasm-native-api.md skill):
+- MQTT: wasm_mqtt_init(), wasm_mqtt_publish(), wasm_mqtt_subscribe()
+- RainMaker: rmaker_node_init(), rmaker_device_create(), rmaker_param_update()
+- WiFi: wifi_connect(), wifi_get_status()
+- HTTP: http_get(), http_post()
+- LVGL: lv_label_create(), lv_label_set_text()
+
+Hardware access via VFS (see esp32-wasm-development.md skill):
+- GPIO: open("/dev/gpio", O_RDWR) + ioctl()
+- I2C: open("/dev/i2c/0", O_RDWR) + ioctl()
+- SPI: open("/dev/spi/0", O_RDWR) + ioctl()`,
+  inputs: [
+    {
+      name: 'sourceCode',
+      type: 'string',
+      description: 'C source code to compile. Must include main() function.',
+      required: true,
+    },
+    {
+      name: 'appName',
+      type: 'string',
+      description: 'Application name (alphanumeric, no spaces)',
+      required: true,
+    },
+    {
+      name: 'deviceIp',
+      type: 'string',
+      description: 'ESP32 device IP address (e.g., "192.168.1.100")',
+      required: true,
+    },
+    {
+      name: 'heapSize',
+      type: 'number',
+      description: 'Heap size in bytes (default: 8192). Increase for MQTT/networking (16384-32768)',
+      required: false,
+    },
+    {
+      name: 'optimizationLevel',
+      type: 'string',
+      description: 'Compiler optimization level: 0, 1, 2, 3, s, z (default: "3")',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { sourceCode, appName, deviceIp, heapSize = 8192, optimizationLevel = '3' } = inputs;
+
+    if (!sourceCode || typeof sourceCode !== 'string') {
+      throw new Error('Invalid sourceCode parameter');
+    }
+
+    if (!appName || typeof appName !== 'string') {
+      throw new Error('Invalid appName parameter');
+    }
+
+    if (!deviceIp || typeof deviceIp !== 'string') {
+      throw new Error('Invalid deviceIp parameter');
+    }
+
+    console.log(`[DeployWasmApp] Compiling ${appName}...`);
+
+    // Step 1: Compile C to WASM (Browser-based compilation)
+    try {
+      // Use browser-based WASM compiler (no backend needed!)
+      const { compileWasm } = await import('./runtime/wasm-compiler');
+
+      const compileResult = await compileWasm({
+        source: sourceCode,
+        name: appName,
+        optimizationLevel,
+      });
+
+      if (!compileResult.success) {
+        return {
+          success: false,
+          error: 'Compilation failed',
+          details: compileResult.error || compileResult.details,
+          hint: compileResult.hint,
+          compilationTime: compileResult.compilationTime,
+        };
+      }
+
+      console.log(`[DeployWasmApp] Compilation successful: ${compileResult.size} bytes in ${compileResult.compilationTime}ms`);
+
+      // Step 2: Deploy WASM binary to device
+      const { installWasmApp } = await import('./hardware/wasm-deployer');
+
+      // Convert Uint8Array to Buffer for TCP transmission
+      const wasmBinary = Buffer.from(compileResult.wasmBinary!);
+
+      const deployResult = await installWasmApp(
+        { deviceIp },
+        {
+          appName,
+          wasmBinary,
+          heapSize,
+        }
+      );
+
+      if (!deployResult.success) {
+        return {
+          success: false,
+          error: 'Deployment failed',
+          details: deployResult.error,
+          compiledSize: compileResult.size,
+        };
+      }
+
+      console.log(`[DeployWasmApp] Deployment successful: ${appName} on ${deviceIp}`);
+
+      return {
+        success: true,
+        appName,
+        deviceIp,
+        heapSize,
+        compiledSize: compileResult.size,
+        message: `App "${appName}" compiled (${compileResult.size} bytes) and deployed to ${deviceIp}. Heap: ${heapSize} bytes.`,
+      };
+
+    } catch (error: any) {
+      console.error('[DeployWasmApp] Error:', error);
+      return {
+        success: false,
+        error: error.message || 'Unknown error',
+      };
+    }
+  },
+};
+
+/**
+ * Query WASM Apps Tool
+ * Lists installed WebAssembly applications on ESP32 device
+ */
+export const QueryWasmAppsTool: ToolDefinition = {
+  id: 'query-wasm-apps',
+  name: 'Query WASM Apps',
+  description: 'Query installed WebAssembly applications on ESP32 WASMachine device.',
+  inputs: [
+    {
+      name: 'deviceIp',
+      type: 'string',
+      description: 'ESP32 device IP address',
+      required: true,
+    },
+    {
+      name: 'appName',
+      type: 'string',
+      description: 'Optional: Query specific app by name',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceIp, appName } = inputs;
+
+    if (!deviceIp || typeof deviceIp !== 'string') {
+      throw new Error('Invalid deviceIp parameter');
+    }
+
+    try {
+      const { queryWasmApps } = await import('./hardware/wasm-deployer');
+
+      const result = await queryWasmApps({ deviceIp }, appName);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error,
+        };
+      }
+
+      return {
+        success: true,
+        deviceIp,
+        apps: result.apps || [],
+        count: result.apps?.length || 0,
+        message: `Found ${result.apps?.length || 0} WASM app(s) on ${deviceIp}`,
+      };
+
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Unknown error',
+      };
+    }
+  },
+};
+
+/**
+ * Uninstall WASM App Tool
+ * Removes a WebAssembly application from ESP32 device
+ */
+export const UninstallWasmAppTool: ToolDefinition = {
+  id: 'uninstall-wasm-app',
+  name: 'Uninstall WASM App',
+  description: 'Uninstall a WebAssembly application from ESP32 WASMachine device.',
+  inputs: [
+    {
+      name: 'deviceIp',
+      type: 'string',
+      description: 'ESP32 device IP address',
+      required: true,
+    },
+    {
+      name: 'appName',
+      type: 'string',
+      description: 'Application name to uninstall',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceIp, appName } = inputs;
+
+    if (!deviceIp || typeof deviceIp !== 'string') {
+      throw new Error('Invalid deviceIp parameter');
+    }
+
+    if (!appName || typeof appName !== 'string') {
+      throw new Error('Invalid appName parameter');
+    }
+
+    try {
+      const { uninstallWasmApp } = await import('./hardware/wasm-deployer');
+
+      const result = await uninstallWasmApp({ deviceIp }, appName);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error,
+        };
+      }
+
+      return {
+        success: true,
+        deviceIp,
+        appName,
+        message: `App "${appName}" uninstalled from ${deviceIp}`,
+      };
+
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Unknown error',
+      };
+    }
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -1229,6 +1494,9 @@ export function getSystemTools(): ToolDefinition[] {
     ListDevicesTool,
     CreateDeviceProjectTool,
     DisconnectDeviceTool,
+    DeployWasmAppTool,
+    QueryWasmAppsTool,
+    UninstallWasmAppTool,
   ];
 }
 

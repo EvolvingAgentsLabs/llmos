@@ -4,6 +4,12 @@ const nextConfig = {
   // Transpile Three.js packages for proper ESM support
   transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
   webpack: (config, { isServer }) => {
+    // Exclude Wasmer SDK from ALL bundles (will load from CDN instead)
+    config.externals = config.externals || [];
+    if (isServer) {
+      config.externals.push('@wasmer/sdk');
+    }
+
     // Fix for Pyodide and WebAssembly
     config.resolve.fallback = {
       ...config.resolve.fallback,
