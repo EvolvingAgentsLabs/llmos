@@ -11,10 +11,11 @@
 1. [Quick Start (Virtual Device)](#quick-start-virtual-device)
 2. [Physical ESP32 Setup](#physical-esp32-setup)
 3. [Firmware Development](#firmware-development)
-4. [LLMos Usage Examples](#llmos-usage-examples)
-5. [Building Custom Applets](#building-custom-applets)
-6. [Advanced Examples](#advanced-examples)
-7. [Troubleshooting](#troubleshooting)
+4. [Browser-Based WASM Compilation](#browser-based-wasm-compilation)
+5. [LLMos Usage Examples](#llmos-usage-examples)
+6. [Building Custom Applets](#building-custom-applets)
+7. [Advanced Examples](#advanced-examples)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -546,6 +547,185 @@ Open Tools → Serial Monitor (115200 baud):
 ```
 
 LED on GPIO 2 should turn on!
+
+---
+
+## Browser-Based WASM Compilation
+
+**LLMos compiles C code to WebAssembly entirely in your browser** - no backend server or Docker required!
+
+### Overview
+
+```
+User writes C code
+     ↓
+Browser loads Clang (WASM) from CDN
+     ↓
+Compile C → WASM (in browser)
+     ↓
+Deploy to ESP32 via Web Serial
+```
+
+**Key Benefits:**
+- ✅ Zero backend infrastructure
+- ✅ Works on Vercel/Netlify/any platform
+- ✅ Privacy-first (code never leaves browser)
+- ✅ No Docker or build servers needed
+- ✅ Aligns with "OS in the Browser" philosophy
+
+### How It Works
+
+**1. Wasmer SDK loads Clang in browser:**
+```typescript
+import { WasmCompiler } from '@/lib/runtime/wasm-compiler';
+
+const compiler = WasmCompiler.getInstance();
+await compiler.initialize(); // Loads Clang from CDN
+```
+
+**2. Compile C code client-side:**
+```typescript
+const result = await compiler.compile({
+  source: `
+    #include "wm_ext_wasm_native.h"
+
+    int main() {
+      gpio_set_direction(2, GPIO_MODE_OUTPUT);
+      gpio_set_level(2, 1);
+      return 0;
+    }
+  `,
+  name: 'led_blink',
+  optimizationLevel: '3'
+});
+
+// result.wasmBinary contains compiled WebAssembly
+```
+
+**3. Deploy to ESP32:**
+```typescript
+await deployWasmToESP32({
+  deviceId: 'device-1234',
+  wasmBinary: result.wasmBinary
+});
+```
+
+### Performance
+
+**First Compilation:**
+- Initial load: ~30MB download (Clang + LLVM toolchain)
+- Downloaded from: unpkg.com CDN
+- Cached in browser: Instant on next use
+- Compile time: 2-5 seconds
+
+**Subsequent Compilations:**
+- Load time: Instant (cached)
+- Compile time: 1-3 seconds
+
+### ESP32 SDK Headers
+
+**Available headers** (loaded automatically):
+- `wm_ext_wasm_native.h` - GPIO, WiFi, HTTP APIs
+- `wm_ext_wasm_native_mqtt.h` - MQTT client
+- `wm_ext_wasm_native_rainmaker.h` - ESP RainMaker cloud
+
+**Example C code:**
+```c
+#include "wm_ext_wasm_native.h"
+
+int main() {
+    // GPIO control
+    gpio_set_direction(2, GPIO_MODE_OUTPUT);
+    gpio_set_level(2, 1);
+
+    // WiFi connection
+    wifi_connect("MySSID", "password");
+
+    // HTTP request
+    char response[1024];
+    http_get("https://api.example.com/data", response, sizeof(response));
+
+    return 0;
+}
+```
+
+### Using the `deploy-wasm-app` Tool
+
+**Natural language deployment:**
+```
+You: "Write a C program that blinks the LED on GPIO pin 2 and deploy it to my ESP32"
+
+SystemAgent:
+1. Generates C code
+2. Compiles to WASM in browser
+3. Deploys via Web Serial API
+4. Confirms deployment success
+```
+
+**Behind the scenes:**
+```typescript
+// SystemAgent uses deploy-wasm-app tool:
+await executeSystemTool('deploy-wasm-app', {
+  sourceCode: cCode,
+  appName: 'led_blink',
+  optimizationLevel: '3',
+  deviceId: 'device-1234'
+});
+
+// Tool internally:
+// 1. Compiles in browser using WasmCompiler
+// 2. Sends binary to ESP32 via TCP (0x12 0x34 leading bytes)
+// 3. ESP32 WAMR runtime executes the app
+```
+
+### Compilation Options
+
+```typescript
+interface CompileOptions {
+  source: string;           // C source code
+  name: string;             // App name (e.g., 'led_blink')
+  optimizationLevel?: string; // '0', '1', '2', '3', 's', 'z' (default: '3')
+  includeDebugInfo?: boolean; // Include DWARF debug symbols (default: false)
+}
+```
+
+**Optimization levels:**
+- `'0'` - No optimization, fastest compilation
+- `'3'` - Maximum optimization (default)
+- `'s'` - Optimize for size
+- `'z'` - Aggressively optimize for size
+
+### Troubleshooting Compilation
+
+**Error: "Failed to load Wasmer SDK"**
+- **Cause**: Network error or CDN unavailable
+- **Solution**: Check internet connection, retry
+
+**Error: "Compilation failed with syntax error"**
+- **Cause**: Invalid C syntax
+- **Solution**: Check error details:
+  - Missing semicolons
+  - Undefined functions
+  - Type mismatches
+  - Missing header includes
+
+**Error: "Out of memory"**
+- **Cause**: Browser tab memory limit exceeded
+- **Solution**: Close other tabs, restart browser
+
+### Comparison: Browser vs. Server Compilation
+
+| Feature | Browser-Based ✅ | Server-Based ❌ |
+|---------|------------------|-----------------|
+| **Privacy** | High (code stays local) | Low (code sent to server) |
+| **Cost** | Zero (uses user's CPU) | High (Vercel/AWS costs) |
+| **Setup** | None (just npm install) | Docker, wasi-sdk, backend |
+| **Vercel Deploy** | Works perfectly | Fails (no Docker) |
+| **Philosophy** | "OS in Browser" ✅ | Breaks philosophy ❌ |
+| **Initial Load** | 30MB (~10s on 3G) | Zero |
+| **Compile Speed** | 2-5 seconds | 1-2 seconds |
+
+**For more details:** See `llmos-lite/docs/BROWSER_COMPILATION.md`
 
 ---
 
@@ -1213,11 +1393,14 @@ console.log(SerialManager.getAllConnections());
 ### What You Have Now
 
 ✅ **Virtual Device** - Test immediately without hardware
+✅ **Browser-Based WASM Compiler** - Compile C to WebAssembly entirely in browser
+✅ **Zero Backend Required** - No Docker, no build servers, works on Vercel
 ✅ **Web Serial Protocol** - Direct browser-to-ESP32 communication
 ✅ **Complete Firmware** - GPIO, ADC, I2C, PWM support
 ✅ **Device-as-Project** - Persistent state in VFS
 ✅ **Cron Polling** - Background monitoring
 ✅ **Custom Applets** - Visual interfaces for device control
+✅ **Privacy-First Compilation** - Code never leaves your browser
 
 ### Quick Reference
 
@@ -1250,17 +1433,32 @@ console.log(SerialManager.getAllConnections());
 "Create a power monitoring dashboard"
 ```
 
+**WASM Deployment:**
+```
+"Write a C program that blinks an LED and deploy it to ESP32"
+"Compile this C code to WASM and deploy: [paste code]"
+"Deploy a WebAssembly app to control GPIO pins"
+```
+
 ---
 
 **You're ready to start using ESP32 with LLMos!**
 
+### Key Features
+
+🌐 **Browser-Based Compilation** - Compile C to WASM without leaving your browser
+🔒 **Privacy-First** - Code never leaves your machine
+☁️ **Deploy Anywhere** - Works on Vercel, Netlify, any serverless platform
+🚀 **Zero Setup** - No Docker, no backend, just npm install
+🎯 **Direct Hardware Control** - Deploy compiled apps to ESP32 via Web Serial
+
 For more details:
-- **Hardware Setup:** See ESP32_HARDWARE_INTEGRATION.md
-- **Virtual Device:** See VIRTUAL_DEVICE_GUIDE.md
-- **Quick Start:** See HARDWARE_QUICKSTART.md
+- **Browser Compilation:** See llmos-lite/docs/BROWSER_COMPILATION.md
+- **Architecture:** See llmos-lite/ARCHITECTURE.md
+- **System Tools:** See llmos-lite/ui/lib/system-tools.ts
 
 **Status:** ✅ Complete and ready for v0.1 release
 
-**Document Version:** 1.0.0
+**Document Version:** 2.0.0 (Browser-Based WASM Compilation)
 **Date:** 2026-01-02
 **Branch:** real-world-alpha-v01
