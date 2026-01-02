@@ -282,11 +282,11 @@ class SerialManagerClass {
   }
 
   /**
-   * Start reading from device
+   * Start reading from device (physical devices only)
    */
   private async startReading(deviceId: string): Promise<void> {
     const conn = this.connections.get(deviceId);
-    if (!conn) return;
+    if (!conn || !conn.reader) return;
 
     const decoder = new TextDecoder();
     let buffer = '';
@@ -294,7 +294,7 @@ class SerialManagerClass {
     console.log(`[SerialManager] Started reading from ${deviceId}`);
 
     try {
-      while (conn.connected) {
+      while (conn.connected && conn.reader) {
         const { value, done } = await conn.reader.read();
 
         if (done) {
