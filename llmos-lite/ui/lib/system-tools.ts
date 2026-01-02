@@ -1289,19 +1289,16 @@ Hardware access via VFS (see esp32-wasm-development.md skill):
 
     console.log(`[DeployWasmApp] Compiling ${appName}...`);
 
-    // Step 1: Compile C to WASM
+    // Step 1: Compile C to WASM (Browser-based compilation)
     try {
-      const compileResponse = await fetch('/api/compile-wasm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: sourceCode,
-          name: appName,
-          optimizationLevel,
-        }),
-      });
+      // Use browser-based WASM compiler (no backend needed!)
+      const { compileWasm } = await import('./runtime/wasm-compiler');
 
-      const compileResult = await compileResponse.json();
+      const compileResult = await compileWasm({
+        source: sourceCode,
+        name: appName,
+        optimizationLevel,
+      });
 
       if (!compileResult.success) {
         return {
@@ -1309,15 +1306,17 @@ Hardware access via VFS (see esp32-wasm-development.md skill):
           error: 'Compilation failed',
           details: compileResult.error || compileResult.details,
           hint: compileResult.hint,
+          compilationTime: compileResult.compilationTime,
         };
       }
 
-      console.log(`[DeployWasmApp] Compilation successful: ${compileResult.size} bytes`);
+      console.log(`[DeployWasmApp] Compilation successful: ${compileResult.size} bytes in ${compileResult.compilationTime}ms`);
 
       // Step 2: Deploy WASM binary to device
       const { installWasmApp } = await import('./hardware/wasm-deployer');
 
-      const wasmBinary = Buffer.from(compileResult.wasmBase64, 'base64');
+      // Convert Uint8Array to Buffer for TCP transmission
+      const wasmBinary = Buffer.from(compileResult.wasmBinary!);
 
       const deployResult = await installWasmApp(
         { deviceIp },
