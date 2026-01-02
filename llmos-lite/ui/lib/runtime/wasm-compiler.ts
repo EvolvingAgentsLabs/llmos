@@ -28,8 +28,6 @@ async function loadWasmerSDK(): Promise<any> {
   // Using unpkg.com for reliable CDN delivery
   // Use string variable to bypass TypeScript static analysis
   const cdnUrl = 'https://unpkg.com/@wasmer/sdk@0.8.0/dist/index.mjs';
-
-  // @ts-expect-error - Dynamic import of external CDN URL
   const WasmerModule = await import(/* webpackIgnore: true */ cdnUrl);
 
   // Store globally for reuse
