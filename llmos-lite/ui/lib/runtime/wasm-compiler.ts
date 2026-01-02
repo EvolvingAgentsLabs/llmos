@@ -26,6 +26,7 @@ async function loadWasmerSDK(): Promise<any> {
 
   // Load from CDN via dynamic import
   // Using unpkg.com for reliable CDN delivery
+  // @ts-ignore - Dynamic import of external URL is intentional
   const WasmerModule = await import(
     /* webpackIgnore: true */
     'https://unpkg.com/@wasmer/sdk@0.8.0/dist/index.mjs'
