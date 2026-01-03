@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { UserStorage } from '@/lib/user-storage';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import dynamic from 'next/dynamic';
-import { Sparkles, Zap, LayoutGrid } from 'lucide-react';
+import { Sparkles, Zap, LayoutGrid, FolderKanban, Users, User } from 'lucide-react';
 import AgentCortexHeader from '@/components/workspace/AgentCortexHeader';
 
 const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
@@ -21,6 +22,10 @@ export default function Header() {
   const [showEvolution, setShowEvolution] = useState(false);
   const { setContextViewMode, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
+  const { activeProject, projects } = useProjectContext();
+
+  // Get the current active project details
+  const currentProject = projects.find(p => p.id === activeProject);
 
   useEffect(() => {
     setUserDisplay(UserStorage.getUserDisplay());
@@ -75,6 +80,40 @@ export default function Header() {
           <div className="hidden md:block ml-4 pl-4 border-l border-border-primary/50">
             <AgentCortexHeader />
           </div>
+
+          {/* Active Project Indicator */}
+          {currentProject && (
+            <div className="hidden md:flex items-center gap-2 ml-4 pl-4 border-l border-border-primary/50">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-violet-500/10 border border-purple-500/30">
+                {/* Volume icon */}
+                {currentProject.volume === 'team' ? (
+                  <Users className="w-3.5 h-3.5 text-blue-400" />
+                ) : (
+                  <User className="w-3.5 h-3.5 text-gray-400" />
+                )}
+                {/* Volume label */}
+                <span className="text-[10px] font-semibold uppercase text-fg-tertiary">
+                  {currentProject.volume === 'team' ? 'Team' : 'User'}
+                </span>
+                {/* Separator */}
+                <span className="text-fg-muted">/</span>
+                {/* Project icon */}
+                <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
+                {/* Project name */}
+                <span className="text-sm font-medium text-purple-300 max-w-[150px] truncate">
+                  {currentProject.name}
+                </span>
+                {/* Status badge */}
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                  currentProject.status === 'saved'
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-amber-500/20 text-amber-400'
+                }`}>
+                  {currentProject.status === 'saved' ? 'Saved' : 'Temporal'}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right side: User info and status */}

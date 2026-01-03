@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { getVFS } from '@/lib/virtual-fs';
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import NewProjectDialog from '@/components/project/NewProjectDialog';
+import { useProjectContext, ProjectType } from '@/contexts/ProjectContext';
 
 // Import icons from extracted module
 import {
@@ -18,6 +20,9 @@ import {
   EditIcon,
   FolderPlusIcon,
   FilePlusIcon,
+  ProjectsFolderIcon,
+  ProjectIcon,
+  NewProjectIcon,
 } from './icons';
 
 interface TreeNode {
@@ -43,6 +48,7 @@ interface VSCodeFileTreeProps {
   onDesktopSelect?: () => void;
   onCodeFileSelect?: (path: string) => void;
   selectedFile?: string | null;
+  onProjectSelect?: (projectName: string, volume: 'team' | 'user') => void;
 }
 
 // Mock data structure - Single tree with volumes as root drives
@@ -168,11 +174,19 @@ export default function VSCodeFileTree({
   onDesktopSelect,
   onCodeFileSelect,
   selectedFile,
+  onProjectSelect,
 }: VSCodeFileTreeProps) {
+  // Start with system collapsed, expand user and team by default
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    new Set(['system', 'system-agents', 'system-tools', 'system-skills'])
+    new Set(['team', 'user', 'team-projects', 'user-projects'])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // New Project Dialog state
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+
+  // Project context for creating new projects
+  const { addProject, setActiveProject } = useProjectContext();
 
   // Check if a file is a code file based on extension
   const isCodeFile = (filename: string): boolean => {
@@ -476,6 +490,47 @@ export default function VSCodeFileTree({
     }
   }, [renameNode]);
 
+  // Handle creating a new project
+  const handleCreateProject = useCallback((data: { name: string; type: ProjectType; goal?: string }) => {
+    const volume = data.type === 'team' ? 'team' : 'user';
+
+    // Create the project in the context
+    const newProject = addProject({
+      name: data.name,
+      type: data.type,
+      status: 'temporal',
+      volume,
+      goal: data.goal,
+    });
+
+    // Create project folder in VFS
+    try {
+      const vfs = getVFS();
+      vfs.createDirectory(`projects/${data.name}`);
+
+      // Create initial memory files
+      vfs.writeFile(`projects/${data.name}/context.md`, `# ${data.name}\n\n## Goal\n${data.goal || 'No goal specified'}\n\n## Context\nProject created on ${new Date().toLocaleString()}\n`);
+      vfs.writeFile(`projects/${data.name}/memory.md`, `# Memory Log - ${data.name}\n\nThis file tracks important learnings and context for this project.\n\n## Entries\n\n`);
+    } catch (error) {
+      console.error('Failed to create project folder:', error);
+    }
+
+    // Set as active project
+    setActiveProject(newProject.id);
+
+    // Notify parent if callback provided
+    if (onProjectSelect) {
+      onProjectSelect(data.name, volume);
+    }
+
+    // Expand the projects folder
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      next.add(`${volume}-projects`);
+      return next;
+    });
+  }, [addProject, setActiveProject, onProjectSelect]);
+
   // Get context menu items for a node
   const getContextMenuItems = useCallback((node: TreeNode): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [];
@@ -537,8 +592,20 @@ export default function VSCodeFileTree({
       return <DriveIcon type={node.metadata.volume as 'system' | 'team' | 'user'} />;
     }
 
-    // Folder icon
+    // Folder icon - check for special project folders
     if (node.type === 'folder') {
+      // Projects folder under Team or User
+      if (node.id === 'team-projects' || node.id === 'user-projects') {
+        return <ProjectsFolderIcon open={isExpanded} />;
+      }
+
+      // Individual project folders (top-level folders in projects/)
+      // These have IDs like 'vfs-dir-projects/projectname'
+      if (node.id.startsWith('vfs-dir-projects/') && !node.id.includes('/', 17)) {
+        // This is a direct child of projects/ (a project folder)
+        return <ProjectIcon />;
+      }
+
       return <FolderIcon open={isExpanded} />;
     }
 
@@ -567,6 +634,9 @@ export default function VSCodeFileTree({
     const isRenaming = renameNode?.id === node.id;
     const isVFSNode = node.id.startsWith('vfs-');
 
+    // Check if this node is a project folder (direct child of projects/)
+    const isProjectFolder = node.id.startsWith('vfs-dir-projects/') && !node.id.slice(17).includes('/');
+
     // Handle node click
     const handleNodeClick = () => {
       setSelectedNodeId(node.id);
@@ -576,6 +646,19 @@ export default function VSCodeFileTree({
         if (node.metadata?.action === 'desktop' && onDesktopSelect) {
           onDesktopSelect();
         }
+        return;
+      }
+
+      // Handle project folder selection - notify parent and set as active
+      if (isProjectFolder && node.type === 'folder') {
+        // Extract volume type from parent context
+        // The path is like 'projects/projectname', we need to determine if it's in team or user
+        const volume = activeVolume === 'team' ? 'team' : 'user';
+        if (onProjectSelect) {
+          onProjectSelect(node.name, volume);
+        }
+        // Also toggle expand
+        toggleNode(node.id);
         return;
       }
 
@@ -703,20 +786,31 @@ export default function VSCodeFileTree({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Tree header */}
+      {/* Tree header with toolbar */}
       <div className="px-3 py-2 border-b border-border-primary/50 flex items-center justify-between">
         <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
           Explorer
         </span>
-        <button
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-tertiary transition-colors"
-          onClick={() => setExpandedNodes(new Set())}
-          title="Collapse All"
-        >
-          <svg className="w-3 h-3 text-fg-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {/* New Project Button */}
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-accent-primary/20 transition-colors group"
+            onClick={() => setShowNewProjectDialog(true)}
+            title="New Project"
+          >
+            <NewProjectIcon />
+          </button>
+          {/* Collapse All Button */}
+          <button
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-tertiary transition-colors"
+            onClick={() => setExpandedNodes(new Set())}
+            title="Collapse All"
+          >
+            <svg className="w-3 h-3 text-fg-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* File tree - Single unified tree with volumes as drives */}
@@ -754,6 +848,14 @@ export default function VSCodeFileTree({
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm({ isOpen: false, node: null })}
         danger
+      />
+
+      {/* New Project Dialog */}
+      <NewProjectDialog
+        isOpen={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+        onCreate={handleCreateProject}
+        defaultVolume={activeVolume}
       />
     </div>
   );
