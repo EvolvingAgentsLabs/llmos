@@ -5,7 +5,7 @@
  * Updated: 2024-12-29 - Forces Desktop (applets) view on startup
  */
 
-import { useState, useEffect, Suspense, lazy } from 'react';
+import { useState, useEffect, Suspense, lazy, useCallback, useRef } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
 import { useSessionContext } from '@/contexts/SessionContext';
 import { useApplets } from '@/contexts/AppletContext';
@@ -14,6 +14,7 @@ import { LLMStorage } from '@/lib/llm-client';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import { DesktopAppletManager } from '@/lib/applets/desktop-applet-manager';
 import CommandPalette from './CommandPalette';
+import { Maximize2, Minimize2 } from 'lucide-react';
 
 // Lazy load panels
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
@@ -221,6 +222,45 @@ export default function FluidLayout() {
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [isTreeOpen, setIsTreeOpen] = useState(true); // Start with tree open
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(480); // Default width
+  const [isResizing, setIsResizing] = useState(false);
+  const [maximizedPanel, setMaximizedPanel] = useState<'left' | 'right' | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Handle resize
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - containerRect.left;
+      // Clamp between 320 and 700px
+      setLeftPanelWidth(Math.min(700, Math.max(320, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Toggle maximize for a panel
+  const toggleMaximize = useCallback((panel: 'left' | 'right') => {
+    setMaximizedPanel(prev => prev === panel ? null : panel);
+  }, []);
 
   // Register applet generation callback so generate-applet tool works
   useEffect(() => {
@@ -397,12 +437,28 @@ export default function FluidLayout() {
       <CommandPalette />
 
       {/* ================================================================== */}
-      {/* MAIN 2-PANEL LAYOUT */}
+      {/* MAIN 2-PANEL LAYOUT (VS Code style resizable) */}
       {/* ================================================================== */}
-      <div className="flex-1 flex overflow-hidden">
+      <div ref={containerRef} className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
         {/* LEFT PANEL: Chat + Tree */}
-        <div className="w-1/2 min-w-[400px] max-w-[600px] flex flex-col
-                        bg-bg-secondary border-r border-border-primary">
+        <div
+          className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
+            maximizedPanel === 'right' ? 'hidden' : maximizedPanel === 'left' ? 'w-full' : ''
+          }`}
+          style={{ width: maximizedPanel === 'left' ? '100%' : maximizedPanel === 'right' ? 0 : leftPanelWidth }}
+        >
+          {/* Panel Header with Maximize */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
+            <span className="text-xs font-medium text-fg-secondary">Explorer & Chat</span>
+            <button
+              onClick={() => toggleMaximize('left')}
+              className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
+              title={maximizedPanel === 'left' ? 'Restore' : 'Maximize'}
+            >
+              {maximizedPanel === 'left' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
           {/* Collapsible Tree */}
           <TreePanel
             isOpen={isTreeOpen}
@@ -427,14 +483,51 @@ export default function FluidLayout() {
           </div>
         </div>
 
+        {/* RESIZE HANDLE */}
+        {maximizedPanel === null && (
+          <div
+            className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary cursor-col-resize transition-all flex-shrink-0 relative group"
+            onMouseDown={handleResizeStart}
+          >
+            {/* Visual indicator on hover */}
+            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-accent-primary/20" />
+            {/* Drag dots */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="w-1 h-1 rounded-full bg-accent-primary" />
+              <div className="w-1 h-1 rounded-full bg-accent-primary" />
+              <div className="w-1 h-1 rounded-full bg-accent-primary" />
+            </div>
+          </div>
+        )}
+
         {/* RIGHT PANEL: Dynamic content based on contextViewMode */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary relative">
-          <RightPanelContent
-            contextViewMode={contextViewMode}
-            activeFilePath={activeFilePath}
-            activeVolume={activeVolume}
-            activeSession={activeSession}
-          />
+        <div
+          className={`flex-1 flex flex-col overflow-hidden bg-bg-primary relative ${
+            maximizedPanel === 'left' ? 'hidden' : maximizedPanel === 'right' ? 'w-full' : ''
+          }`}
+        >
+          {/* Panel Header with Maximize */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
+            <span className="text-xs font-medium text-fg-secondary">
+              {activeFilePath ? activeFilePath.split('/').pop() : 'Desktop'}
+            </span>
+            <button
+              onClick={() => toggleMaximize('right')}
+              className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
+              title={maximizedPanel === 'right' ? 'Restore' : 'Maximize'}
+            >
+              {maximizedPanel === 'right' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            <RightPanelContent
+              contextViewMode={contextViewMode}
+              activeFilePath={activeFilePath}
+              activeVolume={activeVolume}
+              activeSession={activeSession}
+            />
+          </div>
         </div>
       </div>
 
