@@ -100,19 +100,19 @@
   /* Button - Primary (Claude style) */
   .btn-primary {
     @apply bg-accent-primary text-white font-medium;
-    @apply px-5 py-2.5 rounded-lg;
-    @apply transition-all duration-150;
+    @apply px-5 py-2.5 rounded-xl;
+    @apply transition-all duration-200;
     @apply hover:bg-accent-secondary hover:shadow-md;
     @apply active:scale-[0.98];
-    @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent-primary;
+    @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent-primary disabled:shadow-none;
   }
 
   /* Button - Secondary */
   .btn-secondary {
     @apply bg-bg-secondary text-fg-primary font-medium;
-    @apply px-5 py-2.5 rounded-lg border border-border-primary;
-    @apply transition-all duration-150;
-    @apply hover:border-border-secondary hover:shadow-sm;
+    @apply px-5 py-2.5 rounded-xl border border-border-primary;
+    @apply transition-all duration-200;
+    @apply hover:border-border-secondary hover:bg-bg-tertiary hover:shadow-sm;
     @apply active:scale-[0.98];
     @apply disabled:opacity-40 disabled:cursor-not-allowed;
   }
@@ -120,39 +120,118 @@
   /* Button - Ghost */
   .btn-ghost {
     @apply bg-transparent text-fg-secondary font-medium;
-    @apply px-5 py-2.5 rounded-lg;
-    @apply transition-all duration-150;
+    @apply px-5 py-2.5 rounded-xl;
+    @apply transition-all duration-200;
     @apply hover:bg-bg-tertiary hover:text-fg-primary;
     @apply active:scale-[0.98];
+  }
+
+  /* Button - Danger (Material Design red) */
+  .btn-danger {
+    @apply text-white font-medium;
+    @apply px-5 py-2.5 rounded-xl;
+    @apply bg-gradient-to-r from-red-500 to-red-600;
+    @apply shadow-lg shadow-red-500/25;
+    @apply transition-all duration-200;
+    @apply hover:from-red-600 hover:to-red-700 hover:shadow-red-500/40;
+    @apply active:scale-[0.98];
+    @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
+  }
+
+  /* Button - Gradient (Material Design inspired) */
+  .btn-gradient {
+    @apply text-white font-medium;
+    @apply px-5 py-2.5 rounded-xl;
+    @apply bg-gradient-to-r from-purple-500 to-violet-600;
+    @apply shadow-lg shadow-purple-500/25;
+    @apply transition-all duration-200;
+    @apply hover:from-purple-600 hover:to-violet-700 hover:shadow-purple-500/40;
+    @apply active:scale-[0.98];
+    @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
   }
 
   /* Icon button - Subtle and minimal */
   .btn-icon {
     @apply bg-transparent text-fg-secondary;
-    @apply w-9 h-9 rounded-lg;
+    @apply w-9 h-9 rounded-xl;
     @apply flex items-center justify-center;
-    @apply transition-all duration-150;
+    @apply transition-all duration-200;
     @apply hover:bg-bg-tertiary hover:text-accent-primary;
     @apply active:scale-[0.95];
   }
 
-  /* Input field - Clean with subtle borders */
-  .input {
-    @apply bg-bg-secondary border border-border-primary;
-    @apply text-fg-primary px-4 py-2.5 rounded-lg;
-    @apply focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/30;
-    @apply placeholder:text-fg-tertiary;
-    @apply transition-all duration-150;
+  /* Icon button - Rounded (Material Design FAB-like) */
+  .btn-icon-round {
+    @apply bg-transparent text-fg-tertiary;
+    @apply w-8 h-8 rounded-full;
+    @apply flex items-center justify-center;
+    @apply transition-all duration-200;
+    @apply hover:bg-white/10 hover:text-fg-primary;
+    @apply active:scale-[0.95];
   }
 
-  /* Textarea - Consistent with inputs */
+  /* Input field - Material Design inspired */
+  .input {
+    @apply bg-bg-secondary border-2 border-border-primary;
+    @apply text-fg-primary px-4 py-2.5 rounded-xl;
+    @apply focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10;
+    @apply placeholder:text-fg-muted;
+    @apply transition-all duration-200;
+  }
+
+  .input-primary {
+    @apply bg-bg-secondary border-2 border-border-primary;
+    @apply text-fg-primary px-4 py-3 rounded-xl;
+    @apply focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10;
+    @apply placeholder:text-fg-muted;
+    @apply transition-all duration-200;
+  }
+
+  /* Textarea - Material Design inspired */
   .textarea {
-    @apply bg-bg-secondary border border-border-primary;
-    @apply text-fg-primary px-4 py-3 rounded-lg;
-    @apply focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/30;
-    @apply placeholder:text-fg-tertiary;
+    @apply bg-bg-secondary border-2 border-border-primary;
+    @apply text-fg-primary px-4 py-3 rounded-xl;
+    @apply focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10;
+    @apply placeholder:text-fg-muted;
     @apply resize-none;
-    @apply transition-all duration-150;
+    @apply transition-all duration-200;
+  }
+
+  /* Selection card - Material Design card selection pattern */
+  .selection-card {
+    @apply relative p-4 rounded-xl border-2 transition-all duration-200 text-left;
+    @apply border-border-primary bg-bg-secondary;
+    @apply hover:border-border-secondary hover:bg-bg-tertiary;
+  }
+
+  .selection-card-selected {
+    @apply border-purple-500/60 bg-purple-500/10 shadow-lg shadow-purple-500/10;
+  }
+
+  /* Dialog/Modal - Material Design inspired */
+  .dialog-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+    @apply bg-black/60 backdrop-blur-sm;
+  }
+
+  .dialog-panel {
+    @apply relative bg-bg-primary rounded-2xl shadow-2xl;
+    @apply border border-white/10 overflow-hidden;
+    @apply max-w-lg w-full mx-4;
+  }
+
+  .dialog-header {
+    @apply relative px-6 py-5 border-b border-border-primary;
+    @apply bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent;
+  }
+
+  .dialog-content {
+    @apply px-6 py-6 space-y-6;
+  }
+
+  .dialog-footer {
+    @apply px-6 py-4 border-t border-border-primary bg-bg-secondary/50;
+    @apply flex items-center justify-end gap-3;
   }
 
   /* Badge - Subtle and refined */

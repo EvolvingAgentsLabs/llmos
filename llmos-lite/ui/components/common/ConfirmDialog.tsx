@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -14,7 +15,8 @@ interface ConfirmDialogProps {
 }
 
 /**
- * ConfirmDialog - Modal confirmation dialog for destructive actions
+ * ConfirmDialog - Material Design inspired confirmation dialog
+ * Features smooth animations, proper elevation, and consistent button styling
  */
 export default function ConfirmDialog({
   isOpen,
@@ -27,6 +29,16 @@ export default function ConfirmDialog({
   danger = false,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Handle animation on open/close
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => setIsVisible(true));
+    } else {
+      setIsVisible(false);
+    }
+  }, [isOpen]);
 
   // Handle escape key
   useEffect(() => {
@@ -51,52 +63,77 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-200 ${
+        isVisible ? 'opacity-100' : 'opacity-0'
+      }`}
       onClick={onCancel}
     >
-      {/* Backdrop */}
+      {/* Backdrop with blur */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Dialog */}
+      {/* Dialog - Material Design inspired */}
       <div
         ref={dialogRef}
-        className="relative bg-bg-primary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden"
+        className={`relative bg-bg-primary border rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden transition-all duration-200 ${
+          isVisible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'
+        } ${danger ? 'border-red-500/30' : 'border-white/10'}`}
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
         {/* Header */}
-        <div className={`px-4 py-3 border-b border-border-primary ${danger ? 'bg-red-500/10' : 'bg-bg-secondary'}`}>
-          <div className="flex items-center gap-2">
-            {danger && (
-              <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            )}
-            <h3 className={`font-semibold ${danger ? 'text-red-400' : 'text-fg-primary'}`}>
+        <div className={`relative px-5 py-4 border-b ${
+          danger
+            ? 'bg-gradient-to-r from-red-500/15 to-red-500/5 border-red-500/20'
+            : 'bg-gradient-to-r from-purple-500/10 to-transparent border-border-primary'
+        }`}>
+          {/* Close button */}
+          <button
+            onClick={onCancel}
+            className="absolute right-3 top-3 w-7 h-7 rounded-full flex items-center justify-center text-fg-tertiary hover:text-fg-primary hover:bg-white/10 transition-all duration-200"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-3">
+            {/* Icon container with glow effect */}
+            <div className="relative">
+              {danger && (
+                <div className="absolute inset-0 bg-red-500/30 rounded-lg blur-md" />
+              )}
+              <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
+                danger
+                  ? 'bg-gradient-to-br from-red-500 to-red-600 shadow-red-500/30'
+                  : 'bg-gradient-to-br from-purple-500 to-violet-600 shadow-purple-500/30'
+              }`}>
+                <AlertTriangle className="w-5 h-5 text-white" />
+              </div>
+            </div>
+            <h3 className={`font-semibold text-lg ${danger ? 'text-red-400' : 'text-fg-primary'}`}>
               {title}
             </h3>
           </div>
         </div>
 
         {/* Content */}
-        <div className="px-4 py-4">
-          <p className="text-fg-secondary text-sm">{message}</p>
+        <div className="px-5 py-5">
+          <p className="text-fg-secondary text-sm leading-relaxed">{message}</p>
         </div>
 
-        {/* Actions */}
-        <div className="px-4 py-3 border-t border-border-primary bg-bg-secondary flex justify-end gap-2">
+        {/* Actions - Material Design button styling */}
+        <div className="px-5 py-4 border-t border-border-primary bg-bg-secondary/50 flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm rounded-md bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary transition-colors"
+            className="px-5 py-2.5 text-sm font-medium rounded-xl text-fg-secondary bg-transparent border border-border-primary hover:bg-bg-tertiary hover:border-border-secondary active:scale-[0.98] transition-all duration-200"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm rounded-md font-medium transition-colors ${
+            className={`px-5 py-2.5 text-sm font-medium rounded-xl active:scale-[0.98] transition-all duration-200 ${
               danger
-                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
-                : 'bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 border border-accent-primary/30'
+                ? 'text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg shadow-red-500/25 hover:shadow-red-500/40'
+                : 'text-white bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40'
             }`}
           >
             {confirmText}
