@@ -158,3 +158,72 @@ export const FilePlusIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>
 );
+
+// ============================================================================
+// PROJECT ICONS
+// ============================================================================
+
+/**
+ * Projects Folder Icon - A folder with a grid pattern inside
+ * Used for the "projects" folder under Team and User volumes
+ */
+export const ProjectsFolderIcon = ({ open }: { open?: boolean }) => (
+  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+    {open ? (
+      <>
+        {/* Open folder base */}
+        <path d="M7.5 2L6.79 3H2v9h12V2H7.5zm6.31 1L14 11H2V4h4.5l.71-1h6.6z" fill="#22c55e"/>
+        {/* Grid dots inside */}
+        <circle cx="5" cy="7" r="0.8" fill="#86efac"/>
+        <circle cx="8" cy="7" r="0.8" fill="#86efac"/>
+        <circle cx="11" cy="7" r="0.8" fill="#86efac"/>
+        <circle cx="5" cy="9.5" r="0.8" fill="#86efac"/>
+        <circle cx="8" cy="9.5" r="0.8" fill="#86efac"/>
+        <circle cx="11" cy="9.5" r="0.8" fill="#86efac"/>
+      </>
+    ) : (
+      <>
+        {/* Closed folder base */}
+        <path d="M14.5 3H7.71l-.85-1h-5v11h13V3h-.36zm-.51 1l.01 7.5h-11L3 4h7.29l.86 1h2.84z" fill="#16a34a"/>
+        {/* Grid dots inside */}
+        <circle cx="5" cy="7" r="0.8" fill="#4ade80"/>
+        <circle cx="8" cy="7" r="0.8" fill="#4ade80"/>
+        <circle cx="11" cy="7" r="0.8" fill="#4ade80"/>
+        <circle cx="5" cy="9.5" r="0.8" fill="#4ade80"/>
+        <circle cx="8" cy="9.5" r="0.8" fill="#4ade80"/>
+        <circle cx="11" cy="9.5" r="0.8" fill="#4ade80"/>
+      </>
+    )}
+  </svg>
+);
+
+/**
+ * Project Icon - A box/cube representing a project workspace
+ * Used for each project folder inside the projects folder
+ */
+export const ProjectIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+    {/* 3D box/cube shape representing a project */}
+    <path d="M8 1L2 4v8l6 3 6-3V4L8 1z" fill="#a855f7" opacity="0.3"/>
+    <path d="M8 1L2 4l6 3 6-3-6-3z" fill="#a855f7"/>
+    <path d="M8 7v8l6-3V4l-6 3z" fill="#c084fc"/>
+    <path d="M8 7L2 4v8l6 3V7z" fill="#9333ea"/>
+    {/* Center dot */}
+    <circle cx="8" cy="7" r="1" fill="white" opacity="0.8"/>
+  </svg>
+);
+
+/**
+ * New Project Icon - Plus sign for creating new projects
+ */
+export const NewProjectIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+    {/* Cube base */}
+    <path d="M8 1L2 4v8l6 3 6-3V4L8 1z" fill="#22c55e" opacity="0.3"/>
+    <path d="M8 1L2 4l6 3 6-3-6-3z" fill="#22c55e"/>
+    <path d="M8 7v8l6-3V4l-6 3z" fill="#4ade80"/>
+    <path d="M8 7L2 4v8l6 3V7z" fill="#16a34a"/>
+    {/* Plus sign in center */}
+    <path d="M8 5v4M6 7h4" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+  </svg>
+);

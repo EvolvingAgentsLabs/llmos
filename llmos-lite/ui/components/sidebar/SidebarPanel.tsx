@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, lazy, Suspense } from 'react';
+import { useState, useRef, lazy, Suspense, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
 import { ChevronDown, ChevronRight, FolderTree, Bot } from 'lucide-react';
+import { getVFS } from '@/lib/virtual-fs';
 
 // Lazy load ChatPanel
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
@@ -32,7 +33,7 @@ export default function SidebarPanel({
   pendingPrompt,
   onPromptProcessed,
 }: SidebarPanelProps) {
-  const { projects } = useProjectContext();
+  const { projects, setActiveProject, addProject } = useProjectContext();
   const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
 
@@ -107,6 +108,53 @@ export default function SidebarPanel({
     ensureContextPanelOpen();
   };
 
+  // Handle project selection from tree
+  const handleProjectSelect = useCallback((projectName: string, volume: 'team' | 'user') => {
+    console.log('[SidebarPanel] Project selected:', projectName, 'in volume:', volume);
+
+    // Find or create the project in context
+    let project = projects.find(
+      p => p.name === projectName && p.volume === volume
+    );
+
+    if (!project) {
+      // Create a new project entry for this folder
+      console.log('[SidebarPanel] Creating project context for:', projectName);
+      project = addProject({
+        name: projectName,
+        type: volume === 'team' ? 'team' : 'user',
+        status: 'temporal',
+        volume,
+      });
+    }
+
+    // Set as active project
+    setActiveProject(project.id);
+    onSessionChange(project.id);
+
+    // Switch to chat section to show the project context
+    setExpandedSection('chat');
+
+    // Log memory file status for the project
+    try {
+      const vfs = getVFS();
+      const memoryPath = `projects/${projectName}/memory.md`;
+      const contextPath = `projects/${projectName}/context.md`;
+
+      const hasMemory = vfs.exists(memoryPath);
+      const hasContext = vfs.exists(contextPath);
+
+      console.log('[SidebarPanel] Project memory files:', {
+        memoryPath,
+        hasMemory,
+        contextPath,
+        hasContext,
+      });
+    } catch (error) {
+      console.log('[SidebarPanel] Could not check memory files:', error);
+    }
+  }, [projects, addProject, setActiveProject, onSessionChange]);
+
   return (
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden bg-bg-secondary">
       {/* ========== FILES SECTION ========== */}
@@ -151,6 +199,7 @@ export default function SidebarPanel({
               onFileSelect={handleFileSelect}
               onDesktopSelect={handleDesktopSelect}
               onCodeFileSelect={handleCodeFileSelect}
+              onProjectSelect={handleProjectSelect}
               selectedFile={null}
             />
           </div>
