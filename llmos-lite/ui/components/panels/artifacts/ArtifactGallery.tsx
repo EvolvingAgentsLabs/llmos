@@ -23,7 +23,7 @@ interface ArtifactGalleryProps {
  */
 export default function ArtifactGallery({
   artifacts,
-  defaultView = 'graphical',
+  defaultView = 'preview',
   onDeleteArtifact,
   onEditArtifact,
 }: ArtifactGalleryProps) {

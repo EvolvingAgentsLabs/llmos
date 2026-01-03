@@ -181,7 +181,7 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
           <PanelErrorBoundary panelName="Artifact Gallery">
             <ArtifactGallery
               artifacts={allArtifacts}
-              defaultView="split"
+              defaultView="preview"
               onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
               onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
             />
