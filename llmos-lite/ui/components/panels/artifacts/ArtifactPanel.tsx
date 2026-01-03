@@ -1,25 +1,19 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import WorkflowCanvas from './WorkflowCanvas';
-import NodeLibraryPanel from './NodeLibraryPanel';
-import NodeEditor from './NodeEditor';
 import ArtifactGallery from './ArtifactGallery';
 import { ArtifactData } from './ArtifactViewer';
-import { QuantumCircuit } from './CircuitRenderer';
 import { ThreeScene } from './ThreeRenderer';
 import { PlotData } from './PlotRenderer';
-import QuantumCircuitDesigner from './QuantumCircuitDesigner';
 import { useArtifactStore } from '@/lib/artifacts/store';
 import { Artifact } from '@/lib/artifacts/types';
 import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { Maximize2, Minimize2 } from 'lucide-react';
 
 interface ArtifactPanelProps {
   activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
 }
-
-type ViewTab = 'workflow' | 'artifacts' | 'library' | 'quantum-designer';
 
 // Convert Artifact from store to ArtifactData for gallery
 function convertToArtifactData(artifact: Artifact): ArtifactData & { id: string; name?: string } {
@@ -62,9 +56,7 @@ function convertToArtifactData(artifact: Artifact): ArtifactData & { id: string;
 }
 
 export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactPanelProps) {
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ViewTab>('workflow');
+  const [isMaximized, setIsMaximized] = useState(false);
   const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
 
   // Use artifact store
@@ -74,7 +66,6 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     initialize,
     deleteArtifact,
     updateArtifact,
-    getByVolume,
   } = useArtifactStore();
 
   // Initialize store on mount
@@ -87,70 +78,49 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
   // Sample artifacts for demonstration (fallback when store is empty)
   const [sampleArtifacts] = useState<Array<ArtifactData & { id: string; name?: string }>>([
     {
-      id: 'bell-circuit',
-      name: 'Bell State Preparation',
-      type: 'quantum-circuit',
-      data: {
-        type: 'quantum-circuit',
-        title: 'Bell State Preparation',
-        numQubits: 2,
-        gates: [
-          { type: 'H', target: 0, time: 0 },
-          { type: 'CNOT', target: 1, control: 0, time: 1 },
-        ],
-        measurements: [0, 1],
-      } as QuantumCircuit,
-    },
-    {
-      id: 'vqe-convergence',
-      name: 'VQE Convergence',
+      id: 'sample-plot',
+      name: 'Sample Chart',
       type: 'plot',
       data: {
         type: 'line',
-        title: 'VQE Convergence',
+        title: 'Sample Data',
         data: [
-          { iteration: 0, energy: -0.5 },
-          { iteration: 10, energy: -0.8 },
-          { iteration: 20, energy: -0.95 },
-          { iteration: 30, energy: -1.05 },
-          { iteration: 40, energy: -1.12 },
-          { iteration: 50, energy: -1.137 },
+          { x: 0, y: 10 },
+          { x: 10, y: 25 },
+          { x: 20, y: 40 },
+          { x: 30, y: 35 },
+          { x: 40, y: 55 },
+          { x: 50, y: 70 },
         ],
-        xKey: 'iteration',
-        yKey: 'energy',
+        xKey: 'x',
+        yKey: 'y',
         color: '#00ff88',
       } as PlotData,
     },
     {
-      id: 'molecule-viz',
-      name: 'H2 Molecule Visualization',
+      id: 'sample-3d',
+      name: 'Sample 3D Scene',
       type: '3d-scene',
       data: {
         type: '3d-scene',
-        title: 'H2 Molecule Visualization',
+        title: '3D Visualization',
         objects: [
           {
             type: 'sphere',
-            position: [-0.7, 0, 0],
-            scale: [0.5, 0.5, 0.5],
-            color: '#ffffff',
-          },
-          {
-            type: 'sphere',
-            position: [0.7, 0, 0],
-            scale: [0.5, 0.5, 0.5],
-            color: '#ffffff',
+            position: [0, 0, 0],
+            scale: [1, 1, 1],
+            color: '#00ff88',
           },
           {
             type: 'cube',
-            position: [0, 0, 0],
-            scale: [1.4, 0.1, 0.1],
-            color: '#00ff88',
+            position: [2, 0, 0],
+            scale: [0.5, 0.5, 0.5],
+            color: '#ff6600',
             wireframe: true,
           },
         ],
         camera: {
-          position: [3, 2, 3],
+          position: [5, 3, 5],
           lookAt: [0, 0, 0],
         },
       } as ThreeScene,
@@ -167,7 +137,6 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     // Check if it's a sample artifact
     const isSample = sampleArtifacts.some(a => a.id === id);
     if (isSample) {
-      // For sample artifacts, we can't delete them from the store
       console.log('Sample artifact cannot be deleted');
       return;
     }
@@ -185,150 +154,40 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
   // Handle edit artifact
   const handleEditArtifact = useCallback((id: string) => {
     setEditingArtifactId(id);
-    // Switch to artifacts tab to show the editor
-    setActiveTab('artifacts');
   }, []);
-
-  // Handle save artifact
-  const handleSaveArtifact = useCallback((id: string, newCode: string) => {
-    const updated = updateArtifact(id, { codeView: newCode });
-    if (updated) {
-      console.log('Artifact saved:', id);
-    }
-  }, [updateArtifact]);
 
   return (
     <PanelErrorBoundary panelName="Artifact Panel">
-      <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-        {/* Left: Node Library (collapsible) */}
-        {!isFullscreen && (
-          <div className="hidden lg:block w-64 border-r border-terminal-border bg-terminal-bg-secondary">
-            <PanelErrorBoundary panelName="Node Library">
-              <NodeLibraryPanel />
-            </PanelErrorBoundary>
+      <div className={`h-full flex flex-col ${isMaximized ? 'fixed inset-0 z-50 bg-bg-primary' : ''}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border-primary bg-bg-secondary">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-fg-primary">Artifacts</span>
+            <span className="px-2 py-0.5 text-xs rounded-full bg-bg-elevated text-fg-secondary">
+              {allArtifacts.length}
+            </span>
           </div>
-        )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-terminal-bg-secondary">
-        {/* Tab Navigation */}
-        <div className="border-b border-terminal-border bg-terminal-bg-primary">
-          <div className="flex items-center justify-between p-3">
-            <div className="flex gap-1">
-              <button
-                onClick={() => setActiveTab('workflow')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  activeTab === 'workflow'
-                    ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                    : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-                }`}
-              >
-                🔗 Workflow
-              </button>
-              <button
-                onClick={() => setActiveTab('artifacts')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  activeTab === 'artifacts'
-                    ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                    : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-                }`}
-              >
-                📦 Artifacts ({allArtifacts.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('library')}
-                className={`px-3 py-1 text-xs rounded transition-colors lg:hidden ${
-                  activeTab === 'library'
-                    ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                    : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-                }`}
-              >
-                📚 Library
-              </button>
-              <button
-                onClick={() => setActiveTab('quantum-designer')}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  activeTab === 'quantum-designer'
-                    ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                    : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-                }`}
-              >
-                ⚛️ Quantum Designer
-              </button>
-            </div>
-            <button
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="btn-touch-icon md:text-xs md:px-2 md:py-1 md:min-w-0 md:min-h-0"
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
-              {isFullscreen ? '✕' : '⛶'}
-            </button>
-          </div>
+          <button
+            onClick={() => setIsMaximized(!isMaximized)}
+            className="p-1.5 rounded-lg hover:bg-white/10 text-fg-secondary hover:text-fg-primary transition-colors"
+            title={isMaximized ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
         </div>
 
-        {/* Tab Content */}
+        {/* Gallery Content */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'workflow' && (
-            <div className={`h-full flex flex-col`}>
-              {/* Workflow Canvas */}
-              <div className={`${isFullscreen ? 'h-full' : 'h-2/3'} border-b border-terminal-border`}>
-                <div className="h-full">
-                  <PanelErrorBoundary panelName="Workflow Canvas">
-                    <WorkflowCanvas
-                      onNodeSelect={setSelectedNode}
-                      selectedNode={selectedNode}
-                    />
-                  </PanelErrorBoundary>
-                </div>
-              </div>
-
-              {/* Node Detail - Hidden in fullscreen */}
-              {!isFullscreen && (
-                <div className="h-1/3 overflow-auto">
-                  <div className="p-3 border-b border-terminal-border bg-terminal-bg-primary">
-                    <h2 className="terminal-heading text-xs">NODE DETAIL</h2>
-                  </div>
-                  <div className="p-4">
-                    <PanelErrorBoundary panelName="Node Editor">
-                      <NodeEditor selectedNode={selectedNode} />
-                    </PanelErrorBoundary>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'artifacts' && (
-            <div className="h-full">
-              <PanelErrorBoundary panelName="Artifact Gallery">
-                <ArtifactGallery
-                  artifacts={allArtifacts}
-                  defaultView="split"
-                  onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
-                  onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
-                />
-              </PanelErrorBoundary>
-            </div>
-          )}
-
-          {activeTab === 'library' && (
-            <div className="h-full lg:hidden">
-              <PanelErrorBoundary panelName="Node Library Mobile">
-                <NodeLibraryPanel />
-              </PanelErrorBoundary>
-            </div>
-          )}
-
-          {activeTab === 'quantum-designer' && (
-            <div className="h-full p-4">
-              <PanelErrorBoundary panelName="Quantum Designer">
-                <QuantumCircuitDesigner />
-              </PanelErrorBoundary>
-            </div>
-          )}
+          <PanelErrorBoundary panelName="Artifact Gallery">
+            <ArtifactGallery
+              artifacts={allArtifacts}
+              defaultView="preview"
+              onDeleteArtifact={storeArtifacts.length > 0 ? handleDeleteArtifact : undefined}
+              onEditArtifact={storeArtifacts.length > 0 ? handleEditArtifact : undefined}
+            />
+          </PanelErrorBoundary>
         </div>
       </div>
-    </div>
     </PanelErrorBoundary>
   );
 }

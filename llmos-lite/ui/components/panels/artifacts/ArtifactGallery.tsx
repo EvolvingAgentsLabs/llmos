@@ -23,7 +23,7 @@ interface ArtifactGalleryProps {
  */
 export default function ArtifactGallery({
   artifacts,
-  defaultView = 'graphical',
+  defaultView = 'preview',
   onDeleteArtifact,
   onEditArtifact,
 }: ArtifactGalleryProps) {
@@ -60,8 +60,6 @@ export default function ArtifactGallery({
     switch (type) {
       case '3d-scene':
         return '🎨';
-      case 'quantum-circuit':
-        return '⚛️';
       case 'plot':
         return '📊';
       case 'code':
@@ -72,8 +70,6 @@ export default function ArtifactGallery({
         return '🔧';
       case 'skill':
         return '⭐';
-      case 'workflow':
-        return '📋';
       default:
         return '📄';
     }
@@ -83,8 +79,6 @@ export default function ArtifactGallery({
     switch (type) {
       case '3d-scene':
         return '3D Scene';
-      case 'quantum-circuit':
-        return 'Quantum Circuit';
       case 'plot':
         return 'Plot';
       case 'code':
@@ -95,8 +89,6 @@ export default function ArtifactGallery({
         return 'Tool';
       case 'skill':
         return 'Skill';
-      case 'workflow':
-        return 'Workflow';
       default:
         return 'Artifact';
     }

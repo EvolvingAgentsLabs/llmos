@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import ThreeRenderer, { ThreeScene } from './ThreeRenderer';
-import CircuitRenderer, { QuantumCircuit } from './CircuitRenderer';
 import PlotRenderer, { PlotData } from './PlotRenderer';
 import CodeExecutor from './CodeExecutor';
+import { Eye, Code, Maximize2, Minimize2 } from 'lucide-react';
 
-export type ViewMode = 'graphical' | 'code' | 'split';
+export type ViewMode = 'preview' | 'code';
 
 export type ArtifactData =
   | { type: '3d-scene'; data: ThreeScene }
-  | { type: 'quantum-circuit'; data: QuantumCircuit }
   | { type: 'plot'; data: PlotData }
   | { type: 'code'; data: { language: string; code: string; title?: string; executable?: boolean } };
 
@@ -21,36 +20,27 @@ interface ArtifactViewerProps {
 }
 
 /**
- * ArtifactViewer - Unified component for displaying all artifact types
+ * ArtifactViewer - Tabbed component for displaying artifacts
  *
  * Features:
- * - Multiple artifact types (3D scenes, quantum circuits, plots, code)
- * - Dual view mode: Graphical | Code | Split
+ * - Multiple artifact types (3D scenes, plots, code)
+ * - Tabbed view mode: Preview | Code
  * - Code serialization for all visual artifacts
- * - Syntax highlighting
- *
- * Usage:
- * ```tsx
- * <ArtifactViewer
- *   artifact={{ type: '3d-scene', data: mySceneData }}
- *   defaultView="split"
- * />
- * ```
+ * - Maximizable panel
  */
 export default function ArtifactViewer({
   artifact,
-  defaultView = 'graphical',
-  height = 500,
+  defaultView = 'preview',
+  height = '100%',
 }: ArtifactViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // Generate code representation from artifact data
   const getCodeRepresentation = (): string => {
     switch (artifact.type) {
       case '3d-scene':
         return generateThreeSceneCode(artifact.data);
-      case 'quantum-circuit':
-        return generateCircuitCode(artifact.data);
       case 'plot':
         return generatePlotCode(artifact.data);
       case 'code':
@@ -64,8 +54,6 @@ export default function ArtifactViewer({
     switch (artifact.type) {
       case '3d-scene':
         return artifact.data.title || '3D Scene';
-      case 'quantum-circuit':
-        return artifact.data.title || 'Quantum Circuit';
       case 'plot':
         return artifact.data.title || 'Plot';
       case 'code':
@@ -79,8 +67,8 @@ export default function ArtifactViewer({
     if (artifact.type === 'code') {
       return artifact.data.language;
     }
-    // Quantum circuits and plots use Python
-    if (artifact.type === 'quantum-circuit' || artifact.type === 'plot') {
+    // Plots use Python
+    if (artifact.type === 'plot') {
       return 'python';
     }
     // 3D scenes use JavaScript
@@ -95,93 +83,90 @@ export default function ArtifactViewer({
     if (artifact.type === 'code') {
       return artifact.data.executable !== false;
     }
-    // Generated code is always executable
-    return artifact.type === 'quantum-circuit' || artifact.type === 'plot';
+    // Generated code is executable for plots
+    return artifact.type === 'plot';
+  };
+
+  const hasPreview = (): boolean => {
+    return artifact.type === '3d-scene' || artifact.type === 'plot';
   };
 
   const code = getCodeRepresentation();
   const title = getTitle();
   const language = getLanguage();
   const isExecutable = canExecute();
+  const showPreview = hasPreview();
+
+  const tabs: { id: ViewMode; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
+    {
+      id: 'preview',
+      label: 'Preview',
+      icon: <Eye className="w-4 h-4" />,
+      disabled: !showPreview
+    },
+    {
+      id: 'code',
+      label: 'Code',
+      icon: <Code className="w-4 h-4" />
+    },
+  ];
 
   return (
-    <div className="h-full flex flex-col bg-terminal-bg-secondary border border-terminal-border rounded overflow-hidden">
-      {/* Header with view mode toggles */}
-      <div className="flex items-center justify-between p-3 border-b border-terminal-border bg-terminal-bg-primary">
-        <h3 className="text-terminal-accent-green text-sm font-mono">
-          {title}
-        </h3>
-        <div className="flex gap-1">
-          <button
-            onClick={() => setViewMode('graphical')}
-            className={`px-2 py-1 text-xs rounded transition-colors ${
-              viewMode === 'graphical'
-                ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-            }`}
-            title="Graphical View"
-          >
-            📊 Visual
-          </button>
-          <button
-            onClick={() => setViewMode('code')}
-            className={`px-2 py-1 text-xs rounded transition-colors ${
-              viewMode === 'code'
-                ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-            }`}
-            title="Code View"
-          >
-            💻 Code
-          </button>
-          <button
-            onClick={() => setViewMode('split')}
-            className={`px-2 py-1 text-xs rounded transition-colors ${
-              viewMode === 'split'
-                ? 'bg-terminal-accent-green text-terminal-bg-primary'
-                : 'bg-terminal-bg-secondary text-terminal-fg-secondary hover:bg-terminal-bg-tertiary'
-            }`}
-            title="Split View"
-          >
-            ⚡ Both
-          </button>
+    <div
+      className={`flex flex-col bg-bg-secondary border border-border-primary rounded-lg overflow-hidden
+                  ${isMaximized ? 'fixed inset-4 z-50' : ''}`}
+      style={{ height: isMaximized ? 'auto' : (typeof height === 'number' ? `${height}px` : height) }}
+    >
+      {/* Header with tabs */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border-primary bg-bg-primary">
+        <div className="flex items-center gap-4">
+          <h3 className="text-sm font-medium text-fg-primary">{title}</h3>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-1 bg-bg-elevated rounded-lg p-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => !tab.disabled && setViewMode(tab.id)}
+                disabled={tab.disabled}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  viewMode === tab.id
+                    ? 'bg-accent-primary text-white'
+                    : tab.disabled
+                      ? 'text-fg-muted cursor-not-allowed'
+                      : 'text-fg-secondary hover:text-fg-primary hover:bg-white/5'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <button
+          onClick={() => setIsMaximized(!isMaximized)}
+          className="p-1.5 rounded-lg hover:bg-white/10 text-fg-secondary hover:text-fg-primary transition-colors"
+          title={isMaximized ? 'Exit fullscreen' : 'Fullscreen'}
+        >
+          {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden" style={{ height: typeof height === 'number' ? `${height}px` : height }}>
-        {viewMode === 'graphical' && (
+      <div className="flex-1 overflow-hidden">
+        {viewMode === 'preview' && showPreview && (
           <div className="h-full p-4">
-            {renderGraphical()}
+            {renderPreview()}
           </div>
         )}
 
-        {viewMode === 'code' && (
+        {(viewMode === 'code' || (viewMode === 'preview' && !showPreview)) && (
           <div className="h-full flex flex-col">
             <div className="flex-1 overflow-auto">
-              <pre className="code-block text-xs p-4 h-full">
-                <code className="text-terminal-accent-blue">{code}</code>
+              <pre className="text-xs p-4 h-full bg-bg-elevated font-mono">
+                <code className="text-accent-primary">{code}</code>
               </pre>
-            </div>
-            {isExecutable && (
-              <CodeExecutor code={code} language={language as 'python' | 'javascript'} />
-            )}
-          </div>
-        )}
-
-        {viewMode === 'split' && (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-              {/* Graphical view */}
-              <div className="flex-1 border-b md:border-b-0 md:border-r border-terminal-border p-4 overflow-auto">
-                {renderGraphical()}
-              </div>
-              {/* Code view */}
-              <div className="flex-1 overflow-auto">
-                <pre className="code-block text-xs p-4 h-full">
-                  <code className="text-terminal-accent-blue">{code}</code>
-                </pre>
-              </div>
             </div>
             {isExecutable && (
               <CodeExecutor code={code} language={language as 'python' | 'javascript'} />
@@ -192,23 +177,21 @@ export default function ArtifactViewer({
     </div>
   );
 
-  function renderGraphical() {
+  function renderPreview() {
     switch (artifact.type) {
       case '3d-scene':
         return <ThreeRenderer sceneData={artifact.data} height="100%" />;
-      case 'quantum-circuit':
-        return <CircuitRenderer circuitData={artifact.data} height="100%" />;
       case 'plot':
         return <PlotRenderer plotData={artifact.data} height={400} />;
       case 'code':
         return (
-          <div className="h-full flex items-center justify-center text-terminal-fg-tertiary text-sm">
-            No graphical representation available
+          <div className="h-full flex items-center justify-center text-fg-tertiary text-sm">
+            No preview available - switch to Code tab
           </div>
         );
       default:
         return (
-          <div className="h-full flex items-center justify-center text-terminal-fg-tertiary text-sm">
+          <div className="h-full flex items-center justify-center text-fg-tertiary text-sm">
             Unknown artifact type
           </div>
         );
@@ -217,7 +200,7 @@ export default function ArtifactViewer({
 }
 
 /**
- * Generate Python code for Three.js scenes
+ * Generate JavaScript code for Three.js scenes
  */
 function generateThreeSceneCode(scene: ThreeScene): string {
   const imports = `import * as THREE from 'three';
@@ -311,64 +294,11 @@ animate();`;
 }
 
 /**
- * Generate Qiskit Python code for quantum circuits
- */
-function generateCircuitCode(circuit: QuantumCircuit): string {
-  const imports = `from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.visualization import circuit_drawer`;
-
-  const setup = `
-# Create quantum circuit with ${circuit.numQubits} qubits
-qc = QuantumCircuit(${circuit.numQubits}${circuit.measurements ? `, ${circuit.numQubits}` : ''})`;
-
-  const gates = circuit.gates
-    .sort((a, b) => a.time - b.time)
-    .map((gate) => {
-      switch (gate.type) {
-        case 'H':
-          return `qc.h(${gate.target})  # Hadamard gate`;
-        case 'X':
-          return `qc.x(${gate.target})  # Pauli-X gate`;
-        case 'Y':
-          return `qc.y(${gate.target})  # Pauli-Y gate`;
-        case 'Z':
-          return `qc.z(${gate.target})  # Pauli-Z gate`;
-        case 'CNOT':
-          return `qc.cx(${gate.control}, ${gate.target})  # CNOT gate`;
-        case 'SWAP':
-          return `qc.swap(${gate.control}, ${gate.target})  # SWAP gate`;
-        case 'CZ':
-          return `qc.cz(${gate.control}, ${gate.target})  # Controlled-Z gate`;
-        case 'RX':
-          return `qc.rx(${gate.parameter}, ${gate.target})  # Rotation around X`;
-        case 'RY':
-          return `qc.ry(${gate.parameter}, ${gate.target})  # Rotation around Y`;
-        case 'RZ':
-          return `qc.rz(${gate.parameter}, ${gate.target})  # Rotation around Z`;
-        default:
-          return `# Unknown gate: ${gate.type}`;
-      }
-    })
-    .join('\n');
-
-  const measurements = circuit.measurements
-    ? `\n# Add measurements\n${circuit.measurements.map(q => `qc.measure(${q}, ${q})`).join('\n')}`
-    : '';
-
-  const visualization = `
-# Draw the circuit
-qc.draw('mpl')`;
-
-  return `${imports}\n${setup}\n\n# Add gates\n${gates}${measurements}\n${visualization}`;
-}
-
-/**
- * Generate Python code for plots using matplotlib/plotly
+ * Generate Python code for plots using matplotlib
  */
 function generatePlotCode(plot: PlotData): string {
-  const imports = plot.type === 'scatter'
-    ? `import matplotlib.pyplot as plt\nimport numpy as np`
-    : `import matplotlib.pyplot as plt`;
+  const imports = `import matplotlib.pyplot as plt
+import numpy as np`;
 
   const data = `
 # Data

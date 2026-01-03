@@ -1,7 +1,6 @@
 'use client';
 
 import { Artifact } from '@/lib/artifacts/types';
-import CircuitRenderer from '../panels/artifacts/CircuitRenderer';
 import ThreeRenderer from '../panels/artifacts/ThreeRenderer';
 import PlotRenderer from '../panels/artifacts/PlotRenderer';
 
@@ -30,13 +29,6 @@ export default function RenderView({ artifact }: RenderViewProps) {
 
   return (
     <div className="h-full overflow-auto p-6">
-      {/* Render based on type */}
-      {type === 'quantum-circuit' && (
-        <div className="max-w-4xl mx-auto">
-          <CircuitRenderer circuitData={data} />
-        </div>
-      )}
-
       {type === '3d-scene' && (
         <div className="h-full">
           <ThreeRenderer sceneData={data} />
