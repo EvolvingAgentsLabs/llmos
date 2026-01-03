@@ -132,8 +132,8 @@ export default function SidebarPanel({
     setActiveProject(project.id);
     onSessionChange(project.id);
 
-    // Switch to chat section to show the project context
-    setExpandedSection('chat');
+    // NOTE: We no longer auto-switch to chat section
+    // This allows users to continue exploring the project folder contents
 
     // Log memory file status for the project
     try {
