@@ -7,7 +7,7 @@
 
 import { useState, useEffect, Suspense, lazy, useCallback, useRef } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { useApplets } from '@/contexts/AppletContext';
 import { UserStorage } from '@/lib/user-storage';
 import { LLMStorage } from '@/lib/llm-client';
@@ -59,7 +59,7 @@ function SidebarWrapper({
   pendingPrompt,
   onPromptProcessed,
 }: SidebarWrapperProps) {
-  // Full height sidebar with accordion sections (Explorer, Sessions, Activity, Chat)
+  // Full height sidebar with accordion sections (Explorer, Projects, Chat)
   return (
     <div className="h-full bg-bg-secondary/30">
       <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
@@ -209,7 +209,7 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 
 export default function FluidLayout() {
   const { openCommandPalette, state, setContextViewMode } = useWorkspace();
-  const { activeSession, setActiveSession } = useSessionContext();
+  const { activeProject, setActiveProject } = useProjectContext();
   const { createApplet } = useApplets();
   const { contextViewMode, activeFilePath } = state;
 
@@ -430,7 +430,7 @@ export default function FluidLayout() {
       {/* MAIN 2-PANEL LAYOUT (VS Code style resizable) */}
       {/* ================================================================== */}
       <div ref={containerRef} className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
-        {/* LEFT PANEL: Accordion Sidebar (Explorer, Sessions, Activity, Chat) */}
+        {/* LEFT PANEL: Accordion Sidebar (Explorer, Projects, Chat) */}
         {!isLeftPanelCollapsed && (
           <div
             className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
@@ -455,8 +455,8 @@ export default function FluidLayout() {
               <SidebarWrapper
                 activeVolume={activeVolume}
                 onVolumeChange={setActiveVolume}
-                activeSession={activeSession}
-                onSessionChange={setActiveSession}
+                activeSession={activeProject}
+                onSessionChange={setActiveProject}
                 pendingPrompt={pendingPrompt}
                 onPromptProcessed={() => setPendingPrompt(null)}
               />
@@ -506,7 +506,7 @@ export default function FluidLayout() {
               contextViewMode={contextViewMode}
               activeFilePath={activeFilePath}
               activeVolume={activeVolume}
-              activeSession={activeSession}
+              activeSession={activeProject}
             />
           </div>
         </div>

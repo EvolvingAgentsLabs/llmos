@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useWorkspace, AgentState, TaskType, ContextViewMode } from '@/contexts/WorkspaceContext';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { useApplets } from '@/contexts/AppletContext';
 
 // ============================================================================
@@ -107,13 +107,13 @@ function inferViewMode(output: AgentOutput): ContextViewMode | null {
  */
 export function useOrchestrator() {
   const workspace = useWorkspace();
-  const session = useSessionContext();
+  const projectContext = useProjectContext();
   const applets = useApplets();
 
   const lastOutputRef = useRef<AgentOutput | null>(null);
 
-  // Get the current session object from the ID
-  const currentSession = session.sessions.find(s => s.id === session.activeSession);
+  // Get the current project object from the ID
+  const currentProject = projectContext.projects.find(p => p.id === projectContext.activeProject);
 
   // Derived state
   const orchestratorState: OrchestratorState = {
@@ -121,8 +121,8 @@ export function useOrchestrator() {
     agentState: workspace.state.agentState,
     taskType: workspace.state.taskType,
     contextViewMode: workspace.state.contextViewMode,
-    activeSessionId: session.activeSession,
-    hasMessages: (currentSession?.messages.length || 0) > 0,
+    activeSessionId: projectContext.activeProject,
+    hasMessages: (currentProject?.messages.length || 0) > 0,
     hasActiveApplets: applets.activeApplets.length > 0,
     activeAppletCount: applets.activeApplets.length,
   };
@@ -225,18 +225,18 @@ export function useOrchestrator() {
   }, [workspace]);
 
   /**
-   * Create a new session and make it active
+   * Create a new project and make it active
    */
-  const createSession = useCallback((name?: string) => {
-    const newSession = session.addSession({
-      name: name || `Session ${Date.now()}`,
+  const createProject = useCallback((name?: string) => {
+    const newProject = projectContext.addProject({
+      name: name || `Project ${Date.now()}`,
       type: 'user',
       status: 'temporal',
       volume: 'user',
     });
-    session.setActiveSession(newSession.id);
-    return newSession;
-  }, [session]);
+    projectContext.setActiveProject(newProject.id);
+    return newProject;
+  }, [projectContext]);
 
   /**
    * Switch to a different context view
@@ -271,9 +271,9 @@ export function useOrchestrator() {
     // State
     state: orchestratorState,
     workspace: workspace.state,
-    activeSessionId: session.activeSession,
-    activeSession: currentSession,
-    sessions: session.sessions,
+    activeProjectId: projectContext.activeProject,
+    activeProject: currentProject,
+    projects: projectContext.projects,
     applets: applets.activeApplets,
 
     // Agent lifecycle
@@ -287,9 +287,9 @@ export function useOrchestrator() {
     navigateToFile,
     switchView,
 
-    // Sessions
-    createSession,
-    setActiveSession: session.setActiveSession,
+    // Projects
+    createProject,
+    setActiveProject: projectContext.setActiveProject,
 
     // Layout
     autoLayout,
@@ -311,7 +311,7 @@ export function useOrchestrator() {
 
     // Raw contexts (for advanced usage)
     _workspace: workspace,
-    _session: session,
+    _projectContext: projectContext,
     _applets: applets,
   };
 }

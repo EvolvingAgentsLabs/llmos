@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
@@ -10,7 +10,7 @@ import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import ModelSelector from './ModelSelector';
 import CanvasModal from './CanvasModal';
-import type { Message } from '@/contexts/SessionContext';
+import type { Message } from '@/contexts/ProjectContext';
 
 interface ChatPanelProps {
   activeSession: string | null;
@@ -27,7 +27,7 @@ export default function ChatPanel({
   pendingPrompt,
   onPromptProcessed,
 }: ChatPanelProps) {
-  const { sessions, addSession, addMessage } = useSessionContext();
+  const { projects, addProject, addMessage } = useProjectContext();
 
   // Wire to Workspace Context for adaptive UI
   const workspaceContext = useWorkspace();
@@ -46,8 +46,8 @@ export default function ChatPanel({
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const currentSession = sessions.find((s) => s.id === activeSession);
-  const messages = currentSession?.messages || [];
+  const currentProject = projects.find((p) => p.id === activeSession);
+  const messages = currentProject?.messages || [];
 
   // Debug logging
   useEffect(() => {
@@ -93,14 +93,14 @@ export default function ChatPanel({
 
     try {
       if (!sessionId) {
-        setLoadingStatus('Creating new session...');
-        const newSession = addSession({
-          name: `Session ${new Date().toLocaleTimeString()}`,
+        setLoadingStatus('Creating new project...');
+        const newProject = addProject({
+          name: `Project ${new Date().toLocaleTimeString()}`,
           type: 'user',
           status: 'temporal',
           volume: activeVolume,
         });
-        sessionId = newSession.id;
+        sessionId = newProject.id;
         onSessionCreated(sessionId);
       }
 
@@ -302,8 +302,8 @@ export default function ChatPanel({
     }
   };
 
-  // Welcome state when no session
-  if (!activeSession || !currentSession) {
+  // Welcome state when no project
+  if (!activeSession || !currentProject) {
     const samplePrompts = getCurrentSamplePrompts();
 
     return (
@@ -409,25 +409,25 @@ export default function ChatPanel({
     );
   }
 
-  // Active session view
+  // Active project view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Session Header - VSCode Style */}
+      {/* Project Header - VSCode Style */}
       <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-fg-primary">{currentSession.name}</span>
+            <span className="text-xs font-semibold text-fg-primary">{currentProject.name}</span>
             <span className="text-[10px] text-fg-tertiary">•</span>
             <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
             <span className="text-[10px] text-fg-tertiary">•</span>
-            <span className="text-[10px] text-fg-tertiary">{currentSession.timeAgo}</span>
+            <span className="text-[10px] text-fg-tertiary">{currentProject.timeAgo}</span>
           </div>
           <div className="flex items-center gap-2">
             <ModelSelector onModelChange={(modelId) => {
               console.log('[ChatPanel] Model changed to:', modelId);
             }} />
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentSession.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
-              {currentSession.status === 'temporal' ? 'Unsaved' : 'Saved'}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentProject.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
+              {currentProject.status === 'temporal' ? 'Unsaved' : 'Saved'}
             </span>
           </div>
         </div>

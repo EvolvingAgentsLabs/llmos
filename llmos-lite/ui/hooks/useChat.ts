@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient, LLMStorage } from '@/lib/llm-client';
@@ -37,7 +37,7 @@ export function useChat({
   activeVolume,
   onSessionCreated,
 }: UseChatOptions): UseChatReturn {
-  const { addSession, addMessage } = useSessionContext();
+  const { addProject, addMessage } = useProjectContext();
   const workspaceContext = useWorkspace();
   const { setAgentState, setTaskType, setContextViewMode, setActiveFile } = workspaceContext || {};
 
@@ -65,16 +65,16 @@ export function useChat({
     let sessionId = activeSession;
 
     try {
-      // Auto-create session if none exists
+      // Auto-create project if none exists
       if (!sessionId) {
-        setLoadingStatus('Creating new session...');
-        const newSession = addSession({
-          name: `Session ${new Date().toLocaleTimeString()}`,
+        setLoadingStatus('Creating new project...');
+        const newProject = addProject({
+          name: `Project ${new Date().toLocaleTimeString()}`,
           type: 'user',
           status: 'temporal',
           volume: activeVolume,
         });
-        sessionId = newSession.id;
+        sessionId = newProject.id;
         onSessionCreated(sessionId);
       }
 
@@ -231,7 +231,7 @@ export function useChat({
     isLoading,
     activeSession,
     activeVolume,
-    addSession,
+    addProject,
     addMessage,
     onSessionCreated,
     setAgentState,

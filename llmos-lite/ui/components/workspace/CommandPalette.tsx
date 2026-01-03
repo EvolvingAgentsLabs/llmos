@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useWorkspace, ContextViewMode } from '@/contexts/WorkspaceContext';
-import { useSessionContext } from '@/contexts/SessionContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { getVFS } from '@/lib/virtual-fs';
 
 // ============================================================================
@@ -125,7 +125,7 @@ export default function CommandPalette() {
     setFocusedPanel,
     setActiveFile,
   } = useWorkspace();
-  const { sessions, addSession, setActiveSession } = useSessionContext();
+  const { projects, addProject, setActiveProject } = useProjectContext();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -315,29 +315,29 @@ export default function CommandPalette() {
     // Sessions
     {
       id: 'session-new',
-      label: 'New Session',
-      description: 'Create a new conversation',
+      label: 'New Project',
+      description: 'Create a new project',
       icon: icons.plus,
       category: 'session',
       action: () => {
-        const newSession = addSession({
-          name: `Session ${Date.now()}`,
+        const newProject = addProject({
+          name: `Project ${Date.now()}`,
           type: 'user',
           status: 'temporal',
           volume: 'user',
         });
-        setActiveSession(newSession.id);
+        setActiveProject(newProject.id);
         closeCommandPalette();
       },
     },
-    // Add recent sessions
-    ...sessions.slice(0, 5).map((session, index) => ({
-      id: `session-${session.id}`,
-      label: session.name,
-      description: `${session.messages.length} messages · ${session.timeAgo}`,
+    // Add recent projects
+    ...projects.slice(0, 5).map((project, index) => ({
+      id: `project-${project.id}`,
+      label: project.name,
+      description: `${project.messages.length} messages · ${project.timeAgo}`,
       icon: icons.chat,
       category: 'session' as const,
-      action: () => { setActiveSession(session.id); closeCommandPalette(); },
+      action: () => { setActiveProject(project.id); closeCommandPalette(); },
     })),
 
     // Actions
@@ -371,7 +371,7 @@ export default function CommandPalette() {
         closeCommandPalette();
       },
     })),
-  ], [sessions, vfsFiles, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, setActiveFile, addSession, setActiveSession, closeCommandPalette]);
+  ], [projects, vfsFiles, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, setActiveFile, addProject, setActiveProject, closeCommandPalette]);
 
   // Filter commands by query
   const filteredCommands = useMemo(() => {
