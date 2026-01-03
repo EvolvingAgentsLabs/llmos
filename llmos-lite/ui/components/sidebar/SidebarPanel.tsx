@@ -217,27 +217,27 @@ export default function SidebarPanel({
         {/* Files Header */}
         <button
           onClick={() => handleSectionToggle('files')}
-          className={`w-full px-3 py-2 flex items-center justify-between border-b transition-colors ${
+          className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
             expandedSection === 'files'
-              ? 'bg-accent-primary/10 border-accent-primary/30'
-              : 'bg-bg-secondary/50 border-border-primary/30 hover:bg-bg-tertiary/50'
-          }`}
+              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
+              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
+          } border-b border-border-primary/50`}
         >
           <div className="flex items-center gap-2">
             {expandedSection === 'files' ? (
-              <ChevronDown className="w-3 h-3 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
-              <ChevronRight className="w-3 h-3 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
             )}
-            <FolderTree className={`w-3.5 h-3.5 ${expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-tertiary'}`} />
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-              expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-tertiary'
+            <FolderTree className={`w-4 h-4 ${expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <span className={`text-xs font-semibold uppercase tracking-wide ${
+              expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-secondary'
             }`}>
               Files
             </span>
           </div>
           {expandedSection !== 'files' && (
-            <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-fg-tertiary text-[9px]">
+            <span className="px-2 py-0.5 rounded-full bg-bg-elevated text-fg-tertiary text-[10px] font-medium capitalize">
               {activeVolume}
             </span>
           )}
@@ -264,55 +264,69 @@ export default function SidebarPanel({
       }`}>
         {/* Sessions Header */}
         <div
-          className={`px-3 py-2 flex items-center justify-between border-b transition-colors cursor-pointer ${
+          className={`px-3 py-2.5 flex items-center justify-between transition-colors cursor-pointer ${
             expandedSection === 'sessions'
-              ? 'bg-accent-primary/10 border-accent-primary/30'
-              : 'bg-bg-secondary/50 border-border-primary/30 hover:bg-bg-tertiary/50'
-          }`}
+              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
+              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
+          } border-b border-border-primary/50`}
           onClick={() => handleSectionToggle('sessions')}
         >
           <div className="flex items-center gap-2">
             {expandedSection === 'sessions' ? (
-              <ChevronDown className="w-3 h-3 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
-              <ChevronRight className="w-3 h-3 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
             )}
-            <MessageSquare className={`w-3.5 h-3.5 ${expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-tertiary'}`} />
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-              expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-tertiary'
+            <MessageSquare className={`w-4 h-4 ${expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <span className={`text-xs font-semibold uppercase tracking-wide ${
+              expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-secondary'
             }`}>
               Sessions
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-fg-tertiary text-[9px]">
+            <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
               {sortedSessions.length}
             </span>
           </div>
           {expandedSection === 'sessions' && (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              {/* Toggle All/Current Volume */}
-              <button
-                onClick={() => setShowAllSessions(!showAllSessions)}
-                className={`px-1.5 py-0.5 rounded text-[9px] transition-colors ${
-                  showAllSessions
-                    ? 'bg-accent-primary/20 text-accent-primary'
-                    : 'bg-bg-tertiary text-fg-tertiary hover:text-fg-secondary'
-                }`}
-                title={showAllSessions ? 'Showing all sessions' : `Showing ${activeVolume} sessions`}
-              >
-                {showAllSessions ? 'All' : activeVolume}
-              </button>
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {/* Toggle All/Current Volume - Standard Toggle Button */}
+              <div className="flex items-center bg-bg-primary rounded-md border border-border-primary/50 overflow-hidden">
+                <button
+                  onClick={() => setShowAllSessions(true)}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                    showAllSessions
+                      ? 'bg-accent-primary/20 text-accent-primary'
+                      : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary/50'
+                  }`}
+                  title="Show all sessions"
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setShowAllSessions(false)}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors capitalize border-l border-border-primary/50 ${
+                    !showAllSessions
+                      ? 'bg-accent-primary/20 text-accent-primary'
+                      : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary/50'
+                  }`}
+                  title={`Show ${activeVolume} sessions only`}
+                >
+                  {activeVolume}
+                </button>
+              </div>
               {/* New Session Button with Dropdown */}
               <div className="relative" ref={dropdownButtonRef}>
                 <button
                   onClick={handleDropdownToggle}
-                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${
                     showNewSessionDropdown
-                      ? 'bg-accent-primary/20 text-accent-primary'
-                      : 'hover:bg-bg-tertiary text-fg-tertiary hover:text-fg-secondary'
+                      ? 'bg-accent-primary text-white border-accent-primary'
+                      : 'bg-bg-primary border-border-primary/50 text-fg-secondary hover:border-accent-primary/50 hover:text-accent-primary'
                   }`}
                   title="New Session"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New</span>
                 </button>
 
                 {/* Dropdown Menu - Fixed positioning to escape overflow:hidden */}
@@ -383,89 +397,107 @@ export default function SidebarPanel({
 
         {/* Sessions Content */}
         {expandedSection === 'sessions' && (
-          <div className="flex-1 overflow-y-auto px-2 py-1 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto scrollbar-thin">
             {sortedSessions.length === 0 ? (
-              <div className="py-6 px-2 text-center">
-                <svg className="w-10 h-10 mx-auto mb-2 text-fg-muted opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                <p className="text-xs text-fg-tertiary mb-2">No sessions yet</p>
+              <div className="py-8 px-4 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bg-tertiary flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6 text-fg-muted" />
+                </div>
+                <p className="text-sm text-fg-secondary mb-1">No sessions yet</p>
+                <p className="text-xs text-fg-tertiary mb-3">Start a conversation to create your first session</p>
                 <button
                   onClick={handleNewSession}
-                  className="text-[10px] text-accent-primary hover:underline"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
                 >
-                  Start a new session
+                  <Plus className="w-3.5 h-3.5" />
+                  New Session
                 </button>
               </div>
             ) : (
-              <div className="space-y-1 py-1">
+              <div className="divide-y divide-border-primary/30">
                 {sortedSessions.map((session) => {
                   const isActive = activeSession === session.id;
                   return (
                     <div
                       key={session.id}
+                      onClick={() => handleResumeSession(session.id)}
                       className={`
-                        group relative rounded-lg transition-all duration-150 cursor-pointer
+                        group relative transition-all duration-150 cursor-pointer
                         ${isActive
-                          ? 'bg-accent-primary/15 ring-1 ring-accent-primary/30'
-                          : 'hover:bg-bg-tertiary/80'
+                          ? 'bg-accent-primary/10 border-l-2 border-l-accent-primary'
+                          : 'hover:bg-bg-tertiary/50 border-l-2 border-l-transparent'
                         }
                       `}
                     >
-                      {/* Main clickable area */}
-                      <div
-                        onClick={() => handleResumeSession(session.id)}
-                        className="px-2.5 py-2"
-                      >
-                        {/* Top row: icon, name, badges */}
-                        <div className="flex items-center gap-2 mb-1">
-                          {/* Active indicator */}
-                          {isActive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse flex-shrink-0" />
-                          )}
-
-                          {/* Session type icon */}
-                          <span className="text-sm flex-shrink-0">
-                            {session.type === 'user' ? '💬' : '👥'}
-                          </span>
-
-                          {/* Session name */}
-                          <span className={`text-xs truncate flex-1 ${
-                            isActive ? 'text-fg-primary font-medium' : 'text-fg-secondary'
+                      {/* Main content */}
+                      <div className="px-3 py-2.5">
+                        {/* Header row: type icon + name + status */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {/* Session type icon with background */}
+                          <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
+                            session.type === 'user'
+                              ? 'bg-green-500/15'
+                              : 'bg-blue-500/15'
                           }`}>
-                            {session.name}
-                          </span>
+                            {session.type === 'user' ? (
+                              <User className={`w-4 h-4 ${isActive ? 'text-green-400' : 'text-green-500/70'}`} />
+                            ) : (
+                              <Users className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-blue-500/70'}`} />
+                            )}
+                          </div>
 
-                          {/* Volume badge (when showing all) */}
-                          {showAllSessions && (
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-medium ${volumeColors[session.volume]}`}>
-                              {session.volume.charAt(0)}
-                            </span>
-                          )}
+                          {/* Session name and type label */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-xs truncate ${
+                                isActive ? 'text-fg-primary font-medium' : 'text-fg-secondary'
+                              }`}>
+                                {session.name}
+                              </span>
+                              {isActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse flex-shrink-0" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] text-fg-tertiary">
+                                {session.type === 'user' ? 'Personal' : 'Team'}
+                              </span>
+                              {showAllSessions && (
+                                <>
+                                  <span className="text-fg-quaternary">•</span>
+                                  <span className={`text-[10px] capitalize ${
+                                    session.volume === 'user' ? 'text-green-400/80' :
+                                    session.volume === 'team' ? 'text-blue-400/80' : 'text-gray-400/80'
+                                  }`}>
+                                    {session.volume}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
 
-                          {/* Unsaved indicator */}
-                          {session.status === 'temporal' && (
-                            <span
-                              className="w-2 h-2 rounded-full bg-accent-warning flex-shrink-0"
-                              title="Unsaved session"
-                            />
-                          )}
+                          {/* Status badges */}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {session.status === 'temporal' && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                                Unsaved
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Bottom row: metadata */}
-                        <div className="flex items-center gap-2 text-[10px] text-fg-tertiary ml-0">
+                        {/* Metadata row */}
+                        <div className="flex items-center gap-3 text-[10px] text-fg-tertiary ml-9">
                           <span className="flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                            </svg>
-                            {session.messages?.length || 0}
+                            <MessageSquare className="w-3 h-3" />
+                            {session.messages?.length || 0} messages
                           </span>
-                          <span>·</span>
+                          <span className="text-fg-quaternary">•</span>
                           <span>{session.timeAgo}</span>
                           {session.goal && (
                             <>
-                              <span>·</span>
-                              <span className="truncate max-w-[80px]" title={session.goal}>
+                              <span className="text-fg-quaternary">•</span>
+                              <span className="truncate max-w-[100px]" title={session.goal}>
                                 {session.goal}
                               </span>
                             </>
@@ -473,33 +505,19 @@ export default function SidebarPanel({
                         </div>
                       </div>
 
-                      {/* Action buttons - visible on hover */}
+                      {/* Action buttons - always visible on right side */}
                       <div className={`
-                        absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5
+                        absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1
                         ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
-                        transition-opacity duration-150
+                        transition-opacity duration-150 bg-inherit
                       `}>
-                        {/* Resume button (only for non-active) */}
-                        {!isActive && (
-                          <button
-                            onClick={() => handleResumeSession(session.id)}
-                            className="p-1 rounded hover:bg-accent-primary/20 text-fg-tertiary hover:text-accent-primary transition-colors"
-                            title="Resume session"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </button>
-                        )}
-
                         {/* Delete button */}
                         <button
                           onClick={(e) => handleDeleteSession(session, e)}
-                          className="p-1 rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-colors"
+                          className="p-1.5 rounded-md hover:bg-red-500/15 text-fg-tertiary hover:text-red-400 transition-colors"
                           title="Delete session"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         </button>
@@ -520,32 +538,36 @@ export default function SidebarPanel({
         {/* Activity Header */}
         <button
           onClick={() => handleSectionToggle('activity')}
-          className={`w-full px-3 py-2 flex items-center justify-between border-b transition-colors ${
+          className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
             expandedSection === 'activity'
-              ? 'bg-accent-primary/10 border-accent-primary/30'
-              : 'bg-bg-secondary/50 border-border-primary/30 hover:bg-bg-tertiary/50'
-          }`}
+              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
+              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
+          } border-b border-border-primary/50`}
         >
           <div className="flex items-center gap-2">
             {expandedSection === 'activity' ? (
-              <ChevronDown className="w-3 h-3 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
-              <ChevronRight className="w-3 h-3 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
             )}
-            <Activity className={`w-3.5 h-3.5 ${expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-tertiary'}`} />
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-              expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-tertiary'
+            <Activity className={`w-4 h-4 ${expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <span className={`text-xs font-semibold uppercase tracking-wide ${
+              expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-secondary'
             }`}>
               Activity
             </span>
           </div>
           {expandedSection !== 'activity' && (
-            <div className="flex items-center gap-2 text-[9px]">
+            <div className="flex items-center gap-2">
               {runningCrons > 0 && (
-                <span className="text-accent-warning">{runningCrons} running</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-400">
+                  {runningCrons} running
+                </span>
               )}
               {completedCrons > 0 && (
-                <span className="text-accent-success">{completedCrons} done</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400">
+                  {completedCrons} done
+                </span>
               )}
             </div>
           )}
@@ -616,35 +638,35 @@ export default function SidebarPanel({
         {/* Chat Header */}
         <button
           onClick={() => handleSectionToggle('chat')}
-          className={`w-full px-3 py-2 flex items-center justify-between border-b transition-colors ${
+          className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
             expandedSection === 'chat'
-              ? 'bg-accent-primary/10 border-accent-primary/30'
-              : 'bg-bg-secondary/50 border-border-primary/30 hover:bg-bg-tertiary/50'
-          }`}
+              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
+              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
+          } border-b border-border-primary/50`}
         >
           <div className="flex items-center gap-2">
             {expandedSection === 'chat' ? (
-              <ChevronDown className="w-3 h-3 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
-              <ChevronRight className="w-3 h-3 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
             )}
-            <Bot className={`w-3.5 h-3.5 ${expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-tertiary'}`} />
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-              expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-tertiary'
+            <Bot className={`w-4 h-4 ${expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <span className={`text-xs font-semibold uppercase tracking-wide ${
+              expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-secondary'
             }`}>
               Chat
             </span>
             {activeSession && (
-              <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-fg-tertiary text-[9px]">
+              <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
                 {sessions.find(s => s.id === activeSession)?.messages?.length || 0} msg
               </span>
             )}
           </div>
           {expandedSection !== 'chat' && activeSession && (
-            <div className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse" />
-              <span className="text-[9px] text-accent-success">Active</span>
-            </div>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Active
+            </span>
           )}
         </button>
 
