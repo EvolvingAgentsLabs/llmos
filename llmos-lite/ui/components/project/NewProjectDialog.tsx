@@ -1,27 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { SessionType } from '@/contexts/SessionContext';
+import { ProjectType } from '@/contexts/ProjectContext';
 
-interface NewSessionDialogProps {
+interface NewProjectDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (data: {
     name: string;
-    type: SessionType;
+    type: ProjectType;
     goal?: string;
   }) => void;
   defaultVolume: 'system' | 'user' | 'team';
 }
 
-export default function NewSessionDialog({
+export default function NewProjectDialog({
   isOpen,
   onClose,
   onCreate,
   defaultVolume,
-}: NewSessionDialogProps) {
+}: NewProjectDialogProps) {
   const [name, setName] = useState('');
-  const [sessionType, setSessionType] = useState<SessionType>(
+  const [projectType, setProjectType] = useState<ProjectType>(
     defaultVolume === 'team' ? 'team' : 'user'
   );
   const [goal, setGoal] = useState('');
@@ -33,14 +33,14 @@ export default function NewSessionDialog({
 
     onCreate({
       name: name.trim(),
-      type: sessionType,
+      type: projectType,
       goal: goal.trim() || undefined,
     });
 
     // Reset form
     setName('');
     setGoal('');
-    setSessionType(defaultVolume === 'team' ? 'team' : 'user');
+    setProjectType(defaultVolume === 'team' ? 'team' : 'user');
     onClose();
   };
 
@@ -62,19 +62,19 @@ export default function NewSessionDialog({
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-primary">
           <h2 className="text-lg font-semibold text-fg-primary">
-            Create New Session
+            Create New Project
           </h2>
           <p className="text-sm text-fg-tertiary mt-1">
-            Start a new chat session with artifact generation
+            Start a new project with artifact generation and memory tracking
           </p>
         </div>
 
         {/* Content */}
         <div className="px-6 py-6 space-y-6">
-          {/* Session Name */}
+          {/* Project Name */}
           <div>
             <label className="block text-sm font-medium text-fg-secondary mb-2">
-              Session Name
+              Project Name
             </label>
             <input
               type="text"
@@ -86,19 +86,19 @@ export default function NewSessionDialog({
             />
           </div>
 
-          {/* Session Type */}
+          {/* Project Type */}
           <div>
             <label className="block text-sm font-medium text-fg-secondary mb-3">
-              Session Type
+              Project Type
             </label>
             <div className="grid grid-cols-2 gap-3">
-              {/* User Session */}
+              {/* User Project */}
               <button
-                onClick={() => setSessionType('user')}
+                onClick={() => setProjectType('user')}
                 className={`
                   relative p-4 rounded-lg border-2 transition-all duration-200
                   ${
-                    sessionType === 'user'
+                    projectType === 'user'
                       ? 'border-accent-primary bg-accent-primary/10'
                       : 'border-border-primary hover:border-border-secondary bg-bg-secondary'
                   }
@@ -109,36 +109,36 @@ export default function NewSessionDialog({
                     className={`
                     w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5
                     ${
-                      sessionType === 'user'
+                      projectType === 'user'
                         ? 'border-accent-primary'
                         : 'border-border-secondary'
                     }
                   `}
                   >
-                    {sessionType === 'user' && (
+                    {projectType === 'user' && (
                       <div className="w-2.5 h-2.5 rounded-full bg-accent-primary" />
                     )}
                   </div>
                   <div className="flex-1 text-left">
                     <div className="font-medium text-fg-primary text-sm mb-1">
-                      User Session
+                      User Project
                     </div>
                     <div className="text-xs text-fg-tertiary">
                       Private workspace
                       <br />
-                      Saved to: user/
+                      Saved to: user/projects/
                     </div>
                   </div>
                 </div>
               </button>
 
-              {/* Team Session */}
+              {/* Team Project */}
               <button
-                onClick={() => setSessionType('team')}
+                onClick={() => setProjectType('team')}
                 className={`
                   relative p-4 rounded-lg border-2 transition-all duration-200
                   ${
-                    sessionType === 'team'
+                    projectType === 'team'
                       ? 'border-accent-primary bg-accent-primary/10'
                       : 'border-border-primary hover:border-border-secondary bg-bg-secondary'
                   }
@@ -149,24 +149,24 @@ export default function NewSessionDialog({
                     className={`
                     w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5
                     ${
-                      sessionType === 'team'
+                      projectType === 'team'
                         ? 'border-accent-primary'
                         : 'border-border-secondary'
                     }
                   `}
                   >
-                    {sessionType === 'team' && (
+                    {projectType === 'team' && (
                       <div className="w-2.5 h-2.5 rounded-full bg-accent-primary" />
                     )}
                   </div>
                   <div className="flex-1 text-left">
                     <div className="font-medium text-fg-primary text-sm mb-1">
-                      Team Session
+                      Team Project
                     </div>
                     <div className="text-xs text-fg-tertiary">
                       Shared workspace
                       <br />
-                      Saved to: team/
+                      Saved to: team/projects/
                     </div>
                   </div>
                 </div>
@@ -182,7 +182,7 @@ export default function NewSessionDialog({
             <textarea
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              placeholder="Describe what you want to accomplish in this session"
+              placeholder="Describe what you want to accomplish in this project"
               className="input-primary w-full resize-none"
               rows={3}
             />
@@ -192,7 +192,7 @@ export default function NewSessionDialog({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-primary flex items-center justify-between">
           <div className="text-xs text-fg-tertiary">
-            {sessionType === 'user' ? '🔒 Private' : '👥 Shared with team'}
+            {projectType === 'user' ? 'Private project' : 'Shared with team'}
           </div>
           <div className="flex gap-3">
             <button
@@ -206,14 +206,14 @@ export default function NewSessionDialog({
               disabled={!name.trim()}
               className="btn-primary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Session
+              Create Project
             </button>
           </div>
         </div>
 
         {/* Keyboard shortcuts hint */}
         <div className="px-6 pb-4 text-xs text-fg-tertiary text-center">
-          <kbd className="kbd">⌘</kbd> + <kbd className="kbd">Enter</kbd> to create
+          <kbd className="kbd">Cmd</kbd> + <kbd className="kbd">Enter</kbd> to create
           {' · '}
           <kbd className="kbd">Esc</kbd> to cancel
         </div>

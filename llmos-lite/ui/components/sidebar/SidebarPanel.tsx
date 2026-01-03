@@ -1,19 +1,18 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
-import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
+import { useState, useRef, useCallback, lazy, Suspense } from 'react';
+import { useProjectContext, ProjectType, Project } from '@/contexts/ProjectContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
-import ActivitySection from './ActivitySection';
-import NewSessionDialog from '../session/NewSessionDialog';
+import NewProjectDialog from '../project/NewProjectDialog';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { Plus, MessageSquarePlus, ChevronDown, ChevronRight, Users, User, FolderTree, MessageSquare, Activity, Bot } from 'lucide-react';
+import { Plus, MessageSquarePlus, ChevronDown, ChevronRight, Users, User, FolderTree, MessageSquare, Bot, Folder } from 'lucide-react';
 
 // Lazy load ChatPanel
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 
-// Accordion section type
-type AccordionSection = 'files' | 'sessions' | 'activity' | 'chat';
+// Accordion section type - only Tree (files), Projects, and Chat
+type AccordionSection = 'files' | 'projects' | 'chat';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -35,103 +34,99 @@ export default function SidebarPanel({
   pendingPrompt,
   onPromptProcessed,
 }: SidebarPanelProps) {
-  const { sessions, activeSessions, addSession, deleteSession, cronJobs } = useSessionContext();
+  const { projects, activeProjects, addProject, deleteProject } = useProjectContext();
   const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
 
   // Accordion state - which section is expanded (default to chat)
   const [expandedSection, setExpandedSection] = useState<AccordionSection>('chat');
 
-  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
-  const [showAllSessions, setShowAllSessions] = useState(true);
-  const [showNewSessionDropdown, setShowNewSessionDropdown] = useState(false);
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [showAllProjects, setShowAllProjects] = useState(true);
+  const [showNewProjectDropdown, setShowNewProjectDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const dropdownButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Activity stats for collapsed header
-  const completedCrons = cronJobs.filter((c) => c.status === 'completed').length;
-  const runningCrons = cronJobs.filter((c) => c.status === 'running').length;
-
   // Handle dropdown toggle with position calculation
   const handleDropdownToggle = useCallback(() => {
-    if (!showNewSessionDropdown && dropdownButtonRef.current) {
+    if (!showNewProjectDropdown && dropdownButtonRef.current) {
       const rect = dropdownButtonRef.current.getBoundingClientRect();
       setDropdownPosition({
         top: rect.bottom + 4,
         left: rect.right - 192, // 192px = w-48 dropdown width
       });
     }
-    setShowNewSessionDropdown(!showNewSessionDropdown);
-  }, [showNewSessionDropdown]);
+    setShowNewProjectDropdown(!showNewProjectDropdown);
+  }, [showNewProjectDropdown]);
 
   // Handle accordion section toggle
   const handleSectionToggle = (section: AccordionSection) => {
     setExpandedSection(section);
   };
 
-  // Get sessions to display - either all or filtered by volume
-  const displaySessions = showAllSessions
-    ? sessions
-    : activeSessions[activeVolume];
+  // Get projects to display - either all or filtered by volume
+  const displayProjects = showAllProjects
+    ? projects
+    : activeProjects[activeVolume];
 
-  // Sort sessions by most recent first (based on timeAgo or id which has timestamp)
-  const sortedSessions = [...displaySessions].sort((a, b) => {
-    // Active session always first
+  // Sort projects by most recent first (based on timeAgo or id which has timestamp)
+  const sortedProjects = [...displayProjects].sort((a, b) => {
+    // Active project always first
     if (a.id === activeSession) return -1;
     if (b.id === activeSession) return 1;
     // Then sort by id (which contains timestamp) - newer first
     return b.id.localeCompare(a.id);
   });
 
-  const handleNewSession = () => {
-    setShowNewSessionDialog(true);
-    setShowNewSessionDropdown(false);
+  const handleNewProject = () => {
+    setShowNewProjectDialog(true);
+    setShowNewProjectDropdown(false);
   };
 
-  // Quick create session with default name
-  const handleQuickCreateSession = (type: SessionType) => {
-    const defaultName = type === 'user' ? 'Personal Session' : 'Team Collaboration';
-    const newSession = addSession({
+  // Quick create project with default name
+  const handleQuickCreateProject = (type: ProjectType) => {
+    const defaultName = type === 'user' ? 'Personal Project' : 'Team Project';
+    const newProject = addProject({
       name: defaultName,
       type: type,
       status: 'temporal',
       volume: activeVolume,
     });
-    onSessionChange(newSession.id);
-    setShowNewSessionDropdown(false);
+    onSessionChange(newProject.id);
+    setShowNewProjectDropdown(false);
   };
 
-  const handleCreateSession = (data: {
+  const handleCreateProject = (data: {
     name: string;
-    type: SessionType;
+    type: ProjectType;
     goal?: string;
   }) => {
-    const newSession = addSession({
+    const newProject = addProject({
       name: data.name,
       type: data.type,
       status: 'temporal',
       volume: activeVolume,
       goal: data.goal,
     });
-    onSessionChange(newSession.id);
+    onSessionChange(newProject.id);
   };
 
-  const handleDeleteSession = (session: Session, e: React.MouseEvent) => {
+  const handleDeleteProject = (project: Project, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSessionToDelete(session);
+    setProjectToDelete(project);
   };
 
   const confirmDelete = () => {
-    if (sessionToDelete) {
-      deleteSession(sessionToDelete.id);
-      setSessionToDelete(null);
+    if (projectToDelete) {
+      deleteProject(projectToDelete.id);
+      setProjectToDelete(null);
     }
   };
 
-  const handleResumeSession = (sessionId: string) => {
-    onSessionChange(sessionId);
+  const handleResumeProject = (projectId: string) => {
+    onSessionChange(projectId);
   };
 
   // Volume badge colors
@@ -158,11 +153,6 @@ export default function SidebarPanel({
     const isAppExtension = name.endsWith('.app.tsx') || name.endsWith('.applet.tsx');
     // TSX/JSX files in applets folders or with .app extension are applets
     return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
-  };
-
-  const isImageFile = (name: string): boolean => {
-    const ext = name.split('.').pop()?.toLowerCase() || '';
-    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
   };
 
   // Handle Desktop selection - switch to applets view
@@ -258,84 +248,84 @@ export default function SidebarPanel({
         )}
       </div>
 
-      {/* ========== SESSIONS SECTION ========== */}
+      {/* ========== PROJECTS SECTION ========== */}
       <div className={`flex flex-col overflow-hidden transition-all duration-200 ${
-        expandedSection === 'sessions' ? 'flex-1' : 'flex-shrink-0'
+        expandedSection === 'projects' ? 'flex-1' : 'flex-shrink-0'
       }`}>
-        {/* Sessions Header */}
+        {/* Projects Header */}
         <div
           className={`px-3 py-2.5 flex items-center justify-between transition-colors cursor-pointer ${
-            expandedSection === 'sessions'
+            expandedSection === 'projects'
               ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
               : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
           } border-b border-border-primary/50`}
-          onClick={() => handleSectionToggle('sessions')}
+          onClick={() => handleSectionToggle('projects')}
         >
           <div className="flex items-center gap-2">
-            {expandedSection === 'sessions' ? (
+            {expandedSection === 'projects' ? (
               <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
               <ChevronRight className="w-4 h-4 text-fg-tertiary" />
             )}
-            <MessageSquare className={`w-4 h-4 ${expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <Folder className={`w-4 h-4 ${expandedSection === 'projects' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
             <span className={`text-xs font-semibold uppercase tracking-wide ${
-              expandedSection === 'sessions' ? 'text-accent-primary' : 'text-fg-secondary'
+              expandedSection === 'projects' ? 'text-accent-primary' : 'text-fg-secondary'
             }`}>
-              Sessions
+              Projects
             </span>
             <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
-              {sortedSessions.length}
+              {sortedProjects.length}
             </span>
           </div>
-          {expandedSection === 'sessions' && (
+          {expandedSection === 'projects' && (
             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               {/* Toggle All/Current Volume - Standard Toggle Button */}
               <div className="flex items-center bg-bg-primary rounded-md border border-border-primary/50 overflow-hidden">
                 <button
-                  onClick={() => setShowAllSessions(true)}
+                  onClick={() => setShowAllProjects(true)}
                   className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                    showAllSessions
+                    showAllProjects
                       ? 'bg-accent-primary/20 text-accent-primary'
                       : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary/50'
                   }`}
-                  title="Show all sessions"
+                  title="Show all projects"
                 >
                   All
                 </button>
                 <button
-                  onClick={() => setShowAllSessions(false)}
+                  onClick={() => setShowAllProjects(false)}
                   className={`px-2 py-1 text-[10px] font-medium transition-colors capitalize border-l border-border-primary/50 ${
-                    !showAllSessions
+                    !showAllProjects
                       ? 'bg-accent-primary/20 text-accent-primary'
                       : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary/50'
                   }`}
-                  title={`Show ${activeVolume} sessions only`}
+                  title={`Show ${activeVolume} projects only`}
                 >
                   {activeVolume}
                 </button>
               </div>
-              {/* New Session Button with Dropdown */}
+              {/* New Project Button with Dropdown */}
               <div className="relative" ref={dropdownButtonRef}>
                 <button
                   onClick={handleDropdownToggle}
                   className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${
-                    showNewSessionDropdown
+                    showNewProjectDropdown
                       ? 'bg-accent-primary text-white border-accent-primary'
                       : 'bg-bg-primary border-border-primary/50 text-fg-secondary hover:border-accent-primary/50 hover:text-accent-primary'
                   }`}
-                  title="New Session"
+                  title="New Project"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New</span>
                 </button>
 
                 {/* Dropdown Menu - Fixed positioning to escape overflow:hidden */}
-                {showNewSessionDropdown && (
+                {showNewProjectDropdown && (
                   <>
                     {/* Backdrop to close dropdown */}
                     <div
                       className="fixed inset-0 z-40"
-                      onClick={() => setShowNewSessionDropdown(false)}
+                      onClick={() => setShowNewProjectDropdown(false)}
                     />
                     <div
                       className="fixed z-50 w-48
@@ -346,9 +336,9 @@ export default function SidebarPanel({
                         left: dropdownPosition.left,
                       }}
                     >
-                      {/* User Session */}
+                      {/* User Project */}
                       <button
-                        onClick={() => handleQuickCreateSession('user')}
+                        onClick={() => handleQuickCreateProject('user')}
                         className="w-full flex items-center gap-3 px-3 py-2.5
                                  hover:bg-accent-primary/10 transition-colors text-left"
                       >
@@ -356,14 +346,14 @@ export default function SidebarPanel({
                           <User className="w-3 h-3 text-green-400" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-fg-primary">User Session</p>
+                          <p className="text-xs font-medium text-fg-primary">User Project</p>
                           <p className="text-[9px] text-fg-tertiary">Personal</p>
                         </div>
                       </button>
 
-                      {/* Team Session */}
+                      {/* Team Project */}
                       <button
-                        onClick={() => handleQuickCreateSession('team')}
+                        onClick={() => handleQuickCreateProject('team')}
                         className="w-full flex items-center gap-3 px-3 py-2.5
                                  hover:bg-accent-primary/10 transition-colors text-left
                                  border-t border-border-primary/50"
@@ -372,14 +362,14 @@ export default function SidebarPanel({
                           <Users className="w-3 h-3 text-blue-400" />
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-fg-primary">Team Session</p>
+                          <p className="text-xs font-medium text-fg-primary">Team Project</p>
                           <p className="text-[9px] text-fg-tertiary">Collaborative</p>
                         </div>
                       </button>
 
                       {/* Advanced - Opens dialog */}
                       <button
-                        onClick={handleNewSession}
+                        onClick={handleNewProject}
                         className="w-full flex items-center gap-2 px-3 py-2
                                  hover:bg-bg-tertiary transition-colors text-left
                                  border-t border-border-primary/50 bg-bg-secondary/50"
@@ -395,32 +385,32 @@ export default function SidebarPanel({
           )}
         </div>
 
-        {/* Sessions Content */}
-        {expandedSection === 'sessions' && (
+        {/* Projects Content */}
+        {expandedSection === 'projects' && (
           <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {sortedSessions.length === 0 ? (
+            {sortedProjects.length === 0 ? (
               <div className="py-8 px-4 text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-bg-tertiary flex items-center justify-center">
-                  <MessageSquare className="w-6 h-6 text-fg-muted" />
+                  <Folder className="w-6 h-6 text-fg-muted" />
                 </div>
-                <p className="text-sm text-fg-secondary mb-1">No sessions yet</p>
-                <p className="text-xs text-fg-tertiary mb-3">Start a conversation to create your first session</p>
+                <p className="text-sm text-fg-secondary mb-1">No projects yet</p>
+                <p className="text-xs text-fg-tertiary mb-3">Start a new project or continue an existing one</p>
                 <button
-                  onClick={handleNewSession}
+                  onClick={handleNewProject}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  New Session
+                  New Project
                 </button>
               </div>
             ) : (
               <div className="divide-y divide-border-primary/30">
-                {sortedSessions.map((session) => {
-                  const isActive = activeSession === session.id;
+                {sortedProjects.map((project) => {
+                  const isActive = activeSession === project.id;
                   return (
                     <div
-                      key={session.id}
-                      onClick={() => handleResumeSession(session.id)}
+                      key={project.id}
+                      onClick={() => handleResumeProject(project.id)}
                       className={`
                         group relative transition-all duration-150 cursor-pointer
                         ${isActive
@@ -433,26 +423,26 @@ export default function SidebarPanel({
                       <div className="px-3 py-2.5">
                         {/* Header row: type icon + name + status */}
                         <div className="flex items-center gap-2 mb-1.5">
-                          {/* Session type icon with background */}
+                          {/* Project type icon with background */}
                           <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
-                            session.type === 'user'
+                            project.type === 'user'
                               ? 'bg-green-500/15'
                               : 'bg-blue-500/15'
                           }`}>
-                            {session.type === 'user' ? (
+                            {project.type === 'user' ? (
                               <User className={`w-4 h-4 ${isActive ? 'text-green-400' : 'text-green-500/70'}`} />
                             ) : (
                               <Users className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-blue-500/70'}`} />
                             )}
                           </div>
 
-                          {/* Session name and type label */}
+                          {/* Project name and type label */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className={`text-xs truncate ${
                                 isActive ? 'text-fg-primary font-medium' : 'text-fg-secondary'
                               }`}>
-                                {session.name}
+                                {project.name}
                               </span>
                               {isActive && (
                                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse flex-shrink-0" />
@@ -460,16 +450,16 @@ export default function SidebarPanel({
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[10px] text-fg-tertiary">
-                                {session.type === 'user' ? 'Personal' : 'Team'}
+                                {project.type === 'user' ? 'Personal' : 'Team'}
                               </span>
-                              {showAllSessions && (
+                              {showAllProjects && (
                                 <>
                                   <span className="text-fg-quaternary">•</span>
                                   <span className={`text-[10px] capitalize ${
-                                    session.volume === 'user' ? 'text-green-400/80' :
-                                    session.volume === 'team' ? 'text-blue-400/80' : 'text-gray-400/80'
+                                    project.volume === 'user' ? 'text-green-400/80' :
+                                    project.volume === 'team' ? 'text-blue-400/80' : 'text-gray-400/80'
                                   }`}>
-                                    {session.volume}
+                                    {project.volume}
                                   </span>
                                 </>
                               )}
@@ -478,7 +468,7 @@ export default function SidebarPanel({
 
                           {/* Status badges */}
                           <div className="flex items-center gap-1.5 flex-shrink-0">
-                            {session.status === 'temporal' && (
+                            {project.status === 'temporal' && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
                                 Unsaved
                               </span>
@@ -490,15 +480,15 @@ export default function SidebarPanel({
                         <div className="flex items-center gap-3 text-[10px] text-fg-tertiary ml-9">
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-3 h-3" />
-                            {session.messages?.length || 0} messages
+                            {project.messages?.length || 0} messages
                           </span>
                           <span className="text-fg-quaternary">•</span>
-                          <span>{session.timeAgo}</span>
-                          {session.goal && (
+                          <span>{project.timeAgo}</span>
+                          {project.goal && (
                             <>
                               <span className="text-fg-quaternary">•</span>
-                              <span className="truncate max-w-[100px]" title={session.goal}>
-                                {session.goal}
+                              <span className="truncate max-w-[100px]" title={project.goal}>
+                                {project.goal}
                               </span>
                             </>
                           )}
@@ -513,9 +503,9 @@ export default function SidebarPanel({
                       `}>
                         {/* Delete button */}
                         <button
-                          onClick={(e) => handleDeleteSession(session, e)}
+                          onClick={(e) => handleDeleteProject(project, e)}
                           className="p-1.5 rounded-md hover:bg-red-500/15 text-fg-tertiary hover:text-red-400 transition-colors"
-                          title="Delete session"
+                          title="Delete project"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -531,107 +521,7 @@ export default function SidebarPanel({
         )}
       </div>
 
-      {/* ========== ACTIVITY SECTION ========== */}
-      <div className={`flex flex-col overflow-hidden transition-all duration-200 ${
-        expandedSection === 'activity' ? 'flex-1' : 'flex-shrink-0'
-      }`}>
-        {/* Activity Header */}
-        <button
-          onClick={() => handleSectionToggle('activity')}
-          className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
-            expandedSection === 'activity'
-              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
-              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
-          } border-b border-border-primary/50`}
-        >
-          <div className="flex items-center gap-2">
-            {expandedSection === 'activity' ? (
-              <ChevronDown className="w-4 h-4 text-accent-primary" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
-            )}
-            <Activity className={`w-4 h-4 ${expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
-            <span className={`text-xs font-semibold uppercase tracking-wide ${
-              expandedSection === 'activity' ? 'text-accent-primary' : 'text-fg-secondary'
-            }`}>
-              Activity
-            </span>
-          </div>
-          {expandedSection !== 'activity' && (
-            <div className="flex items-center gap-2">
-              {runningCrons > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-400">
-                  {runningCrons} running
-                </span>
-              )}
-              {completedCrons > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400">
-                  {completedCrons} done
-                </span>
-              )}
-            </div>
-          )}
-        </button>
-
-        {/* Activity Content */}
-        {expandedSection === 'activity' && (
-          <div className="flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">
-            <div className="space-y-2">
-              {cronJobs.length === 0 ? (
-                <div className="py-6 text-center">
-                  <Activity className="w-10 h-10 mx-auto mb-2 text-fg-muted opacity-40" />
-                  <p className="text-xs text-fg-tertiary">No activity yet</p>
-                </div>
-              ) : (
-                cronJobs.map((cron) => (
-                  <div
-                    key={cron.id}
-                    className="p-2 rounded bg-bg-primary border border-border-primary/50"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={
-                          cron.status === 'completed'
-                            ? 'text-accent-success'
-                            : cron.status === 'running'
-                            ? 'text-accent-warning'
-                            : 'text-fg-tertiary'
-                        }
-                      >
-                        {cron.status === 'completed' && '✓'}
-                        {cron.status === 'running' && '⟳'}
-                        {cron.status === 'scheduled' && '⏸'}
-                      </span>
-                      <span className="text-xs font-medium text-fg-primary">{cron.name}</span>
-                    </div>
-                    <div className="ml-5 text-xs text-fg-secondary space-y-0.5">
-                      <div>Last: {cron.lastRun}</div>
-                      {cron.status === 'completed' && (
-                        <div className="text-accent-success">
-                          {cron.skillsGenerated} skills from {cron.patterns} patterns
-                        </div>
-                      )}
-                      <div>Next: {cron.nextRun}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Git Status - Minimal */}
-            <div className="mt-3 pt-3 border-t border-border-primary/50">
-              <div className="text-xs text-fg-tertiary">
-                <div className="flex items-center gap-2">
-                  <span>Git:</span>
-                  <span className="text-accent-success">Clean</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ========== CHAT SECTION (JARVIS) ========== */}
+      {/* ========== CHAT SECTION ========== */}
       <div className={`flex flex-col overflow-hidden transition-all duration-200 ${
         expandedSection === 'chat' ? 'flex-1' : 'flex-shrink-0'
       }`}>
@@ -658,7 +548,7 @@ export default function SidebarPanel({
             </span>
             {activeSession && (
               <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
-                {sessions.find(s => s.id === activeSession)?.messages?.length || 0} msg
+                {projects.find(p => p.id === activeSession)?.messages?.length || 0} msg
               </span>
             )}
           </div>
@@ -693,23 +583,23 @@ export default function SidebarPanel({
         )}
       </div>
 
-      {/* New Session Dialog */}
-      <NewSessionDialog
-        isOpen={showNewSessionDialog}
-        onClose={() => setShowNewSessionDialog(false)}
-        onCreate={handleCreateSession}
+      {/* New Project Dialog */}
+      <NewProjectDialog
+        isOpen={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+        onCreate={handleCreateProject}
         defaultVolume={activeVolume}
       />
 
-      {/* Delete Session Confirmation */}
+      {/* Delete Project Confirmation */}
       <ConfirmDialog
-        isOpen={!!sessionToDelete}
-        title="Delete Session"
-        message={`Are you sure you want to delete "${sessionToDelete?.name}"? This will permanently remove all ${sessionToDelete?.messages?.length || 0} messages in this session.`}
+        isOpen={!!projectToDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${projectToDelete?.name}"? This will permanently remove all ${projectToDelete?.messages?.length || 0} messages and artifacts in this project.`}
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={confirmDelete}
-        onCancel={() => setSessionToDelete(null)}
+        onCancel={() => setProjectToDelete(null)}
         danger
       />
     </div>

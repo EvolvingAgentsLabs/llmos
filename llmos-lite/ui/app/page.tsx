@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { LLMStorage } from '@/lib/llm-client';
 import { UserStorage } from '@/lib/user-storage';
-import { SessionProvider } from '@/contexts/SessionContext';
+import { ProjectProvider } from '@/contexts/ProjectContext';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { AppletProvider } from '@/contexts/AppletContext';
 import { bootKernel, BootProgress } from '@/lib/kernel/boot';
@@ -174,12 +174,12 @@ export default function Home() {
   };
 
   return (
-    <SessionProvider>
+    <ProjectProvider>
       <AppletProvider>
         <WorkspaceProvider>
           {renderLayout()}
         </WorkspaceProvider>
       </AppletProvider>
-    </SessionProvider>
+    </ProjectProvider>
   );
 }
