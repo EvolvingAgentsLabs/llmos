@@ -19,6 +19,7 @@ import CommandPalette from './CommandPalette';
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
 const AppletGrid = lazy(() => import('../applets/AppletGrid'));
+const TabbedAppletViewer = lazy(() => import('../applets/TabbedAppletViewer'));
 const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
 const ArtifactPanel = lazy(() => import('../panels/artifacts/ArtifactPanel'));
 const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
@@ -123,6 +124,15 @@ interface RightPanelContentProps {
   activeSession: string | null;
 }
 
+// Helper to check if file is an applet
+function isAppletFile(path: string): boolean {
+  if (!path) return false;
+  const isInAppletsDir = path.includes('/applets/') || path.includes('/applet/');
+  const isAppExtension = path.endsWith('.app.tsx') || path.endsWith('.applet.tsx');
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
+}
+
 function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, activeSession }: RightPanelContentProps) {
   // Render content based on context view mode
   switch (contextViewMode) {
@@ -178,7 +188,18 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
     case 'canvas':
     case 'applets':
     default:
-      // Desktop view - always show AppletGrid with JARVIS
+      // If there's an applet file selected, show TabbedAppletViewer
+      if (activeFilePath && isAppletFile(activeFilePath)) {
+        return (
+          <Suspense fallback={<PanelLoader />}>
+            <TabbedAppletViewer
+              filePath={activeFilePath}
+              volume={activeVolume}
+            />
+          </Suspense>
+        );
+      }
+      // Desktop view - show AppletGrid with JARVIS
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />
