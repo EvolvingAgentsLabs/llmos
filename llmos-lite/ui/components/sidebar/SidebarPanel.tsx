@@ -1,22 +1,29 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useSessionContext, SessionType, Session } from '@/contexts/SessionContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
 import ActivitySection from './ActivitySection';
 import NewSessionDialog from '../session/NewSessionDialog';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { Plus, MessageSquarePlus, ChevronDown, ChevronRight, Users, User, FolderTree, MessageSquare, Activity } from 'lucide-react';
+import { Plus, MessageSquarePlus, ChevronDown, ChevronRight, Users, User, FolderTree, MessageSquare, Activity, Bot } from 'lucide-react';
+
+// Lazy load ChatPanel
+const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 
 // Accordion section type
-type AccordionSection = 'files' | 'sessions' | 'activity';
+type AccordionSection = 'files' | 'sessions' | 'activity' | 'chat';
 
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
   activeSession: string | null;
   onSessionChange: (sessionId: string | null) => void;
+  // Chat props
+  onSessionCreated?: (sessionId: string) => void;
+  pendingPrompt?: string | null;
+  onPromptProcessed?: () => void;
 }
 
 export default function SidebarPanel({
@@ -24,13 +31,16 @@ export default function SidebarPanel({
   onVolumeChange,
   activeSession,
   onSessionChange,
+  onSessionCreated,
+  pendingPrompt,
+  onPromptProcessed,
 }: SidebarPanelProps) {
   const { sessions, activeSessions, addSession, deleteSession, cronJobs } = useSessionContext();
   const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
 
-  // Accordion state - which section is expanded
-  const [expandedSection, setExpandedSection] = useState<AccordionSection>('sessions');
+  // Accordion state - which section is expanded (default to chat)
+  const [expandedSection, setExpandedSection] = useState<AccordionSection>('chat');
 
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
@@ -595,6 +605,68 @@ export default function SidebarPanel({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========== CHAT SECTION (JARVIS) ========== */}
+      <div className={`flex flex-col overflow-hidden transition-all duration-200 ${
+        expandedSection === 'chat' ? 'flex-1' : 'flex-shrink-0'
+      }`}>
+        {/* Chat Header */}
+        <button
+          onClick={() => handleSectionToggle('chat')}
+          className={`w-full px-3 py-2 flex items-center justify-between border-b transition-colors ${
+            expandedSection === 'chat'
+              ? 'bg-accent-primary/10 border-accent-primary/30'
+              : 'bg-bg-secondary/50 border-border-primary/30 hover:bg-bg-tertiary/50'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {expandedSection === 'chat' ? (
+              <ChevronDown className="w-3 h-3 text-accent-primary" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-fg-tertiary" />
+            )}
+            <Bot className={`w-3.5 h-3.5 ${expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-tertiary'}`} />
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+              expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-tertiary'
+            }`}>
+              Chat
+            </span>
+            {activeSession && (
+              <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-fg-tertiary text-[9px]">
+                {sessions.find(s => s.id === activeSession)?.messages?.length || 0} msg
+              </span>
+            )}
+          </div>
+          {expandedSection !== 'chat' && activeSession && (
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse" />
+              <span className="text-[9px] text-accent-success">Active</span>
+            </div>
+          )}
+        </button>
+
+        {/* Chat Content */}
+        {expandedSection === 'chat' && (
+          <div className="flex-1 overflow-hidden">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-8 h-8 border-2 border-accent-primary/20 border-t-accent-primary rounded-full animate-spin" />
+                  <span className="text-xs text-fg-muted">Loading chat...</span>
+                </div>
+              </div>
+            }>
+              <ChatPanel
+                activeSession={activeSession}
+                activeVolume={activeVolume}
+                onSessionCreated={onSessionCreated || onSessionChange}
+                pendingPrompt={pendingPrompt}
+                onPromptProcessed={onPromptProcessed}
+              />
+            </Suspense>
           </div>
         )}
       </div>
