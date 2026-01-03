@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApplets } from '@/contexts/AppletContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { ActiveApplet, AppletStore } from '@/lib/applets/applet-store';
 import {
   DesktopAppletManager,
@@ -285,6 +286,8 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     recentApplets,
   } = useApplets();
 
+  const { logActivity, setCurrentActivity, setAgentState } = useWorkspace();
+
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedAppletId, setSelectedAppletId] = useState<string | null>(null);
 
@@ -294,7 +297,13 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
 
   const handleLaunchSystemApplet = (type: SystemAppletType) => {
     const appletDef = SYSTEM_APPLETS[type];
-    if (!appletDef) return;
+    if (!appletDef) {
+      logActivity('error', 'Failed to launch applet', `System applet "${type}" not found`);
+      return;
+    }
+
+    logActivity('action', 'Launching system applet', appletDef.name);
+    setAgentState('executing');
 
     const applet = createApplet({
       code: appletDef.code,
@@ -309,6 +318,10 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
       },
       volume: 'system',
     });
+
+    logActivity('success', 'Applet launched', appletDef.name);
+    setAgentState('success');
+    setTimeout(() => setAgentState('idle'), 1500);
 
     setSelectedAppletId(applet.id);
     setViewMode('full');
@@ -360,9 +373,14 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
   const handleOpenDesktopApplet = useCallback(async (desktopApplet: DesktopApplet) => {
     console.log('[AppletGrid] Opening desktop applet:', desktopApplet.id, desktopApplet.filePath);
 
+    // Log the opening attempt
+    logActivity('action', 'Opening applet', desktopApplet.name);
+    setCurrentActivity('Opening applet', desktopApplet.filePath);
+    setAgentState('executing');
+
     // Check AppletStore directly (React state might be stale due to async updates)
     const storeApplets = AppletStore.getActiveApplets();
-    console.log('[AppletGrid] Store applets:', storeApplets.map(a => ({ id: a.id, metaId: a.metadata.id, filePath: a.filePath })));
+    logActivity('detail', 'Checking active applets', `${storeApplets.length} applets currently active`);
 
     // Check in AppletStore first (most reliable source of truth)
     const existingApplet = storeApplets.find(
@@ -372,26 +390,43 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
     );
 
     if (existingApplet) {
-      console.log('[AppletGrid] Found existing applet, opening:', existingApplet.id);
+      logActivity('info', 'Applet already open', `Focusing ${existingApplet.metadata.name}`);
       // Focus and select the applet
       focusApplet(existingApplet.id);
       setSelectedAppletId(existingApplet.id);
       setViewMode('full');
+      setAgentState('success');
+      setTimeout(() => {
+        setAgentState('idle');
+        setCurrentActivity(null, null);
+      }, 1000);
       return;
     }
 
-    console.log('[AppletGrid] Applet not in active list, loading from VFS:', desktopApplet.filePath);
+    logActivity('detail', 'Loading from VFS', desktopApplet.filePath);
 
     // Load applet code from VFS
     try {
       const { getVFS } = await import('@/lib/virtual-fs');
       const vfs = getVFS();
+
+      logActivity('detail', 'Reading file', desktopApplet.filePath);
       const file = vfs.readFile(desktopApplet.filePath);
 
       if (!file || !file.content) {
+        const errorMsg = `File not found or empty: ${desktopApplet.filePath}`;
         console.error('Failed to load applet code from:', desktopApplet.filePath);
+        logActivity('error', 'Failed to load applet', errorMsg);
+        setAgentState('error');
+        setTimeout(() => {
+          setAgentState('idle');
+          setCurrentActivity(null, null);
+        }, 3000);
         return;
       }
+
+      logActivity('detail', 'File loaded', `${file.content.length} bytes`);
+      logActivity('action', 'Creating applet instance', desktopApplet.name);
 
       const applet = createApplet({
         code: file.content,
@@ -408,12 +443,27 @@ export default function AppletGrid({ className = '', showEmptyState = false, emp
         volume: desktopApplet.volume,
       });
 
+      logActivity('success', 'Applet created', desktopApplet.name);
+      setAgentState('success');
+
       setSelectedAppletId(applet.id);
       setViewMode('full');
+
+      setTimeout(() => {
+        setAgentState('idle');
+        setCurrentActivity(null, null);
+      }, 1500);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error('Failed to open desktop applet:', error);
+      logActivity('error', 'Failed to open applet', errorMsg);
+      setAgentState('error');
+      setTimeout(() => {
+        setAgentState('idle');
+        setCurrentActivity(null, null);
+      }, 3000);
     }
-  }, [activeApplets, createApplet, focusApplet]);
+  }, [activeApplets, createApplet, focusApplet, logActivity, setCurrentActivity, setAgentState]);
 
   // Check AppletStore directly as React state might be stale
   const storeActiveCount = AppletStore.getActiveCount();
