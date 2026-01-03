@@ -166,6 +166,21 @@ export default function SidebarPanel({
     }
   };
 
+  // Helper functions to detect file types
+  const isAppletFile = (path: string, name: string): boolean => {
+    // Check if file is in an applets directory or is a .app.tsx file
+    const isInAppletsDir = path.includes('/applets/') || path.includes('/applet/');
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    const isAppExtension = name.endsWith('.app.tsx') || name.endsWith('.applet.tsx');
+    // TSX/JSX files in applets folders or with .app extension are applets
+    return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
+  };
+
+  const isImageFile = (name: string): boolean => {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
+  };
+
   // Handle Desktop selection - switch to applets view
   const handleDesktopSelect = () => {
     setContextViewMode('applets');
@@ -190,12 +205,16 @@ export default function SidebarPanel({
 
     setActiveFile(node.path);
 
-    if (codeExtensions.includes(ext)) {
-      // Code files - open in split view for editing/running
-      setContextViewMode('split-view');
+    // Check if it's an applet file - should open in applets mode (execution)
+    if (isAppletFile(node.path, node.name)) {
+      console.log('[SidebarPanel] Applet file detected, opening in applets mode:', node.path);
+      setContextViewMode('applets');
     } else if (mediaExtensions.includes(ext)) {
       // Media files - open in media viewer
       setContextViewMode('media');
+    } else if (codeExtensions.includes(ext)) {
+      // Code files - open in split view for editing/running
+      setContextViewMode('split-view');
     } else {
       // Other files - open in split view as fallback (can show raw content)
       setContextViewMode('split-view');

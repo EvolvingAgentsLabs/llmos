@@ -10,9 +10,9 @@
  * - Expands on hover/click to show status
  */
 
-import { useState, useEffect } from 'react';
-import { useWorkspace, AgentState } from '@/contexts/WorkspaceContext';
-import { MessageCircle, X, Minimize2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useWorkspace, AgentState, ActivityLogEntry } from '@/contexts/WorkspaceContext';
+import { MessageCircle, X, Minimize2, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 
 // ============================================================================
 // STATE CONFIGURATIONS
@@ -109,8 +109,11 @@ export default function FloatingJarvis({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const activityLogRef = useRef<HTMLDivElement>(null);
 
   const config = stateConfigs[state.agentState];
+  const { currentActivity, currentDetail, activityLog } = state;
 
   // Position classes
   const positionClasses = {
@@ -130,6 +133,34 @@ export default function FloatingJarvis({
       return () => clearTimeout(timer);
     }
   }, [state.agentState]);
+
+  // Auto-scroll activity log
+  useEffect(() => {
+    if (activityLogRef.current && showActivityLog) {
+      activityLogRef.current.scrollTop = activityLogRef.current.scrollHeight;
+    }
+  }, [activityLog, showActivityLog]);
+
+  // Get activity type styles
+  const getActivityTypeStyle = (type: ActivityLogEntry['type']) => {
+    switch (type) {
+      case 'success': return 'text-green-400';
+      case 'error': return 'text-red-400';
+      case 'action': return 'text-amber-400';
+      case 'detail': return 'text-blue-400';
+      default: return 'text-fg-muted';
+    }
+  };
+
+  const getActivityIcon = (type: ActivityLogEntry['type']) => {
+    switch (type) {
+      case 'success': return '✓';
+      case 'error': return '✗';
+      case 'action': return '▸';
+      case 'detail': return '  ';
+      default: return '•';
+    }
+  };
 
   if (isMinimized) {
     return (
@@ -164,7 +195,7 @@ export default function FloatingJarvis({
                    bg-bg-elevated/90 backdrop-blur-xl
                    border border-white/20 shadow-2xl shadow-black/40
                    transition-all duration-300
-                   ${isExpanded ? 'w-56 h-64' : 'w-16 h-16'}`}
+                   ${isExpanded ? (showActivityLog ? 'w-80 h-96' : 'w-64 h-72') : 'w-16 h-16'}`}
         style={{
           boxShadow: `0 0 30px ${config.color}30, 0 8px 32px rgba(0,0,0,0.4)`
         }}
@@ -215,8 +246,68 @@ export default function FloatingJarvis({
               <CSSOrb config={config} size="lg" />
             </div>
 
+            {/* Current Activity - Claude Code Style */}
+            {(currentActivity || currentDetail) && (
+              <div className="px-3 py-2 border-t border-white/10 bg-bg-primary/50">
+                <div className="flex items-start gap-2">
+                  <Activity className="w-3 h-3 mt-0.5 text-amber-400 flex-shrink-0 animate-pulse" />
+                  <div className="min-w-0 flex-1">
+                    {currentActivity && (
+                      <p className="text-xs text-fg-primary font-medium truncate">
+                        {currentActivity}
+                      </p>
+                    )}
+                    {currentDetail && (
+                      <p className="text-[10px] text-fg-muted font-mono truncate mt-0.5">
+                        {currentDetail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Activity Log Toggle */}
+            {activityLog.length > 0 && (
+              <button
+                onClick={() => setShowActivityLog(!showActivityLog)}
+                className="w-full px-3 py-1.5 flex items-center justify-between
+                          border-t border-white/10 bg-bg-secondary/30
+                          hover:bg-white/5 transition-colors text-[10px] text-fg-muted"
+              >
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+                  Activity Log ({activityLog.length})
+                </span>
+                {showActivityLog ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+              </button>
+            )}
+
+            {/* Activity Log - Scrollable */}
+            {showActivityLog && activityLog.length > 0 && (
+              <div
+                ref={activityLogRef}
+                className="flex-1 overflow-y-auto px-3 py-2 bg-bg-primary/30 border-t border-white/5
+                          font-mono text-[10px] space-y-1 max-h-32"
+              >
+                {activityLog.slice(-20).map((entry) => (
+                  <div key={entry.id} className="flex gap-1.5">
+                    <span className={`flex-shrink-0 ${getActivityTypeStyle(entry.type)}`}>
+                      {getActivityIcon(entry.type)}
+                    </span>
+                    <div className="min-w-0">
+                      <span className={getActivityTypeStyle(entry.type)}>{entry.message}</span>
+                      {entry.detail && (
+                        <span className="text-fg-tertiary ml-1 truncate block">{entry.detail}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Status */}
-            <div className="px-4 py-3 border-t border-white/10 bg-bg-secondary/50">
+            <div className="px-4 py-3 border-t border-white/10 bg-bg-secondary/50 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-fg-primary">{config.label}</p>

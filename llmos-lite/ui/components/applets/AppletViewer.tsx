@@ -21,6 +21,7 @@ import {
   AppletProps,
 } from '@/lib/runtime/applet-runtime';
 import { fixAppletError, isCodeError } from '@/lib/applets/applet-error-fixer';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   X,
   Minimize2,
@@ -66,6 +67,8 @@ export function AppletViewer({
   showControls = true,
   autoCompile = true,
 }: AppletViewerProps) {
+  const { logActivity, setCurrentActivity, setAgentState } = useWorkspace();
+
   const [status, setStatus] = useState<ViewerStatus>('idle');
   const [exports, setExports] = useState<AppletExports | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +83,8 @@ export function AppletViewer({
   const MAX_AUTO_RETRIES = 3;
   const MAX_FIX_ATTEMPTS = 3;
 
+  const appletName = initialMetadata?.name || 'Untitled Applet';
+
   // Update currentCode when code prop changes
   useEffect(() => {
     setCurrentCode(code);
@@ -89,13 +94,18 @@ export function AppletViewer({
   const attemptAIFix = useCallback(async (errorMsg: string, codeToFix: string) => {
     if (fixAttempt >= MAX_FIX_ATTEMPTS) {
       console.log('[AppletViewer] Max AI fix attempts reached');
+      logActivity('info', 'AI fix limit reached', `Max ${MAX_FIX_ATTEMPTS} attempts`);
       return false;
     }
 
     setStatus('fixing');
     setError(`AI is analyzing and fixing the error... (attempt ${fixAttempt + 1}/${MAX_FIX_ATTEMPTS})`);
+    logActivity('action', 'AI fixing code', `Attempt ${fixAttempt + 1}/${MAX_FIX_ATTEMPTS}`);
+    setCurrentActivity('AI Fixing', appletName);
+    setAgentState('thinking');
 
     try {
+      logActivity('detail', 'Analyzing error', errorMsg.slice(0, 80));
       const result = await fixAppletError(
         codeToFix,
         errorMsg,
@@ -105,6 +115,7 @@ export function AppletViewer({
 
       if (result.success && result.fixedCode) {
         console.log(`[AppletViewer] AI fix attempt ${fixAttempt + 1} successful`);
+        logActivity('success', 'AI generated fix', `${result.fixedCode.length} bytes`);
         setCurrentCode(result.fixedCode);
         setFixAttempt(prev => prev + 1);
 
@@ -116,6 +127,8 @@ export function AppletViewer({
         // Try to compile the fixed code
         setStatus('compiling');
         setError(null);
+        logActivity('action', 'Recompiling fixed code', appletName);
+        setAgentState('executing');
 
         const compileResult = await AppletRuntime.compile(result.fixedCode);
 
@@ -124,28 +137,43 @@ export function AppletViewer({
           setWarnings(compileResult.warnings || []);
           setStatus('running');
           setFixAttempt(0);
+          logActivity('success', 'Fixed code compiled', appletName);
+          setAgentState('success');
+          setTimeout(() => {
+            setAgentState('idle');
+            setCurrentActivity(null, null);
+          }, 1500);
           return true;
         } else {
           // Still has errors, try again if attempts remaining
           const newError = compileResult.error || 'Unknown compilation error';
           if (fixAttempt + 1 < MAX_FIX_ATTEMPTS) {
             console.log('[AppletViewer] Fixed code still has errors, retrying...');
+            logActivity('info', 'Still has errors', 'Retrying AI fix...');
             return attemptAIFix(newError, result.fixedCode);
           } else {
+            logActivity('error', 'AI fix exhausted', newError.slice(0, 100));
             setError(newError);
             setStatus('error');
+            setAgentState('error');
+            setTimeout(() => {
+              setAgentState('idle');
+              setCurrentActivity(null, null);
+            }, 3000);
             return false;
           }
         }
       } else {
         console.log('[AppletViewer] AI fix failed:', result.error);
+        logActivity('error', 'AI fix failed', result.error || 'Unknown error');
         return false;
       }
     } catch (err: any) {
       console.error('[AppletViewer] AI fix error:', err);
+      logActivity('error', 'AI fix exception', err.message || 'Unknown error');
       return false;
     }
-  }, [fixAttempt, initialMetadata?.name, onCodeUpdate]);
+  }, [fixAttempt, initialMetadata?.name, onCodeUpdate, appletName, logActivity, setCurrentActivity, setAgentState]);
 
   // Compile the applet with auto-retry for transient errors
   const compile = useCallback(async (isAutoRetry = false, codeToCompile?: string) => {
@@ -155,8 +183,13 @@ export function AppletViewer({
       setError(null);
       setRetryCount(0);
       setFixAttempt(0);
+      logActivity('action', 'Compiling applet', appletName);
+      setCurrentActivity('Compiling', appletName);
+      setAgentState('executing');
     }
     setWarnings([]);
+
+    logActivity('detail', 'Transpiling TSX code', `${compileCode.length} bytes`);
 
     try {
       const result = await AppletRuntime.compile(compileCode);
@@ -166,6 +199,16 @@ export function AppletViewer({
         setWarnings(result.warnings || []);
         setStatus('running');
         setRetryCount(0);
+
+        logActivity('success', 'Compilation successful', appletName);
+        if (result.warnings && result.warnings.length > 0) {
+          result.warnings.forEach(w => logActivity('info', 'Warning', w));
+        }
+        setAgentState('success');
+        setTimeout(() => {
+          setAgentState('idle');
+          setCurrentActivity(null, null);
+        }, 1500);
       } else {
         const errorMsg = result.error || 'Unknown compilation error';
 
@@ -175,6 +218,7 @@ export function AppletViewer({
 
         if (isBabelError && currentRetry < MAX_AUTO_RETRIES) {
           console.log(`[AppletViewer] Babel error, auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
+          logActivity('info', 'Loading compiler', `Attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES}`);
           setRetryCount(currentRetry + 1);
           setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
           setTimeout(() => compile(true, compileCode), 1500 * (currentRetry + 1));
@@ -183,12 +227,19 @@ export function AppletViewer({
 
         // For code errors, attempt AI fix if auto-fixing is enabled
         if (isAutoFixing && isCodeError(errorMsg) && fixAttempt < MAX_FIX_ATTEMPTS) {
+          logActivity('action', 'AI analyzing error', errorMsg.slice(0, 100));
           const fixed = await attemptAIFix(errorMsg, compileCode);
           if (fixed) return;
         }
 
+        logActivity('error', 'Compilation failed', errorMsg.slice(0, 150));
         setError(errorMsg);
         setStatus('error');
+        setAgentState('error');
+        setTimeout(() => {
+          setAgentState('idle');
+          setCurrentActivity(null, null);
+        }, 3000);
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Compilation failed';
@@ -199,6 +250,7 @@ export function AppletViewer({
 
       if (isBabelError && currentRetry < MAX_AUTO_RETRIES) {
         console.log(`[AppletViewer] Babel error (exception), auto-retrying (${currentRetry + 1}/${MAX_AUTO_RETRIES})...`);
+        logActivity('info', 'Loading compiler', `Retry ${currentRetry + 1}/${MAX_AUTO_RETRIES}`);
         setRetryCount(currentRetry + 1);
         setError(`Loading compiler... (attempt ${currentRetry + 1}/${MAX_AUTO_RETRIES})`);
         setTimeout(() => compile(true, codeToCompile), 1500 * (currentRetry + 1));
@@ -207,14 +259,21 @@ export function AppletViewer({
 
       // For code errors, attempt AI fix if auto-fixing is enabled
       if (isAutoFixing && isCodeError(errorMsg) && fixAttempt < MAX_FIX_ATTEMPTS) {
+        logActivity('action', 'AI analyzing error', errorMsg.slice(0, 100));
         const fixed = await attemptAIFix(errorMsg, compileCode);
         if (fixed) return;
       }
 
+      logActivity('error', 'Compilation error', errorMsg.slice(0, 150));
       setError(errorMsg);
       setStatus('error');
+      setAgentState('error');
+      setTimeout(() => {
+        setAgentState('idle');
+        setCurrentActivity(null, null);
+      }, 3000);
     }
-  }, [currentCode, retryCount, isAutoFixing, fixAttempt, attemptAIFix]);
+  }, [currentCode, retryCount, isAutoFixing, fixAttempt, attemptAIFix, appletName, logActivity, setCurrentActivity, setAgentState]);
 
   // Manual AI fix trigger
   const triggerAIFix = useCallback(async () => {

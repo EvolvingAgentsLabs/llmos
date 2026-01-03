@@ -40,6 +40,15 @@ export type AgentState =
   | 'error'
   | 'success';
 
+/** Activity log entry for detailed Jarvis feedback */
+export interface ActivityLogEntry {
+  id: string;
+  timestamp: Date;
+  type: 'info' | 'action' | 'success' | 'error' | 'detail';
+  message: string;
+  detail?: string;  // Detailed information like file paths, code snippets, etc.
+}
+
 /** Panel size configuration */
 export interface PanelSizes {
   sidebar: number;    // Width in pixels (default: 288 = w-72)
@@ -81,6 +90,11 @@ export interface WorkspaceState {
   activeFilePath: string | null;
   activeArtifactId: string | null;
   activeAppletId: string | null;
+
+  // Activity log for detailed Jarvis feedback (like Claude Code)
+  activityLog: ActivityLogEntry[];
+  currentActivity: string | null;  // Current action being performed
+  currentDetail: string | null;    // Detailed info about current action
 }
 
 // ============================================================================
@@ -112,6 +126,9 @@ const defaultWorkspaceState: WorkspaceState = {
   activeFilePath: null,
   activeArtifactId: null,
   activeAppletId: null,
+  activityLog: [],
+  currentActivity: null,
+  currentDetail: null,
 };
 
 // ============================================================================
@@ -151,6 +168,11 @@ interface WorkspaceContextType {
 
   // Smart layout (agent-driven)
   suggestLayout: (taskType: TaskType) => void;
+
+  // Activity logging (Claude Code style feedback)
+  logActivity: (type: ActivityLogEntry['type'], message: string, detail?: string) => void;
+  setCurrentActivity: (activity: string | null, detail?: string | null) => void;
+  clearActivityLog: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -467,6 +489,41 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Activity logging methods (Claude Code style)
+  const logActivity = useCallback((type: ActivityLogEntry['type'], message: string, detail?: string) => {
+    const entry: ActivityLogEntry = {
+      id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(),
+      type,
+      message,
+      detail,
+    };
+
+    setState(prev => ({
+      ...prev,
+      activityLog: [...prev.activityLog.slice(-49), entry], // Keep last 50 entries
+      currentActivity: type === 'action' ? message : prev.currentActivity,
+      currentDetail: type === 'action' ? (detail || null) : prev.currentDetail,
+    }));
+  }, []);
+
+  const setCurrentActivity = useCallback((activity: string | null, detail?: string | null) => {
+    setState(prev => ({
+      ...prev,
+      currentActivity: activity,
+      currentDetail: detail ?? null,
+    }));
+  }, []);
+
+  const clearActivityLog = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      activityLog: [],
+      currentActivity: null,
+      currentDetail: null,
+    }));
+  }, []);
+
   const value: WorkspaceContextType = {
     state,
     setTaskType,
@@ -486,6 +543,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setActiveApplet,
     updatePreferences,
     suggestLayout,
+    logActivity,
+    setCurrentActivity,
+    clearActivityLog,
   };
 
   return (
