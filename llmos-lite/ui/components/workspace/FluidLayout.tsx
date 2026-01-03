@@ -17,13 +17,10 @@ import CommandPalette from './CommandPalette';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
 // Lazy load panels
-const ChatPanel = lazy(() => import('../chat/ChatPanel'));
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
 const AppletGrid = lazy(() => import('../applets/AppletGrid'));
-const TabbedAppletViewer = lazy(() => import('../applets/TabbedAppletViewer'));
-const SplitViewCanvas = lazy(() => import('../canvas/SplitViewCanvas'));
+const TabbedContentViewer = lazy(() => import('../viewer/TabbedContentViewer'));
 const ArtifactPanel = lazy(() => import('../panels/artifacts/ArtifactPanel'));
-const FloatingJarvis = lazy(() => import('../system/FloatingJarvis'));
 const MediaViewer = lazy(() => import('../media/MediaViewer'));
 
 // ============================================================================
@@ -42,44 +39,40 @@ function PanelLoader() {
 }
 
 // ============================================================================
-// COLLAPSIBLE TREE PANEL
+// SIDEBAR PANEL WRAPPER - Full height accordion
 // ============================================================================
 
-interface TreePanelProps {
-  isOpen: boolean;
-  onToggle: () => void;
+interface SidebarWrapperProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
   activeSession: string | null;
   onSessionChange: (sessionId: string | null) => void;
+  pendingPrompt?: string | null;
+  onPromptProcessed?: () => void;
 }
 
-function TreePanel({
-  isOpen,
-  onToggle,
+function SidebarWrapper({
   activeVolume,
   onVolumeChange,
   activeSession,
   onSessionChange,
-}: TreePanelProps) {
-  // Use a larger height (60% of viewport minus header) for better usability
-  // SidebarPanel has its own internal resize handle for file tree vs sessions
-  // IMPORTANT: Don't use overflow-hidden here as it clips dropdowns
+  pendingPrompt,
+  onPromptProcessed,
+}: SidebarWrapperProps) {
+  // Full height sidebar with accordion sections (Explorer, Sessions, Activity, Chat)
   return (
-    <div
-      className={`transition-all duration-300 flex-shrink-0 ${isOpen ? '' : 'h-0 overflow-hidden'}`}
-      style={{ height: isOpen ? 'calc(60vh - 48px)' : 0 }}
-    >
-      <div className="h-full border-b border-white/10 bg-bg-secondary/30 overflow-y-auto">
-        <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
-          <SidebarPanel
-            activeVolume={activeVolume}
-            onVolumeChange={onVolumeChange}
-            activeSession={activeSession}
-            onSessionChange={onSessionChange}
-          />
-        </Suspense>
-      </div>
+    <div className="h-full bg-bg-secondary/30">
+      <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
+        <SidebarPanel
+          activeVolume={activeVolume}
+          onVolumeChange={onVolumeChange}
+          activeSession={activeSession}
+          onSessionChange={onSessionChange}
+          onSessionCreated={onSessionChange}
+          pendingPrompt={pendingPrompt}
+          onPromptProcessed={onPromptProcessed}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -158,12 +151,13 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 
     case 'split-view':
     case 'code-editor':
+      // Use TabbedContentViewer for all code files (full panel with tabs)
       if (activeFilePath) {
         return (
           <Suspense fallback={<PanelLoader />}>
-            <SplitViewCanvas
-              volume={activeVolume}
+            <TabbedContentViewer
               filePath={activeFilePath}
+              volume={activeVolume}
             />
           </Suspense>
         );
@@ -189,18 +183,18 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
     case 'canvas':
     case 'applets':
     default:
-      // If there's an applet file selected, show TabbedAppletViewer
-      if (activeFilePath && isAppletFile(activeFilePath)) {
+      // If there's a file selected (applet or code), show TabbedContentViewer
+      if (activeFilePath) {
         return (
           <Suspense fallback={<PanelLoader />}>
-            <TabbedAppletViewer
+            <TabbedContentViewer
               filePath={activeFilePath}
               volume={activeVolume}
             />
           </Suspense>
         );
       }
-      // Desktop view - show AppletGrid with JARVIS
+      // Desktop view - show AppletGrid
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />
@@ -220,9 +214,9 @@ export default function FluidLayout() {
   const { contextViewMode, activeFilePath } = state;
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
-  const [isTreeOpen, setIsTreeOpen] = useState(true); // Start with tree open
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(480); // Default width
+  const [leftPanelWidth, setLeftPanelWidth] = useState(420); // Default width for sidebar
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false); // Toggle left panel
   const [isResizing, setIsResizing] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState<'left' | 'right' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -329,17 +323,13 @@ export default function FluidLayout() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
         e.preventDefault();
-        setIsTreeOpen(prev => !prev);
+        setIsLeftPanelCollapsed(prev => !prev);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openCommandPalette]);
-
-  // Check if we're showing content (not just applets/desktop)
-  const isShowingContent = contextViewMode === 'split-view' || contextViewMode === 'code-editor' ||
-                           (contextViewMode === 'artifacts' && activeFilePath);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
@@ -348,14 +338,14 @@ export default function FluidLayout() {
       {/* ================================================================== */}
       <header className="h-12 flex items-center justify-between px-4
                          bg-bg-secondary border-b border-border-primary">
-        {/* Left: Logo + Tree toggle */}
-        <div className="flex items-center gap-3">
+        {/* Left: Logo + Panel toggle */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsTreeOpen(!isTreeOpen)}
-            className={`p-2 rounded-lg transition-colors ${isTreeOpen ? 'bg-accent-primary/20 text-accent-primary' : 'hover:bg-white/10 text-fg-secondary'}`}
-            title="Toggle files (⌘B)"
+            onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+            className={`p-1.5 rounded-lg transition-colors ${!isLeftPanelCollapsed ? 'bg-accent-primary/20 text-accent-primary' : 'hover:bg-white/10 text-fg-secondary'}`}
+            title="Toggle sidebar (⌘B)"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
@@ -363,19 +353,19 @@ export default function FluidLayout() {
           {/* Desktop/Start Button */}
           <button
             onClick={() => setContextViewMode('applets')}
-            className={`p-2 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-accent-primary text-white' : 'hover:bg-white/10 text-fg-secondary'}`}
+            className={`p-1.5 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-accent-primary text-white' : 'hover:bg-white/10 text-fg-secondary'}`}
             title="Desktop"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
             </svg>
           </button>
 
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
-              <span className="text-white text-xs font-bold">L</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-md bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
+              <span className="text-white text-[10px] font-bold">L</span>
             </div>
-            <span className="font-semibold text-fg-primary">LLMos</span>
+            <span className="font-medium text-sm text-fg-primary">LLMos</span>
           </div>
         </div>
 
@@ -440,51 +430,42 @@ export default function FluidLayout() {
       {/* MAIN 2-PANEL LAYOUT (VS Code style resizable) */}
       {/* ================================================================== */}
       <div ref={containerRef} className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
-        {/* LEFT PANEL: Chat + Tree */}
-        <div
-          className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
-            maximizedPanel === 'right' ? 'hidden' : maximizedPanel === 'left' ? 'w-full' : ''
-          }`}
-          style={{ width: maximizedPanel === 'left' ? '100%' : maximizedPanel === 'right' ? 0 : leftPanelWidth }}
-        >
-          {/* Panel Header with Maximize */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
-            <span className="text-xs font-medium text-fg-secondary">Explorer & Chat</span>
-            <button
-              onClick={() => toggleMaximize('left')}
-              className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
-              title={maximizedPanel === 'left' ? 'Restore' : 'Maximize'}
-            >
-              {maximizedPanel === 'left' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            </button>
-          </div>
+        {/* LEFT PANEL: Accordion Sidebar (Explorer, Sessions, Activity, Chat) */}
+        {!isLeftPanelCollapsed && (
+          <div
+            className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
+              maximizedPanel === 'right' ? 'hidden' : maximizedPanel === 'left' ? 'w-full' : ''
+            }`}
+            style={{ width: maximizedPanel === 'left' ? '100%' : maximizedPanel === 'right' ? 0 : leftPanelWidth }}
+          >
+            {/* Panel Header with Maximize */}
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
+              <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">Explorer</span>
+              <button
+                onClick={() => toggleMaximize('left')}
+                className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
+                title={maximizedPanel === 'left' ? 'Restore' : 'Maximize'}
+              >
+                {maximizedPanel === 'left' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+              </button>
+            </div>
 
-          {/* Collapsible Tree */}
-          <TreePanel
-            isOpen={isTreeOpen}
-            onToggle={() => setIsTreeOpen(!isTreeOpen)}
-            activeVolume={activeVolume}
-            onVolumeChange={setActiveVolume}
-            activeSession={activeSession}
-            onSessionChange={setActiveSession}
-          />
-
-          {/* Chat */}
-          <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<PanelLoader />}>
-              <ChatPanel
-                activeSession={activeSession}
+            {/* Full-height Sidebar with Accordion */}
+            <div className="flex-1 overflow-hidden">
+              <SidebarWrapper
                 activeVolume={activeVolume}
-                onSessionCreated={(sessionId) => setActiveSession(sessionId)}
+                onVolumeChange={setActiveVolume}
+                activeSession={activeSession}
+                onSessionChange={setActiveSession}
                 pendingPrompt={pendingPrompt}
                 onPromptProcessed={() => setPendingPrompt(null)}
               />
-            </Suspense>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* RESIZE HANDLE */}
-        {maximizedPanel === null && (
+        {maximizedPanel === null && !isLeftPanelCollapsed && (
           <div
             className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary cursor-col-resize transition-all flex-shrink-0 relative group"
             onMouseDown={handleResizeStart}
@@ -508,7 +489,7 @@ export default function FluidLayout() {
         >
           {/* Panel Header with Maximize */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
-            <span className="text-xs font-medium text-fg-secondary">
+            <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
               {activeFilePath ? activeFilePath.split('/').pop() : 'Desktop'}
             </span>
             <button
@@ -516,7 +497,7 @@ export default function FluidLayout() {
               className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
               title={maximizedPanel === 'right' ? 'Restore' : 'Maximize'}
             >
-              {maximizedPanel === 'right' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              {maximizedPanel === 'right' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             </button>
           </div>
 
@@ -530,13 +511,6 @@ export default function FluidLayout() {
           </div>
         </div>
       </div>
-
-      {/* Floating JARVIS - minimizes when content is shown */}
-      <Suspense fallback={null}>
-        <FloatingJarvis
-          position={isShowingContent ? 'bottom-right' : 'bottom-right'}
-        />
-      </Suspense>
     </div>
   );
 }
