@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
+import { hasExistingProjectFiles, getProjectSummary } from '@/lib/project-context-resolver';
 import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import ModelSelector from './ModelSelector';
@@ -48,6 +49,32 @@ export default function ChatPanel({
 
   const currentProject = projects.find((p) => p.id === activeSession);
   const messages = currentProject?.messages || [];
+
+  // Check if this project has existing VFS files (for continuation mode indicator)
+  const projectStatus = useMemo((): {
+    isExisting: boolean;
+    hasAgents?: boolean;
+    hasApplets?: boolean;
+    hasCode?: boolean;
+    agentCount?: number;
+    appletCount?: number;
+    codeFileCount?: number;
+  } | null => {
+    if (!currentProject?.name) return null;
+    try {
+      const hasFiles = hasExistingProjectFiles(currentProject.name, activeVolume);
+      if (hasFiles) {
+        const summary = getProjectSummary(`projects/${currentProject.name.toLowerCase().replace(/\s+/g, '_')}`);
+        return {
+          isExisting: true,
+          ...summary
+        };
+      }
+    } catch (e) {
+      // Ignore errors - just means we can't determine status
+    }
+    return { isExisting: false };
+  }, [currentProject?.name, activeVolume]);
 
   // Debug logging
   useEffect(() => {
@@ -164,6 +191,7 @@ export default function ChatPanel({
       console.log('[ChatPanel] Executing SystemAgent for goal:', messageText);
 
       const { SystemAgentOrchestrator } = await import('@/lib/system-agent-orchestrator');
+      const { resolveProjectContext } = await import('@/lib/project-context-resolver');
       const { getVFS } = await import('@/lib/virtual-fs');
 
       // Load SystemAgent definition
@@ -183,6 +211,24 @@ export default function ChatPanel({
           setAgentState?.('thinking');
         }
       });
+
+      // Resolve project context for continuation if we have an active project
+      if (currentProject && currentProject.name) {
+        setLoadingStatus('Loading project context...');
+        console.log('[ChatPanel] Resolving project context for:', currentProject.name);
+
+        try {
+          const projectContext = await resolveProjectContext(currentProject, activeVolume);
+          if (projectContext) {
+            orchestrator.setProjectContext(projectContext);
+            console.log('[ChatPanel] Project context set - continuing work on existing project');
+          } else {
+            console.log('[ChatPanel] No existing VFS project found - will create new if needed');
+          }
+        } catch (e) {
+          console.warn('[ChatPanel] Failed to resolve project context:', e);
+        }
+      }
 
       // Wire: Agent is now executing
       setAgentState?.('executing');
@@ -421,6 +467,18 @@ export default function ChatPanel({
             <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
             <span className="text-[10px] text-fg-tertiary">•</span>
             <span className="text-[10px] text-fg-tertiary">{currentProject.timeAgo}</span>
+            {/* Continuation mode indicator */}
+            {projectStatus?.isExisting && (
+              <>
+                <span className="text-[10px] text-fg-tertiary">•</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 flex items-center gap-1" title="This project has existing files. New messages will continue work on this project.">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Continue
+                </span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <ModelSelector onModelChange={(modelId) => {
@@ -431,6 +489,35 @@ export default function ChatPanel({
             </span>
           </div>
         </div>
+        {/* Project summary for existing projects */}
+        {projectStatus?.isExisting && ((projectStatus.agentCount ?? 0) > 0 || (projectStatus.appletCount ?? 0) > 0 || (projectStatus.codeFileCount ?? 0) > 0) && (
+          <div className="mt-1 flex items-center gap-2 text-[10px] text-fg-muted">
+            {(projectStatus.agentCount ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                {projectStatus.agentCount} agent{projectStatus.agentCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {(projectStatus.appletCount ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+                {projectStatus.appletCount} applet{projectStatus.appletCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {(projectStatus.codeFileCount ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                {projectStatus.codeFileCount} code file{projectStatus.codeFileCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Messages - Compact VSCode Style */}

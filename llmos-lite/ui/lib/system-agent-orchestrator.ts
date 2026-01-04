@@ -54,6 +54,24 @@ export interface SystemAgentResult {
   };
 }
 
+/**
+ * Project context for continuing work on an existing project
+ */
+export interface ProjectContext {
+  /** The VFS path to the project (e.g., "projects/pacman_game") */
+  projectPath: string;
+  /** The display name of the project (e.g., "Pacman Game") */
+  projectName: string;
+  /** Content of context.md if it exists */
+  contextFile?: string;
+  /** Content of memory.md if it exists */
+  memoryFile?: string;
+  /** List of existing files in the project */
+  existingFiles?: string[];
+  /** Whether this is an existing project or a new one */
+  isExistingProject: boolean;
+}
+
 export interface AgentProgressEvent {
   type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation';
   agent?: string;
@@ -156,6 +174,7 @@ export class SystemAgentOrchestrator {
   private progressCallback?: ProgressCallback;
   private contextManager: WorkflowContextManager;
   private config: OrchestratorConfig;
+  private projectContext?: ProjectContext;
 
   constructor(
     systemPrompt: string,
@@ -171,6 +190,21 @@ export class SystemAgentOrchestrator {
     this.contextManager = createWorkflowContextManager({
       strategy: this.config.strategy,
       ...this.config.contextConfig,
+    });
+  }
+
+  /**
+   * Set project context for continuing work on an existing project
+   */
+  setProjectContext(context: ProjectContext): void {
+    this.projectContext = context;
+    console.log('[SystemAgent] Project context set:', {
+      projectPath: context.projectPath,
+      projectName: context.projectName,
+      isExisting: context.isExistingProject,
+      hasContext: !!context.contextFile,
+      hasMemory: !!context.memoryFile,
+      fileCount: context.existingFiles?.length || 0,
     });
   }
 
@@ -210,7 +244,10 @@ export class SystemAgentOrchestrator {
     const startTime = performance.now();
     const toolCalls: ToolCallResult[] = [];
     const filesCreated: string[] = [];
-    let projectPath: string | undefined;
+    // Use project context path if available, otherwise detect from file writes
+    let projectPath: string | undefined = this.projectContext?.isExistingProject
+      ? this.projectContext.projectPath
+      : undefined;
     let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
 
     try {
@@ -230,8 +267,12 @@ export class SystemAgentOrchestrator {
       this.emitProgress({
         type: 'thinking',
         agent: 'SystemAgent',
-        action: 'Reading system memory and planning approach',
-        details: 'Consulting /system/memory_log.md for similar past tasks',
+        action: this.projectContext?.isExistingProject
+          ? `Continuing work on "${this.projectContext.projectName}"`
+          : 'Reading system memory and planning approach',
+        details: this.projectContext?.isExistingProject
+          ? `Working in ${this.projectContext.projectPath} with ${this.projectContext.existingFiles?.length || 0} existing files`
+          : 'Consulting /system/memory_log.md for similar past tasks',
       });
 
       // Create summarizer function
@@ -601,10 +642,83 @@ ${learnings.errors.length > 0 ? `**Errors Encountered:**\n${learnings.errors.map
   }
 
   /**
+   * Build project context preamble for existing projects
+   */
+  private buildProjectContextPreamble(): string {
+    if (!this.projectContext || !this.projectContext.isExistingProject) {
+      return '';
+    }
+
+    const ctx = this.projectContext;
+    let preamble = `
+## 🎯 ACTIVE PROJECT CONTEXT - CONTINUE WORKING HERE
+
+**IMPORTANT: You are continuing work on an EXISTING project. DO NOT create a new project structure.**
+
+### Current Project
+- **Name**: ${ctx.projectName}
+- **Path**: \`${ctx.projectPath}\`
+- **Status**: Existing project with ${ctx.existingFiles?.length || 0} files
+
+### Existing Files
+\`\`\`
+${ctx.existingFiles?.slice(0, 30).join('\n') || 'No files listed'}
+${(ctx.existingFiles?.length || 0) > 30 ? `\n... and ${ctx.existingFiles!.length - 30} more files` : ''}
+\`\`\`
+
+### Instructions for Continuation
+1. **DO NOT** create a new project directory structure
+2. **DO** work within \`${ctx.projectPath}/\`
+3. **DO** read existing files before modifying them
+4. **DO** evolve existing agents rather than creating duplicates
+5. **DO** update context.md and memory.md with new work
+
+`;
+
+    if (ctx.contextFile) {
+      preamble += `### Project Context (context.md)
+\`\`\`markdown
+${ctx.contextFile.substring(0, 2000)}${ctx.contextFile.length > 2000 ? '\n... [truncated]' : ''}
+\`\`\`
+
+`;
+    }
+
+    if (ctx.memoryFile) {
+      preamble += `### Project Memory (memory.md)
+\`\`\`markdown
+${ctx.memoryFile.substring(0, 2000)}${ctx.memoryFile.length > 2000 ? '\n... [truncated]' : ''}
+\`\`\`
+
+`;
+    }
+
+    preamble += `### Continuation Mode Active
+When the user asks to:
+- "Add a feature" → Add to THIS project
+- "Refactor" → Modify existing code in THIS project
+- "Fix a bug" → Fix within THIS project
+- "Improve" → Enhance THIS project
+- "Create something new" → Ask if it should be in THIS project or a new one
+
+---
+
+`;
+
+    return preamble;
+  }
+
+  /**
    * Build system prompt with tool descriptions
    */
   private buildSystemPromptWithTools(): string {
     let prompt = this.systemPrompt;
+
+    // Add project context preamble if working on existing project
+    const projectPreamble = this.buildProjectContextPreamble();
+    if (projectPreamble) {
+      prompt = projectPreamble + prompt;
+    }
 
     // Add tool descriptions
     const tools = getSystemTools();
