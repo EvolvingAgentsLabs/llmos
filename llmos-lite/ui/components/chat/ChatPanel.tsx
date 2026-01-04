@@ -458,66 +458,42 @@ export default function ChatPanel({
   // Active project view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Project Header - VSCode Style */}
+      {/* Project Header - Streamlined Design */}
       <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-fg-primary">{currentProject.name}</span>
-            <span className="text-[10px] text-fg-tertiary">•</span>
-            <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
-            <span className="text-[10px] text-fg-tertiary">•</span>
-            <span className="text-[10px] text-fg-tertiary">{currentProject.timeAgo}</span>
-            {/* Continuation mode indicator */}
+        <div className="flex items-center gap-3">
+          {/* Model Selector - Primary action, left side */}
+          <ModelSelector onModelChange={(modelId) => {
+            console.log('[ChatPanel] Model changed to:', modelId);
+          }} />
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-border-primary/50" />
+
+          {/* Project name - Prominent center */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm font-medium text-fg-primary truncate">{currentProject.name}</span>
+            {/* Continuation indicator as subtle icon */}
             {projectStatus?.isExisting && (
-              <>
-                <span className="text-[10px] text-fg-tertiary">•</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 flex items-center gap-1" title="This project has existing files. New messages will continue work on this project.">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Continue
-                </span>
-              </>
+              <span
+                className="flex-shrink-0 w-4 h-4 rounded bg-blue-500/15 flex items-center justify-center"
+                title={`Continuing project with ${projectStatus.agentCount || 0} agents, ${projectStatus.appletCount || 0} applets, ${projectStatus.codeFileCount || 0} code files`}
+              >
+                <svg className="w-2.5 h-2.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <ModelSelector onModelChange={(modelId) => {
-              console.log('[ChatPanel] Model changed to:', modelId);
-            }} />
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentProject.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
-              {currentProject.status === 'temporal' ? 'Unsaved' : 'Saved'}
+
+          {/* Right side - compact info */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${currentProject.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${currentProject.status === 'temporal' ? 'bg-accent-warning' : 'bg-accent-success'}`} />
+              {currentProject.status === 'temporal' ? 'Draft' : 'Saved'}
             </span>
           </div>
         </div>
-        {/* Project summary for existing projects */}
-        {projectStatus?.isExisting && ((projectStatus.agentCount ?? 0) > 0 || (projectStatus.appletCount ?? 0) > 0 || (projectStatus.codeFileCount ?? 0) > 0) && (
-          <div className="mt-1 flex items-center gap-2 text-[10px] text-fg-muted">
-            {(projectStatus.agentCount ?? 0) > 0 && (
-              <span className="flex items-center gap-0.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                {projectStatus.agentCount} agent{projectStatus.agentCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {(projectStatus.appletCount ?? 0) > 0 && (
-              <span className="flex items-center gap-0.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                </svg>
-                {projectStatus.appletCount} applet{projectStatus.appletCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {(projectStatus.codeFileCount ?? 0) > 0 && (
-              <span className="flex items-center gap-0.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                </svg>
-                {projectStatus.codeFileCount} code file{projectStatus.codeFileCount !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Messages - Compact VSCode Style */}

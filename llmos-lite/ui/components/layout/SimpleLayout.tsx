@@ -10,10 +10,10 @@ import { AppletProvider, useApplets } from '@/contexts/AppletContext';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import { DebugConsole } from '../debug';
 import { logger } from '@/lib/debug/logger';
-import { Sparkles } from 'lucide-react';
+import { MessageSquare, Layers, Sparkles, PanelRightClose, PanelRight } from 'lucide-react';
 
-type ViewMode = 'chat' | 'canvas' | 'applets';
-type AppletPanelMode = 'split' | 'full' | 'dock' | 'hidden';
+type ViewMode = 'chat' | 'canvas';
+type ContextPanelMode = 'applets' | 'preview' | 'hidden';
 
 interface TreeNode {
   id: string;
@@ -27,15 +27,16 @@ interface TreeNode {
 }
 
 function LayoutContent() {
-  const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('system');
+  const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
   const [activeSession, setActiveSession] = useState<string | null>(null);
-  const [appletPanelMode, setAppletPanelMode] = useState<AppletPanelMode>('hidden');
+  const [contextPanelMode, setContextPanelMode] = useState<ContextPanelMode>('hidden');
 
   const { activeApplets, createApplet } = useApplets();
   const hasActiveApplets = activeApplets.length > 0;
+  const showContextPanel = contextPanelMode !== 'hidden';
 
   // Set up the applet generation callback when component mounts
   useEffect(() => {
@@ -61,7 +62,7 @@ function LayoutContent() {
         logger.applet(`Applet created in store: ${createdApplet.id}`);
 
         // Auto-open the applet panel
-        setAppletPanelMode('split');
+        setContextPanelMode('applets');
       } catch (err) {
         logger.error('applet', 'Failed to create applet', { error: err });
         console.error('[SimpleLayout] Failed to create applet:', err);
@@ -83,11 +84,13 @@ function LayoutContent() {
     // TODO: Feed this back into the chat as a message
   }, []);
 
-  // Toggle applet panel
-  const toggleAppletPanel = useCallback(() => {
-    setAppletPanelMode((prev) => {
-      if (prev === 'hidden' || prev === 'dock') return 'split';
-      return 'hidden';
+  // Toggle context panel
+  const toggleContextPanel = useCallback((mode?: ContextPanelMode) => {
+    setContextPanelMode((prev) => {
+      if (mode) {
+        return prev === mode ? 'hidden' : mode;
+      }
+      return prev === 'hidden' ? 'applets' : 'hidden';
     });
   }, []);
 
@@ -112,10 +115,10 @@ function LayoutContent() {
               if (node.type === 'file') {
                 // Check if it's an applet file
                 if (node.path.endsWith('.app')) {
-                  setAppletPanelMode('split');
-                  setViewMode('chat');
+                  setContextPanelMode('applets');
                 } else {
                   setViewMode('canvas');
+                  setContextPanelMode('preview');
                 }
               }
             }}
@@ -123,56 +126,75 @@ function LayoutContent() {
           />
         </div>
 
-        {/* Center Panel: Chat or Canvas */}
-        <div className={`flex-1 flex flex-col overflow-hidden ${appletPanelMode === 'split' ? 'max-w-[50%]' : ''}`}>
-          {/* View mode toggle */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-border-primary/50 bg-bg-secondary/30">
-            <div className="flex gap-2">
+        {/* Center Panel: Chat (Primary) or Canvas */}
+        <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-200 ${showContextPanel ? 'max-w-[55%]' : ''}`}>
+          {/* Streamlined View Mode Bar */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary/50 bg-bg-secondary/30">
+            {/* Left: View Mode Toggle */}
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setViewMode('chat')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'chat'
-                    ? 'bg-accent-primary text-white shadow-glow'
-                    : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
+                    ? 'bg-accent-primary/20 text-accent-primary'
+                    : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary'
                 }`}
+                title="Chat"
               >
-                Chat
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Chat</span>
               </button>
               <button
                 onClick={() => setViewMode('canvas')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-200 ${
                   viewMode === 'canvas'
-                    ? 'bg-accent-primary text-white shadow-glow'
-                    : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
+                    ? 'bg-accent-primary/20 text-accent-primary'
+                    : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary'
                 }`}
+                title="Canvas"
               >
-                Canvas
+                <Layers className="w-3.5 h-3.5" />
+                <span>Canvas</span>
               </button>
+            </div>
 
-              {/* Applets toggle button */}
+            {/* Right: Context Panel Controls */}
+            <div className="flex items-center gap-1">
+              {/* Applets toggle */}
               <button
-                onClick={toggleAppletPanel}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                  appletPanelMode === 'split' || appletPanelMode === 'full'
-                    ? 'bg-purple-600 text-white shadow-glow'
-                    : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
+                onClick={() => toggleContextPanel('applets')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-200 ${
+                  contextPanelMode === 'applets'
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary'
                 }`}
+                title="Toggle Applets Panel"
               >
-                <Sparkles className="w-4 h-4" />
-                Applets
+                <Sparkles className="w-3.5 h-3.5" />
                 {hasActiveApplets && (
-                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-purple-500/30 rounded-full">
+                  <span className="px-1 py-0.5 text-[10px] bg-purple-500/30 rounded">
                     {activeApplets.length}
                   </span>
                 )}
               </button>
-            </div>
 
-            {selectedFile && (
-              <span className="text-sm text-fg-secondary">
-                Selected: <span className="text-fg-primary font-medium">{selectedFile}</span>
-              </span>
-            )}
+              {/* Panel toggle */}
+              <button
+                onClick={() => toggleContextPanel()}
+                className={`p-1.5 rounded-md transition-all duration-200 ${
+                  showContextPanel
+                    ? 'text-accent-primary bg-accent-primary/10'
+                    : 'text-fg-tertiary hover:text-fg-secondary hover:bg-bg-tertiary'
+                }`}
+                title={showContextPanel ? 'Hide Context Panel' : 'Show Context Panel'}
+              >
+                {showContextPanel ? (
+                  <PanelRightClose className="w-4 h-4" />
+                ) : (
+                  <PanelRight className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Main content area */}
@@ -195,38 +217,61 @@ function LayoutContent() {
           </div>
         </div>
 
-        {/* Right Panel: Applets (Conditional) */}
-        {appletPanelMode === 'split' && (
-          <div className="w-1/2 flex-shrink-0 border-l border-border-primary/50 overflow-hidden">
-            <AppletPanel
-              mode="split"
-              onModeChange={(mode) => {
-                if (mode === 'dock') setAppletPanelMode('dock');
-                else if (mode === 'full') setAppletPanelMode('full');
-                else setAppletPanelMode('split');
-              }}
-            />
-          </div>
-        )}
+        {/* Right Panel: Context Panel (Applets or Preview) */}
+        {showContextPanel && (
+          <div className="w-[45%] flex-shrink-0 border-l border-border-primary/50 overflow-hidden flex flex-col">
+            {/* Context Panel Header */}
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary/50 bg-bg-secondary/30">
+              <span className="text-xs font-medium text-fg-secondary">
+                {contextPanelMode === 'applets' ? 'Applets' : 'Preview'}
+              </span>
+              <button
+                onClick={() => setContextPanelMode('hidden')}
+                className="p-1 rounded hover:bg-bg-tertiary text-fg-tertiary hover:text-fg-secondary transition-colors"
+                title="Close Panel"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-        {/* Full screen applet panel */}
-        {appletPanelMode === 'full' && (
-          <div className="fixed inset-0 z-50 bg-bg-primary">
-            <AppletPanel
-              mode="full"
-              onModeChange={(mode) => {
-                if (mode === 'dock') setAppletPanelMode('dock');
-                else if (mode === 'split') setAppletPanelMode('split');
-                else setAppletPanelMode('full');
-              }}
-            />
+            {/* Context Panel Content */}
+            <div className="flex-1 overflow-hidden">
+              {contextPanelMode === 'applets' ? (
+                <AppletPanel
+                  mode="split"
+                  onModeChange={(mode) => {
+                    if (mode === 'dock') setContextPanelMode('hidden');
+                    else if (mode === 'full') {
+                      // Handle full mode if needed
+                    }
+                  }}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-fg-tertiary text-sm">
+                  {selectedFile ? (
+                    <CanvasView
+                      volume={activeVolume}
+                      selectedArtifact={selectedFile}
+                      selectedNode={selectedNode}
+                    />
+                  ) : (
+                    <div className="text-center p-4">
+                      <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>Select a file to preview</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Applet dock at bottom when minimized */}
-      {appletPanelMode === 'dock' && hasActiveApplets && (
-        <AppletDock onExpand={() => setAppletPanelMode('split')} />
+      {/* Applet dock at bottom when there are active applets but panel is hidden */}
+      {contextPanelMode === 'hidden' && hasActiveApplets && (
+        <AppletDock onExpand={() => setContextPanelMode('applets')} />
       )}
 
       {/* Debug Console - Bottom Panel */}

@@ -15,7 +15,6 @@ import {
   FileIcon,
   DriveIcon,
   SpecialIcon,
-  DesktopIcon,
   TrashIcon,
   EditIcon,
   FolderPlusIcon,
@@ -45,22 +44,14 @@ interface VSCodeFileTreeProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
   onFileSelect?: (node: TreeNode) => void;
-  onDesktopSelect?: () => void;
   onCodeFileSelect?: (path: string) => void;
   selectedFile?: string | null;
   onProjectSelect?: (projectName: string, volume: 'team' | 'user') => void;
 }
 
 // Mock data structure - Single tree with volumes as root drives
+// Note: Desktop/Applets functionality moved to the view mode toggle in the main layout
 const ROOT_TREE: TreeNode[] = [
-  // Desktop - Special item at the top
-  {
-    id: 'desktop',
-    name: 'Desktop',
-    type: 'special',
-    path: '/desktop',
-    metadata: { action: 'desktop' },
-  },
   {
     id: 'system',
     name: 'System',
@@ -171,7 +162,6 @@ export default function VSCodeFileTree({
   activeVolume,
   onVolumeChange,
   onFileSelect,
-  onDesktopSelect,
   onCodeFileSelect,
   selectedFile,
   onProjectSelect,
@@ -580,13 +570,6 @@ export default function VSCodeFileTree({
   }, [closeContextMenu, handleDeleteClick, handleRename]);
 
   const getNodeIcon = (node: TreeNode, isExpanded: boolean): JSX.Element => {
-    // Special items (Desktop, etc.)
-    if (node.type === 'special') {
-      if (node.metadata?.action === 'desktop') {
-        return <DesktopIcon />;
-      }
-    }
-
     // Volume/Drive icon
     if (node.type === 'volume' && node.metadata?.volume) {
       return <DriveIcon type={node.metadata.volume as 'system' | 'team' | 'user'} />;
@@ -630,7 +613,6 @@ export default function VSCodeFileTree({
     const hasChildren = node.children && node.children.length > 0;
     const isReadOnly = node.metadata?.readonly;
     const isVolume = node.type === 'volume';
-    const isSpecial = node.type === 'special';
     const isRenaming = renameNode?.id === node.id;
     const isVFSNode = node.id.startsWith('vfs-');
 
@@ -640,14 +622,6 @@ export default function VSCodeFileTree({
     // Handle node click
     const handleNodeClick = () => {
       setSelectedNodeId(node.id);
-
-      // Handle special nodes (Desktop, etc.)
-      if (isSpecial) {
-        if (node.metadata?.action === 'desktop' && onDesktopSelect) {
-          onDesktopSelect();
-        }
-        return;
-      }
 
       // Handle project folder selection - notify parent and set as active
       if (isProjectFolder && node.type === 'folder') {
@@ -687,7 +661,7 @@ export default function VSCodeFileTree({
             group flex items-center gap-1 py-0.5 px-1 cursor-pointer
             transition-colors duration-100
             ${isSelected ? 'bg-accent-primary/20' : 'hover:bg-bg-tertiary'}
-            ${isVolume || isSpecial ? 'font-semibold' : ''}
+            ${isVolume ? 'font-semibold' : ''}
           `}
           style={{ paddingLeft: `${depth * 8 + 4}px` }}
           onClick={handleNodeClick}
