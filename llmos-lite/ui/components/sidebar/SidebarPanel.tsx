@@ -65,12 +65,6 @@ export default function SidebarPanel({
     return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
   };
 
-  // Handle Desktop selection - switch to applets view
-  const handleDesktopSelect = () => {
-    setContextViewMode('applets');
-    ensureContextPanelOpen();
-  };
-
   // Handle code file selection - open in split view
   const handleCodeFileSelect = (path: string) => {
     setActiveFile(path);
@@ -197,7 +191,6 @@ export default function SidebarPanel({
               activeVolume={activeVolume}
               onVolumeChange={onVolumeChange}
               onFileSelect={handleFileSelect}
-              onDesktopSelect={handleDesktopSelect}
               onCodeFileSelect={handleCodeFileSelect}
               onProjectSelect={handleProjectSelect}
               selectedFile={null}
