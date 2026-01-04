@@ -13,6 +13,8 @@ import { UserStorage } from '@/lib/user-storage';
 import { LLMStorage } from '@/lib/llm-client';
 import { setAppletGeneratedCallback } from '@/lib/system-tools';
 import { DesktopAppletManager } from '@/lib/applets/desktop-applet-manager';
+import { useArtifactStore } from '@/lib/artifacts/store';
+import { getVFS } from '@/lib/virtual-fs';
 import CommandPalette from './CommandPalette';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
@@ -209,8 +211,9 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 
 export default function FluidLayout() {
   const { openCommandPalette, state, setContextViewMode } = useWorkspace();
-  const { activeProject, setActiveProject } = useProjectContext();
+  const { activeProject, setActiveProject, projects, addArtifactToProject } = useProjectContext();
   const { createApplet } = useApplets();
+  const { createArtifact } = useArtifactStore();
   const { contextViewMode, activeFilePath } = state;
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
@@ -265,10 +268,34 @@ export default function FluidLayout() {
 
       try {
         const now = new Date().toISOString();
+        const vfs = getVFS();
+
+        // Find the active project to determine the correct file path
+        const currentProject = activeProject
+          ? projects.find(p => p.id === activeProject)
+          : null;
+
+        // Determine the file path based on whether there's an active project
+        let generatedFilePath: string;
+        let volume: 'system' | 'team' | 'user' = 'user';
+
+        if (currentProject) {
+          // Save to project folder: projects/{projectName}/applets/{appletId}.tsx
+          const projectFolderName = currentProject.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          generatedFilePath = `projects/${projectFolderName}/applets/${applet.id}.tsx`;
+          volume = currentProject.volume || 'user';
+          console.log(`[FluidLayout] Saving applet to project: ${currentProject.name} at ${generatedFilePath}`);
+        } else {
+          // Fallback to generic path if no project is active
+          generatedFilePath = `generated/${applet.id}.tsx`;
+          console.log(`[FluidLayout] No active project, saving to: ${generatedFilePath}`);
+        }
+
+        // Save applet code to VFS
+        vfs.writeFile(generatedFilePath, applet.code);
+        console.log(`[FluidLayout] Applet code saved to VFS: ${generatedFilePath}`);
 
         // Create the applet in the store (for runtime)
-        // IMPORTANT: Use same filePath as DesktopAppletManager for matching
-        const generatedFilePath = `generated/${applet.id}`;
         const createdApplet = createApplet({
           code: applet.code,
           metadata: {
@@ -279,11 +306,31 @@ export default function FluidLayout() {
             createdAt: now,
             updatedAt: now,
           },
-          volume: 'user',
+          volume,
           filePath: generatedFilePath,
         });
 
         console.log(`[FluidLayout] Applet created in store: ${createdApplet.id}`);
+
+        // Create an artifact record for tracking
+        const artifact = createArtifact({
+          name: applet.name,
+          type: 'code',
+          volume,
+          description: applet.description,
+          codeView: applet.code,
+          filePath: generatedFilePath,
+          createdBy: activeProject || 'unknown',
+          tags: ['applet', 'generated'],
+        });
+
+        console.log(`[FluidLayout] Artifact created: ${artifact.id}`);
+
+        // Link artifact to project if there's an active project
+        if (currentProject) {
+          addArtifactToProject(currentProject.id, artifact.id);
+          console.log(`[FluidLayout] Artifact linked to project: ${currentProject.id}`);
+        }
 
         // Also add to DesktopAppletManager (for UI regions display)
         DesktopAppletManager.addApplet({
@@ -291,7 +338,7 @@ export default function FluidLayout() {
           name: applet.name,
           description: applet.description,
           filePath: generatedFilePath,
-          volume: 'user',
+          volume,
           createdAt: now,
           isActive: true,
         });
@@ -312,7 +359,7 @@ export default function FluidLayout() {
       console.log('[FluidLayout] Unregistering applet generation callback');
       setAppletGeneratedCallback(null);
     };
-  }, [createApplet, setContextViewMode]);
+  }, [createApplet, setContextViewMode, activeProject, projects, addArtifactToProject, createArtifact]);
 
   // Keyboard shortcuts
   useEffect(() => {
