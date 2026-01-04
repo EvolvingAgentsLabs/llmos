@@ -21,6 +21,11 @@ import {
   MIN_AGENTS_REQUIRED,
   MultiAgentValidation,
 } from './agents/multi-agent-validator';
+import {
+  getLLMPatternMatcher,
+  ExecutionTrace,
+  SubAgentTrace,
+} from './agents/llm-pattern-matcher';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -40,6 +45,7 @@ export interface SystemAgentResult {
   evolution?: {
     memoryUpdated: boolean;
     learnings: string[];
+    longTermTraceGenerated?: boolean;
   };
   multiAgentValidation?: {
     isValid: boolean;
@@ -51,6 +57,12 @@ export interface SystemAgentResult {
       type: string;
     }>;
     message: string;
+  };
+  // Sub-agent collaboration tracking
+  subAgentCollaboration?: {
+    subAgentsUsed: SubAgentTrace[];
+    collaborationVerified: boolean;
+    collaborationSummary: string;
   };
 }
 
@@ -451,10 +463,14 @@ export class SystemAgentOrchestrator {
 
       // Extract learnings from the workflow
       const learnings = this.contextManager.extractLearnings();
-      const evolutionResult: { memoryUpdated: boolean; learnings: string[] } = {
+      const evolutionResult: { memoryUpdated: boolean; learnings: string[]; longTermTraceGenerated?: boolean } = {
         memoryUpdated: false,
         learnings: [],
+        longTermTraceGenerated: false,
       };
+
+      // Collect sub-agent traces for collaboration tracking
+      const subAgentsUsed: SubAgentTrace[] = this.collectSubAgentTraces(startTime);
 
       // Update system memory if configured
       if (this.config.updateSystemMemory && filesCreated.length > 0) {
@@ -488,6 +504,39 @@ export class SystemAgentOrchestrator {
         } catch (error) {
           console.error('[SystemAgent] Failed to update system memory:', error);
         }
+      }
+
+      // Generate long-term trace for this task completion
+      try {
+        this.emitProgress({
+          type: 'evolution',
+          agent: 'SystemAgent',
+          action: 'Generating long-term trace',
+          details: 'Consolidating execution into persistent learning record',
+        });
+
+        const longTermGenerated = await this.generateLongTermTrace(
+          userGoal,
+          toolCalls,
+          filesCreated,
+          projectPath,
+          true, // success
+          executionTime,
+          subAgentsUsed
+        );
+
+        evolutionResult.longTermTraceGenerated = longTermGenerated;
+
+        if (longTermGenerated) {
+          this.emitProgress({
+            type: 'evolution',
+            agent: 'SystemAgent',
+            action: 'Long-term trace generated',
+            details: 'Execution consolidated into project and system memory',
+          });
+        }
+      } catch (error) {
+        console.error('[SystemAgent] Failed to generate long-term trace:', error);
       }
 
       // Persist workflow if configured
@@ -541,6 +590,15 @@ export class SystemAgentOrchestrator {
         details: `Created ${filesCreated.length} file(s) in ${executionTime.toFixed(0)}ms`,
       });
 
+      // Build sub-agent collaboration summary
+      const subAgentCollaboration = subAgentsUsed.length > 0
+        ? {
+            subAgentsUsed,
+            collaborationVerified: subAgentsUsed.every(s => s.success),
+            collaborationSummary: `${subAgentsUsed.length} sub-agent(s) collaborated: ${subAgentsUsed.map(s => `${s.agentName}(${s.success ? '✓' : '✗'})`).join(', ')}`,
+          }
+        : undefined;
+
       return {
         success: true,
         response: finalResponse,
@@ -557,6 +615,7 @@ export class SystemAgentOrchestrator {
         },
         evolution: evolutionResult,
         multiAgentValidation,
+        subAgentCollaboration,
       };
     } catch (error: any) {
       const executionTime = performance.now() - startTime;
@@ -639,6 +698,125 @@ ${learnings.errors.length > 0 ? `**Errors Encountered:**\n${learnings.errors.map
     vfs.writeFile(memoryPath, updatedMemory);
 
     return entry;
+  }
+
+  /**
+   * Generate a long-term trace after task completion
+   * This consolidates the execution into a persistent learning record
+   */
+  private async generateLongTermTrace(
+    userGoal: string,
+    toolCalls: ToolCallResult[],
+    filesCreated: string[],
+    projectPath: string | undefined,
+    success: boolean,
+    executionTime: number,
+    subAgentsUsed: SubAgentTrace[]
+  ): Promise<boolean> {
+    try {
+      const vfs = getVFS();
+      const patternMatcher = getLLMPatternMatcher();
+      const timestamp = new Date().toISOString();
+
+      // Create comprehensive execution trace
+      const trace: ExecutionTrace = {
+        id: `trace-main-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        goal: userGoal,
+        success,
+        toolsUsed: [...new Set(toolCalls.map(tc => tc.toolId))],
+        filesCreated,
+        duration: executionTime,
+        timestamp,
+        traceType: 'main',
+        projectPath,
+        subAgentsUsed: subAgentsUsed.length > 0 ? subAgentsUsed : undefined,
+      };
+
+      // Add to pattern matcher for evolution analysis
+      patternMatcher.addTrace(trace);
+
+      // Write long-term trace to project memory if project exists
+      if (projectPath) {
+        const longTermPath = `${projectPath}/memory/long_term/learnings.md`;
+
+        let existing = '';
+        try {
+          existing = vfs.readFileContent(longTermPath) || '';
+        } catch {
+          // File may not exist yet
+        }
+
+        // Generate collaboration summary
+        const collaborationSummary = subAgentsUsed.length > 0
+          ? `**Sub-Agents Collaborated:** ${subAgentsUsed.map(s => s.agentName).join(', ')}\n` +
+            `**Collaboration Success Rate:** ${(subAgentsUsed.filter(s => s.success).length / subAgentsUsed.length * 100).toFixed(0)}%\n`
+          : '';
+
+        const longTermEntry = `
+## [${timestamp}] Task Completed: ${success ? '✓' : '✗'}
+
+### Goal
+${userGoal}
+
+### Execution Summary
+- **Duration:** ${(executionTime / 1000).toFixed(2)}s
+- **Files Created:** ${filesCreated.length}
+- **Tools Used:** ${trace.toolsUsed.join(', ') || 'None'}
+${collaborationSummary}
+### Key Learnings
+- Task ${success ? 'completed successfully' : 'failed'}
+${subAgentsUsed.length > 0 ? `- ${subAgentsUsed.length} sub-agent(s) collaborated on this task` : ''}
+${filesCreated.length > 0 ? `- Generated ${filesCreated.length} artifact(s)` : ''}
+
+### Pattern Insights
+This execution ${success ? 'demonstrates' : 'attempted'} the approach of:
+${trace.toolsUsed.map(t => `1. Using ${t}`).join('\n')}
+
+---
+`;
+
+        vfs.writeFile(longTermPath, existing + longTermEntry);
+        console.log(`[SystemAgent] Long-term trace written to ${longTermPath}`);
+      }
+
+      // Also write to system-wide long-term memory
+      const systemLongTermPath = 'system/memory/long_term/consolidated_learnings.md';
+      let systemExisting = '';
+      try {
+        systemExisting = vfs.readFileContent(systemLongTermPath) || '';
+      } catch {
+        // File may not exist yet
+      }
+
+      const systemEntry = `
+## [${timestamp}] ${success ? '✓' : '✗'} ${userGoal.substring(0, 100)}
+
+- **Project:** ${projectPath || 'No project'}
+- **Duration:** ${(executionTime / 1000).toFixed(2)}s
+- **Tools:** ${trace.toolsUsed.join(', ') || 'None'}
+- **Sub-Agents:** ${subAgentsUsed.length > 0 ? subAgentsUsed.map(s => `${s.agentName}(${s.success ? '✓' : '✗'})`).join(', ') : 'None'}
+
+---
+`;
+
+      vfs.writeFile(systemLongTermPath, systemExisting + systemEntry);
+
+      return true;
+    } catch (error) {
+      console.error('[SystemAgent] Failed to generate long-term trace:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Collect sub-agent traces from the pattern matcher
+   * This retrieves recent sub-agent executions for collaboration tracking
+   */
+  private collectSubAgentTraces(startTime: number): SubAgentTrace[] {
+    const patternMatcher = getLLMPatternMatcher();
+    // Note: In a full implementation, we'd filter traces by timestamp
+    // For now, we return an empty array as sub-agent traces are tracked separately
+    return [];
   }
 
   /**

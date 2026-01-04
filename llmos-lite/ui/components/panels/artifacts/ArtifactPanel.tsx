@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import ArtifactGallery from './ArtifactGallery';
 import { ArtifactData } from './ArtifactViewer';
 import { ThreeScene } from './ThreeRenderer';
 import { PlotData } from './PlotRenderer';
 import { useArtifactStore } from '@/lib/artifacts/store';
 import { Artifact } from '@/lib/artifacts/types';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
@@ -59,6 +60,9 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
   const [isMaximized, setIsMaximized] = useState(false);
   const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
 
+  // Get project context for filtering
+  const { activeProject, getProjectArtifacts } = useProjectContext();
+
   // Use artifact store
   const {
     artifacts: storeArtifacts,
@@ -74,6 +78,28 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
       initialize();
     }
   }, [initialized, initialize]);
+
+  // Filter artifacts by active project if one exists
+  const filteredArtifacts = useMemo(() => {
+    if (!activeProject) {
+      // No active project - show all artifacts
+      return storeArtifacts;
+    }
+
+    // Get artifact IDs associated with the active project
+    const projectArtifactIds = getProjectArtifacts(activeProject);
+
+    if (projectArtifactIds.length === 0) {
+      // Project has no artifacts yet, show all to avoid confusion
+      return storeArtifacts;
+    }
+
+    // Filter to only show artifacts in the project
+    return storeArtifacts.filter(artifact =>
+      projectArtifactIds.includes(artifact.id) ||
+      artifact.createdBy === activeProject
+    );
+  }, [storeArtifacts, activeProject, getProjectArtifacts]);
 
   // Sample artifacts for demonstration (fallback when store is empty)
   const [sampleArtifacts] = useState<Array<ArtifactData & { id: string; name?: string }>>([
@@ -127,9 +153,10 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     },
   ]);
 
-  // Combine store artifacts with samples (store takes precedence)
+  // Combine filtered artifacts with samples (filtered artifacts take precedence)
+  // Only show samples if there are no artifacts at all in the store
   const allArtifacts = storeArtifacts.length > 0
-    ? storeArtifacts.map(convertToArtifactData)
+    ? filteredArtifacts.map(convertToArtifactData)
     : sampleArtifacts;
 
   // Handle delete artifact

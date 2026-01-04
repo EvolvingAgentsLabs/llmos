@@ -10,6 +10,8 @@
 import { getVolumeFileSystem, VolumeType } from '../volumes/file-operations';
 import { getLivePreview } from '../runtime/live-preview';
 import { recordSubAgentExecution } from './usage-tracker';
+import { getLLMPatternMatcher, ExecutionTrace, SubAgentTrace } from '../agents/llm-pattern-matcher';
+import { getVFS } from '../virtual-fs';
 
 export interface SubAgentDefinition {
   name: string;
@@ -125,6 +127,7 @@ export class SubAgentExecutor {
     context?: Record<string, any>
   ): Promise<AgentExecutionResult> {
     const startTime = Date.now();
+    const timestamp = new Date().toISOString();
 
     // Get agent definition for tracking
     const agentDef = this.loadedAgents.get(`${volume}:${agentPath}`);
@@ -156,6 +159,19 @@ export class SubAgentExecutor {
         executionTime
       );
 
+      // Generate execution trace for this sub-agent task
+      this.generateSubAgentTrace(
+        agentName,
+        agentPath,
+        volume,
+        task,
+        result.success,
+        executionTime,
+        timestamp,
+        result.stdout || result.stderr || '',
+        context?.projectPath
+      );
+
       console.log(`[SubAgentExecutor] Executed ${agentName} (${volume}): success=${result.success}, time=${executionTime}ms`);
 
       return {
@@ -177,6 +193,20 @@ export class SubAgentExecutor {
         executionTime
       );
 
+      // Generate trace for failed execution
+      this.generateSubAgentTrace(
+        agentName,
+        agentPath,
+        volume,
+        task,
+        false,
+        executionTime,
+        timestamp,
+        '',
+        context?.projectPath,
+        error instanceof Error ? error.message : String(error)
+      );
+
       console.log(`[SubAgentExecutor] Execution failed for ${agentName} (${volume}): ${error}`);
 
       return {
@@ -185,6 +215,92 @@ export class SubAgentExecutor {
         error: error instanceof Error ? error.message : String(error),
         executionTime
       };
+    }
+  }
+
+  /**
+   * Generate an execution trace for a sub-agent task
+   * This enables tracking of sub-agent collaboration and evolution analysis
+   */
+  private generateSubAgentTrace(
+    agentName: string,
+    agentPath: string,
+    volume: VolumeType,
+    task: string,
+    success: boolean,
+    executionTime: number,
+    timestamp: string,
+    output: string,
+    projectPath?: string,
+    error?: string
+  ): void {
+    try {
+      const patternMatcher = getLLMPatternMatcher();
+
+      // Create execution trace for this sub-agent
+      const trace: ExecutionTrace = {
+        id: `trace-subagent-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        goal: `[Sub-Agent: ${agentName}] ${task}`,
+        success,
+        toolsUsed: ['python-execution', agentName],
+        filesCreated: [],
+        duration: executionTime,
+        timestamp,
+        output: output.substring(0, 500), // Limit output size
+        error,
+        traceType: 'sub-agent',
+        projectPath,
+      };
+
+      // Add to pattern matcher for evolution analysis
+      patternMatcher.addTrace(trace);
+
+      // Also write to short-term memory if project context exists
+      if (projectPath) {
+        this.writeToShortTermMemory(projectPath, trace, agentName);
+      }
+
+      console.log(`[SubAgentExecutor] Trace generated for ${agentName}: ${trace.id}`);
+    } catch (err) {
+      console.error('[SubAgentExecutor] Failed to generate trace:', err);
+    }
+  }
+
+  /**
+   * Write sub-agent trace to project's short-term memory
+   */
+  private writeToShortTermMemory(
+    projectPath: string,
+    trace: ExecutionTrace,
+    agentName: string
+  ): void {
+    try {
+      const vfs = getVFS();
+      const shortTermPath = `${projectPath}/memory/short_term/execution_log.md`;
+
+      let existing = '';
+      try {
+        existing = vfs.readFileContent(shortTermPath) || '';
+      } catch {
+        // File may not exist yet
+      }
+
+      const entry = `
+### [${trace.timestamp}] Sub-Agent: ${agentName}
+
+**Task:** ${trace.goal.replace(`[Sub-Agent: ${agentName}] `, '')}
+
+**Status:** ${trace.success ? '✓ Success' : '✗ Failed'}
+
+**Duration:** ${(trace.duration / 1000).toFixed(2)}s
+
+${trace.error ? `**Error:** ${trace.error}\n` : ''}
+---
+`;
+
+      vfs.writeFile(shortTermPath, existing + entry);
+    } catch (err) {
+      console.error('[SubAgentExecutor] Failed to write to short-term memory:', err);
     }
   }
 
