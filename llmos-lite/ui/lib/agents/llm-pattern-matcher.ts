@@ -28,6 +28,23 @@ export interface ExecutionTrace {
   timestamp: string;
   output?: string;
   error?: string;
+  // Sub-agent tracking for collaboration verification
+  subAgentsUsed?: SubAgentTrace[];
+  // Project context
+  projectId?: string;
+  projectPath?: string;
+  // Trace type for filtering
+  traceType?: 'main' | 'sub-agent' | 'tool';
+}
+
+export interface SubAgentTrace {
+  agentName: string;
+  agentPath: string;
+  volume: string;
+  task: string;
+  success: boolean;
+  executionTime: number;
+  timestamp: string;
 }
 
 export interface PatternMatch {
