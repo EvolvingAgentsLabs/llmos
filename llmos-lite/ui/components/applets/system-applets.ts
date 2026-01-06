@@ -618,6 +618,195 @@ export const SYSTEM_APPLETS: Record<string, SystemAppletDefinition> = {
 }`,
   },
 
+  flightSim: {
+    name: 'Flight Simulator',
+    description: 'Hardware-in-the-Loop drone flight simulator with PID control',
+    category: 'simulation',
+    code: `function Component({ onSubmit }) {
+  const [altitude, setAltitude] = useState(0);
+  const [targetAltitude, setTargetAltitude] = useState(5);
+  const [velocity, setVelocity] = useState(0);
+  const [motors, setMotors] = useState([0, 0, 0, 0]);
+  const [armed, setArmed] = useState(false);
+  const [autopilot, setAutopilot] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  // PID state
+  const pidRef = useRef({ integral: 0, lastError: 0, kP: 0.5, kI: 0.1, kD: 0.2 });
+
+  // Physics constants
+  const GRAVITY = 9.81;
+  const MAX_THRUST = 15;
+  const HOVER_THROTTLE = 0.5;
+
+  useEffect(() => {
+    if (!running || !armed) return;
+
+    const interval = setInterval(() => {
+      const dt = 0.05; // 50ms tick
+      const pid = pidRef.current;
+
+      // Calculate thrust
+      let thrust = 0;
+      if (autopilot) {
+        const error = targetAltitude - altitude;
+        pid.integral = Math.max(-0.5, Math.min(0.5, pid.integral + error * dt));
+        const derivative = (error - pid.lastError) / dt;
+        const pidOutput = pid.kP * error + pid.kI * pid.integral + pid.kD * derivative;
+        pid.lastError = error;
+        thrust = (HOVER_THROTTLE + pidOutput) * MAX_THRUST;
+      } else {
+        thrust = motors.reduce((a, b) => a + b, 0) / 4 * MAX_THRUST;
+      }
+
+      // Update physics
+      const accel = thrust - GRAVITY;
+      const newVelocity = velocity * 0.98 + accel * dt;
+      const newAltitude = Math.max(0, altitude + newVelocity * dt);
+
+      setVelocity(newVelocity);
+      setAltitude(newAltitude);
+
+      // Update motor display for autopilot
+      if (autopilot) {
+        const motorVal = Math.max(0, Math.min(1, thrust / MAX_THRUST));
+        setMotors([motorVal, motorVal, motorVal, motorVal]);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [running, armed, autopilot, altitude, velocity, targetAltitude, motors]);
+
+  const reset = () => {
+    setAltitude(0);
+    setVelocity(0);
+    setMotors([0, 0, 0, 0]);
+    setArmed(false);
+    setAutopilot(false);
+    setRunning(false);
+    pidRef.current = { integral: 0, lastError: 0, kP: 0.5, kI: 0.1, kD: 0.2 };
+  };
+
+  return (
+    <div className="p-4 h-full flex flex-col bg-gray-950">
+      {/* Altitude Visualization */}
+      <div className="flex-1 relative bg-gradient-to-t from-gray-900 to-blue-900/30 rounded-xl mb-4 overflow-hidden">
+        {/* Target line */}
+        <div
+          className="absolute left-0 right-0 border-t-2 border-dashed border-yellow-500/50"
+          style={{ bottom: \`\${Math.min(95, targetAltitude * 8)}%\` }}
+        >
+          <span className="absolute right-2 -top-5 text-xs text-yellow-400">{targetAltitude}m target</span>
+        </div>
+
+        {/* Drone */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 transition-all duration-100"
+          style={{ bottom: \`\${Math.min(90, altitude * 8)}%\` }}
+        >
+          <div className="relative">
+            <div className="w-8 h-2 bg-blue-500 rounded" />
+            {/* Props */}
+            {motors.map((m, i) => (
+              <div
+                key={i}
+                className="absolute w-4 h-4 rounded-full transition-all"
+                style={{
+                  left: i % 2 === 0 ? -8 : 20,
+                  top: i < 2 ? -6 : 4,
+                  backgroundColor: m > 0.1 ? \`rgba(34, 197, 94, \${m})\` : '#374151'
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Ground */}
+        <div className="absolute bottom-0 left-0 right-0 h-4 bg-gray-800 border-t border-gray-700" />
+
+        {/* Altitude scale */}
+        {[0, 2, 5, 8, 10].map(h => (
+          <div key={h} className="absolute left-2 text-xs text-gray-500" style={{ bottom: \`\${h * 8}%\` }}>
+            {h}m
+          </div>
+        ))}
+      </div>
+
+      {/* Telemetry */}
+      <div className="grid grid-cols-4 gap-2 mb-4 text-xs">
+        <div className="bg-gray-800 rounded p-2">
+          <div className="text-gray-500">Altitude</div>
+          <div className="text-lg font-mono text-blue-400">{altitude.toFixed(2)}m</div>
+        </div>
+        <div className="bg-gray-800 rounded p-2">
+          <div className="text-gray-500">Velocity</div>
+          <div className="text-lg font-mono text-green-400">{velocity.toFixed(2)}m/s</div>
+        </div>
+        <div className="bg-gray-800 rounded p-2">
+          <div className="text-gray-500">Throttle</div>
+          <div className="text-lg font-mono text-orange-400">{(motors.reduce((a,b) => a+b, 0) / 4 * 100).toFixed(0)}%</div>
+        </div>
+        <div className="bg-gray-800 rounded p-2">
+          <div className="text-gray-500">Error</div>
+          <div className="text-lg font-mono text-yellow-400">{(targetAltitude - altitude).toFixed(2)}m</div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => { if (!running && !armed) setArmed(true); setRunning(!running); }}
+          className={\`px-4 py-2 rounded-lg font-medium \${running ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'} text-white\`}
+        >
+          {running ? 'Pause' : 'Start'}
+        </button>
+
+        <button
+          onClick={reset}
+          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
+        >
+          Reset
+        </button>
+
+        <button
+          onClick={() => setArmed(!armed)}
+          className={\`px-4 py-2 rounded-lg font-medium \${armed ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white\`}
+        >
+          {armed ? 'Disarm' : 'Arm'}
+        </button>
+
+        <button
+          onClick={() => setAutopilot(!autopilot)}
+          className={\`px-4 py-2 rounded-lg font-medium \${autopilot ? 'bg-blue-600' : 'bg-gray-700'} text-white\`}
+        >
+          Autopilot
+        </button>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-sm text-gray-400">Target:</span>
+          <button onClick={() => setTargetAltitude(Math.max(0, targetAltitude - 1))} className="px-2 py-1 bg-gray-700 rounded">-</button>
+          <span className="w-12 text-center font-mono text-white">{targetAltitude}m</span>
+          <button onClick={() => setTargetAltitude(targetAltitude + 1)} className="px-2 py-1 bg-gray-700 rounded">+</button>
+        </div>
+      </div>
+
+      {/* Status badges */}
+      <div className="flex gap-2 mt-3">
+        <span className={\`px-2 py-1 rounded text-xs \${armed ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}\`}>
+          {armed ? 'ARMED' : 'DISARMED'}
+        </span>
+        <span className={\`px-2 py-1 rounded text-xs \${autopilot ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-gray-400'}\`}>
+          {autopilot ? 'AUTOPILOT' : 'MANUAL'}
+        </span>
+        <span className={\`px-2 py-1 rounded text-xs \${running ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-700 text-gray-400'}\`}>
+          {running ? 'RUNNING' : 'STOPPED'}
+        </span>
+      </div>
+    </div>
+  );
+}`,
+  },
+
   workflowBuilder: {
     name: 'Workflow Builder',
     description: 'Create visual automation workflows',
@@ -768,6 +957,11 @@ export const APPLET_CATEGORIES = {
     label: 'Automation',
     icon: 'Workflow',
     applets: ['workflowBuilder'],
+  },
+  simulation: {
+    label: 'Simulation',
+    icon: 'Plane',
+    applets: ['flightSim'],
   },
 };
 
