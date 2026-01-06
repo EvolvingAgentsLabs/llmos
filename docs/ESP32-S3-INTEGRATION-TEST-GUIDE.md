@@ -2,555 +2,317 @@
 
 ## The Ultimate Demo: The OS Building Itself
 
-This guide documents the end-to-end integration test scenario where LLMos acts as a "Senior Engineer" building a flight simulator from scratch. This validates:
+This guide demonstrates LLMos's self-building capability. **You don't write code** - you prompt LLMos to generate everything. LLMos acts as the "Senior Engineer" while you play the "Architect."
 
-1. **Dynamic Code Generation** - LLMos generating working TypeScript/React code
+The demo validates:
+1. **Dynamic Code Generation** - LLMos generating working TypeScript/React
 2. **Hardware Abstraction** - Virtual and physical ESP32-S3 integration
-3. **3D Visualization** - React Three Fiber rendering
-4. **System Registration** - Dynamic applet installation
-5. **Full Loop Simulation** - Hardware-in-the-Loop (HIL) testing
+3. **Applet System** - Generated applets saved to volumes and installed
+4. **Skill Application** - LLMos using the `hardware-flight-controller` skill
+5. **Self-Evolution** - Pattern becomes a skill for future use
 
 ---
 
 ## Prerequisites
 
-### Environment Setup
+### Verify Skills Are Loaded
 
-```bash
-# Install dependencies (if not already installed)
-cd llmos-lite/ui
-npm install @react-three/fiber @react-three/drei three
+LLMos should automatically load the `hardware-flight-controller` skill. You can verify:
 
-# Verify hardware libraries
-npm ls @react-three/fiber
+```
+> List available skills related to flight controllers
 ```
 
-### Context Injection for LLMos
+### Context Injection (Optional)
 
-Before starting the demo, ensure LLMos has the following context:
+For best results, set context at the start:
 
-> "We are using Next.js 14, Tailwind CSS, TypeScript 5, and we have `@react-three/fiber` and `@react-three/drei` available for 3D graphics. The hardware layer uses `lib/hardware/serial-manager.ts` for device communication."
+```
+We are using Next.js 14, Tailwind CSS, TypeScript 5.
+The hardware layer uses lib/hardware/serial-manager.ts for ESP32 communication.
+For 3D graphics, @react-three/fiber and @react-three/drei are available.
+```
 
 ---
 
 ## Act 1: The Hardware Layer
 
-**Goal:** Create the simulation logic (the "Brain" of the drone) before the visuals.
+**Goal:** Have LLMos create the simulation logic (the "Brain" of the drone).
 
 ### Prompt to LLMos:
 
 ```
 I need to design a virtual hardware interface for a drone project.
 
-Create a TypeScript singleton class named `VirtualFlightController` in `lib/hardware/virtual-flight-controller.ts`.
+Create a TypeScript singleton class named `VirtualFlightController` in
+lib/hardware/virtual-flight-controller.ts.
 
 Requirements:
-1. It should store the state of 4 motors (0.0 to 1.0) and sensor data (orientation: x, y, z; altitude: number).
-2. Implement a `tick(dt)` method that acts as the firmware loop.
-3. Inside `tick`, implement a basic **PID Controller** to stabilize the drone's altitude at 5 meters.
-4. Add a method `updateSensors` to receive physics data from the simulator.
-5. Export a const instance named `flightController` so I can import it elsewhere.
+1. Store state of 4 motors (0.0 to 1.0) and sensor data (orientation: x, y, z; altitude)
+2. Implement a tick(dt) method that acts as the firmware loop
+3. Inside tick, implement a basic PID Controller to stabilize altitude at 5 meters
+4. Add a method updateSensors to receive physics data from the simulator
+5. Export a const instance named `flightController` so I can import it elsewhere
 ```
 
-### Expected Generated Code Structure:
+### What LLMos Should Generate:
 
-```typescript
-// lib/hardware/virtual-flight-controller.ts
-
-interface MotorState {
-  motor1: number; // 0.0 - 1.0
-  motor2: number;
-  motor3: number;
-  motor4: number;
-}
-
-interface SensorData {
-  orientation: { x: number; y: number; z: number };
-  altitude: number;
-  velocity: { x: number; y: number; z: number };
-}
-
-interface PIDState {
-  kP: number;
-  kI: number;
-  kD: number;
-  integral: number;
-  previousError: number;
-}
-
-export class VirtualFlightController {
-  motors: MotorState;
-  sensors: SensorData;
-  pid: PIDState;
-  targetAltitude: number;
-  autopilotEnabled: boolean;
-
-  constructor();
-  tick(dt: number): void;
-  updateSensors(data: Partial<SensorData>): void;
-  setTargetAltitude(altitude: number): void;
-  enableAutopilot(enabled: boolean): void;
-  getMotorThrust(): number;
-}
-
-export const flightController: VirtualFlightController;
-```
+LLMos will use the `hardware-flight-controller` skill to generate:
+- A TypeScript class with motor state, sensor data, PID controller
+- A `tick(dt)` method with PID calculation
+- Sensor update methods
+- Exported singleton instance
 
 ### Self-Correction Prompts:
 
-If LLMos forgets key features:
-- "Please export a const instance named `flightController` so I can import it elsewhere."
-- "Add PID tuning parameters (kP, kI, kD) with default values of 0.5, 0.1, 0.05."
-- "Include a method to toggle autopilot on/off."
+If LLMos misses something:
+- *"Please export a const instance named `flightController`"*
+- *"Add PID tuning parameters with default values kP=0.5, kI=0.1, kD=0.2"*
+- *"Include a method to toggle autopilot on/off"*
 
 ---
 
 ## Act 2: The Visual Layer
 
-**Goal:** Create the 3D physics engine and renderer.
+**Goal:** Have LLMos create a visual simulator applet.
 
 ### Prompt to LLMos:
 
 ```
-Now, create a visual simulator for this hardware.
+Now, create a visual simulator applet for this hardware.
 
-Create a new component `FlightSimApplet` in `components/applets/specialized/FlightSimApplet.tsx`.
+Generate an interactive flight simulator applet with these specs:
+1. Show 2D altitude visualization with a drone and target altitude line
+2. Implement physics: gravity (9.81 m/s²), motor thrust, air resistance (0.98 damping)
+3. Use PID autopilot for altitude stabilization
+4. Controls: Start/Pause, Reset, Arm/Disarm, Autopilot toggle, Target altitude +/-
+5. Telemetry display: altitude, velocity, throttle percentage, error
+6. Status badges showing armed/autopilot/running state
 
-Technical Specs:
-1. Use `@react-three/fiber` for the Canvas.
-2. Create a `Drone` component that renders a simple box with 4 arms (representing motor mounts).
-3. Use `useFrame` to simulate physics:
-   - Read motor values from `flightController`.
-   - Apply gravity (9.81 m/s²) and upward thrust based on motor speed.
-   - Update the drone's position and rotation.
-   - **Crucial:** Feed the calculated position/rotation back into `flightController.updateSensors()` so the PID loop works.
-4. Add a ground plane for visual reference.
-5. Add a button in the UI to toggle the Autopilot.
-6. Display current altitude, motor power, and PID values.
+Save to team volume as applets/flight-simulator.app
 ```
 
-### Expected Component Structure:
+### What LLMos Should Do:
 
-```tsx
-// components/applets/specialized/FlightSimApplet.tsx
-
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
-import { flightController } from '@/lib/hardware/virtual-flight-controller';
-
-function Drone({ position, rotation }) {
-  // 3D drone mesh with 4 arms
-}
-
-function PhysicsSimulation() {
-  // useFrame for physics loop
-  // Reads motors, applies physics, updates sensors
-}
-
-export default function FlightSimApplet({ onSubmit }) {
-  // UI controls
-  // Canvas with 3D scene
-  // Telemetry display
-}
-```
+LLMos will:
+1. Use the `generate_applet` tool to create a React component
+2. Implement physics simulation in `useEffect`
+3. Create the PID logic inline
+4. Save to `team-volume/applets/flight-simulator.app`
 
 ### Physics Tuning Prompts:
 
 If physics behave incorrectly:
-- "The drone flies away instantly. Please add air resistance (damping) to the velocity."
-- "Limit the maximum motor thrust to prevent infinite acceleration."
-- "The physics feel too floaty. Increase gravity effect and reduce base thrust."
-- "Add a ground collision check so the drone can't go below altitude 0."
+- *"The drone flies away instantly. Add air resistance damping to velocity."*
+- *"Limit maximum motor thrust to prevent infinite acceleration."*
+- *"Add ground collision so drone can't go below altitude 0."*
 
 ---
 
-## Act 3: System Registration
+## Act 3: Testing with Virtual ESP32
 
-**Goal:** "Install" the new applet into the OS.
+**Goal:** Connect the applet to the virtual ESP32 device.
 
 ### Prompt to LLMos:
 
 ```
-Register this new applet in the system.
+Now let's test this with the virtual ESP32. Show me how to:
+1. Connect to a virtual ESP32-S3 device
+2. Send arm and motor commands
+3. Read IMU and barometer data
+4. Integrate the device with the flight simulator
 
-Update `components/applets/system-applets.ts` to include the `flightSim` applet:
-- Use the `Plane` icon from `lucide-react`.
-- Set the category to 'simulation'.
-- Include a simple inline version for the system applets registry.
-
-Also update APPLET_CATEGORIES to include a new 'simulation' category.
+Use the SerialManager from lib/hardware/serial-manager.ts
 ```
 
-### Expected Changes:
+### Expected Integration Code:
 
+LLMos will show how to use:
 ```typescript
-// In system-applets.ts
-
-export const SYSTEM_APPLETS = {
-  // ... existing applets ...
-
-  flightSim: {
-    name: 'Flight Simulator',
-    description: 'Hardware-in-the-Loop drone flight simulator',
-    category: 'simulation',
-    code: `function Component({ onSubmit }) {
-      // Inline applet code
-    }`,
-  },
-};
-
-export const APPLET_CATEGORIES = {
-  // ... existing categories ...
-
-  simulation: {
-    label: 'Simulation',
-    icon: 'Plane',
-    applets: ['flightSim'],
-  },
-};
-```
-
----
-
-## Act 4: ESP32-S3 Hardware Integration
-
-**Goal:** Connect the simulation to real hardware.
-
-### Option A: Virtual Device (Simulator Only)
-
-```typescript
-import { SerialManager } from '@/lib/hardware/serial-manager';
-
-// Connect to virtual ESP32
 const deviceId = await SerialManager.connectVirtual('ESP32-S3-FlightController');
-
-// Send commands
-await SerialManager.sendCommand(deviceId, {
-  action: 'set_pwm',
-  pin: 12,
-  duty_cycle: 128,  // 50% throttle
-  frequency: 50     // Standard servo PWM
-});
-
-// Read sensors
-const response = await SerialManager.sendCommand(deviceId, {
-  action: 'read_sensors'
-});
-console.log(response.sensors);
-```
-
-### Option B: Physical ESP32-S3
-
-```typescript
-// Connect to physical device (triggers browser picker)
-const deviceId = await SerialManager.connect();
-
-// Same API works for physical devices
-await SerialManager.sendCommand(deviceId, {
-  action: 'read_i2c',
-  sensor: 'bme280'  // Read altitude from pressure sensor
-});
-```
-
-### ESP32-S3 Firmware Template
-
-For physical hardware testing, upload this firmware to your ESP32-S3:
-
-```cpp
-// esp32-flight-controller.ino
-#include <ArduinoJson.h>
-
-// Motor pins (adjust for your setup)
-const int MOTOR_PINS[4] = {12, 13, 14, 15};
-const int PWM_FREQ = 50;  // 50Hz for servo/ESC
-const int PWM_RESOLUTION = 8;
-
-void setup() {
-  Serial.begin(115200);
-
-  // Configure motor PWM channels
-  for (int i = 0; i < 4; i++) {
-    ledcSetup(i, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(MOTOR_PINS[i], i);
-    ledcWrite(i, 0);  // Start with motors off
-  }
-}
-
-void loop() {
-  if (Serial.available()) {
-    String input = Serial.readStringUntil('\n');
-    processCommand(input);
-  }
-}
-
-void processCommand(String json) {
-  StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc, json);
-
-  if (error) {
-    sendError("JSON parse error");
-    return;
-  }
-
-  const char* action = doc["action"];
-
-  if (strcmp(action, "set_motors") == 0) {
-    // Set all 4 motors at once
-    for (int i = 0; i < 4; i++) {
-      int duty = doc["motors"][i] | 0;
-      ledcWrite(i, constrain(duty, 0, 255));
-    }
-    sendOk("Motors set");
-  }
-  else if (strcmp(action, "get_info") == 0) {
-    sendInfo();
-  }
-  else {
-    sendError("Unknown action");
-  }
-}
-
-void sendOk(const char* msg) {
-  Serial.print("{\"status\":\"ok\",\"msg\":\"");
-  Serial.print(msg);
-  Serial.println("\"}");
-}
-
-void sendError(const char* msg) {
-  Serial.print("{\"status\":\"error\",\"msg\":\"");
-  Serial.print(msg);
-  Serial.println("\"}");
-}
-
-void sendInfo() {
-  Serial.println("{\"status\":\"ok\",\"device\":\"ESP32-S3-FlightController\",\"firmware\":\"1.0.0\"}");
-}
+await SerialManager.sendCommand(deviceId, { action: 'arm' });
+await SerialManager.sendCommand(deviceId, { action: 'set_motors', motors: [128,128,128,128] });
 ```
 
 ---
 
-## Act 5: The Execution (Magic Moment)
+## Act 4: The Execution (Magic Moment)
 
-### Demo Script:
+### Launch the Applet:
 
-1. **Open LLMos** in your browser
+```
+Launch the flight simulator applet
+```
 
-2. **Set Context** (paste into chat):
-   > "We are building a drone flight simulator. We have Next.js, Tailwind CSS, @react-three/fiber and @react-three/drei for 3D graphics."
+Or if you want LLMos to load it:
 
-3. **Create Hardware Layer** (paste prompt from Act 1)
-   - Watch LLMos generate the VirtualFlightController
-   - Narrate: "First, I define the hardware abstraction layer."
+```
+Load the flight-simulator.app from team volume and display it
+```
 
-4. **Create Visual Layer** (paste prompt from Act 2)
-   - Watch LLMos generate the FlightSimApplet
-   - Narrate: "Next, I define the physics simulation and 3D visualization."
+### Demo Narrative:
 
-5. **Register Applet** (paste prompt from Act 3)
-   - Watch LLMos update system-applets.ts
-   - Narrate: "Finally, I deploy it to the system."
+1. **"First, I described the hardware interface."** (Prompt 1) → *Code generated*
+2. **"Next, I described the physics simulation."** (Prompt 2) → *Applet created*
+3. **"Then, I connected to virtual hardware."** (Prompt 3) → *Integration shown*
+4. **"Now we have a Hardware-in-the-Loop simulator, built entirely by the OS."**
 
-6. **Launch** (say or type):
-   > "Launch the Flight Simulator"
+---
 
-7. **Demo the Simulator**:
-   - Toggle autopilot on/off
-   - Show altitude stabilization via PID
-   - Connect virtual ESP32 device
-   - Show motor telemetry
+## Act 5: Evolution - Making It a Pattern
 
-### Narrative Script:
+**Goal:** The interaction becomes a learnable pattern.
 
-> "What you're seeing is the operating system building itself. I didn't write any of this code - I simply described what I needed, and LLMos generated a complete Hardware-in-the-Loop simulator with:
-> - A PID-based flight controller
-> - Real-time 3D physics simulation
-> - Hardware abstraction that works with both virtual and physical ESP32-S3 devices
->
-> This is the future of software development - you describe the system, and the OS builds it."
+### What Happens Automatically:
+
+1. **Execution Trace**: LLMos records the conversation and tool calls
+2. **Pattern Detection**: Daily cron analyzes traces for repeated patterns
+3. **Skill Draft**: If similar requests recur, a skill draft is created
+4. **Promotion**: High-success patterns promote to team/system skills
+
+### Manually Trigger Evolution:
+
+```
+Analyze my recent interactions and suggest skills that could be created from patterns.
+```
+
+---
+
+## Physical Hardware Testing
+
+### ESP32-S3 Firmware
+
+Upload the firmware from `firmware/esp32-flight-controller/`:
+
+1. Install Arduino IDE or PlatformIO
+2. Select ESP32-S3 DevKit board
+3. Enable USB CDC On Boot
+4. Upload `esp32-flight-controller.ino`
+
+### Connect Physical Device:
+
+```
+Connect to my physical ESP32-S3 device via USB serial
+```
+
+LLMos will use `SerialManager.connect()` which opens the browser device picker.
+
+### Test Commands:
+
+```json
+{"action":"get_info"}
+{"action":"arm"}
+{"action":"set_motors","motors":[100,100,100,100]}
+{"action":"read_sensors"}
+{"action":"disarm"}
+```
+
+---
+
+## Sharing & Installation
+
+### Share Project to Team
+
+The applet is saved to `team-volume/applets/flight-simulator.app`, automatically accessible to team members.
+
+### Install from Marketplace (Future)
+
+```
+Publish the flight-simulator applet to the marketplace
+```
+
+### Create a Project
+
+```
+Create a new project called "drone-simulator" that includes:
+- The VirtualFlightController hardware layer
+- The flight simulator applet
+- Documentation on how to use it
+- Example PID tuning parameters
+```
 
 ---
 
 ## Troubleshooting
 
-### Common Issues and Fixes
+### LLMos Generates Wrong Code
 
-#### 1. "Module not found: @react-three/fiber"
-```bash
-npm install @react-three/fiber @react-three/drei three
+**Correct it naturally:**
+```
+That doesn't look right. The PID integral should be clamped to prevent windup.
+Please fix the runAutopilot method.
 ```
 
-#### 2. "Babel not loaded" error
-The applet runtime needs Babel for TSX compilation. It will auto-load, but if it fails:
-```typescript
-import { preloadBabel } from '@/lib/runtime/applet-runtime';
-await preloadBabel();
+### Missing Dependencies
+
+```
+We don't have cannon-es physics. Use simple vector math instead of a physics engine.
 ```
 
-#### 3. Drone flies to infinity
-Add damping and thrust limits:
-```typescript
-// In physics simulation
-velocity.y *= 0.98; // Air resistance
-thrust = Math.min(thrust, maxThrust);
+### Applet Doesn't Save
+
 ```
-
-#### 4. PID oscillation
-Tune the parameters:
-```typescript
-flightController.pid.kP = 0.3;  // Reduce proportional
-flightController.pid.kD = 0.1;  // Increase derivative
+Save the applet to team volume at applets/flight-simulator.app
 ```
-
-#### 5. Web Serial not working
-- Ensure Chrome/Edge 89+ on HTTPS or localhost
-- Check USB connection
-- Verify ESP32-S3 is in USB-CDC mode
-
-### Hallucination Handling
-
-If LLMos imports unavailable libraries:
-
-**Option 1 - Correct it:**
-> "We don't have cannon-es installed. Please rewrite the physics using simple vector math in useFrame."
-
-**Option 2 - Install it (if appropriate):**
-> "Install the cannon-es package for physics."
-
-For the demo, Option 1 (simple vector math) is recommended for stability.
 
 ---
 
 ## Validation Checklist
 
-### Hardware Layer
+### Code Generation
 - [ ] VirtualFlightController compiles without errors
 - [ ] PID controller stabilizes at target altitude
-- [ ] Motor values stay within 0.0-1.0 range
-- [ ] Sensor updates work correctly
+- [ ] Motor values stay within 0.0-1.0
 
-### Visual Layer
-- [ ] 3D Canvas renders
-- [ ] Drone mesh visible
-- [ ] Physics simulation runs in useFrame
-- [ ] Sensor feedback loop works
-- [ ] UI controls function
+### Applet System
+- [ ] Applet generated via `generate_applet` tool
+- [ ] Applet saved to team volume
+- [ ] Applet loads and runs correctly
 
-### System Integration
-- [ ] Applet registered in system-applets.ts
-- [ ] Category appears in APPLET_CATEGORIES
-- [ ] Applet can be launched from desktop
-- [ ] State persists between sessions
-
-### ESP32 Integration
+### Hardware Integration
 - [ ] Virtual device connects
 - [ ] Commands send successfully
-- [ ] Responses parse correctly
 - [ ] Physical device works (if available)
 
+### Evolution
+- [ ] Execution traces recorded
+- [ ] Pattern could be detected (after repeated use)
+
 ---
 
-## Extended Scenarios
+## Key Insight
 
-### Scenario 1: Digital Twin
+The demo's power isn't in the flight simulator itself - it's that:
 
-Connect the simulator to a physical drone:
+1. **You describe what you want** (natural language)
+2. **LLMos generates working code** (using skills as guides)
+3. **The applet is saved and installable** (volume system)
+4. **The pattern becomes reusable** (evolution system)
+5. **Others can use your creation** (team sharing)
 
-```typescript
-// Bridge virtual controller to physical ESP32
-SerialManager.addEventListener(physicalDeviceId, (response) => {
-  if (response.sensor === 'imu') {
-    flightController.updateSensors({
-      orientation: response.data.orientation
-    });
-  }
-});
+This is the OS building itself - each interaction teaches the system new capabilities.
+
+---
+
+## Files Created by This Demo
+
 ```
+team-volume/
+└── applets/
+    └── flight-simulator.app    # Generated applet
 
-### Scenario 2: Multi-Drone Swarm
+lib/hardware/
+└── virtual-flight-controller.ts  # Generated hardware layer
 
-Create multiple flight controllers:
+volumes/system/skills/
+└── hardware-flight-controller.md # Pre-existing skill (teaches LLMos)
 
-```typescript
-const swarm = [
-  new VirtualFlightController(),
-  new VirtualFlightController(),
-  new VirtualFlightController(),
-];
-
-// Coordinate formation flight
-swarm.forEach((drone, i) => {
-  drone.setTargetAltitude(5 + i * 2);
-});
-```
-
-### Scenario 3: Autonomous Mission
-
-Add waypoint navigation:
-
-```typescript
-interface Waypoint {
-  x: number;
-  y: number;
-  altitude: number;
-}
-
-class MissionController {
-  waypoints: Waypoint[] = [];
-  currentWaypoint: number = 0;
-
-  addWaypoint(wp: Waypoint) {
-    this.waypoints.push(wp);
-  }
-
-  navigate(flightController: VirtualFlightController) {
-    // Navigate to current waypoint
-    const wp = this.waypoints[this.currentWaypoint];
-    flightController.setTargetAltitude(wp.altitude);
-    // ... horizontal navigation
-  }
-}
+firmware/
+└── esp32-flight-controller/      # Physical hardware firmware
 ```
 
 ---
 
-## File Locations Reference
-
-```
-llmos-lite/
-├── ui/
-│   ├── lib/
-│   │   └── hardware/
-│   │       ├── virtual-esp32.ts          # Virtual device emulator
-│   │       ├── serial-manager.ts          # Serial API wrapper
-│   │       └── virtual-flight-controller.ts  # Flight controller (NEW)
-│   └── components/
-│       └── applets/
-│           ├── system-applets.ts          # Applet registry
-│           └── specialized/
-│               └── FlightSimApplet.tsx    # Flight simulator (NEW)
-├── volumes/
-│   └── system/
-│       └── skills/
-│           └── esp32-json-protocol.md     # Protocol documentation
-└── docs/
-    └── ESP32-S3-INTEGRATION-TEST-GUIDE.md  # This guide
-```
-
----
-
-## Success Metrics
-
-A successful integration test demonstrates:
-
-1. **Code Generation Quality**: LLMos generates working, type-safe code
-2. **Architecture Understanding**: Generated code follows project conventions
-3. **Hardware Abstraction**: Same code works with virtual/physical devices
-4. **Real-time Performance**: 60 FPS physics simulation
-5. **System Integration**: Applet installs and runs without manual intervention
-6. **Self-Correction**: LLMos responds to feedback and fixes issues
-
----
-
-*Guide Version: 1.0.0*
+*Guide Version: 2.0.0 - Prompt-Based Approach*
 *Last Updated: 2026-01-06*
 *Compatible with: LLMos-Lite v2.x*
