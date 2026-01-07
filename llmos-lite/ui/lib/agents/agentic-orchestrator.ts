@@ -19,6 +19,8 @@ import { Message } from '../llm/types';
 import { getMCPToolRegistry, MCPToolDefinition, MCPToolCall, MCPToolResult, toAnthropicTools } from './mcp-tools';
 import { getLLMPatternMatcher, ExecutionTrace, PatternMatch } from './llm-pattern-matcher';
 import { getVFS } from '../virtual-fs';
+import { logger } from '../debug/logger';
+import { planLogger, PlanStep as PlanLogStep } from '../debug/plan-log-store';
 
 // =============================================================================
 // Types
@@ -144,17 +146,29 @@ export class AgenticOrchestrator {
     let iterations = 0;
     let plan: AgentPlan | null = null;
 
+    // Start plan execution logging
+    const executionId = planLogger.startPlan(task);
+    logger.info('plan', `Starting plan execution: ${task.substring(0, 100)}`, { executionId });
+
     try {
       const llmClient = createLLMClient();
       if (!llmClient) {
-        throw new Error('LLM client not configured');
+        const error = 'LLM client not configured';
+        logger.error('plan', error);
+        planLogger.error(error);
+        throw new Error(error);
       }
+
+      logger.debug('plan', 'LLM client initialized');
 
       // =========================================================================
       // Phase 1: PLANNING
       // =========================================================================
       if (this.config.planFirst) {
         this.state.phase = 'planning';
+        planLogger.setPhase('planning');
+        logger.info('plan', 'Phase 1: Planning - Analyzing task and creating execution plan');
+
         this.emit({
           type: 'planning',
           phase: 'planning',
@@ -164,6 +178,22 @@ export class AgenticOrchestrator {
         plan = await this.createPlan(task, llmClient);
         this.state.plan = plan;
         this.state.totalSteps = plan.steps.length;
+
+        // Convert steps to plan log format
+        const planLogSteps: PlanLogStep[] = plan.steps.map(s => ({
+          id: s.id,
+          description: s.description,
+          toolHint: s.toolHint,
+          status: s.status,
+        }));
+        planLogger.setPlan(planLogSteps);
+
+        logger.success('plan', `Plan created with ${plan.steps.length} steps`, {
+          taskAnalysis: plan.taskAnalysis,
+          approach: plan.approach,
+          confidence: plan.confidence,
+          estimatedTools: plan.estimatedTools,
+        });
 
         this.emit({
           type: 'planning',
@@ -177,6 +207,8 @@ export class AgenticOrchestrator {
       // Phase 2: EXECUTION
       // =========================================================================
       this.state.phase = 'executing';
+      planLogger.setPhase('executing');
+      logger.info('plan', 'Phase 2: Execution - Running agentic loop');
 
       const messages: Message[] = [
         { role: 'system', content: this.buildSystemPrompt(plan) },
@@ -186,20 +218,29 @@ export class AgenticOrchestrator {
       // Agentic loop
       while (iterations < this.config.maxIterations) {
         iterations++;
+        logger.debug('plan', `Agentic loop iteration ${iterations}/${this.config.maxIterations}`);
+        planLogger.info(`Starting iteration ${iterations}`);
 
         // Get LLM response
+        logger.time(`llm-response-${iterations}`, 'llm', 'Getting LLM response');
         const response = await llmClient.chatDirect(messages);
+        logger.timeEnd(`llm-response-${iterations}`, true, { responseLength: response.length });
 
         // Parse tool calls from response
         const parsedToolCalls = this.parseToolCalls(response);
+        logger.debug('plan', `Parsed ${parsedToolCalls.length} tool calls from response`);
 
         if (parsedToolCalls.length === 0) {
           // No tool calls = task complete
           this.state.phase = 'reflecting';
+          logger.info('plan', 'No tool calls in response - task may be complete');
 
           // =====================================================================
           // Phase 3: REFLECTION
           // =====================================================================
+          planLogger.setPhase('reflecting');
+          logger.info('plan', 'Phase 3: Reflection - Evaluating execution results');
+
           this.emit({
             type: 'reflecting',
             phase: 'reflecting',
@@ -209,10 +250,27 @@ export class AgenticOrchestrator {
           // Update memory if configured
           let memoryUpdated = false;
           if (this.config.updateMemory) {
+            logger.debug('memory', 'Updating memory with execution results');
             memoryUpdated = await this.updateMemory(task, toolCalls, filesCreated, true);
+            logger.info('memory', memoryUpdated ? 'Memory updated successfully' : 'Memory update skipped');
           }
 
           this.state.phase = 'completed';
+          const executionTime = performance.now() - startTime;
+
+          logger.success('plan', `Task completed successfully in ${iterations} iterations`, {
+            toolCallCount: toolCalls.length,
+            filesCreated: filesCreated.length,
+            executionTime: `${(executionTime / 1000).toFixed(2)}s`,
+          });
+
+          planLogger.success(`Completed in ${(executionTime / 1000).toFixed(2)}s`, {
+            iterations,
+            toolCallCount: toolCalls.length,
+            filesCreated,
+          });
+          planLogger.endPlan(true);
+
           this.emit({
             type: 'completed',
             phase: 'completed',
@@ -226,7 +284,7 @@ export class AgenticOrchestrator {
             plan,
             toolCalls,
             filesCreated,
-            executionTime: performance.now() - startTime,
+            executionTime,
             iterations,
             memoryUpdated
           };
@@ -236,9 +294,14 @@ export class AgenticOrchestrator {
         messages.push({ role: 'assistant', content: response });
 
         let toolResultsText = '';
+        logger.info('plan', `Executing ${parsedToolCalls.length} tool calls`);
 
         for (const toolCall of parsedToolCalls) {
           this.state.toolCallCount++;
+
+          // Log tool call
+          logger.toolCall(toolCall.name, toolCall.arguments, 'request');
+          planLogger.toolCall(toolCall.name, toolCall.arguments);
 
           this.emit({
             type: 'tool_call',
@@ -249,7 +312,7 @@ export class AgenticOrchestrator {
 
           const callStart = performance.now();
           const result = await this.toolRegistry.execute(toolCall);
-          const duration = performance.now() - callStart;
+          const duration = Math.round(performance.now() - callStart);
 
           toolCalls.push({
             tool: toolCall.name,
@@ -261,7 +324,19 @@ export class AgenticOrchestrator {
           // Track files created
           if (toolCall.name === 'write_file' && toolCall.arguments.path) {
             filesCreated.push(toolCall.arguments.path);
+            logger.fileOp('write', toolCall.arguments.path, !result.isError);
           }
+
+          // Log tool result
+          if (result.isError) {
+            logger.error('plan', `Tool ${toolCall.name} failed`, {
+              duration: `${duration}ms`,
+              error: result.content.map(c => c.text).join('\n'),
+            });
+          } else {
+            logger.success('plan', `Tool ${toolCall.name} completed in ${duration}ms`);
+          }
+          planLogger.toolResult(toolCall.name, !result.isError, undefined, duration);
 
           this.emit({
             type: 'tool_result',
@@ -293,12 +368,21 @@ export class AgenticOrchestrator {
 
       // Max iterations reached
       this.state.phase = 'failed';
+      const maxIterError = 'Maximum iterations reached without completing the task.';
+
+      logger.error('plan', maxIterError, {
+        iterations,
+        maxIterations: this.config.maxIterations,
+        toolCallCount: toolCalls.length,
+      });
+      planLogger.error(maxIterError);
+      planLogger.endPlan(false, maxIterError);
 
       await this.updateMemory(task, toolCalls, filesCreated, false);
 
       return {
         success: false,
-        response: 'Maximum iterations reached without completing the task.',
+        response: maxIterError,
         plan,
         toolCalls,
         filesCreated,
@@ -309,6 +393,16 @@ export class AgenticOrchestrator {
 
     } catch (error: any) {
       this.state.phase = 'failed';
+      const errorMessage = error.message || 'Unknown error';
+
+      logger.error('plan', `Plan execution failed: ${errorMessage}`, {
+        error: errorMessage,
+        stack: error.stack,
+        iterations,
+        toolCallCount: toolCalls.length,
+      });
+      planLogger.error(errorMessage, error);
+      planLogger.endPlan(false, errorMessage);
 
       this.emit({
         type: 'error',
@@ -343,6 +437,9 @@ export class AgenticOrchestrator {
     let relevantMemories: PatternMatch[] = [];
 
     if (this.config.queryMemory) {
+      logger.info('memory', 'Searching memory for relevant experiences');
+      planLogger.memoryQuery(task);
+
       this.emit({
         type: 'memory_query',
         phase: 'planning',
@@ -355,25 +452,40 @@ export class AgenticOrchestrator {
       });
 
       if (relevantMemories.length > 0) {
+        logger.success('memory', `Found ${relevantMemories.length} relevant past experiences`, {
+          memories: relevantMemories.map(m => ({ goal: m.goal, similarity: m.similarity })),
+        });
+        planLogger.memoryResult(relevantMemories.length, relevantMemories.map(m => m.goal));
+
         this.emit({
           type: 'memory_query',
           phase: 'planning',
           message: `Found ${relevantMemories.length} relevant past experiences`,
           details: relevantMemories
         });
+      } else {
+        logger.info('memory', 'No relevant memories found');
+        planLogger.memoryResult(0);
       }
     }
 
     // Build planning prompt
+    logger.debug('plan', 'Building planning prompt');
     const planningPrompt = this.buildPlanningPrompt(task, relevantMemories);
 
+    logger.time('plan-creation', 'plan', 'Creating execution plan with LLM');
     const response = await llmClient.chatDirect([
       { role: 'system', content: PLANNING_SYSTEM_PROMPT },
       { role: 'user', content: planningPrompt }
     ]);
+    logger.timeEnd('plan-creation', true);
 
     // Parse plan from response
-    return this.parsePlan(response, relevantMemories);
+    logger.debug('plan', 'Parsing plan from LLM response');
+    const plan = this.parsePlan(response, relevantMemories);
+    logger.info('plan', `Plan parsed: ${plan.steps.length} steps, confidence: ${(plan.confidence * 100).toFixed(0)}%`);
+
+    return plan;
   }
 
   /**

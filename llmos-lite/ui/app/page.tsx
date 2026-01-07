@@ -9,6 +9,7 @@ import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { AppletProvider } from '@/contexts/AppletContext';
 import { bootKernel, BootProgress } from '@/lib/kernel/boot';
 import BootScreen from '@/components/kernel/BootScreen';
+import PlanExecutionLog from '@/components/debug/PlanExecutionLog';
 
 // Layout mode storage key
 const LAYOUT_MODE_KEY = 'llmos_layout_mode';
@@ -178,6 +179,7 @@ export default function Home() {
       <AppletProvider>
         <WorkspaceProvider>
           {renderLayout()}
+          <PlanExecutionLog />
         </WorkspaceProvider>
       </AppletProvider>
     </ProjectProvider>

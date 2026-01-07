@@ -45,6 +45,8 @@ import {
 } from './compiled-agent-runtime';
 import { getMCPToolRegistry, MCPToolDefinition } from './mcp-tools';
 import { getLLMPatternMatcher, ExecutionTrace, PatternMatch } from './llm-pattern-matcher';
+import { logger } from '../debug/logger';
+import { planLogger } from '../debug/plan-log-store';
 
 // =============================================================================
 // Types
@@ -161,8 +163,19 @@ export class ModelAwareOrchestrator {
     const startTime = performance.now();
     const subagentResults = new Map<string, AgentExecutionResponse>();
 
+    // Start plan execution logging
+    const executionId = planLogger.startPlan(task, this.config.modelId);
+    logger.info('plan', `Starting model-aware orchestration`, {
+      executionId,
+      modelId: this.config.modelId,
+      strategy: this.strategy,
+    });
+
     try {
       // Phase 1: Create execution plan
+      planLogger.setPhase('planning');
+      logger.info('plan', 'Phase 1: Creating execution plan');
+
       this.emit({
         type: 'planning',
         phase: 'analysis',
@@ -170,6 +183,12 @@ export class ModelAwareOrchestrator {
       });
 
       const plan = await this.createExecutionPlan(task, context);
+
+      logger.success('plan', `Execution plan created`, {
+        subagentCount: plan.subagentPlans.length,
+        strategy: plan.modelStrategy.baseStrategy,
+        complexity: plan.taskAnalysis.complexity,
+      });
 
       this.emit({
         type: 'planning',
@@ -179,14 +198,21 @@ export class ModelAwareOrchestrator {
       });
 
       // Phase 2: Compile agents if needed
-      if (plan.subagentPlans.some(p => p.compilationNeeded)) {
+      const needsCompilation = plan.subagentPlans.filter(p => p.compilationNeeded);
+      if (needsCompilation.length > 0) {
+        logger.info('agent', `Compiling ${needsCompilation.length} agents for target model`);
+        planLogger.info(`Compiling ${needsCompilation.length} agents`);
+
         this.emit({
           type: 'compiling',
           phase: 'start',
           message: 'Compiling agents for target model...',
         });
 
-        await this.compileAgents(plan.subagentPlans.filter(p => p.compilationNeeded));
+        await this.compileAgents(needsCompilation);
+
+        logger.success('agent', 'Agent compilation complete');
+        planLogger.info('Agent compilation complete');
 
         this.emit({
           type: 'compiling',
@@ -196,7 +222,16 @@ export class ModelAwareOrchestrator {
       }
 
       // Phase 3: Execute subagents
-      for (const parallelGroup of plan.executionOrder) {
+      planLogger.setPhase('executing');
+      logger.info('plan', `Phase 2: Executing ${plan.executionOrder.length} agent groups`);
+
+      for (let groupIndex = 0; groupIndex < plan.executionOrder.length; groupIndex++) {
+        const parallelGroup = plan.executionOrder[groupIndex];
+        logger.info('agent', `Executing agent group ${groupIndex + 1}/${plan.executionOrder.length}`, {
+          agents: parallelGroup,
+        });
+        planLogger.info(`Executing group: ${parallelGroup.join(', ')}`);
+
         this.emit({
           type: 'executing',
           phase: 'group',
@@ -207,8 +242,12 @@ export class ModelAwareOrchestrator {
         const groupResults = await Promise.all(
           parallelGroup.map(agentName => {
             const agentPlan = plan.subagentPlans.find(p => p.agentName === agentName);
-            if (!agentPlan) return null;
+            if (!agentPlan) {
+              logger.warn('agent', `Agent plan not found for ${agentName}`);
+              return null;
+            }
 
+            planLogger.agentStart(agentName, agentPlan.task);
             return this.executeSubagent(agentPlan, context, subagentResults);
           })
         );
@@ -218,18 +257,43 @@ export class ModelAwareOrchestrator {
           const result = groupResults[i];
           if (result) {
             subagentResults.set(parallelGroup[i], result);
+            planLogger.agentComplete(parallelGroup[i], result.success, result.executionTime);
+
+            if (result.success) {
+              logger.success('agent', `Agent ${parallelGroup[i]} completed`, {
+                iterations: result.iterations,
+                toolCalls: result.toolCalls.length,
+              });
+            } else {
+              logger.error('agent', `Agent ${parallelGroup[i]} failed`, {
+                error: result.response,
+              });
+            }
           }
         }
       }
 
       // Phase 4: Synthesize results
+      planLogger.setPhase('reflecting');
+      logger.info('plan', 'Phase 3: Synthesizing results');
       const finalResponse = this.synthesizeResults(task, plan, subagentResults);
 
       // Phase 5: Record learning if enabled
       let learningRecorded = false;
       if (this.config.enableLearning) {
+        logger.debug('memory', 'Recording execution for learning');
         learningRecorded = await this.recordExecution(task, plan, subagentResults, true);
+        logger.info('memory', learningRecorded ? 'Learning recorded' : 'Learning recording skipped');
       }
+
+      const totalExecutionTime = performance.now() - startTime;
+      logger.success('plan', `Model-aware orchestration completed successfully`, {
+        totalExecutionTime: `${(totalExecutionTime / 1000).toFixed(2)}s`,
+        subagentCount: subagentResults.size,
+        tokensUsed: this.estimateTokensUsed(plan, subagentResults),
+      });
+      planLogger.success(`Completed in ${(totalExecutionTime / 1000).toFixed(2)}s`);
+      planLogger.endPlan(true);
 
       this.emit({
         type: 'completed',
@@ -243,12 +307,20 @@ export class ModelAwareOrchestrator {
         response: finalResponse,
         plan,
         subagentResults,
-        totalExecutionTime: performance.now() - startTime,
+        totalExecutionTime,
         tokensUsed: this.estimateTokensUsed(plan, subagentResults),
         learningRecorded,
       };
 
     } catch (error: any) {
+      const errorMessage = error.message || 'Unknown error';
+      logger.error('plan', `Model-aware orchestration failed: ${errorMessage}`, {
+        error: errorMessage,
+        stack: error.stack,
+      });
+      planLogger.error(errorMessage, error);
+      planLogger.endPlan(false, errorMessage);
+
       this.emit({
         type: 'error',
         phase: 'failed',

@@ -8,6 +8,8 @@
 import { executeJavaScript, executePythonCode, ExecutionOptions, ExecutionResult } from '../artifact-executor';
 import { getErrorSupervisor, SupervisedExecutionResult as SupervisedResult } from './error-supervisor';
 import { getRefinementService } from './refinement-service';
+import { logger } from '../debug/logger';
+import { planLogger } from '../debug/plan-log-store';
 
 // Re-export SupervisedExecutionResult
 export type { SupervisedResult as SupervisedExecutionResult };
@@ -43,6 +45,14 @@ export async function executeWithSupervision(
     ...execOptions
   } = options;
 
+  logger.info('applet', `Starting supervised execution`, {
+    language,
+    artifactId,
+    enableSelfCorrection,
+    maxRetries,
+    codeLength: code.length,
+  });
+
   // Get supervisor and refinement service
   const supervisor = getErrorSupervisor({ maxRetries, onProgress });
   const refinementService = getRefinementService({
@@ -77,21 +87,31 @@ export async function executeWithSupervision(
       onProgress(status, attempt, maxRetries);
     }
 
-    console.log(`[SupervisedExecution] Attempt ${attempt}/${maxRetries}`);
+    logger.info('applet', `Execution attempt ${attempt}/${maxRetries}`, { language, artifactId });
+    planLogger.info(`Applet execution attempt ${attempt}/${maxRetries}`);
 
     // Execute code
+    logger.time(`exec-${artifactId}-${attempt}`, 'applet', `Executing ${language} code`);
     let result: ExecutionResult;
     if (language === 'javascript') {
       result = await executeJavaScript(currentCode, artifactId, execOptions);
     } else {
       result = await executePythonCode(currentCode, execOptions);
     }
+    logger.timeEnd(`exec-${artifactId}-${attempt}`, result.success, {
+      executionTime: result.executionTime,
+    });
 
     lastResult = result;
 
     // Success! Return result
     if (result.success) {
-      console.log(`[SupervisedExecution] Success on attempt ${attempt}`);
+      logger.success('applet', `Execution succeeded on attempt ${attempt}`, {
+        artifactId,
+        executionTime: result.executionTime,
+        wasRefined: attempt > 1,
+      });
+      planLogger.success(`Applet executed successfully`);
 
       return supervisor.createSupervisedResult(
         result,
@@ -101,11 +121,20 @@ export async function executeWithSupervision(
     }
 
     // Execution failed
-    console.error(`[SupervisedExecution] Attempt ${attempt} failed:`, result.error);
+    logger.error('applet', `Execution attempt ${attempt} failed`, {
+      artifactId,
+      error: result.error,
+    });
+    planLogger.warning(`Applet execution failed: ${result.error?.substring(0, 100)}`);
 
     // If self-correction is disabled or we're on the last attempt, return failure
     if (!enableSelfCorrection || attempt === maxRetries) {
-      console.log('[SupervisedExecution] Max retries reached or self-correction disabled');
+      logger.warn('applet', 'Max retries reached or self-correction disabled', {
+        enableSelfCorrection,
+        attempt,
+        maxRetries,
+      });
+      planLogger.error(`Applet failed after ${attempt} attempts`);
       return supervisor.createSupervisedResult(result, attempt > 1, refinementHistory);
     }
 
@@ -133,20 +162,27 @@ export async function executeWithSupervision(
       onProgress(`Analyzing error and requesting refinement...`, attempt, maxRetries);
     }
 
-    console.log('[SupervisedExecution] Requesting LLM refinement...');
+    logger.info('applet', 'Requesting LLM refinement for failed execution');
+    planLogger.info('Requesting LLM refinement');
 
     const prompt = supervisor.buildRefinementPrompt(errorContext);
+    logger.time(`refinement-${artifactId}-${attempt}`, 'llm', 'LLM code refinement');
     const refinementResult = await refinementService.refineCode(errorContext, prompt);
+    logger.timeEnd(`refinement-${artifactId}-${attempt}`, refinementResult.success);
 
     if (!refinementResult.success || !refinementResult.refinedCode) {
-      console.error('[SupervisedExecution] Refinement failed:', refinementResult.error);
+      logger.error('applet', 'LLM refinement failed', {
+        error: refinementResult.error,
+      });
+      planLogger.error('LLM refinement failed');
 
       // Can't refine, return last result
       return supervisor.createSupervisedResult(result, attempt > 1, refinementHistory);
     }
 
-    console.log('[SupervisedExecution] Refinement successful');
-    console.log('[SupervisedExecution] Explanation:', refinementResult.explanation);
+    logger.success('applet', 'LLM refinement successful', {
+      explanation: refinementResult.explanation?.substring(0, 200),
+    });
 
     // Validate refined code
     const validation = await refinementService.validateRefinedCode(
@@ -156,12 +192,14 @@ export async function executeWithSupervision(
     );
 
     if (!validation.valid) {
-      console.error('[SupervisedExecution] Refined code validation failed');
+      logger.error('applet', 'Refined code validation failed');
       return supervisor.createSupervisedResult(result, attempt > 1, refinementHistory);
     }
 
     if (validation.warnings.length > 0) {
-      console.warn('[SupervisedExecution] Validation warnings:', validation.warnings);
+      logger.warn('applet', 'Validation warnings for refined code', {
+        warnings: validation.warnings,
+      });
     }
 
     // Record refinement
@@ -175,11 +213,15 @@ export async function executeWithSupervision(
     // Update code for next attempt
     currentCode = refinementResult.refinedCode;
 
-    // Log refinement
-    console.log(`[SupervisedExecution] Will retry with refined code (${currentCode.length} chars)`);
+    logger.info('applet', `Will retry with refined code`, {
+      codeLength: currentCode.length,
+      attempt: attempt + 1,
+    });
+    planLogger.info(`Retrying with refined code (${currentCode.length} chars)`);
   }
 
   // Should never reach here, but return last result if we do
+  logger.error('applet', 'Execution loop exited unexpectedly');
   return supervisor.createSupervisedResult(
     lastResult || {
       success: false,
