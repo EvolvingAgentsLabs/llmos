@@ -12,6 +12,8 @@ import { getLivePreview } from '../runtime/live-preview';
 import { recordSubAgentExecution } from './usage-tracker';
 import { getLLMPatternMatcher, ExecutionTrace, SubAgentTrace } from '../agents/llm-pattern-matcher';
 import { getVFS } from '../virtual-fs';
+import { logger } from '../debug/logger';
+import { planLogger } from '../debug/plan-log-store';
 
 export interface SubAgentDefinition {
   name: string;
@@ -46,8 +48,11 @@ export class SubAgentExecutor {
   async discoverAgents(volume: VolumeType): Promise<SubAgentDefinition[]> {
     const agents: SubAgentDefinition[] = [];
 
+    logger.debug('agent', `Discovering agents in ${volume} volume`);
+
     try {
       const files = await this.fs.listFiles(volume, 'agents');
+      logger.debug('agent', `Found ${files.length} files in ${volume}/agents`);
 
       for (const file of files) {
         if (file.path.endsWith('.py')) {
@@ -55,11 +60,20 @@ export class SubAgentExecutor {
           if (agentDef) {
             agents.push(agentDef);
             this.loadedAgents.set(`${volume}:${file.path}`, agentDef);
+            logger.info('agent', `Discovered agent: ${agentDef.name}`, {
+              path: file.path,
+              volume,
+              capabilities: agentDef.capabilities,
+            });
           }
         }
       }
+
+      if (agents.length > 0) {
+        logger.success('agent', `Discovered ${agents.length} agents in ${volume} volume`);
+      }
     } catch (error) {
-      console.warn(`No agents found in ${volume} volume`);
+      logger.debug('agent', `No agents found in ${volume} volume`);
     }
 
     return agents;
@@ -133,19 +147,30 @@ export class SubAgentExecutor {
     const agentDef = this.loadedAgents.get(`${volume}:${agentPath}`);
     const agentName = agentDef?.name || agentPath.split('/').pop()?.replace('.py', '') || 'unknown';
 
+    logger.info('agent', `Executing sub-agent: ${agentName}`, {
+      volume,
+      path: agentPath,
+      task: task.substring(0, 100),
+    });
+    planLogger.agentStart(agentName, task);
+
     try {
       // Load agent code
+      logger.debug('agent', `Loading agent code from ${volume}:${agentPath}`);
       const agentCode = await this.fs.readFile(volume, agentPath);
+      logger.debug('agent', `Agent code loaded: ${agentCode.length} bytes`);
 
       // Create execution environment
       const executionCode = this.buildExecutionCode(agentCode, task, context);
 
       // Execute in Pyodide
+      logger.time(`agent-${agentName}`, 'agent', `Executing ${agentName}`);
       const result = await this.runtime.executeFile(
         `${volume}:${agentPath}`,
         executionCode,
         { capturePlots: true }
       );
+      logger.timeEnd(`agent-${agentName}`, result.success);
 
       const executionTime = Date.now() - startTime;
 
@@ -172,7 +197,18 @@ export class SubAgentExecutor {
         context?.projectPath
       );
 
-      console.log(`[SubAgentExecutor] Executed ${agentName} (${volume}): success=${result.success}, time=${executionTime}ms`);
+      if (result.success) {
+        logger.success('agent', `Sub-agent ${agentName} completed successfully`, {
+          executionTime: `${executionTime}ms`,
+          outputLength: (result.stdout || '').length,
+        });
+      } else {
+        logger.warn('agent', `Sub-agent ${agentName} completed with errors`, {
+          executionTime: `${executionTime}ms`,
+          error: result.error,
+        });
+      }
+      planLogger.agentComplete(agentName, result.success, executionTime);
 
       return {
         success: result.success,
@@ -182,6 +218,14 @@ export class SubAgentExecutor {
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('agent', `Sub-agent ${agentName} execution failed`, {
+        executionTime: `${executionTime}ms`,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      planLogger.agentComplete(agentName, false, executionTime);
 
       // Track failed execution
       recordSubAgentExecution(
@@ -204,15 +248,13 @@ export class SubAgentExecutor {
         timestamp,
         '',
         context?.projectPath,
-        error instanceof Error ? error.message : String(error)
+        errorMessage
       );
-
-      console.log(`[SubAgentExecutor] Execution failed for ${agentName} (${volume}): ${error}`);
 
       return {
         success: false,
         output: '',
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         executionTime
       };
     }
@@ -254,15 +296,17 @@ export class SubAgentExecutor {
 
       // Add to pattern matcher for evolution analysis
       patternMatcher.addTrace(trace);
+      logger.debug('agent', `Execution trace generated for ${agentName}`, { traceId: trace.id });
 
       // Also write to short-term memory if project context exists
       if (projectPath) {
         this.writeToShortTermMemory(projectPath, trace, agentName);
+        logger.debug('memory', `Trace written to short-term memory for project: ${projectPath}`);
       }
-
-      console.log(`[SubAgentExecutor] Trace generated for ${agentName}: ${trace.id}`);
     } catch (err) {
-      console.error('[SubAgentExecutor] Failed to generate trace:', err);
+      logger.error('agent', `Failed to generate trace for ${agentName}`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

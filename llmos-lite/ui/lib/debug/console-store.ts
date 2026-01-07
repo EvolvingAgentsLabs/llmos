@@ -73,7 +73,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => {
     height: persisted.height,
     filter: {
       levels: ['debug', 'info', 'warn', 'error', 'success'],
-      categories: ['system', 'python', 'applet', 'llm', 'vfs', 'git', 'memory'],
+      categories: ['system', 'python', 'applet', 'llm', 'vfs', 'git', 'memory', 'plan', 'agent'],
       search: '',
     },
 

@@ -13,7 +13,9 @@ export type LogCategory =
   | 'llm'       // LLM API calls and tool usage
   | 'vfs'       // Virtual file system operations
   | 'git'       // Git operations
-  | 'memory';   // Memory system operations
+  | 'memory'    // Memory system operations
+  | 'plan'      // Plan creation and execution
+  | 'agent';    // Agent execution and orchestration
 
 export interface LogEntry {
   id: string;
@@ -58,6 +60,8 @@ export const LOG_CATEGORY_COLORS: Record<LogCategory, string> = {
   vfs: 'bg-green-500/20 text-green-400',
   git: 'bg-orange-500/20 text-orange-400',
   memory: 'bg-cyan-500/20 text-cyan-400',
+  plan: 'bg-indigo-500/20 text-indigo-400',
+  agent: 'bg-emerald-500/20 text-emerald-400',
 };
 
 export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
@@ -68,4 +72,6 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   vfs: 'VFS',
   git: 'GIT',
   memory: 'MEMORY',
+  plan: 'PLAN',
+  agent: 'AGENT',
 };

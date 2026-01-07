@@ -130,6 +130,14 @@ class Logger {
     this.log('info', 'memory', message, data);
   }
 
+  plan(message: string, data?: LogData): void {
+    this.log('info', 'plan', message, data);
+  }
+
+  agent(message: string, data?: LogData): void {
+    this.log('info', 'agent', message, data);
+  }
+
   // Timer methods for measuring duration
   /**
    * Start a timer for measuring operation duration
