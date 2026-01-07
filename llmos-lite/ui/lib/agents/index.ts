@@ -216,3 +216,37 @@ export {
   executeAgent,
   shouldCompileAgent
 } from './compiled-agent-runtime';
+
+// =============================================================================
+// Rust/WASM Tools (High-Performance Tool Execution)
+// =============================================================================
+
+export {
+  type WASMToolDefinition,
+  type WASMToolSchema,
+  type WASMFunctionBinding,
+  type WASMParameter,
+  type WASMReturnType,
+  type WASMToolResult,
+  type RustToolConfig,
+  WASMToolLoader,
+  createRustToolExecutor,
+  getWASMToolLoader,
+  FFT_TOOL_EXAMPLE
+} from './rust-wasm-tools';
+
+// =============================================================================
+// Model-Aware Orchestrator (Unified Execution Coordinator)
+// =============================================================================
+
+export {
+  type ModelAwareConfig,
+  type SubagentPlan,
+  type ExecutionPlan,
+  type OrchestratorResult,
+  type OrchestratorProgressEvent,
+  type OrchestratorProgressCallback,
+  ModelAwareOrchestrator,
+  createModelAwareOrchestrator,
+  executeWithModelAwareness
+} from './model-aware-orchestrator';

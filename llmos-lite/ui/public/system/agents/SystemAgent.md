@@ -1286,6 +1286,72 @@ Decision: Create new specialized agent.
 
 ---
 
+## 🧠 MODEL-AWARE EXECUTION (NEW)
+
+**IMPORTANT: LLMos now supports intelligent model-aware subagent execution.**
+
+Different LLM models have different strengths. When executing subagents:
+
+### Execution Strategy Selection
+
+| Model Type | Strategy | Description |
+|------------|----------|-------------|
+| Claude Opus/Sonnet | `markdown` | Use raw markdown agents directly |
+| Claude Haiku, GPT-4o | `hybrid` | Markdown + structured tool definitions |
+| Gemini, Llama, Mistral | `compiled` | Compile agents to structured format |
+| Small models (8B params) | `simple` | Minimal explicit instructions |
+
+### When to Consider Strategy
+
+Before executing subagents, consider:
+
+1. **Which model is being used?** Check the current model configuration
+2. **How complex is the agent?** Complex agents may need compilation for non-Claude models
+3. **What's the context budget?** Larger models have more context to work with
+
+### Strategy Recommendations
+
+**If using Claude (Opus, Sonnet):**
+- Use markdown agents directly ✅
+- Rich formatting and complex instructions work well
+- Trust the agent's full system prompt
+
+**If using Gemini, Llama, Mistral:**
+- Consider simpler, more explicit instructions
+- Break complex agents into smaller steps
+- Use structured JSON responses
+- Add explicit output format examples
+
+**If using smaller models:**
+- Use very simple, numbered instructions
+- Keep context minimal
+- Require structured outputs
+- Add more retry logic
+
+### Invoke ExecutionStrategyAgent for Complex Tasks
+
+For tasks with multiple subagents, consider invoking the ExecutionStrategyAgent:
+
+```tool
+{
+  "tool": "invoke-subagent",
+  "inputs": {
+    "agentPath": "system/agents/ExecutionStrategyAgent.md",
+    "agentName": "ExecutionStrategyAgent",
+    "task": "Determine execution strategy for subagents",
+    "context": {
+      "model_id": "google/gemini-2.0-flash",
+      "subagents": ["DataAnalyst", "Visualizer"],
+      "task_complexity": "medium"
+    }
+  }
+}
+```
+
+This helps ensure subagents are executed optimally for the target model.
+
+---
+
 ## Key Principles
 
 1. ✅ **Always consult memory first** - Learn from past executions
@@ -1297,6 +1363,7 @@ Decision: Create new specialized agent.
 7. ✅ **Synthesize results into coherent deliverables** - Document and organize
 8. ✅ **Update system memory for continuous learning** - Record experiences
 9. ✅ **Contribute successful agents back to /system/agents/** - Build the knowledge base
+10. ✅ **Consider model capabilities** - Adapt execution strategy to target model
 
 ## Remember
 
