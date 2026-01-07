@@ -293,17 +293,17 @@ export class ContextManager {
 export type MessageFormat = 'json' | 'xml' | 'markdown';
 
 export class MessageFormatter {
-  private format: MessageFormat;
+  private messageFormat: MessageFormat;
 
   constructor(format: MessageFormat) {
-    this.format = format;
+    this.messageFormat = format;
   }
 
   /**
    * Format a message for transmission
    */
-  format(message: AgentMessage): string {
-    switch (this.format) {
+  formatMessage(message: AgentMessage): string {
+    switch (this.messageFormat) {
       case 'json':
         return this.formatAsJSON(message);
       case 'xml':
@@ -319,7 +319,7 @@ export class MessageFormatter {
    * Parse a received message
    */
   parse(text: string): Partial<AgentMessage> | null {
-    switch (this.format) {
+    switch (this.messageFormat) {
       case 'json':
         return this.parseJSON(text);
       case 'xml':
@@ -652,7 +652,7 @@ export class AgentMessengerHub {
    * Get formatted message for LLM consumption
    */
   formatMessageForLLM(message: AgentMessage): string {
-    return this.formatter.format(message);
+    return this.formatter.formatMessage(message);
   }
 
   /**
