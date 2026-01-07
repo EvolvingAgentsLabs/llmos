@@ -106,7 +106,10 @@ export class WASMToolLoader {
     });
 
     // Compile and instantiate
-    const module = await WebAssembly.compile(wasmBytes);
+    // Use buffer.slice to create a clean ArrayBuffer compatible with all TypeScript versions
+    const module = await WebAssembly.compile(
+      wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength)
+    );
     const instance = await WebAssembly.instantiate(module, {
       env: {
         memory,
