@@ -79,17 +79,17 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
         </svg>
       </button>
 
-      {/* Dropdown Menu */}
+      {/* Dropdown Menu - Centered Modal */}
       {isOpen && (
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Menu */}
-          <div className={`absolute right-0 w-96 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl z-50 max-h-96 overflow-y-auto ${dropdownPosition === 'top' ? 'bottom-full mb-2' : 'mt-2'}`}>
+          {/* Menu - Centered at top of viewport */}
+          <div className="fixed left-1/2 top-24 -translate-x-1/2 w-96 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl z-50 max-h-[70vh] overflow-y-auto">
             <div className="p-3 border-b border-border-primary bg-bg-tertiary">
               <h3 className="text-xs font-semibold text-fg-primary">Select AI Model</h3>
               <p className="text-[10px] text-fg-tertiary mt-0.5">Choose the model for your conversations</p>
