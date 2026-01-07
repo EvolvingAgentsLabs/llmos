@@ -518,7 +518,7 @@ ${result.isError ? 'ERROR: ' : ''}${resultText}
         try {
           // Try to parse arguments
           const argsText = match[2].trim();
-          let args = {};
+          let args: Record<string, any> = {};
 
           if (argsText.startsWith('{')) {
             args = JSON.parse(argsText);
