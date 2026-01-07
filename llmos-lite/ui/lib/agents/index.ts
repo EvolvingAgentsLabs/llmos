@@ -137,3 +137,82 @@ export {
   getEvolutionIntegration,
   runEvolutionCycle
 } from './evolution-integration';
+
+// =============================================================================
+// Model Capabilities (Strategy Selection for Different LLMs)
+// =============================================================================
+
+export {
+  type ModelCapabilities,
+  type ExecutionStrategyType,
+  type ExecutionStrategyConfig,
+  MODEL_CAPABILITIES,
+  getModelCapabilities,
+  getExecutionStrategy,
+  shouldCompileAgents,
+  supportsMarkdownAgents,
+  getAgentCapabilityScore,
+  getExecutionStrategyConfig,
+  analyzeTaskComplexity
+} from './model-capabilities';
+
+// =============================================================================
+// Agent Compiler (Markdown to Structured Format Transformation)
+// =============================================================================
+
+export {
+  type CompiledAgent,
+  type CompiledToolBinding,
+  type ParameterDefinition,
+  type ResponseSchema,
+  type ContextConfig,
+  type CompiledExecutionContext,
+  type CompiledExecutionResult,
+  AgentCompiler,
+  createAgentCompiler,
+  compileAgentForModel,
+  buildCompiledMessages,
+  parseCompiledResponse
+} from './agent-compiler';
+
+// =============================================================================
+// Agent Messenger (Enhanced Inter-Agent Communication)
+// =============================================================================
+
+export {
+  type AgentMessage,
+  type AgentIdentity,
+  type MessageType,
+  type MessageContent,
+  type TaskInfo,
+  type ErrorInfo,
+  type Attachment,
+  type ContextWindow,
+  type MessageFormat,
+  type MessageHandler,
+  type PendingTask,
+  type DelegationResult,
+  type MessengerConfig,
+  ContextManager,
+  MessageFormatter,
+  AgentMessengerHub,
+  createMessengerHub,
+  createAgentIdentity
+} from './agent-messenger';
+
+// =============================================================================
+// Compiled Agent Runtime (Model-Aware Execution)
+// =============================================================================
+
+export {
+  type RuntimeConfig,
+  type AgentExecutionRequest,
+  type AgentExecutionResponse,
+  type ToolCallRecord,
+  type RuntimeProgressEvent,
+  type RuntimeProgressCallback,
+  CompiledAgentRuntime,
+  createRuntime,
+  executeAgent,
+  shouldCompileAgent
+} from './compiled-agent-runtime';
