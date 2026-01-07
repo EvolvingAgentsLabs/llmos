@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AVAILABLE_MODELS, LLMStorage, type ModelId } from '@/lib/llm-client';
 
 interface ModelSelectorProps {
@@ -79,17 +80,26 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
         </svg>
       </button>
 
-      {/* Dropdown Menu - Centered Modal */}
-      {isOpen && (
+      {/* Dropdown Menu - Centered Modal using Portal */}
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm"
+            style={{ zIndex: 9998 }}
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Menu - Centered at top of viewport */}
-          <div className="fixed left-1/2 top-24 -translate-x-1/2 w-96 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl z-50 max-h-[70vh] overflow-y-auto">
+          {/* Menu - Centered in viewport */}
+          <div
+            className="fixed w-96 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl max-h-[70vh] overflow-y-auto"
+            style={{
+              zIndex: 9999,
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)'
+            }}
+          >
             <div className="p-3 border-b border-border-primary bg-bg-tertiary">
               <h3 className="text-xs font-semibold text-fg-primary">Select AI Model</h3>
               <p className="text-[10px] text-fg-tertiary mt-0.5">Choose the model for your conversations</p>
@@ -174,11 +184,12 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
 
             <div className="p-3 border-t border-border-primary bg-bg-tertiary">
               <p className="text-[10px] text-fg-tertiary">
-                💡 Model changes take effect on the next message
+                Model changes take effect on the next message
               </p>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
