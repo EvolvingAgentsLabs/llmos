@@ -591,9 +591,13 @@ export class ModelAwareOrchestrator {
         duration: Array.from(results.values()).reduce((sum, r) => sum + r.executionTime, 0),
         timestamp: new Date().toISOString(),
         subAgentsUsed: plan?.subagentPlans.map(p => ({
-          name: p.agentName,
+          agentName: p.agentName,
+          agentPath: p.agentPath,
+          volume: 'system',
           task: p.task,
           success: results.get(p.agentName)?.success || false,
+          executionTime: results.get(p.agentName)?.executionTime || 0,
+          timestamp: new Date().toISOString(),
         })),
       };
 
