@@ -35,6 +35,59 @@ export interface ExecutionTrace {
   projectPath?: string;
   // Trace type for filtering
   traceType?: 'main' | 'sub-agent' | 'tool';
+
+  // =========================================================================
+  // Trace Linking (from llmunix gap analysis)
+  // =========================================================================
+
+  // Parent trace for hierarchical linking
+  parentTraceId?: string;
+
+  // Type of link to parent
+  linkType?: 'sequential' | 'hierarchical' | 'dependency' | 'parallel';
+
+  // Depth in the trace hierarchy (0 = root)
+  depth?: number;
+
+  // Dependencies on other traces (for data flow tracking)
+  dependsOn?: TraceDependency[];
+
+  // Sibling traces (for parallel execution)
+  siblingTraceIds?: string[];
+
+  // =========================================================================
+  // Trace Lifecycle (from llmunix gap analysis)
+  // =========================================================================
+
+  // Current lifecycle state
+  lifecycleState?: 'active' | 'consolidated' | 'archived';
+
+  // When the trace was consolidated into learnings
+  consolidatedAt?: string;
+
+  // When the trace was archived
+  archivedAt?: string;
+
+  // =========================================================================
+  // Agent Metadata (enhanced from llmunix)
+  // =========================================================================
+
+  // Agent that created this trace
+  agentName?: string;
+  agentType?: 'core' | 'dynamic' | 'system';
+  agentPath?: string;
+
+  // Task category for pattern grouping
+  taskCategory?: string;
+}
+
+/**
+ * Dependency on another trace's output
+ */
+export interface TraceDependency {
+  traceId: string;
+  outputFile: string;
+  dependencyType: 'data' | 'config' | 'model' | 'artifact';
 }
 
 export interface SubAgentTrace {
@@ -78,6 +131,54 @@ export interface LLMPatternAnalysis {
   patterns: ConsolidatedPattern[];
   suggestedSkills: SkillRecommendation[];
   insights: string[];
+}
+
+// =============================================================================
+// Trace Graph Types (from llmunix gap analysis)
+// =============================================================================
+
+export interface TraceGraph {
+  nodes: Map<string, ExecutionTrace>;
+  edges: TraceEdge[];
+  rootTraceId?: string;
+}
+
+export interface TraceEdge {
+  from: string;
+  to: string;
+  type: 'sequential' | 'hierarchical' | 'dependency' | 'parallel';
+  artifact?: string; // For dependency edges
+}
+
+// =============================================================================
+// Query Memory Types (formalized from llmunix)
+// =============================================================================
+
+export interface QueryMemoryOptions {
+  memoryType?: 'agent_templates' | 'workflow_patterns' | 'domain_knowledge' | 'skills' | 'traces' | 'all';
+  scope?: 'project' | 'global' | 'similar';
+  projectContext?: string;
+  timeRange?: {
+    from?: string;
+    to?: string;
+  };
+  limit?: number;
+  minRelevance?: number;
+}
+
+export interface QueryMemoryResult {
+  matches: MemoryMatch[];
+  querySummary: string;
+  totalSearched: number;
+  searchTimeMs: number;
+}
+
+export interface MemoryMatch {
+  path: string;
+  relevance: number;
+  type: string;
+  excerpt: string;
+  metadata: Record<string, any>;
 }
 
 // =============================================================================
@@ -514,6 +615,310 @@ Return JSON:
       .filter(s => s.similarity > 0)
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, limit);
+  }
+
+  // ===========================================================================
+  // Trace Linking Methods (from llmunix gap analysis)
+  // ===========================================================================
+
+  /**
+   * Build a trace graph from all traces
+   */
+  buildTraceGraph(rootTraceId?: string): TraceGraph {
+    const nodes = new Map<string, ExecutionTrace>();
+    const edges: TraceEdge[] = [];
+
+    // Build node map
+    for (const trace of this.traces) {
+      nodes.set(trace.id, trace);
+    }
+
+    // Build edge list
+    for (const trace of this.traces) {
+      // Parent-child edges
+      if (trace.parentTraceId && nodes.has(trace.parentTraceId)) {
+        edges.push({
+          from: trace.parentTraceId,
+          to: trace.id,
+          type: trace.linkType || 'hierarchical'
+        });
+      }
+
+      // Dependency edges
+      if (trace.dependsOn) {
+        for (const dep of trace.dependsOn) {
+          if (nodes.has(dep.traceId)) {
+            edges.push({
+              from: dep.traceId,
+              to: trace.id,
+              type: 'dependency',
+              artifact: dep.outputFile
+            });
+          }
+        }
+      }
+    }
+
+    return { nodes, edges, rootTraceId };
+  }
+
+  /**
+   * Find all children of a trace
+   */
+  findChildTraces(traceId: string): ExecutionTrace[] {
+    return this.traces.filter(t => t.parentTraceId === traceId);
+  }
+
+  /**
+   * Find the dependency chain for a trace
+   */
+  findDependencyChain(traceId: string): string[] {
+    const trace = this.traces.find(t => t.id === traceId);
+    if (!trace?.dependsOn) return [];
+
+    const chain: string[] = [];
+    for (const dep of trace.dependsOn) {
+      chain.push(dep.traceId);
+      chain.push(...this.findDependencyChain(dep.traceId));
+    }
+    return [...new Set(chain)]; // Remove duplicates
+  }
+
+  /**
+   * Get execution order (topologically sorted by dependencies)
+   */
+  getExecutionOrder(rootTraceId?: string): string[] {
+    const visited = new Set<string>();
+    const order: string[] = [];
+
+    const visit = (traceId: string) => {
+      if (visited.has(traceId)) return;
+      visited.add(traceId);
+
+      const trace = this.traces.find(t => t.id === traceId);
+      if (!trace) return;
+
+      // Visit dependencies first
+      if (trace.dependsOn) {
+        for (const dep of trace.dependsOn) {
+          visit(dep.traceId);
+        }
+      }
+
+      order.push(traceId);
+
+      // Visit children
+      for (const child of this.findChildTraces(traceId)) {
+        visit(child.id);
+      }
+    };
+
+    if (rootTraceId) {
+      visit(rootTraceId);
+    } else {
+      // Find root traces (no parent) and process each
+      const roots = this.traces.filter(t => !t.parentTraceId);
+      for (const root of roots) {
+        visit(root.id);
+      }
+    }
+
+    return order;
+  }
+
+  /**
+   * Create a trace with proper linking
+   */
+  createLinkedTrace(
+    baseTrace: Omit<ExecutionTrace, 'id' | 'timestamp' | 'lifecycleState'>,
+    parentTraceId?: string,
+    linkType?: ExecutionTrace['linkType']
+  ): ExecutionTrace {
+    const parentTrace = parentTraceId ? this.traces.find(t => t.id === parentTraceId) : undefined;
+
+    const trace: ExecutionTrace = {
+      ...baseTrace,
+      id: `trace-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      parentTraceId,
+      linkType: linkType || (parentTraceId ? 'hierarchical' : undefined),
+      depth: parentTrace ? (parentTrace.depth || 0) + 1 : 0,
+      lifecycleState: 'active'
+    };
+
+    this.addTrace(trace);
+    return trace;
+  }
+
+  // ===========================================================================
+  // Trace Lifecycle Methods (from llmunix gap analysis)
+  // ===========================================================================
+
+  /**
+   * Mark a trace as consolidated
+   */
+  consolidateTrace(traceId: string): boolean {
+    const trace = this.traces.find(t => t.id === traceId);
+    if (!trace) return false;
+
+    trace.lifecycleState = 'consolidated';
+    trace.consolidatedAt = new Date().toISOString();
+    return true;
+  }
+
+  /**
+   * Mark a trace as archived
+   */
+  archiveTrace(traceId: string): boolean {
+    const trace = this.traces.find(t => t.id === traceId);
+    if (!trace) return false;
+
+    trace.lifecycleState = 'archived';
+    trace.archivedAt = new Date().toISOString();
+    return true;
+  }
+
+  /**
+   * Get traces by lifecycle state
+   */
+  getTracesByLifecycle(state: ExecutionTrace['lifecycleState']): ExecutionTrace[] {
+    return this.traces.filter(t => t.lifecycleState === state);
+  }
+
+  /**
+   * Archive old traces (older than specified days)
+   */
+  archiveOldTraces(olderThanDays: number = 7): number {
+    const cutoff = Date.now() - (olderThanDays * 24 * 60 * 60 * 1000);
+    let archivedCount = 0;
+
+    for (const trace of this.traces) {
+      if (trace.lifecycleState === 'consolidated') {
+        const traceTime = new Date(trace.timestamp).getTime();
+        if (traceTime < cutoff) {
+          this.archiveTrace(trace.id);
+          archivedCount++;
+        }
+      }
+    }
+
+    return archivedCount;
+  }
+
+  // ===========================================================================
+  // Cross-Project Query Methods (from llmunix gap analysis)
+  // ===========================================================================
+
+  /**
+   * Query memory with formalized options (implements QueryMemoryTool spec)
+   */
+  async queryMemory(
+    query: string,
+    options: QueryMemoryOptions = {}
+  ): Promise<QueryMemoryResult> {
+    const startTime = performance.now();
+    const {
+      memoryType = 'all',
+      scope = 'project',
+      limit = 10,
+      minRelevance = 0.3,
+      timeRange
+    } = options;
+
+    const matches: MemoryMatch[] = [];
+    let totalSearched = 0;
+
+    // Filter traces by memory type
+    let candidateTraces = [...this.traces];
+
+    // Apply time range filter
+    if (timeRange?.from) {
+      const fromTime = new Date(timeRange.from).getTime();
+      candidateTraces = candidateTraces.filter(t =>
+        new Date(t.timestamp).getTime() >= fromTime
+      );
+    }
+    if (timeRange?.to) {
+      const toTime = new Date(timeRange.to).getTime();
+      candidateTraces = candidateTraces.filter(t =>
+        new Date(t.timestamp).getTime() <= toTime
+      );
+    }
+
+    // Apply memory type filter
+    if (memoryType !== 'all') {
+      candidateTraces = candidateTraces.filter(t => {
+        switch (memoryType) {
+          case 'traces':
+            return true; // All traces
+          case 'agent_templates':
+            return t.agentType === 'dynamic';
+          case 'workflow_patterns':
+            return t.traceType === 'main';
+          case 'domain_knowledge':
+            return t.taskCategory != null;
+          case 'skills':
+            return t.filesCreated?.some(f => f.includes('/skills/'));
+          default:
+            return true;
+        }
+      });
+    }
+
+    totalSearched = candidateTraces.length;
+
+    // Score and rank matches
+    const queryTerms = query.toLowerCase().split(/\s+/);
+
+    for (const trace of candidateTraces) {
+      const searchText = `${trace.goal} ${trace.taskCategory || ''} ${trace.agentName || ''}`.toLowerCase();
+      const matchCount = queryTerms.filter(term => searchText.includes(term)).length;
+      const relevance = matchCount / Math.max(queryTerms.length, 1);
+
+      if (relevance >= minRelevance) {
+        matches.push({
+          path: trace.projectPath || `memory/traces/${trace.id}`,
+          relevance,
+          type: trace.traceType || 'trace',
+          excerpt: trace.goal.substring(0, 200),
+          metadata: {
+            traceId: trace.id,
+            success: trace.success,
+            timestamp: trace.timestamp,
+            agentName: trace.agentName,
+            toolsUsed: trace.toolsUsed,
+            lifecycleState: trace.lifecycleState
+          }
+        });
+      }
+    }
+
+    // Sort by relevance and limit
+    matches.sort((a, b) => b.relevance - a.relevance);
+    const limitedMatches = matches.slice(0, limit);
+
+    const searchTimeMs = Math.round(performance.now() - startTime);
+
+    return {
+      matches: limitedMatches,
+      querySummary: `Found ${limitedMatches.length} matches for "${query}" (searched ${totalSearched} traces)`,
+      totalSearched,
+      searchTimeMs
+    };
+  }
+
+  /**
+   * Get all traces (for external access)
+   */
+  getAllTraces(): ExecutionTrace[] {
+    return [...this.traces];
+  }
+
+  /**
+   * Get trace by ID
+   */
+  getTrace(traceId: string): ExecutionTrace | undefined {
+    return this.traces.find(t => t.id === traceId);
   }
 }
 

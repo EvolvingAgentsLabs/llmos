@@ -691,28 +691,39 @@ Begin with step 1 and proceed through the plan. Report progress as you go.`;
 
   /**
    * Update system memory with execution results
+   * Enhanced with trace linking from llmunix gap analysis
    */
   private async updateMemory(
     task: string,
     toolCalls: AgenticResult['toolCalls'],
     filesCreated: string[],
-    success: boolean
+    success: boolean,
+    parentTraceId?: string,
+    agentName?: string
   ): Promise<boolean> {
     try {
-      // Add trace to pattern matcher
-      const trace: ExecutionTrace = {
-        id: `trace-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      // Create linked trace using the pattern matcher
+      const baseTrace = {
         goal: task,
         success,
         toolsUsed: [...new Set(toolCalls.map(tc => tc.tool))],
         filesCreated,
         duration: toolCalls.reduce((sum, tc) => sum + tc.duration, 0),
-        timestamp: new Date().toISOString()
+        // Enhanced fields from llmunix
+        traceType: 'main' as const,
+        agentName: agentName || 'SystemAgent',
+        agentType: 'system' as const,
+        taskCategory: this.inferTaskCategory(task)
       };
 
-      this.patternMatcher.addTrace(trace);
+      // Use createLinkedTrace for proper linking
+      const trace = this.patternMatcher.createLinkedTrace(
+        baseTrace,
+        parentTraceId,
+        parentTraceId ? 'hierarchical' : undefined
+      );
 
-      // Also append to memory log
+      // Also append to memory log with enhanced format
       const vfs = getVFS();
       const memoryPath = 'system/memory_log.md';
 
@@ -723,10 +734,27 @@ Begin with step 1 and proceed through the plan. Report progress as you go.`;
         // File may not exist
       }
 
+      // Enhanced memory log entry with trace linking metadata
       const entry = `
+---
+trace_id: ${trace.id}
+timestamp: ${trace.timestamp}
+parent_trace_id: ${parentTraceId || 'null'}
+link_type: ${trace.linkType || 'root'}
+lifecycle_state: ${trace.lifecycleState}
+agent_name: ${trace.agentName}
+task_category: ${trace.taskCategory}
+---
+
 ## [${trace.timestamp}] ${success ? '✓' : '✗'} Workflow
 
+**Trace ID:** \`${trace.id}\`
+
 **Goal:** ${task}
+
+**Agent:** ${trace.agentName} (${trace.agentType})
+
+**Category:** ${trace.taskCategory}
 
 **Tools Used:** ${trace.toolsUsed.join(', ') || 'None'}
 
@@ -736,7 +764,8 @@ Begin with step 1 and proceed through the plan. Report progress as you go.`;
 
 **Status:** ${success ? 'Completed successfully' : 'Failed'}
 
----
+**Depth:** ${trace.depth || 0}
+
 `;
 
       vfs.writeFile(memoryPath, existingMemory + entry);
@@ -746,6 +775,40 @@ Begin with step 1 and proceed through the plan. Report progress as you go.`;
       console.error('Failed to update memory:', error);
       return false;
     }
+  }
+
+  /**
+   * Infer task category from goal text
+   */
+  private inferTaskCategory(goal: string): string {
+    const goalLower = goal.toLowerCase();
+
+    if (/signal|fft|frequency|spectrum|audio|wave/.test(goalLower)) {
+      return 'signal_processing';
+    }
+    if (/data|analyze|statistics|metrics|chart/.test(goalLower)) {
+      return 'data_analysis';
+    }
+    if (/machine learning|ml|train|model|predict/.test(goalLower)) {
+      return 'machine_learning';
+    }
+    if (/quantum|qubit|circuit|qiskit/.test(goalLower)) {
+      return 'quantum_computing';
+    }
+    if (/ui|interface|design|applet|component/.test(goalLower)) {
+      return 'ui_development';
+    }
+    if (/api|backend|server|database/.test(goalLower)) {
+      return 'backend_development';
+    }
+    if (/test|debug|fix|error/.test(goalLower)) {
+      return 'testing_debugging';
+    }
+    if (/document|readme|explain/.test(goalLower)) {
+      return 'documentation';
+    }
+
+    return 'general';
   }
 
   /**
