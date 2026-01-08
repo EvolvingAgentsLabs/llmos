@@ -108,6 +108,8 @@ interface ProjectContextType {
   addProject: (project: Omit<Project, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds' | 'shortTermMemory' | 'longTermMemory'>) => Project;
   updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
+  deleteAllProjects: () => void;
+  clearProjectMessages: (projectId: string) => void;
   addMessage: (projectId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
   updateCronJob: (id: string, updates: Partial<CronJob>) => void;
 
@@ -294,6 +296,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAllProjects = () => {
+    console.log('[ProjectContext] Deleting all projects');
+    setProjects([]);
+    setActiveProjectState(null);
+    // Also clear from localStorage immediately
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(PROJECTS_KEY);
+      localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    }
+  };
+
+  const clearProjectMessages = (projectId: string) => {
+    console.log('[ProjectContext] Clearing messages for project:', projectId);
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, messages: [], traces: 0, timeAgo: 'just now' }
+          : project
+      )
+    );
+  };
+
   const addMessage = (projectId: string, messageData: Omit<Message, 'id' | 'timestamp'>) => {
     console.log('[ProjectContext] addMessage called:', {
       projectId,
@@ -448,6 +472,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     addProject,
     updateProject,
     deleteProject,
+    deleteAllProjects,
+    clearProjectMessages,
     addMessage,
     updateCronJob,
     addArtifactToProject,

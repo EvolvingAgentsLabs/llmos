@@ -85,7 +85,7 @@ export interface ProjectContext {
 }
 
 export interface AgentProgressEvent {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation' | 'initializing' | 'api-call' | 'parsing' | 'waiting';
   agent?: string;
   action?: string;
   tool?: string;
@@ -263,10 +263,25 @@ export class SystemAgentOrchestrator {
     let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
 
     try {
+      // Emit initializing event
+      this.emitProgress({
+        type: 'initializing',
+        agent: 'SystemAgent',
+        action: 'Initializing LLM client',
+        details: 'Configuring AI backend and loading credentials',
+      });
+
       const llmClient = createLLMClient();
       if (!llmClient) {
         throw new Error('LLM client not configured');
       }
+
+      this.emitProgress({
+        type: 'initializing',
+        agent: 'SystemAgent',
+        action: 'Loading system prompt',
+        details: 'Preparing agent instructions and tool definitions',
+      });
 
       // Initialize context manager with system prompt and user goal
       const systemPromptWithTools = this.buildSystemPromptWithTools();
@@ -281,10 +296,10 @@ export class SystemAgentOrchestrator {
         agent: 'SystemAgent',
         action: this.projectContext?.isExistingProject
           ? `Continuing work on "${this.projectContext.projectName}"`
-          : 'Reading system memory and planning approach',
+          : 'Analyzing goal and planning approach',
         details: this.projectContext?.isExistingProject
           ? `Working in ${this.projectContext.projectPath} with ${this.projectContext.existingFiles?.length || 0} existing files`
-          : 'Consulting /system/memory_log.md for similar past tasks',
+          : `Goal: "${userGoal.substring(0, 100)}${userGoal.length > 100 ? '...' : ''}"`,
       });
 
       // Create summarizer function
@@ -325,17 +340,47 @@ export class SystemAgentOrchestrator {
           console.log(`[SystemAgent] Context summarized: ${contextResult.summarizationSteps} steps, ${Math.round(contextResult.tokenEstimate / 1000)}K tokens`);
         }
 
+        // Emit API call event
+        this.emitProgress({
+          type: 'api-call',
+          agent: 'SystemAgent',
+          action: `Making LLM API call (iteration ${iterations})`,
+          details: `Context: ~${Math.round(contextResult.tokenEstimate / 1000)}K tokens`,
+        });
+
         // Call LLM with the managed context
         const llmResponse = await llmClient.chatDirect(contextResult.messages);
+
+        // Emit parsing event
+        this.emitProgress({
+          type: 'parsing',
+          agent: 'SystemAgent',
+          action: 'Parsing LLM response',
+          details: `Response length: ${llmResponse.length} characters`,
+        });
 
         // Parse for tool calls
         const toolCallsInResponse = this.parseToolCalls(llmResponse);
 
         if (toolCallsInResponse.length === 0) {
           // No tool calls, agent is done
+          this.emitProgress({
+            type: 'thinking',
+            agent: 'SystemAgent',
+            action: 'Generating final response',
+            details: 'No more tool calls needed, preparing output',
+          });
           finalResponse = llmResponse;
           break;
         }
+
+        // Emit event about found tool calls
+        this.emitProgress({
+          type: 'thinking',
+          agent: 'SystemAgent',
+          action: `Found ${toolCallsInResponse.length} tool call(s) to execute`,
+          details: toolCallsInResponse.map(t => t.toolName).join(', '),
+        });
 
         // Add LLM response to context manager
         this.contextManager.addLLMResponse(llmResponse, iterations);

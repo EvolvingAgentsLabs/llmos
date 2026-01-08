@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 export interface AgentActivity {
-  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation';
+  type: 'thinking' | 'tool-call' | 'memory-query' | 'execution' | 'completed' | 'context-management' | 'evolution' | 'multi-agent-validation' | 'initializing' | 'api-call' | 'parsing' | 'waiting';
   agent?: string;
   action?: string;
   tool?: string;
@@ -116,6 +116,36 @@ export default function AgentActivityDisplay({
             </svg>
           </div>
         );
+      case 'initializing':
+        return (
+          <div className="w-5 h-5 rounded-full bg-accent-primary/20 flex items-center justify-center">
+            <div className="w-2.5 h-2.5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        );
+      case 'api-call':
+        return (
+          <div className="w-5 h-5 rounded-full bg-cyan-500/20 flex items-center justify-center">
+            <svg className="w-3 h-3 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+        );
+      case 'parsing':
+        return (
+          <div className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center">
+            <svg className="w-3 h-3 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+          </div>
+        );
+      case 'waiting':
+        return (
+          <div className="w-5 h-5 rounded-full bg-gray-500/20 flex items-center justify-center">
+            <svg className="w-3 h-3 text-gray-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        );
       default:
         return (
           <div className="w-5 h-5 rounded-full bg-fg-muted/20 flex items-center justify-center">
@@ -143,10 +173,29 @@ export default function AgentActivityDisplay({
         return 'text-accent-secondary';
       case 'multi-agent-validation':
         return 'text-accent-info';
+      case 'initializing':
+        return 'text-accent-primary';
+      case 'api-call':
+        return 'text-cyan-400';
+      case 'parsing':
+        return 'text-violet-400';
+      case 'waiting':
+        return 'text-gray-400';
       default:
         return 'text-fg-tertiary';
     }
   };
+
+  // Calculate elapsed time and activity stats
+  const activityStats = useMemo(() => {
+    if (displayedActivities.length === 0) return null;
+    const firstTime = displayedActivities[0]?.timestamp || Date.now();
+    const lastTime = displayedActivities[displayedActivities.length - 1]?.timestamp || Date.now();
+    const elapsed = Math.max(0, (Date.now() - firstTime) / 1000);
+    const toolCalls = displayedActivities.filter(a => a.type === 'tool-call').length;
+    const executions = displayedActivities.filter(a => a.type === 'execution').length;
+    return { elapsed, toolCalls, executions, total: displayedActivities.length };
+  }, [displayedActivities]);
 
   // Get current planning step for prominent display
   const currentThinkingActivity = displayedActivities
@@ -201,6 +250,25 @@ export default function AgentActivityDisplay({
             {isActive ? 'SystemAgent Active' : 'SystemAgent Complete'}
           </span>
         </div>
+
+        {/* Activity stats */}
+        {activityStats && (
+          <div className="flex items-center gap-3 text-[10px] text-fg-tertiary">
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-info/50" />
+              {activityStats.toolCalls} tools
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-warning/50" />
+              {activityStats.executions} exec
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-fg-muted/50" />
+              {activityStats.total} total
+            </span>
+          </div>
+        )}
+
         {isActive && (
           <div className="ml-auto flex items-center gap-2">
             <div className="flex gap-1">

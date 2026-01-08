@@ -4,7 +4,7 @@ import { useState, useRef, lazy, Suspense, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
-import { ChevronDown, ChevronRight, FolderTree, Bot } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderTree, Bot, Trash2, MessageSquareX } from 'lucide-react';
 import { getVFS } from '@/lib/virtual-fs';
 
 // Lazy load ChatPanel
@@ -33,13 +33,32 @@ export default function SidebarPanel({
   pendingPrompt,
   onPromptProcessed,
 }: SidebarPanelProps) {
-  const { projects, setActiveProject, addProject } = useProjectContext();
+  const { projects, setActiveProject, addProject, deleteAllProjects, clearProjectMessages } = useProjectContext();
   const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
 
   // Accordion state - which section is expanded (default to chat)
   const [expandedSection, setExpandedSection] = useState<AccordionSection>('chat');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Handle delete all projects
+  const handleDeleteAllProjects = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteAll = () => {
+    deleteAllProjects();
+    onSessionChange(null);
+    setShowDeleteConfirm(false);
+  };
+
+  // Handle clear current chat
+  const handleClearCurrentChat = () => {
+    if (activeSession) {
+      clearProjectMessages(activeSession);
+    }
+  };
 
   // Handle accordion section toggle
   const handleSectionToggle = (section: AccordionSection) => {
@@ -204,15 +223,15 @@ export default function SidebarPanel({
         expandedSection === 'chat' ? 'flex-1' : 'flex-shrink-0'
       }`}>
         {/* Chat Header */}
-        <button
-          onClick={() => handleSectionToggle('chat')}
-          className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
-            expandedSection === 'chat'
-              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
-              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
-          } border-b border-border-primary/50`}
-        >
-          <div className="flex items-center gap-2">
+        <div className={`flex items-center justify-between transition-colors ${
+          expandedSection === 'chat'
+            ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
+            : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
+        } border-b border-border-primary/50`}>
+          <button
+            onClick={() => handleSectionToggle('chat')}
+            className="flex-1 px-3 py-2.5 flex items-center gap-2"
+          >
             {expandedSection === 'chat' ? (
               <ChevronDown className="w-4 h-4 text-accent-primary" />
             ) : (
@@ -229,14 +248,38 @@ export default function SidebarPanel({
                 {projects.find(p => p.id === activeSession)?.messages?.length || 0} msg
               </span>
             )}
-          </div>
-          {expandedSection !== 'chat' && activeSession && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Active
-            </span>
+            {expandedSection !== 'chat' && activeSession && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                Active
+              </span>
+            )}
+          </button>
+
+          {/* Action buttons - visible when chat expanded */}
+          {expandedSection === 'chat' && (
+            <div className="flex items-center gap-1 pr-2">
+              {activeSession && (
+                <button
+                  onClick={handleClearCurrentChat}
+                  className="p-1.5 rounded hover:bg-accent-warning/20 text-fg-tertiary hover:text-accent-warning transition-colors"
+                  title="Clear current chat"
+                >
+                  <MessageSquareX className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {projects.length > 0 && (
+                <button
+                  onClick={handleDeleteAllProjects}
+                  className="p-1.5 rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-colors"
+                  title="Delete all projects"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           )}
-        </button>
+        </div>
 
         {/* Chat Content */}
         {expandedSection === 'chat' && (
@@ -260,6 +303,40 @@ export default function SidebarPanel({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-bg-secondary border border-border-primary rounded-lg shadow-xl p-4 max-w-sm mx-4 animate-fade-in">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-fg-primary">Delete All Projects?</h3>
+                <p className="text-xs text-fg-tertiary">This will remove {projects.length} project(s)</p>
+              </div>
+            </div>
+            <p className="text-xs text-fg-secondary mb-4">
+              This action cannot be undone. All projects and their chat history will be permanently deleted.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3 py-1.5 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAll}
+                className="px-3 py-1.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
