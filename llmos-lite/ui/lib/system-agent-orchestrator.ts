@@ -67,20 +67,33 @@ export interface SystemAgentResult {
 }
 
 /**
- * Project context for continuing work on an existing project
+ * Workspace context - the entire volume is the workspace
+ * AI decides what context is relevant from the workspace
+ */
+export interface WorkspaceContext {
+  /** The volume type (user/team/system) */
+  volume: 'user' | 'team' | 'system';
+  /** The VFS path to the workspace root */
+  workspacePath: string;
+  /** Top-level sections/directories in the workspace */
+  sections?: string[];
+  /** List of existing files in the workspace (limited to prevent context overflow) */
+  existingFiles?: string[];
+  /** Content of workspace memory if it exists */
+  memoryFile?: string;
+  /** Content of system memory log */
+  systemMemory?: string;
+}
+
+/**
+ * @deprecated Use WorkspaceContext instead
  */
 export interface ProjectContext {
-  /** The VFS path to the project (e.g., "projects/pacman_game") */
   projectPath: string;
-  /** The display name of the project (e.g., "Pacman Game") */
   projectName: string;
-  /** Content of context.md if it exists */
   contextFile?: string;
-  /** Content of memory.md if it exists */
   memoryFile?: string;
-  /** List of existing files in the project */
   existingFiles?: string[];
-  /** Whether this is an existing project or a new one */
   isExistingProject: boolean;
 }
 
@@ -186,6 +199,8 @@ export class SystemAgentOrchestrator {
   private progressCallback?: ProgressCallback;
   private contextManager: WorkflowContextManager;
   private config: OrchestratorConfig;
+  private workspaceContext?: WorkspaceContext;
+  /** @deprecated Use workspaceContext instead */
   private projectContext?: ProjectContext;
 
   constructor(
@@ -206,17 +221,35 @@ export class SystemAgentOrchestrator {
   }
 
   /**
-   * Set project context for continuing work on an existing project
+   * Set workspace context - the entire volume is the workspace
+   */
+  setWorkspaceContext(context: WorkspaceContext): void {
+    this.workspaceContext = context;
+    console.log('[SystemAgent] Workspace context set:', {
+      volume: context.volume,
+      workspacePath: context.workspacePath,
+      sections: context.sections?.length || 0,
+      fileCount: context.existingFiles?.length || 0,
+      hasMemory: !!context.memoryFile,
+      hasSystemMemory: !!context.systemMemory,
+    });
+  }
+
+  /**
+   * @deprecated Use setWorkspaceContext instead
    */
   setProjectContext(context: ProjectContext): void {
     this.projectContext = context;
-    console.log('[SystemAgent] Project context set:', {
+    // Convert to workspace context for compatibility
+    this.workspaceContext = {
+      volume: 'user',
+      workspacePath: context.projectPath,
+      existingFiles: context.existingFiles,
+      memoryFile: context.memoryFile,
+    };
+    console.log('[SystemAgent] Project context set (deprecated):', {
       projectPath: context.projectPath,
       projectName: context.projectName,
-      isExisting: context.isExistingProject,
-      hasContext: !!context.contextFile,
-      hasMemory: !!context.memoryFile,
-      fileCount: context.existingFiles?.length || 0,
     });
   }
 
@@ -256,9 +289,9 @@ export class SystemAgentOrchestrator {
     const startTime = performance.now();
     const toolCalls: ToolCallResult[] = [];
     const filesCreated: string[] = [];
-    // Use project context path if available, otherwise detect from file writes
-    let projectPath: string | undefined = this.projectContext?.isExistingProject
-      ? this.projectContext.projectPath
+    // Files are written to the workspace (volume root) or detected from file writes
+    let projectPath: string | undefined = this.workspaceContext?.workspacePath !== '.'
+      ? this.workspaceContext?.workspacePath
       : undefined;
     let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
 
@@ -294,11 +327,11 @@ export class SystemAgentOrchestrator {
       this.emitProgress({
         type: 'thinking',
         agent: 'SystemAgent',
-        action: this.projectContext?.isExistingProject
-          ? `Continuing work on "${this.projectContext.projectName}"`
+        action: this.workspaceContext
+          ? `Working in ${this.workspaceContext.volume} workspace`
           : 'Analyzing goal and planning approach',
-        details: this.projectContext?.isExistingProject
-          ? `Working in ${this.projectContext.projectPath} with ${this.projectContext.existingFiles?.length || 0} existing files`
+        details: this.workspaceContext
+          ? `Workspace has ${this.workspaceContext.existingFiles?.length || 0} files in context`
           : `Goal: "${userGoal.substring(0, 100)}${userGoal.length > 100 ? '...' : ''}"`,
       });
 
@@ -865,50 +898,43 @@ ${trace.toolsUsed.map(t => `1. Using ${t}`).join('\n')}
   }
 
   /**
-   * Build project context preamble for existing projects
+   * Build workspace context preamble
+   * The entire volume is the workspace - AI decides what's relevant
    */
-  private buildProjectContextPreamble(): string {
-    if (!this.projectContext || !this.projectContext.isExistingProject) {
+  private buildWorkspaceContextPreamble(): string {
+    if (!this.workspaceContext) {
       return '';
     }
 
-    const ctx = this.projectContext;
+    const ctx = this.workspaceContext;
     let preamble = `
-## 🎯 ACTIVE PROJECT CONTEXT - CONTINUE WORKING HERE
+## 🎯 WORKSPACE CONTEXT
 
-**IMPORTANT: You are continuing work on an EXISTING project. DO NOT create a new project structure.**
+**You are working in the ${ctx.volume.toUpperCase()} workspace.**
+**The AI decides what context is relevant from the entire workspace.**
 
-### Current Project
-- **Name**: ${ctx.projectName}
-- **Path**: \`${ctx.projectPath}\`
-- **Status**: Existing project with ${ctx.existingFiles?.length || 0} files
+### Workspace Overview
+- **Volume**: ${ctx.volume}
+- **Path**: \`${ctx.workspacePath}\`
+- **Files in Context**: ${ctx.existingFiles?.length || 0}
+${ctx.sections?.length ? `- **Sections**: ${ctx.sections.join(', ')}` : ''}
 
-### Existing Files
+### Workspace Files
 \`\`\`
-${ctx.existingFiles?.slice(0, 30).join('\n') || 'No files listed'}
+${ctx.existingFiles?.slice(0, 30).join('\n') || 'No files in workspace yet'}
 ${(ctx.existingFiles?.length || 0) > 30 ? `\n... and ${ctx.existingFiles!.length - 30} more files` : ''}
 \`\`\`
 
-### Instructions for Continuation
-1. **DO NOT** create a new project directory structure
-2. **DO** work within \`${ctx.projectPath}/\`
-3. **DO** read existing files before modifying them
-4. **DO** evolve existing agents rather than creating duplicates
-5. **DO** update context.md and memory.md with new work
+### Working Guidelines
+1. **Write files** to the workspace root or appropriate subdirectories
+2. **Read existing files** before modifying them
+3. **Organize** code in logical directories (output/, components/, applets/)
+4. **Update** workspace memory with learnings
 
 `;
-
-    if (ctx.contextFile) {
-      preamble += `### Project Context (context.md)
-\`\`\`markdown
-${ctx.contextFile.substring(0, 2000)}${ctx.contextFile.length > 2000 ? '\n... [truncated]' : ''}
-\`\`\`
-
-`;
-    }
 
     if (ctx.memoryFile) {
-      preamble += `### Project Memory (memory.md)
+      preamble += `### Workspace Memory
 \`\`\`markdown
 ${ctx.memoryFile.substring(0, 2000)}${ctx.memoryFile.length > 2000 ? '\n... [truncated]' : ''}
 \`\`\`
@@ -916,19 +942,27 @@ ${ctx.memoryFile.substring(0, 2000)}${ctx.memoryFile.length > 2000 ? '\n... [tru
 `;
     }
 
-    preamble += `### Continuation Mode Active
-When the user asks to:
-- "Add a feature" → Add to THIS project
-- "Refactor" → Modify existing code in THIS project
-- "Fix a bug" → Fix within THIS project
-- "Improve" → Enhance THIS project
-- "Create something new" → Ask if it should be in THIS project or a new one
+    if (ctx.systemMemory) {
+      preamble += `### System Memory (Recent Learnings)
+\`\`\`markdown
+${ctx.systemMemory}
+\`\`\`
 
----
+`;
+    }
+
+    preamble += `---
 
 `;
 
     return preamble;
+  }
+
+  /**
+   * @deprecated Use buildWorkspaceContextPreamble instead
+   */
+  private buildProjectContextPreamble(): string {
+    return this.buildWorkspaceContextPreamble();
   }
 
   /**
@@ -937,10 +971,10 @@ When the user asks to:
   private buildSystemPromptWithTools(): string {
     let prompt = this.systemPrompt;
 
-    // Add project context preamble if working on existing project
-    const projectPreamble = this.buildProjectContextPreamble();
-    if (projectPreamble) {
-      prompt = projectPreamble + prompt;
+    // Add workspace context preamble
+    const workspacePreamble = this.buildWorkspaceContextPreamble();
+    if (workspacePreamble) {
+      prompt = workspacePreamble + prompt;
     }
 
     // Add tool descriptions

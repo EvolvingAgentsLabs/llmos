@@ -108,7 +108,7 @@ function KeyboardHint() {
 // ============================================================================
 
 export default function AdaptiveLayout() {
-  const { activeProject, setActiveProject } = useProjectContext();
+  const { activeVolume: workspaceVolume } = useProjectContext();
   const { state, toggleSidebar, toggleContext, resizePanel, setFocusedPanel, updatePreferences } = useWorkspace();
   const { createApplet } = useApplets();
   const layout = useWorkspaceLayout();
@@ -300,8 +300,6 @@ export default function AdaptiveLayout() {
             <SidebarPanel
               activeVolume={activeVolume}
               onVolumeChange={setActiveVolume}
-              activeSession={activeProject}
-              onSessionChange={setActiveProject}
             />
           </div>
         </ResizablePanel>
@@ -314,9 +312,7 @@ export default function AdaptiveLayout() {
         >
           <FocusIndicator panel="chat" />
           <ChatPanel
-            activeSession={activeProject}
             activeVolume={activeVolume}
-            onSessionCreated={(sessionId) => setActiveProject(sessionId)}
             pendingPrompt={pendingPrompt}
             onPromptProcessed={() => setPendingPrompt(null)}
           />
@@ -339,7 +335,6 @@ export default function AdaptiveLayout() {
           >
             <FocusIndicator panel="context" />
             <ViewManager
-              activeSession={activeProject}
               activeVolume={activeVolume}
             />
           </div>
@@ -353,11 +348,6 @@ export default function AdaptiveLayout() {
           <SidebarPanel
             activeVolume={activeVolume}
             onVolumeChange={setActiveVolume}
-            activeSession={activeProject}
-            onSessionChange={(sessionId) => {
-              setActiveProject(sessionId);
-              setMobileTab('chat');
-            }}
           />
         </div>
 
@@ -365,15 +355,12 @@ export default function AdaptiveLayout() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {mobileTab === 'chat' ? (
             <ChatPanel
-              activeSession={activeProject}
               activeVolume={activeVolume}
-              onSessionCreated={(sessionId) => setActiveProject(sessionId)}
               pendingPrompt={pendingPrompt}
               onPromptProcessed={() => setPendingPrompt(null)}
             />
           ) : (
             <ViewManager
-              activeSession={activeProject}
               activeVolume={activeVolume}
             />
           )}
@@ -411,25 +398,17 @@ export default function AdaptiveLayout() {
             <SidebarPanel
               activeVolume={activeVolume}
               onVolumeChange={setActiveVolume}
-              activeSession={activeProject}
-              onSessionChange={(sessionId) => {
-                setActiveProject(sessionId);
-                setMobileTab('chat');
-              }}
             />
           )}
           {mobileTab === 'chat' && (
             <ChatPanel
-              activeSession={activeProject}
               activeVolume={activeVolume}
-              onSessionCreated={(sessionId) => setActiveProject(sessionId)}
               pendingPrompt={pendingPrompt}
               onPromptProcessed={() => setPendingPrompt(null)}
             />
           )}
           {mobileTab === 'context' && (
             <ViewManager
-              activeSession={activeProject}
               activeVolume={activeVolume}
             />
           )}

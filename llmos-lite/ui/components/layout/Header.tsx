@@ -5,7 +5,7 @@ import { UserStorage } from '@/lib/user-storage';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import dynamic from 'next/dynamic';
-import { Sparkles, Zap, LayoutGrid, FolderKanban, Users, User } from 'lucide-react';
+import { Sparkles, Zap, LayoutGrid, HardDrive, Users, User } from 'lucide-react';
 import AgentCortexHeader from '@/components/workspace/AgentCortexHeader';
 
 const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
@@ -22,10 +22,7 @@ export default function Header() {
   const [showEvolution, setShowEvolution] = useState(false);
   const { setContextViewMode, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
-  const { activeProject, projects } = useProjectContext();
-
-  // Get the current active project details
-  const currentProject = projects.find(p => p.id === activeProject);
+  const { activeVolume, currentWorkspace } = useProjectContext();
 
   useEffect(() => {
     setUserDisplay(UserStorage.getUserDisplay());
@@ -34,7 +31,6 @@ export default function Header() {
   // Handle Start/Desktop button click - opens applet grid
   const handleStartClick = () => {
     setContextViewMode('applets');
-    // Also open the context panel if it's collapsed
     if (layout.isContextCollapsed) {
       updatePreferences({
         collapsedPanels: { ...state.preferences.collapsedPanels, context: false }
@@ -81,49 +77,40 @@ export default function Header() {
             <AgentCortexHeader />
           </div>
 
-          {/* Active Project Indicator - Enhanced and Prominent */}
-          {currentProject && (
-            <div className="hidden md:flex items-center gap-3 ml-4 pl-4 border-l border-border-primary/50">
-              <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600/15 via-violet-500/15 to-purple-600/15 border border-purple-500/40 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/20 hover:border-purple-400/50 transition-all duration-200 cursor-default">
-                {/* Project icon with glow */}
-                <div className="relative">
-                  <div className="absolute inset-0 bg-purple-500/30 rounded-lg blur-md" />
-                  <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-md">
-                    <FolderKanban className="w-4 h-4 text-white" />
-                  </div>
+          {/* Active Workspace Indicator */}
+          <div className="hidden md:flex items-center gap-3 ml-4 pl-4 border-l border-border-primary/50">
+            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600/15 via-cyan-500/15 to-blue-600/15 border border-blue-500/40 shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 hover:border-blue-400/50 transition-all duration-200 cursor-default">
+              {/* Workspace icon with glow */}
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/30 rounded-lg blur-md" />
+                <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md">
+                  <HardDrive className="w-4 h-4 text-white" />
                 </div>
+              </div>
 
-                {/* Project info */}
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    {/* Project name */}
-                    <span className="text-sm font-semibold text-white max-w-[200px] truncate">
-                      {currentProject.name}
-                    </span>
-                    {/* Status badge */}
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                      currentProject.status === 'saved'
-                        ? 'bg-green-500/25 text-green-400 border border-green-500/30'
-                        : 'bg-amber-500/25 text-amber-400 border border-amber-500/30'
-                    }`}>
-                      {currentProject.status === 'saved' ? 'Saved' : 'Temporal'}
-                    </span>
-                  </div>
-                  {/* Volume breadcrumb */}
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {currentProject.volume === 'team' ? (
-                      <Users className="w-3 h-3 text-blue-400" />
-                    ) : (
-                      <User className="w-3 h-3 text-purple-400" />
-                    )}
-                    <span className="text-[11px] text-fg-tertiary">
-                      {currentProject.volume === 'team' ? 'Team' : 'User'} / projects / {currentProject.name}
-                    </span>
-                  </div>
+              {/* Workspace info */}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white capitalize">
+                    {activeVolume} Workspace
+                  </span>
+                </div>
+                {/* Volume indicator */}
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {activeVolume === 'team' ? (
+                    <Users className="w-3 h-3 text-blue-400" />
+                  ) : activeVolume === 'system' ? (
+                    <HardDrive className="w-3 h-3 text-gray-400" />
+                  ) : (
+                    <User className="w-3 h-3 text-cyan-400" />
+                  )}
+                  <span className="text-[11px] text-fg-tertiary">
+                    {currentWorkspace?.messages?.length || 0} messages
+                  </span>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Right side: User info and status */}

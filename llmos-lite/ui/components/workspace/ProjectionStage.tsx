@@ -206,12 +206,10 @@ function ProjectionCard({
 // ============================================================================
 
 interface ProjectionStageProps {
-  activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
 }
 
 export default function ProjectionStage({
-  activeSession,
   activeVolume,
 }: ProjectionStageProps) {
   const { state } = useWorkspace();
@@ -278,7 +276,6 @@ export default function ProjectionStage({
         return (
           <Suspense fallback={<ProjectionLoader />}>
             <ArtifactPanel
-              activeSession={activeSession}
               activeVolume={activeVolume}
             />
           </Suspense>
@@ -326,7 +323,6 @@ export default function ProjectionStage({
           projection.type === 'applet' ? (
             <Suspense fallback={<ProjectionLoader />}>
               <ArtifactPanel
-                activeSession={activeSession}
                 activeVolume={activeVolume}
               />
             </Suspense>

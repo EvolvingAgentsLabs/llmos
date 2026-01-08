@@ -2,12 +2,8 @@
 // HOOKS INDEX
 // ============================================================================
 
-// Orchestrator - coordinates all contexts for adaptive UI
-export { useOrchestrator, type AgentOutput, type OrchestratorState } from './useOrchestrator';
-export type { AgentState, TaskType, ContextViewMode } from './useOrchestrator';
-
-// Chat - business logic for chat functionality
-export { useChat } from './useChat';
+// Re-export common types from WorkspaceContext
+export type { AgentState, TaskType, ContextViewMode } from '@/contexts/WorkspaceContext';
 
 // Code Execution - manages code execution state
 export { useCodeExecution } from './useCodeExecution';

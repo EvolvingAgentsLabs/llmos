@@ -1,34 +1,35 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProjectContext, type VolumeType } from '@/contexts/ProjectContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { UserStorage } from '@/lib/user-storage';
 import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
-import { hasExistingProjectFiles, getProjectSummary } from '@/lib/project-context-resolver';
+import { getWorkspaceSummary } from '@/lib/project-context-resolver';
 import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import ModelSelector from './ModelSelector';
 import CanvasModal from './CanvasModal';
-import type { Message } from '@/contexts/ProjectContext';
 
 interface ChatPanelProps {
-  activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
-  onSessionCreated: (sessionId: string) => void;
+  onVolumeChange?: (volume: VolumeType) => void;
   pendingPrompt?: string | null;
   onPromptProcessed?: () => void;
 }
 
 export default function ChatPanel({
-  activeSession,
   activeVolume,
-  onSessionCreated,
+  onVolumeChange,
   pendingPrompt,
   onPromptProcessed,
 }: ChatPanelProps) {
-  const { projects, addProject, addMessage } = useProjectContext();
+  const {
+    currentWorkspace,
+    addMessage,
+    setActiveVolume,
+  } = useProjectContext();
 
   // Wire to Workspace Context for adaptive UI
   const workspaceContext = useWorkspace();
@@ -47,39 +48,28 @@ export default function ChatPanel({
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const currentProject = projects.find((p) => p.id === activeSession);
-  const messages = currentProject?.messages || [];
+  // Get messages from current workspace (volume)
+  const messages = currentWorkspace?.messages || [];
 
-  // Check if this project has existing VFS files (for continuation mode indicator)
-  const projectStatus = useMemo((): {
-    isExisting: boolean;
-    hasAgents?: boolean;
-    hasApplets?: boolean;
-    hasCode?: boolean;
-    agentCount?: number;
-    appletCount?: number;
-    codeFileCount?: number;
-  } | null => {
-    if (!currentProject?.name) return null;
+  // Get workspace summary for display
+  const workspaceSummary = useMemo(() => {
     try {
-      const hasFiles = hasExistingProjectFiles(currentProject.name, activeVolume);
-      if (hasFiles) {
-        const summary = getProjectSummary(`projects/${currentProject.name.toLowerCase().replace(/\s+/g, '_')}`);
-        return {
-          isExisting: true,
-          ...summary
-        };
-      }
+      return getWorkspaceSummary(activeVolume);
     } catch (e) {
-      // Ignore errors - just means we can't determine status
+      return null;
     }
-    return { isExisting: false };
-  }, [currentProject?.name, activeVolume]);
+  }, [activeVolume]);
+
+  // Sync active volume when prop changes
+  useEffect(() => {
+    if (activeVolume) {
+      setActiveVolume(activeVolume);
+    }
+  }, [activeVolume, setActiveVolume]);
 
   // Debug logging
   useEffect(() => {
     console.log('[ChatPanel] Render - Message count:', messages.length);
-    console.log('[ChatPanel] Render - Messages:', messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content.length })));
   }, [messages]);
 
   const scrollToBottom = () => {
@@ -115,25 +105,10 @@ export default function ChatPanel({
     setAgentState?.('thinking');
     setTaskType?.('chatting');
 
-    // Auto-create session if none exists
-    let sessionId = activeSession;
-
     try {
-      if (!sessionId) {
-        setLoadingStatus('Creating new project...');
-        const newProject = addProject({
-          name: `Project ${new Date().toLocaleTimeString()}`,
-          type: 'user',
-          status: 'temporal',
-          volume: activeVolume,
-        });
-        sessionId = newProject.id;
-        onSessionCreated(sessionId);
-      }
-
-      // Add user message
+      // Add user message to workspace
       setLoadingStatus('Sending message...');
-      addMessage(sessionId, {
+      addMessage({
         role: 'user',
         content: messageText,
       });
@@ -144,7 +119,7 @@ export default function ChatPanel({
 
       if (!user || !team) {
         console.error('User or team not configured');
-        addMessage(sessionId, {
+        addMessage({
           role: 'assistant',
           content: 'Error: User profile not configured. Please complete setup.',
         });
@@ -158,13 +133,9 @@ export default function ChatPanel({
       if (!client) {
         console.error('[ChatPanel] LLM client not configured');
 
-        // Provide specific error message
         const { LLMStorage } = await import('@/lib/llm-client');
         const apiKey = LLMStorage.getApiKey();
         const model = LLMStorage.getModel();
-
-        console.error('[ChatPanel] Storage check - API Key:', apiKey ? 'present' : 'missing');
-        console.error('[ChatPanel] Storage check - Model:', model);
 
         let errorMsg = 'Error: LLM client not configured. ';
         if (!apiKey) {
@@ -173,12 +144,9 @@ export default function ChatPanel({
         if (!model) {
           errorMsg += 'Missing model selection. ';
         }
-        if (apiKey && model) {
-          errorMsg += 'Invalid model configuration. ';
-        }
         errorMsg += 'Please complete the setup process.';
 
-        addMessage(sessionId, {
+        addMessage({
           role: 'assistant',
           content: errorMsg,
         });
@@ -191,8 +159,7 @@ export default function ChatPanel({
       console.log('[ChatPanel] Executing SystemAgent for goal:', messageText);
 
       const { SystemAgentOrchestrator } = await import('@/lib/system-agent-orchestrator');
-      const { resolveProjectContext } = await import('@/lib/project-context-resolver');
-      const { getVFS } = await import('@/lib/virtual-fs');
+      const { resolveWorkspaceContext } = await import('@/lib/project-context-resolver');
 
       // Load SystemAgent definition
       const systemAgentMarkdown = await fetch('/system/agents/SystemAgent.md').then(r => r.text());
@@ -212,22 +179,18 @@ export default function ChatPanel({
         }
       });
 
-      // Resolve project context for continuation if we have an active project
-      if (currentProject && currentProject.name) {
-        setLoadingStatus('Loading project context...');
-        console.log('[ChatPanel] Resolving project context for:', currentProject.name);
+      // Resolve workspace context for the volume
+      setLoadingStatus('Loading workspace context...');
+      console.log('[ChatPanel] Resolving workspace context for volume:', activeVolume);
 
-        try {
-          const projectContext = await resolveProjectContext(currentProject, activeVolume);
-          if (projectContext) {
-            orchestrator.setProjectContext(projectContext);
-            console.log('[ChatPanel] Project context set - continuing work on existing project');
-          } else {
-            console.log('[ChatPanel] No existing VFS project found - will create new if needed');
-          }
-        } catch (e) {
-          console.warn('[ChatPanel] Failed to resolve project context:', e);
+      try {
+        const workspaceCtx = await resolveWorkspaceContext(activeVolume);
+        if (workspaceCtx) {
+          orchestrator.setWorkspaceContext(workspaceCtx);
+          console.log('[ChatPanel] Workspace context set for volume:', activeVolume);
         }
+      } catch (e) {
+        console.warn('[ChatPanel] Failed to resolve workspace context:', e);
       }
 
       // Wire: Agent is now executing
@@ -245,83 +208,57 @@ export default function ChatPanel({
 
       setLoadingStatus('Processing response...');
 
-      // Build response with project info and file paths
+      // Build response with file paths
       let assistantResponse = result.response || '';
 
       // Extract and embed images from Python execution tool calls
-      console.log('[ChatPanel] Checking for Python tool calls...', { toolCallsCount: result.toolCalls?.length || 0 });
       const pythonToolCalls = result.toolCalls.filter(tc => tc.toolId === 'execute-python' && tc.success);
-      console.log('[ChatPanel] Found Python tool calls:', pythonToolCalls.length);
 
       for (const toolCall of pythonToolCalls) {
-        console.log('[ChatPanel] Python tool call output:', {
-          hasImages: !!toolCall.output?.images,
-          imageCount: toolCall.output?.images?.length || 0,
-        });
-
         if (toolCall.output?.images && Array.isArray(toolCall.output.images) && toolCall.output.images.length > 0) {
-          console.log('[ChatPanel] Embedding images in markdown...');
           assistantResponse += '\n\n';
           toolCall.output.images.forEach((base64Image: string, idx: number) => {
-            const imagePreview = base64Image.substring(0, 50);
-            console.log(`[ChatPanel] Adding image ${idx + 1}, base64 preview:`, imagePreview);
             assistantResponse += `![Plot ${idx + 1}](data:image/png;base64,${base64Image})\n\n`;
           });
         }
       }
 
-      if (result.success && result.projectPath) {
-        assistantResponse += `\n\n---\n\n**Project Created:** \`${result.projectPath}\`\n`;
-        assistantResponse += `**Files Created:** ${result.filesCreated.length}\n\n`;
+      if (result.success && result.filesCreated.length > 0) {
+        assistantResponse += `\n\n---\n\n**Files Created:** ${result.filesCreated.length}\n\n`;
 
         // List files created
-        if (result.filesCreated.length > 0) {
-          assistantResponse += '**Files:**\n';
-          result.filesCreated.slice(0, 10).forEach(file => {
-            assistantResponse += `- \`${file}\`\n`;
-          });
-          if (result.filesCreated.length > 10) {
-            assistantResponse += `- ... and ${result.filesCreated.length - 10} more\n`;
-          }
+        assistantResponse += '**Files:**\n';
+        result.filesCreated.slice(0, 10).forEach(file => {
+          assistantResponse += `- \`${file}\`\n`;
+        });
+        if (result.filesCreated.length > 10) {
+          assistantResponse += `- ... and ${result.filesCreated.length - 10} more\n`;
+        }
 
-          // Wire: Auto-switch view based on created file types
-          const firstFile = result.filesCreated[0];
-          if (firstFile) {
-            // If images were created, switch to canvas view
-            if (firstFile.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
-              setContextViewMode?.('canvas');
-              setActiveFile?.(firstFile);
-            }
-            // If code files were created, switch to split view
-            else if (firstFile.match(/\.(py|js|ts|tsx|jsx)$/i)) {
-              setContextViewMode?.('split-view');
-              setActiveFile?.(firstFile);
-            }
-            // If artifacts panel content
-            else {
-              setContextViewMode?.('artifacts');
-            }
+        // Wire: Auto-switch view based on created file types
+        const firstFile = result.filesCreated[0];
+        if (firstFile) {
+          if (firstFile.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
+            setContextViewMode?.('canvas');
+            setActiveFile?.(firstFile);
+          } else if (firstFile.match(/\.(py|js|ts|tsx|jsx)$/i)) {
+            setContextViewMode?.('split-view');
+            setActiveFile?.(firstFile);
+          } else {
+            setContextViewMode?.('artifacts');
           }
         }
 
-        // Show how to view files
-        assistantResponse += `\n💡 Check the **User** volume in the left panel to browse your project files.`;
-
-        // Wire: Agent succeeded
+        assistantResponse += `\n💡 Check the **Files** section in the left panel to browse your workspace.`;
         setAgentState?.('success');
       }
 
       if (!result.success && result.error) {
         assistantResponse = `Error executing SystemAgent: ${result.error}`;
-        // Wire: Agent failed
         setAgentState?.('error');
       }
 
-      console.log('[ChatPanel] Adding assistant message to session:', sessionId);
-      console.log('[ChatPanel] Assistant response content preview:', assistantResponse.substring(0, 500));
-      console.log('[ChatPanel] Assistant response contains image markdown:', assistantResponse.includes('![Plot'));
-
-      addMessage(sessionId, {
+      addMessage({
         role: 'assistant',
         content: assistantResponse,
       });
@@ -329,18 +266,14 @@ export default function ChatPanel({
     } catch (error) {
       console.error('Failed to send message:', error);
       setLoadingStatus('Error occurred');
-      // Wire: Agent failed
       setAgentState?.('error');
-      if (sessionId) {
-        addMessage(sessionId, {
-          role: 'assistant',
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-        });
-      }
+      addMessage({
+        role: 'assistant',
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+      });
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
-      // Wire: Reset agent state after a delay (show success/error briefly)
       setTimeout(() => {
         setAgentState?.('idle');
         setTaskType?.('idle');
@@ -348,8 +281,8 @@ export default function ChatPanel({
     }
   };
 
-  // Welcome state when no project
-  if (!activeSession || !currentProject) {
+  // Welcome state when no messages
+  if (messages.length === 0) {
     const samplePrompts = getCurrentSamplePrompts();
 
     return (
@@ -364,26 +297,30 @@ export default function ChatPanel({
               </p>
             </div>
 
-            {/* Instructions */}
-            <div className="glass-panel p-4 text-left space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-md bg-accent-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-accent-primary text-sm">1</span>
+            {/* Workspace Info */}
+            <div className="glass-panel p-4 text-left">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-md bg-accent-primary/10 flex items-center justify-center">
+                  <span className="text-accent-primary text-sm capitalize">{activeVolume[0]}</span>
                 </div>
-                <div>
-                  <p className="text-sm text-fg-primary font-medium">Start a conversation</p>
-                  <p className="text-xs text-fg-tertiary mt-0.5">Type a message below to begin</p>
-                </div>
+                <span className="text-sm font-medium text-fg-primary capitalize">{activeVolume} Workspace</span>
               </div>
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-md bg-accent-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-accent-primary text-sm">2</span>
+              <p className="text-xs text-fg-tertiary">
+                The AI will work with your entire {activeVolume} volume and decide what context is relevant.
+              </p>
+              {workspaceSummary && (
+                <div className="flex gap-2 mt-2 text-xs text-fg-muted">
+                  {workspaceSummary.agentCount > 0 && (
+                    <span>{workspaceSummary.agentCount} agents</span>
+                  )}
+                  {workspaceSummary.appletCount > 0 && (
+                    <span>{workspaceSummary.appletCount} applets</span>
+                  )}
+                  {workspaceSummary.projectCount > 0 && (
+                    <span>{workspaceSummary.projectCount} project folders</span>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm text-fg-primary font-medium">Try a sample prompt</p>
-                  <p className="text-xs text-fg-tertiary mt-0.5">Click any suggestion below to get started</p>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Sample Prompts */}
@@ -411,7 +348,6 @@ export default function ChatPanel({
 
         {/* Input at bottom */}
         <div className="p-4 border-t border-border-primary/50 bg-bg-secondary/50 backdrop-blur-xl space-y-3">
-          {/* Model Selector */}
           <div className="flex justify-center">
             <ModelSelector
               dropdownPosition="top"
@@ -455,13 +391,13 @@ export default function ChatPanel({
     );
   }
 
-  // Active project view
+  // Active conversation view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Project Header - Streamlined Design */}
+      {/* Workspace Header - Streamlined */}
       <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex items-center gap-3">
-          {/* Model Selector - Primary action, left side */}
+          {/* Model Selector */}
           <ModelSelector onModelChange={(modelId) => {
             console.log('[ChatPanel] Model changed to:', modelId);
           }} />
@@ -469,132 +405,93 @@ export default function ChatPanel({
           {/* Separator */}
           <div className="w-px h-4 bg-border-primary/50" />
 
-          {/* Project name - Prominent center */}
+          {/* Workspace indicator */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm font-medium text-fg-primary truncate">{currentProject.name}</span>
-            {/* Continuation indicator as subtle icon */}
-            {projectStatus?.isExisting && (
-              <span
-                className="flex-shrink-0 w-4 h-4 rounded bg-blue-500/15 flex items-center justify-center"
-                title={`Continuing project with ${projectStatus.agentCount || 0} agents, ${projectStatus.appletCount || 0} applets, ${projectStatus.codeFileCount || 0} code files`}
-              >
-                <svg className="w-2.5 h-2.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </span>
-            )}
+            <span className="text-sm font-medium text-fg-primary capitalize">{activeVolume} Workspace</span>
           </div>
 
-          {/* Right side - compact info */}
+          {/* Right side - message count */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-fg-tertiary">{messages.length} msg</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${currentProject.status === 'temporal' ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${currentProject.status === 'temporal' ? 'bg-accent-warning' : 'bg-accent-success'}`} />
-              {currentProject.status === 'temporal' ? 'Draft' : 'Saved'}
-            </span>
+            <span className="text-[10px] text-fg-tertiary">{messages.length} messages</span>
           </div>
         </div>
       </div>
 
-      {/* Messages - Compact VSCode Style */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin">
-        {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <svg className="w-12 h-12 mx-auto mb-3 text-fg-muted opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              <p className="text-xs text-fg-tertiary">No messages yet</p>
-              <p className="text-[10px] text-fg-muted mt-1">Start the conversation below</p>
-            </div>
-          </div>
-        ) : (
-          messages.map((message, idx) => (
-            <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
-              {/* Message header - Compact */}
-              <div className="flex items-center gap-1.5 mb-1">
-                {message.role === 'user' ? (
-                  <div className="w-5 h-5 rounded bg-accent-secondary/20 flex items-center justify-center">
-                    <span className="text-[10px] text-accent-secondary font-semibold">U</span>
-                  </div>
-                ) : (
-                  <div className="w-5 h-5 rounded bg-accent-primary/20 flex items-center justify-center">
-                    <svg className="w-3 h-3 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                )}
-                <span className="text-[10px] font-semibold text-fg-secondary">
-                  {message.role === 'user' ? 'You' : 'Assistant'}
-                </span>
-                <span className="text-[10px] text-fg-muted">{message.timestamp}</span>
-              </div>
-
-              {/* Message content - Compact */}
-              <div
-                className={`ml-6 p-2 rounded text-xs ${
-                  message.role === 'user'
-                    ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary whitespace-pre-wrap'
-                    : 'bg-bg-tertiary border border-border-primary text-fg-secondary'
-                }`}
-              >
-                {message.role === 'assistant' ? (
-                  <MarkdownRenderer
-                    content={message.content}
-                    enableCodeExecution={true}
-                    onExecutionStart={(status) => {
-                      setIsExecutingCode(true);
-                      setCodeExecutionStatus(status);
-                    }}
-                    onExecutionEnd={() => {
-                      setIsExecutingCode(false);
-                      setCodeExecutionStatus('');
-                    }}
-                    onExecutionStatusChange={(status) => {
-                      setCodeExecutionStatus(status);
-                    }}
-                    onOpenInCanvas={(code, language) => {
-                      setCanvasModal({ code, language, isOpen: true });
-                    }}
-                  />
-                ) : (
-                  message.content
-                )}
-              </div>
-
-              {/* Canvas Modal */}
-              <CanvasModal
-                code={canvasModal.code}
-                language={canvasModal.language}
-                isOpen={canvasModal.isOpen}
-                onClose={() => setCanvasModal({ ...canvasModal, isOpen: false })}
-              />
-
-              {/* Metadata - Compact */}
-              {(message.traces || message.artifact || message.pattern) && (
-                <div className="ml-6 mt-1 flex flex-wrap gap-1">
-                  {message.traces && message.traces.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success">
-                      Trace #{message.traces[0]}-{message.traces[message.traces.length - 1]}
-                    </span>
-                  )}
-                  {message.artifact && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-info/20 text-accent-info">
-                      {message.artifact}
-                    </span>
-                  )}
-                  {message.pattern && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-warning/20 text-accent-warning">
-                      {message.pattern.name} ({(message.pattern.confidence * 100).toFixed(0)}%)
-                    </span>
-                  )}
+        {messages.map((message, idx) => (
+          <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
+            {/* Message header */}
+            <div className="flex items-center gap-1.5 mb-1">
+              {message.role === 'user' ? (
+                <div className="w-5 h-5 rounded bg-accent-secondary/20 flex items-center justify-center">
+                  <span className="text-[10px] text-accent-secondary font-semibold">U</span>
+                </div>
+              ) : (
+                <div className="w-5 h-5 rounded bg-accent-primary/20 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 </div>
               )}
+              <span className="text-[10px] font-semibold text-fg-secondary">
+                {message.role === 'user' ? 'You' : 'Assistant'}
+              </span>
+              <span className="text-[10px] text-fg-muted">{message.timestamp}</span>
             </div>
-          ))
-        )}
 
-        {/* Agent Activity Display - Matrix Style */}
+            {/* Message content */}
+            <div
+              className={`ml-6 p-2 rounded text-xs ${
+                message.role === 'user'
+                  ? 'bg-accent-primary/10 border border-accent-primary/30 text-fg-primary whitespace-pre-wrap'
+                  : 'bg-bg-tertiary border border-border-primary text-fg-secondary'
+              }`}
+            >
+              {message.role === 'assistant' ? (
+                <MarkdownRenderer
+                  content={message.content}
+                  enableCodeExecution={true}
+                  onExecutionStart={(status) => {
+                    setIsExecutingCode(true);
+                    setCodeExecutionStatus(status);
+                  }}
+                  onExecutionEnd={() => {
+                    setIsExecutingCode(false);
+                    setCodeExecutionStatus('');
+                  }}
+                  onExecutionStatusChange={(status) => {
+                    setCodeExecutionStatus(status);
+                  }}
+                  onOpenInCanvas={(code, language) => {
+                    setCanvasModal({ code, language, isOpen: true });
+                  }}
+                />
+              ) : (
+                message.content
+              )}
+            </div>
+
+            {/* Canvas Modal */}
+            <CanvasModal
+              code={canvasModal.code}
+              language={canvasModal.language}
+              isOpen={canvasModal.isOpen}
+              onClose={() => setCanvasModal({ ...canvasModal, isOpen: false })}
+            />
+
+            {/* Metadata */}
+            {message.traces && message.traces.length > 0 && (
+              <div className="ml-6 mt-1 flex flex-wrap gap-1">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success">
+                  Trace #{message.traces[0]}-{message.traces[message.traces.length - 1]}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Agent Activity Display */}
         {(isLoading || agentActivities.length > 0) && (
           <AgentActivityDisplay
             activities={agentActivities}
@@ -602,7 +499,7 @@ export default function ChatPanel({
           />
         )}
 
-        {/* Loading indicator - Compact */}
+        {/* Loading indicator */}
         {isLoading && (
           <div className="animate-fade-in">
             <div className="flex items-center gap-1.5 mb-1">
@@ -624,7 +521,7 @@ export default function ChatPanel({
           </div>
         )}
 
-        {/* Code execution indicator - Compact */}
+        {/* Code execution indicator */}
         {!isLoading && isExecutingCode && (
           <div className="animate-fade-in">
             <div className="flex items-center gap-1.5 mb-1">
@@ -649,7 +546,7 @@ export default function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input - Compact VSCode Style */}
+      {/* Input */}
       <div className="px-3 py-2 border-t border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex gap-2">
           <textarea

@@ -4,8 +4,7 @@ import { useState, useRef, lazy, Suspense, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
 import VSCodeFileTree from '../panels/volumes/VSCodeFileTree';
-import { ChevronDown, ChevronRight, FolderTree, Bot, Trash2, MessageSquareX } from 'lucide-react';
-import { getVFS } from '@/lib/virtual-fs';
+import { ChevronDown, ChevronRight, FolderTree, Bot, Trash2 } from 'lucide-react';
 
 // Lazy load ChatPanel
 const ChatPanel = lazy(() => import('../chat/ChatPanel'));
@@ -16,48 +15,32 @@ type AccordionSection = 'files' | 'chat';
 interface SidebarPanelProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
-  activeSession: string | null;
-  onSessionChange: (sessionId: string | null) => void;
-  // Chat props
-  onSessionCreated?: (sessionId: string) => void;
-  pendingPrompt?: string | null;
-  onPromptProcessed?: () => void;
 }
 
 export default function SidebarPanel({
   activeVolume,
   onVolumeChange,
-  activeSession,
-  onSessionChange,
-  onSessionCreated,
-  pendingPrompt,
-  onPromptProcessed,
 }: SidebarPanelProps) {
-  const { projects, setActiveProject, addProject, deleteAllProjects, clearProjectMessages } = useProjectContext();
+  const { currentWorkspace, clearMessages } = useProjectContext();
   const { setContextViewMode, setActiveFile, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
 
   // Accordion state - which section is expanded (default to chat)
   const [expandedSection, setExpandedSection] = useState<AccordionSection>('chat');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Handle delete all projects
-  const handleDeleteAllProjects = () => {
-    setShowDeleteConfirm(true);
+  // Get message count from current workspace
+  const messageCount = currentWorkspace?.messages?.length || 0;
+
+  // Handle clear chat messages
+  const handleClearChat = () => {
+    setShowClearConfirm(true);
   };
 
-  const confirmDeleteAll = () => {
-    deleteAllProjects();
-    onSessionChange(null);
-    setShowDeleteConfirm(false);
-  };
-
-  // Handle clear current chat
-  const handleClearCurrentChat = () => {
-    if (activeSession) {
-      clearProjectMessages(activeSession);
-    }
+  const confirmClearChat = () => {
+    clearMessages();
+    setShowClearConfirm(false);
   };
 
   // Handle accordion section toggle
@@ -76,11 +59,9 @@ export default function SidebarPanel({
 
   // Helper functions to detect file types
   const isAppletFile = (path: string, name: string): boolean => {
-    // Check if file is in an applets directory or is a .app.tsx file
     const isInAppletsDir = path.includes('/applets/') || path.includes('/applet/');
     const ext = name.split('.').pop()?.toLowerCase() || '';
     const isAppExtension = name.endsWith('.app.tsx') || name.endsWith('.applet.tsx');
-    // TSX/JSX files in applets folders or with .app extension are applets
     return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
   };
 
@@ -95,7 +76,6 @@ export default function SidebarPanel({
   const handleFileSelect = (node: any) => {
     console.log('[SidebarPanel] File selected:', node);
 
-    // Check file extension to determine view mode
     const ext = node.name?.split('.').pop()?.toLowerCase() || '';
     const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html', 'md'];
     const mediaExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'mp4', 'webm', 'ogg', 'mov'];
@@ -107,66 +87,15 @@ export default function SidebarPanel({
       console.log('[SidebarPanel] Applet file detected, opening in applets mode:', node.path);
       setContextViewMode('applets');
     } else if (mediaExtensions.includes(ext)) {
-      // Media files - open in media viewer
       setContextViewMode('media');
     } else if (codeExtensions.includes(ext)) {
-      // Code files - open in split view for editing/running
       setContextViewMode('split-view');
     } else {
-      // Other files - open in split view as fallback (can show raw content)
       setContextViewMode('split-view');
     }
 
-    // Always open the context panel to show the file
     ensureContextPanelOpen();
   };
-
-  // Handle project selection from tree
-  const handleProjectSelect = useCallback((projectName: string, volume: 'team' | 'user') => {
-    console.log('[SidebarPanel] Project selected:', projectName, 'in volume:', volume);
-
-    // Find or create the project in context
-    let project = projects.find(
-      p => p.name === projectName && p.volume === volume
-    );
-
-    if (!project) {
-      // Create a new project entry for this folder
-      console.log('[SidebarPanel] Creating project context for:', projectName);
-      project = addProject({
-        name: projectName,
-        type: volume === 'team' ? 'team' : 'user',
-        status: 'temporal',
-        volume,
-      });
-    }
-
-    // Set as active project
-    setActiveProject(project.id);
-    onSessionChange(project.id);
-
-    // NOTE: We no longer auto-switch to chat section
-    // This allows users to continue exploring the project folder contents
-
-    // Log memory file status for the project
-    try {
-      const vfs = getVFS();
-      const memoryPath = `projects/${projectName}/memory.md`;
-      const contextPath = `projects/${projectName}/context.md`;
-
-      const hasMemory = vfs.exists(memoryPath);
-      const hasContext = vfs.exists(contextPath);
-
-      console.log('[SidebarPanel] Project memory files:', {
-        memoryPath,
-        hasMemory,
-        contextPath,
-        hasContext,
-      });
-    } catch (error) {
-      console.log('[SidebarPanel] Could not check memory files:', error);
-    }
-  }, [projects, addProject, setActiveProject, onSessionChange]);
 
   return (
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden bg-bg-secondary">
@@ -211,7 +140,6 @@ export default function SidebarPanel({
               onVolumeChange={onVolumeChange}
               onFileSelect={handleFileSelect}
               onCodeFileSelect={handleCodeFileSelect}
-              onProjectSelect={handleProjectSelect}
               selectedFile={null}
             />
           </div>
@@ -243,12 +171,12 @@ export default function SidebarPanel({
             }`}>
               Chat
             </span>
-            {activeSession && (
+            {messageCount > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
-                {projects.find(p => p.id === activeSession)?.messages?.length || 0} msg
+                {messageCount} msg
               </span>
             )}
-            {expandedSection !== 'chat' && activeSession && (
+            {expandedSection !== 'chat' && messageCount > 0 && (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                 Active
@@ -257,26 +185,15 @@ export default function SidebarPanel({
           </button>
 
           {/* Action buttons - visible when chat expanded */}
-          {expandedSection === 'chat' && (
+          {expandedSection === 'chat' && messageCount > 0 && (
             <div className="flex items-center gap-1 pr-2">
-              {activeSession && (
-                <button
-                  onClick={handleClearCurrentChat}
-                  className="p-1.5 rounded hover:bg-accent-warning/20 text-fg-tertiary hover:text-accent-warning transition-colors"
-                  title="Clear current chat"
-                >
-                  <MessageSquareX className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {projects.length > 0 && (
-                <button
-                  onClick={handleDeleteAllProjects}
-                  className="p-1.5 rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-colors"
-                  title="Delete all projects"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <button
+                onClick={handleClearChat}
+                className="p-1.5 rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-colors"
+                title="Clear chat history"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>
@@ -293,19 +210,15 @@ export default function SidebarPanel({
               </div>
             }>
               <ChatPanel
-                activeSession={activeSession}
                 activeVolume={activeVolume}
-                onSessionCreated={onSessionCreated || onSessionChange}
-                pendingPrompt={pendingPrompt}
-                onPromptProcessed={onPromptProcessed}
               />
             </Suspense>
           </div>
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
+      {/* Clear Chat Confirmation Dialog */}
+      {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-bg-secondary border border-border-primary rounded-lg shadow-xl p-4 max-w-sm mx-4 animate-fade-in">
             <div className="flex items-center gap-3 mb-3">
@@ -313,25 +226,25 @@ export default function SidebarPanel({
                 <Trash2 className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-fg-primary">Delete All Projects?</h3>
-                <p className="text-xs text-fg-tertiary">This will remove {projects.length} project(s)</p>
+                <h3 className="text-sm font-semibold text-fg-primary">Clear Chat History?</h3>
+                <p className="text-xs text-fg-tertiary">This will remove {messageCount} message(s)</p>
               </div>
             </div>
             <p className="text-xs text-fg-secondary mb-4">
-              This action cannot be undone. All projects and their chat history will be permanently deleted.
+              This action cannot be undone. All chat history for the {activeVolume} workspace will be cleared.
             </p>
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => setShowClearConfirm(false)}
                 className="px-3 py-1.5 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmDeleteAll}
+                onClick={confirmClearChat}
                 className="px-3 py-1.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
-                Delete All
+                Clear Chat
               </button>
             </div>
           </div>

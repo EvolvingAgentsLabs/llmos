@@ -3,6 +3,18 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ArtifactReference } from '@/lib/artifacts/types';
 
+/**
+ * Simplified Workspace Context
+ *
+ * The workspace is the entire volume (user/team). There's no concept of "projects" -
+ * the AI decides what context is relevant from the entire workspace.
+ *
+ * Each volume has:
+ * - Messages (chat history)
+ * - Artifacts created during sessions
+ * - Short-term and long-term memory
+ */
+
 // Types
 export interface Message {
   id: string;
@@ -10,23 +22,13 @@ export interface Message {
   content: string;
   timestamp: string;
   traces?: number[];
-
-  // Artifact integration
-  references?: ArtifactReference[]; // Artifacts referenced in this message (@artifact)
-  generatedArtifacts?: string[]; // IDs of artifacts created by this message
-
-  // Legacy (kept for backward compatibility)
-  artifact?: string;
-  pattern?: {
-    name: string;
-    confidence: number;
-  };
+  references?: ArtifactReference[];
+  generatedArtifacts?: string[];
 }
 
-export type ProjectType = 'user' | 'team';
-export type ProjectStatus = 'temporal' | 'saved';
+export type VolumeType = 'user' | 'team' | 'system';
 
-// Memory types for projects
+// Memory types
 export interface ShortTermMemory {
   id: string;
   content: string;
@@ -40,47 +42,18 @@ export interface LongTermMemory {
   summary: string;
   createdAt: string;
   updatedAt: string;
-  importance: number; // 0-1 scale
+  importance: number;
   tags?: string[];
 }
 
-export interface Project {
-  id: string;
-  name: string;
-
-  // Project properties
-  type: ProjectType; // User or Team project
-  status: ProjectStatus; // Temporal (unsaved) or Saved (committed to repo)
-
-  traces: number;
-  timeAgo: string;
-  patterns?: number;
-  commitHash?: string;
-  goal?: string;
-  volume: 'system' | 'team' | 'user';
+// Workspace state for each volume
+export interface WorkspaceState {
+  volume: VolumeType;
   messages: Message[];
-
-  // Artifact tracking
-  artifactIds?: string[]; // IDs of all artifacts in this project
-
-  // Memory system
-  shortTermMemory?: ShortTermMemory[];
-  longTermMemory?: LongTermMemory[];
-
-  // Activity log file path within project
-  activityLogPath?: string;
-
-  // Legacy (kept for backward compatibility)
-  artifacts?: Array<{
-    type: 'skill' | 'code' | 'workflow';
-    name: string;
-  }>;
-  evolution?: {
-    patternsDetected: number;
-    patternName: string;
-    occurrence: number;
-    confidence: number;
-  };
+  artifactIds: string[];
+  shortTermMemory: ShortTermMemory[];
+  longTermMemory: LongTermMemory[];
+  lastActivity: string;
 }
 
 export interface CronJob {
@@ -99,95 +72,136 @@ export interface CronJob {
   }>;
 }
 
-interface ProjectContextType {
-  projects: Project[];
-  activeProjects: Record<'user' | 'team' | 'system', Project[]>;
-  cronJobs: CronJob[];
-  activeProject: string | null;
-  setActiveProject: (id: string | null) => void;
-  addProject: (project: Omit<Project, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds' | 'shortTermMemory' | 'longTermMemory'>) => Project;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  deleteProject: (id: string) => void;
-  deleteAllProjects: () => void;
-  clearProjectMessages: (projectId: string) => void;
-  addMessage: (projectId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
-  updateCronJob: (id: string, updates: Partial<CronJob>) => void;
+interface WorkspaceContextType {
+  // Workspace state per volume
+  workspaces: Record<VolumeType, WorkspaceState>;
+
+  // Active volume
+  activeVolume: VolumeType;
+  setActiveVolume: (volume: VolumeType) => void;
+
+  // Get current workspace
+  currentWorkspace: WorkspaceState;
+
+  // Message management for current workspace
+  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
+  clearMessages: () => void;
 
   // Artifact management
-  addArtifactToProject: (projectId: string, artifactId: string) => void;
-  removeArtifactFromProject: (projectId: string, artifactId: string) => void;
-  getProjectArtifacts: (projectId: string) => string[];
+  addArtifact: (artifactId: string) => void;
+  removeArtifact: (artifactId: string) => void;
+  getArtifacts: () => string[];
 
   // Memory management
-  addShortTermMemory: (projectId: string, memory: Omit<ShortTermMemory, 'id' | 'timestamp'>) => void;
-  addLongTermMemory: (projectId: string, memory: Omit<LongTermMemory, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  getProjectMemories: (projectId: string) => { shortTerm: ShortTermMemory[]; longTerm: LongTermMemory[] };
+  addShortTermMemory: (memory: Omit<ShortTermMemory, 'id' | 'timestamp'>) => void;
+  addLongTermMemory: (memory: Omit<LongTermMemory, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  getMemories: () => { shortTerm: ShortTermMemory[]; longTerm: LongTermMemory[] };
 
-  // Backward compatibility aliases
-  sessions: Project[];
-  activeSessions: Record<'user' | 'team' | 'system', Project[]>;
-  activeSession: string | null;
-  setActiveSession: (id: string | null) => void;
-  addSession: (session: Omit<Project, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds' | 'shortTermMemory' | 'longTermMemory'>) => Project;
-  updateSession: (id: string, updates: Partial<Project>) => void;
-  deleteSession: (id: string) => void;
-  addArtifactToSession: (sessionId: string, artifactId: string) => void;
-  removeArtifactFromSession: (sessionId: string, artifactId: string) => void;
-  getSessionArtifacts: (sessionId: string) => string[];
+  // Cron jobs (system-level)
+  cronJobs: CronJob[];
+  updateCronJob: (id: string, updates: Partial<CronJob>) => void;
+
+  // Backward compatibility - deprecated, will be removed
+  /** @deprecated Use workspaces instead */
+  projects: never[];
+  /** @deprecated Use activeVolume instead */
+  activeProject: string | null;
+  /** @deprecated Use setActiveVolume instead */
+  setActiveProject: (id: string | null) => void;
 }
 
-const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
+const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 // Local storage keys
-const PROJECTS_KEY = 'llmos_projects';
+const WORKSPACES_KEY = 'llmos_workspaces';
+const ACTIVE_VOLUME_KEY = 'llmos_active_volume';
 const CRON_JOBS_KEY = 'llmos_cron_jobs';
-const ACTIVE_PROJECT_KEY = 'llmos_active_project';
 
-// Legacy key for migration
-const LEGACY_SESSIONS_KEY = 'llmos_sessions';
-const LEGACY_ACTIVE_SESSION_KEY = 'llmos_active_session';
+// Initialize empty workspace
+function createEmptyWorkspace(volume: VolumeType): WorkspaceState {
+  return {
+    volume,
+    messages: [],
+    artifactIds: [],
+    shortTermMemory: [],
+    longTermMemory: [],
+    lastActivity: new Date().toISOString(),
+  };
+}
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [workspaces, setWorkspaces] = useState<Record<VolumeType, WorkspaceState>>({
+    user: createEmptyWorkspace('user'),
+    team: createEmptyWorkspace('team'),
+    system: createEmptyWorkspace('system'),
+  });
+  const [activeVolume, setActiveVolumeState] = useState<VolumeType>('user');
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
-  const [activeProject, setActiveProjectState] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load from localStorage on mount (with migration from sessions)
+  // Load from localStorage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Try to load projects first, then fall back to legacy sessions
-    let savedProjects = localStorage.getItem(PROJECTS_KEY);
-
-    // Migration: Check for legacy sessions if no projects exist
-    if (!savedProjects) {
-      const legacySessions = localStorage.getItem(LEGACY_SESSIONS_KEY);
-      if (legacySessions) {
-        console.log('[ProjectContext] Migrating legacy sessions to projects...');
-        savedProjects = legacySessions;
-        // Clear legacy data after migration
-        localStorage.removeItem(LEGACY_SESSIONS_KEY);
-        localStorage.removeItem(LEGACY_ACTIVE_SESSION_KEY);
-      }
-    }
-
-    const savedCronJobs = localStorage.getItem(CRON_JOBS_KEY);
-    let savedActiveProject = localStorage.getItem(ACTIVE_PROJECT_KEY);
-
-    // Migration for active project
-    if (!savedActiveProject) {
-      savedActiveProject = localStorage.getItem(LEGACY_ACTIVE_SESSION_KEY);
-    }
-
-    if (savedProjects) {
+    // Load workspaces
+    const savedWorkspaces = localStorage.getItem(WORKSPACES_KEY);
+    if (savedWorkspaces) {
       try {
-        setProjects(JSON.parse(savedProjects));
+        const parsed = JSON.parse(savedWorkspaces);
+        // Ensure all volumes exist
+        setWorkspaces({
+          user: parsed.user || createEmptyWorkspace('user'),
+          team: parsed.team || createEmptyWorkspace('team'),
+          system: parsed.system || createEmptyWorkspace('system'),
+        });
       } catch (e) {
-        console.error('Failed to load projects:', e);
+        console.error('Failed to load workspaces:', e);
       }
     }
 
+    // Migrate from old projects if they exist
+    const oldProjects = localStorage.getItem('llmos_projects');
+    if (oldProjects && !savedWorkspaces) {
+      try {
+        const projects = JSON.parse(oldProjects);
+        console.log('[WorkspaceContext] Migrating from old projects format');
+
+        // Combine all user project messages into user workspace
+        const userMessages: Message[] = [];
+        const teamMessages: Message[] = [];
+
+        for (const project of projects) {
+          if (project.messages?.length > 0) {
+            if (project.volume === 'team') {
+              teamMessages.push(...project.messages);
+            } else {
+              userMessages.push(...project.messages);
+            }
+          }
+        }
+
+        setWorkspaces({
+          user: { ...createEmptyWorkspace('user'), messages: userMessages },
+          team: { ...createEmptyWorkspace('team'), messages: teamMessages },
+          system: createEmptyWorkspace('system'),
+        });
+
+        // Clear old data
+        localStorage.removeItem('llmos_projects');
+        localStorage.removeItem('llmos_active_project');
+      } catch (e) {
+        console.error('Failed to migrate from old projects:', e);
+      }
+    }
+
+    // Load active volume
+    const savedVolume = localStorage.getItem(ACTIVE_VOLUME_KEY);
+    if (savedVolume && ['user', 'team', 'system'].includes(savedVolume)) {
+      setActiveVolumeState(savedVolume as VolumeType);
+    }
+
+    // Load cron jobs
+    const savedCronJobs = localStorage.getItem(CRON_JOBS_KEY);
     if (savedCronJobs) {
       try {
         setCronJobs(JSON.parse(savedCronJobs));
@@ -197,10 +211,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
     } else {
       initializeDefaultCronJobs();
-    }
-
-    if (savedActiveProject) {
-      setActiveProjectState(savedActiveProject);
     }
 
     setIsInitialized(true);
@@ -230,107 +240,36 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setCronJobs(defaultCronJobs);
   };
 
-  // Save to localStorage whenever projects change
+  // Save workspaces to localStorage
   useEffect(() => {
     if (!isInitialized || typeof window === 'undefined') return;
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
-  }, [projects, isInitialized]);
+    localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
+  }, [workspaces, isInitialized]);
 
-  // Save cron jobs to localStorage
+  // Save active volume
+  useEffect(() => {
+    if (!isInitialized || typeof window === 'undefined') return;
+    localStorage.setItem(ACTIVE_VOLUME_KEY, activeVolume);
+  }, [activeVolume, isInitialized]);
+
+  // Save cron jobs
   useEffect(() => {
     if (!isInitialized || typeof window === 'undefined') return;
     localStorage.setItem(CRON_JOBS_KEY, JSON.stringify(cronJobs));
   }, [cronJobs, isInitialized]);
 
-  // Save active project to localStorage
-  useEffect(() => {
-    if (!isInitialized || typeof window === 'undefined') return;
-    if (activeProject) {
-      localStorage.setItem(ACTIVE_PROJECT_KEY, activeProject);
-    } else {
-      localStorage.removeItem(ACTIVE_PROJECT_KEY);
-    }
-  }, [activeProject, isInitialized]);
-
-  const setActiveProject = (id: string | null) => {
-    setActiveProjectState(id);
+  // Set active volume
+  const setActiveVolume = (volume: VolumeType) => {
+    setActiveVolumeState(volume);
   };
 
-  const addProject = (
-    projectData: Omit<Project, 'id' | 'traces' | 'timeAgo' | 'messages' | 'artifactIds' | 'shortTermMemory' | 'longTermMemory'>
-  ): Project => {
-    const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const newProject: Project = {
-      ...projectData,
-      id: projectId,
-      traces: 0,
-      timeAgo: 'just now',
-      messages: [],
-      artifactIds: [],
-      shortTermMemory: [],
-      longTermMemory: [],
-      // Set activity log path within project folder
-      activityLogPath: `projects/${projectId}/activity.md`,
-      // Default to temporal status if not specified
-      status: projectData.status || 'temporal',
-      // Default to user type if not specified
-      type: projectData.type || 'user',
-    };
+  // Get current workspace
+  const currentWorkspace = workspaces[activeVolume];
 
-    setProjects((prev) => [...prev, newProject]);
-    return newProject;
-  };
-
-  const updateProject = (id: string, updates: Partial<Project>) => {
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === id ? { ...project, ...updates } : project
-      )
-    );
-  };
-
-  const deleteProject = (id: string) => {
-    setProjects((prev) => prev.filter((project) => project.id !== id));
-    if (activeProject === id) {
-      setActiveProjectState(null);
-    }
-  };
-
-  const deleteAllProjects = () => {
-    console.log('[ProjectContext] Deleting all projects');
-    setProjects([]);
-    setActiveProjectState(null);
-    // Also clear from localStorage immediately
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(PROJECTS_KEY);
-      localStorage.removeItem(ACTIVE_PROJECT_KEY);
-    }
-  };
-
-  const clearProjectMessages = (projectId: string) => {
-    console.log('[ProjectContext] Clearing messages for project:', projectId);
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, messages: [], traces: 0, timeAgo: 'just now' }
-          : project
-      )
-    );
-  };
-
-  const addMessage = (projectId: string, messageData: Omit<Message, 'id' | 'timestamp'>) => {
-    console.log('[ProjectContext] addMessage called:', {
-      projectId,
-      role: messageData.role,
-      contentLength: messageData.content?.length || 0,
-      contentPreview: messageData.content?.substring(0, 100)
-    });
-
+  // Add message to current workspace
+  const addMessage = (messageData: Omit<Message, 'id' | 'timestamp'>) => {
     const now = new Date();
-    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now
-      .getMinutes()
-      .toString()
-      .padStart(2, '0')}`;
+    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
     const newMessage: Message = {
       ...messageData,
@@ -338,93 +277,73 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       timestamp,
     };
 
-    console.log('[ProjectContext] Created message:', newMessage.id);
+    setWorkspaces((prev) => ({
+      ...prev,
+      [activeVolume]: {
+        ...prev[activeVolume],
+        messages: [...prev[activeVolume].messages, newMessage],
+        lastActivity: new Date().toISOString(),
+      },
+    }));
+  };
 
-    setProjects((prev) => {
-      const updated = prev.map((project) => {
-        if (project.id === projectId) {
-          const updatedProject = {
-            ...project,
-            messages: [...project.messages, newMessage],
-            traces: project.traces + (newMessage.traces?.length || 0),
-            timeAgo: 'just now',
-          };
-          console.log('[ProjectContext] Updated project, new message count:', updatedProject.messages.length);
-          return updatedProject;
-        }
-        return project;
-      });
-      console.log('[ProjectContext] Total projects:', updated.length);
-      return updated;
+  // Clear messages in current workspace
+  const clearMessages = () => {
+    setWorkspaces((prev) => ({
+      ...prev,
+      [activeVolume]: {
+        ...prev[activeVolume],
+        messages: [],
+        lastActivity: new Date().toISOString(),
+      },
+    }));
+  };
+
+  // Artifact management
+  const addArtifact = (artifactId: string) => {
+    setWorkspaces((prev) => {
+      const workspace = prev[activeVolume];
+      if (workspace.artifactIds.includes(artifactId)) return prev;
+      return {
+        ...prev,
+        [activeVolume]: {
+          ...workspace,
+          artifactIds: [...workspace.artifactIds, artifactId],
+        },
+      };
     });
   };
 
-  const updateCronJob = (id: string, updates: Partial<CronJob>) => {
-    setCronJobs((prev) =>
-      prev.map((cron) => (cron.id === id ? { ...cron, ...updates } : cron))
-    );
+  const removeArtifact = (artifactId: string) => {
+    setWorkspaces((prev) => ({
+      ...prev,
+      [activeVolume]: {
+        ...prev[activeVolume],
+        artifactIds: prev[activeVolume].artifactIds.filter((id) => id !== artifactId),
+      },
+    }));
   };
 
-  // Artifact management functions
-  const addArtifactToProject = (projectId: string, artifactId: string) => {
-    setProjects((prev) =>
-      prev.map((project) => {
-        if (project.id === projectId) {
-          const artifactIds = project.artifactIds || [];
-          if (!artifactIds.includes(artifactId)) {
-            return {
-              ...project,
-              artifactIds: [...artifactIds, artifactId],
-            };
-          }
-        }
-        return project;
-      })
-    );
-  };
+  const getArtifacts = () => currentWorkspace.artifactIds;
 
-  const removeArtifactFromProject = (projectId: string, artifactId: string) => {
-    setProjects((prev) =>
-      prev.map((project) => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            artifactIds: (project.artifactIds || []).filter((id) => id !== artifactId),
-          };
-        }
-        return project;
-      })
-    );
-  };
-
-  const getProjectArtifacts = (projectId: string): string[] => {
-    const project = projects.find((p) => p.id === projectId);
-    return project?.artifactIds || [];
-  };
-
-  // Memory management functions
-  const addShortTermMemory = (projectId: string, memoryData: Omit<ShortTermMemory, 'id' | 'timestamp'>) => {
-    const now = new Date();
+  // Memory management
+  const addShortTermMemory = (memoryData: Omit<ShortTermMemory, 'id' | 'timestamp'>) => {
     const newMemory: ShortTermMemory = {
       ...memoryData,
       id: `stm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: now.toISOString(),
+      timestamp: new Date().toISOString(),
     };
 
-    setProjects((prev) =>
-      prev.map((project) => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            shortTermMemory: [...(project.shortTermMemory || []), newMemory],
-          };
-        }
-        return project;
-      })
-    );
+    setWorkspaces((prev) => ({
+      ...prev,
+      [activeVolume]: {
+        ...prev[activeVolume],
+        shortTermMemory: [...prev[activeVolume].shortTermMemory, newMemory],
+      },
+    }));
   };
 
-  const addLongTermMemory = (projectId: string, memoryData: Omit<LongTermMemory, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addLongTermMemory = (memoryData: Omit<LongTermMemory, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();
     const newMemory: LongTermMemory = {
       ...memoryData,
@@ -433,87 +352,74 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     };
 
-    setProjects((prev) =>
-      prev.map((project) => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            longTermMemory: [...(project.longTermMemory || []), newMemory],
-          };
-        }
-        return project;
-      })
+    setWorkspaces((prev) => ({
+      ...prev,
+      [activeVolume]: {
+        ...prev[activeVolume],
+        longTermMemory: [...prev[activeVolume].longTermMemory, newMemory],
+      },
+    }));
+  };
+
+  const getMemories = () => ({
+    shortTerm: currentWorkspace.shortTermMemory,
+    longTerm: currentWorkspace.longTermMemory,
+  });
+
+  // Cron job management
+  const updateCronJob = (id: string, updates: Partial<CronJob>) => {
+    setCronJobs((prev) =>
+      prev.map((cron) => (cron.id === id ? { ...cron, ...updates } : cron))
     );
   };
 
-  const getProjectMemories = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId);
-    return {
-      shortTerm: project?.shortTermMemory || [],
-      longTerm: project?.longTermMemory || [],
-    };
-  };
-
-  // Group projects by volume
-  const activeProjects = projects.reduce(
-    (acc, project) => {
-      acc[project.volume].push(project);
-      return acc;
-    },
-    { user: [], team: [], system: [] } as Record<'user' | 'team' | 'system', Project[]>
-  );
-
-  const value: ProjectContextType = {
-    projects,
-    activeProjects,
-    cronJobs,
-    activeProject,
-    setActiveProject,
-    addProject,
-    updateProject,
-    deleteProject,
-    deleteAllProjects,
-    clearProjectMessages,
+  const value: WorkspaceContextType = {
+    workspaces,
+    activeVolume,
+    setActiveVolume,
+    currentWorkspace,
     addMessage,
-    updateCronJob,
-    addArtifactToProject,
-    removeArtifactFromProject,
-    getProjectArtifacts,
+    clearMessages,
+    addArtifact,
+    removeArtifact,
+    getArtifacts,
     addShortTermMemory,
     addLongTermMemory,
-    getProjectMemories,
+    getMemories,
+    cronJobs,
+    updateCronJob,
 
-    // Backward compatibility aliases
-    sessions: projects,
-    activeSessions: activeProjects,
-    activeSession: activeProject,
-    setActiveSession: setActiveProject,
-    addSession: addProject,
-    updateSession: updateProject,
-    deleteSession: deleteProject,
-    addArtifactToSession: addArtifactToProject,
-    removeArtifactFromSession: removeArtifactFromProject,
-    getSessionArtifacts: getProjectArtifacts,
+    // Backward compatibility (deprecated)
+    projects: [] as never[],
+    activeProject: activeVolume,
+    setActiveProject: () => {},
   };
 
-  return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 export function useProjectContext() {
-  const context = useContext(ProjectContext);
+  const context = useContext(WorkspaceContext);
   if (!context) {
     throw new Error('useProjectContext must be used within ProjectProvider');
   }
   return context;
 }
 
-// Backward compatibility alias
-export function useSessionContext() {
-  return useProjectContext();
-}
+// Alias for clarity
+export const useWorkspaceContext = useProjectContext;
+export const WorkspaceProvider = ProjectProvider;
 
-// Re-export types with backward compatibility aliases
-export type SessionType = ProjectType;
-export type SessionStatus = ProjectStatus;
-export type Session = Project;
-export const SessionProvider = ProjectProvider;
+// Type exports for backward compatibility
+export type ProjectType = 'user' | 'team';
+export type ProjectStatus = 'temporal' | 'saved';
+export interface Project {
+  id: string;
+  name: string;
+  type: ProjectType;
+  status: ProjectStatus;
+  traces: number;
+  timeAgo: string;
+  volume: 'system' | 'team' | 'user';
+  messages: Message[];
+}

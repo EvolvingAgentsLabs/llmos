@@ -12,7 +12,6 @@ import { PanelErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
 interface ArtifactPanelProps {
-  activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
 }
 
@@ -56,12 +55,12 @@ function convertToArtifactData(artifact: Artifact): ArtifactData & { id: string;
   };
 }
 
-export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeVolume }: ArtifactPanelProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
 
-  // Get project context for filtering
-  const { activeProject, getProjectArtifacts } = useProjectContext();
+  // Get workspace context for artifact tracking
+  const { getArtifacts } = useProjectContext();
 
   // Use artifact store
   const {
@@ -79,27 +78,24 @@ export default function ArtifactPanel({ activeSession, activeVolume }: ArtifactP
     }
   }, [initialized, initialize]);
 
-  // Filter artifacts by active project if one exists
+  // Get workspace artifact IDs
+  const workspaceArtifactIds = getArtifacts();
+
+  // Filter artifacts by workspace and volume
   const filteredArtifacts = useMemo(() => {
-    if (!activeProject) {
-      // No active project - show all artifacts
-      return storeArtifacts;
+    // Filter by volume
+    let artifacts = storeArtifacts.filter(a => a.volume === activeVolume);
+
+    // Also include artifacts tracked in the workspace
+    if (workspaceArtifactIds.length > 0) {
+      artifacts = storeArtifacts.filter(artifact =>
+        workspaceArtifactIds.includes(artifact.id) ||
+        artifact.volume === activeVolume
+      );
     }
 
-    // Get artifact IDs associated with the active project
-    const projectArtifactIds = getProjectArtifacts(activeProject);
-
-    if (projectArtifactIds.length === 0) {
-      // Project has no artifacts yet, show all to avoid confusion
-      return storeArtifacts;
-    }
-
-    // Filter to only show artifacts in the project
-    return storeArtifacts.filter(artifact =>
-      projectArtifactIds.includes(artifact.id) ||
-      artifact.createdBy === activeProject
-    );
-  }, [storeArtifacts, activeProject, getProjectArtifacts]);
+    return artifacts;
+  }, [storeArtifacts, activeVolume, workspaceArtifactIds]);
 
   // Sample artifacts for demonstration (fallback when store is empty)
   const [sampleArtifacts] = useState<Array<ArtifactData & { id: string; name?: string }>>([
