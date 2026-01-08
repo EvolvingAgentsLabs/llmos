@@ -2,7 +2,7 @@
 
 /**
  * FluidLayout - Main workspace layout with Desktop-first experience
- * Updated: 2024-12-29 - Forces Desktop (applets) view on startup
+ * Simplified: Uses volumes as workspaces (no project concept)
  */
 
 import { useState, useEffect, Suspense, lazy, useCallback, useRef } from 'react';
@@ -47,32 +47,18 @@ function PanelLoader() {
 interface SidebarWrapperProps {
   activeVolume: 'system' | 'team' | 'user';
   onVolumeChange: (volume: 'system' | 'team' | 'user') => void;
-  activeSession: string | null;
-  onSessionChange: (sessionId: string | null) => void;
-  pendingPrompt?: string | null;
-  onPromptProcessed?: () => void;
 }
 
 function SidebarWrapper({
   activeVolume,
   onVolumeChange,
-  activeSession,
-  onSessionChange,
-  pendingPrompt,
-  onPromptProcessed,
 }: SidebarWrapperProps) {
-  // Full height sidebar with accordion sections (Explorer, Projects, Chat)
   return (
     <div className="h-full bg-bg-secondary/30">
       <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
         <SidebarPanel
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
-          activeSession={activeSession}
-          onSessionChange={onSessionChange}
-          onSessionCreated={onSessionChange}
-          pendingPrompt={pendingPrompt}
-          onPromptProcessed={onPromptProcessed}
         />
       </Suspense>
     </div>
@@ -117,23 +103,11 @@ interface RightPanelContentProps {
   contextViewMode: ContextViewMode;
   activeFilePath: string | null;
   activeVolume: 'system' | 'team' | 'user';
-  activeSession: string | null;
 }
 
-// Helper to check if file is an applet
-function isAppletFile(path: string): boolean {
-  if (!path) return false;
-  const isInAppletsDir = path.includes('/applets/') || path.includes('/applet/');
-  const isAppExtension = path.endsWith('.app.tsx') || path.endsWith('.applet.tsx');
-  const ext = path.split('.').pop()?.toLowerCase() || '';
-  return isAppExtension || (isInAppletsDir && ['tsx', 'jsx'].includes(ext));
-}
-
-function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, activeSession }: RightPanelContentProps) {
-  // Render content based on context view mode
+function RightPanelContent({ contextViewMode, activeFilePath, activeVolume }: RightPanelContentProps) {
   switch (contextViewMode) {
     case 'media':
-      // Media files (images, videos)
       if (activeFilePath) {
         return (
           <Suspense fallback={<PanelLoader />}>
@@ -144,7 +118,6 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
           </Suspense>
         );
       }
-      // Fall through to desktop if no file
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />
@@ -153,7 +126,6 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 
     case 'split-view':
     case 'code-editor':
-      // Use TabbedContentViewer for all code files (full panel with tabs)
       if (activeFilePath) {
         return (
           <Suspense fallback={<PanelLoader />}>
@@ -164,7 +136,6 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
           </Suspense>
         );
       }
-      // Fall through to desktop if no file selected
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid showEmptyState emptyMessage="Select a file from the tree to view and edit code" />
@@ -172,11 +143,9 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
       );
 
     case 'artifacts':
-      // Only show artifact panel if explicitly requested (not for file viewing)
       return (
         <Suspense fallback={<PanelLoader />}>
           <ArtifactPanel
-            activeSession={activeSession}
             activeVolume={activeVolume}
           />
         </Suspense>
@@ -185,7 +154,6 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
     case 'canvas':
     case 'applets':
     default:
-      // If there's a file selected (applet or code), show TabbedContentViewer
       if (activeFilePath) {
         return (
           <Suspense fallback={<PanelLoader />}>
@@ -196,7 +164,6 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
           </Suspense>
         );
       }
-      // Desktop view - show AppletGrid
       return (
         <Suspense fallback={<PanelLoader />}>
           <AppletGrid />
@@ -211,15 +178,14 @@ function RightPanelContent({ contextViewMode, activeFilePath, activeVolume, acti
 
 export default function FluidLayout() {
   const { openCommandPalette, state, setContextViewMode } = useWorkspace();
-  const { activeProject, setActiveProject, projects, addArtifactToProject } = useProjectContext();
+  const { activeVolume: workspaceVolume, addArtifact } = useProjectContext();
   const { createApplet } = useApplets();
   const { createArtifact } = useArtifactStore();
   const { contextViewMode, activeFilePath } = state;
 
   const [activeVolume, setActiveVolume] = useState<'system' | 'team' | 'user'>('user');
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(420); // Default width for sidebar
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false); // Toggle left panel
+  const [leftPanelWidth, setLeftPanelWidth] = useState(420);
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState<'left' | 'right' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -237,7 +203,6 @@ export default function FluidLayout() {
       if (!containerRef.current) return;
       const containerRect = containerRef.current.getBoundingClientRect();
       const newWidth = e.clientX - containerRect.left;
-      // Clamp between 320 and 700px
       setLeftPanelWidth(Math.min(700, Math.max(320, newWidth)));
     };
 
@@ -254,12 +219,11 @@ export default function FluidLayout() {
     };
   }, [isResizing]);
 
-  // Toggle maximize for a panel
   const toggleMaximize = useCallback((panel: 'left' | 'right') => {
     setMaximizedPanel(prev => prev === panel ? null : panel);
   }, []);
 
-  // Register applet generation callback so generate-applet tool works
+  // Register applet generation callback
   useEffect(() => {
     console.log('[FluidLayout] Registering applet generation callback');
 
@@ -270,26 +234,8 @@ export default function FluidLayout() {
         const now = new Date().toISOString();
         const vfs = getVFS();
 
-        // Find the active project to determine the correct file path
-        const currentProject = activeProject
-          ? projects.find(p => p.id === activeProject)
-          : null;
-
-        // Determine the file path based on whether there's an active project
-        let generatedFilePath: string;
-        let volume: 'system' | 'team' | 'user' = 'user';
-
-        if (currentProject) {
-          // Save to project folder: projects/{projectName}/applets/{appletId}.tsx
-          const projectFolderName = currentProject.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-          generatedFilePath = `projects/${projectFolderName}/applets/${applet.id}.tsx`;
-          volume = currentProject.volume || 'user';
-          console.log(`[FluidLayout] Saving applet to project: ${currentProject.name} at ${generatedFilePath}`);
-        } else {
-          // Fallback to generic path if no project is active
-          generatedFilePath = `generated/${applet.id}.tsx`;
-          console.log(`[FluidLayout] No active project, saving to: ${generatedFilePath}`);
-        }
+        // Save to workspace output folder
+        const generatedFilePath = `output/applets/${applet.id}.tsx`;
 
         // Save applet code to VFS
         vfs.writeFile(generatedFilePath, applet.code);
@@ -306,7 +252,7 @@ export default function FluidLayout() {
             createdAt: now,
             updatedAt: now,
           },
-          volume,
+          volume: activeVolume,
           filePath: generatedFilePath,
         });
 
@@ -316,36 +262,33 @@ export default function FluidLayout() {
         const artifact = createArtifact({
           name: applet.name,
           type: 'code',
-          volume,
+          volume: activeVolume,
           description: applet.description,
           codeView: applet.code,
           filePath: generatedFilePath,
-          createdBy: activeProject || 'unknown',
+          createdBy: activeVolume,
           tags: ['applet', 'generated'],
         });
 
         console.log(`[FluidLayout] Artifact created: ${artifact.id}`);
 
-        // Link artifact to project if there's an active project
-        if (currentProject) {
-          addArtifactToProject(currentProject.id, artifact.id);
-          console.log(`[FluidLayout] Artifact linked to project: ${currentProject.id}`);
-        }
+        // Track artifact in workspace
+        addArtifact(artifact.id);
 
-        // Also add to DesktopAppletManager (for UI regions display)
+        // Add to DesktopAppletManager
         DesktopAppletManager.addApplet({
           id: applet.id,
           name: applet.name,
           description: applet.description,
           filePath: generatedFilePath,
-          volume,
+          volume: activeVolume,
           createdAt: now,
           isActive: true,
         });
 
         console.log(`[FluidLayout] Applet added to desktop: ${applet.id}`);
 
-        // Switch to applets view to show the new applet
+        // Switch to applets view
         setContextViewMode('applets');
       } catch (err) {
         console.error('[FluidLayout] Failed to create applet:', err);
@@ -354,12 +297,11 @@ export default function FluidLayout() {
 
     setAppletGeneratedCallback(handleAppletGenerated);
 
-    // Cleanup on unmount
     return () => {
       console.log('[FluidLayout] Unregistering applet generation callback');
       setAppletGeneratedCallback(null);
     };
-  }, [createApplet, setContextViewMode, activeProject, projects, addArtifactToProject, createArtifact]);
+  }, [createApplet, setContextViewMode, activeVolume, addArtifact, createArtifact]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -380,24 +322,19 @@ export default function FluidLayout() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
-      {/* ================================================================== */}
-      {/* HEADER - Minimal, glassmorphism */}
-      {/* ================================================================== */}
-      <header className="h-12 flex items-center justify-between px-4
-                         bg-bg-secondary border-b border-border-primary">
-        {/* Left: Logo + Panel toggle */}
+      {/* HEADER */}
+      <header className="h-12 flex items-center justify-between px-4 bg-bg-secondary border-b border-border-primary">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
             className={`p-1.5 rounded-lg transition-colors ${!isLeftPanelCollapsed ? 'bg-accent-primary/20 text-accent-primary' : 'hover:bg-white/10 text-fg-secondary'}`}
-            title="Toggle sidebar (⌘B)"
+            title="Toggle sidebar (Ctrl+B)"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
 
-          {/* Desktop/Start Button */}
           <button
             onClick={() => setContextViewMode('applets')}
             className={`p-1.5 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-accent-primary text-white' : 'hover:bg-white/10 text-fg-secondary'}`}
@@ -416,11 +353,9 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        {/* Center: Status + View Mode */}
         <div className="flex items-center gap-4">
           <CortexStatus />
 
-          {/* View mode indicator */}
           {activeFilePath && (
             <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-elevated text-xs text-fg-secondary">
               <span className="truncate max-w-[150px]">{activeFilePath.split('/').pop()}</span>
@@ -429,18 +364,16 @@ export default function FluidLayout() {
                 className="text-fg-tertiary hover:text-fg-primary"
                 title="Close file"
               >
-                ×
+                x
               </button>
             </div>
           )}
         </div>
 
-        {/* Right: Settings + Command palette trigger */}
         <div className="flex items-center gap-2">
-          {/* Logout/Settings button */}
           <button
             onClick={() => {
-              if (confirm('Are you sure you want to logout?\n\nThis will clear all local data including your API key, profile, and preferences.')) {
+              if (confirm('Are you sure you want to logout?\n\nThis will clear all local data.')) {
                 UserStorage.clearAll();
                 LLMStorage.clearAll();
                 window.location.reload();
@@ -454,30 +387,23 @@ export default function FluidLayout() {
             </svg>
           </button>
 
-          {/* Command palette trigger */}
           <button
             onClick={openCommandPalette}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-                       bg-bg-elevated border border-border-primary
-                       text-fg-secondary hover:text-fg-primary hover:bg-bg-hover
-                       transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-elevated border border-border-primary text-fg-secondary hover:text-fg-primary hover:bg-bg-hover transition-all"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <span className="text-xs">⌘K</span>
+            <span className="text-xs">Ctrl+K</span>
           </button>
         </div>
       </header>
 
-      {/* Command Palette */}
       <CommandPalette />
 
-      {/* ================================================================== */}
-      {/* MAIN 2-PANEL LAYOUT (VS Code style resizable) */}
-      {/* ================================================================== */}
+      {/* MAIN 2-PANEL LAYOUT */}
       <div ref={containerRef} className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
-        {/* LEFT PANEL: Accordion Sidebar (Explorer, Projects, Chat) */}
+        {/* LEFT PANEL */}
         {!isLeftPanelCollapsed && (
           <div
             className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
@@ -485,7 +411,6 @@ export default function FluidLayout() {
             }`}
             style={{ width: maximizedPanel === 'left' ? '100%' : maximizedPanel === 'right' ? 0 : leftPanelWidth }}
           >
-            {/* Panel Header with Maximize */}
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
               <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">Explorer</span>
               <button
@@ -497,15 +422,10 @@ export default function FluidLayout() {
               </button>
             </div>
 
-            {/* Full-height Sidebar with Accordion */}
             <div className="flex-1 overflow-hidden">
               <SidebarWrapper
                 activeVolume={activeVolume}
                 onVolumeChange={setActiveVolume}
-                activeSession={activeProject}
-                onSessionChange={setActiveProject}
-                pendingPrompt={pendingPrompt}
-                onPromptProcessed={() => setPendingPrompt(null)}
               />
             </div>
           </div>
@@ -517,9 +437,7 @@ export default function FluidLayout() {
             className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary cursor-col-resize transition-all flex-shrink-0 relative group"
             onMouseDown={handleResizeStart}
           >
-            {/* Visual indicator on hover */}
             <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-accent-primary/20" />
-            {/* Drag dots */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="w-1 h-1 rounded-full bg-accent-primary" />
               <div className="w-1 h-1 rounded-full bg-accent-primary" />
@@ -528,13 +446,12 @@ export default function FluidLayout() {
           </div>
         )}
 
-        {/* RIGHT PANEL: Dynamic content based on contextViewMode */}
+        {/* RIGHT PANEL */}
         <div
           className={`flex-1 flex flex-col overflow-hidden bg-bg-primary relative ${
             maximizedPanel === 'left' ? 'hidden' : maximizedPanel === 'right' ? 'w-full' : ''
           }`}
         >
-          {/* Panel Header with Maximize */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
             <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
               {activeFilePath ? activeFilePath.split('/').pop() : 'Desktop'}
@@ -553,7 +470,6 @@ export default function FluidLayout() {
               contextViewMode={contextViewMode}
               activeFilePath={activeFilePath}
               activeVolume={activeVolume}
-              activeSession={activeProject}
             />
           </div>
         </div>

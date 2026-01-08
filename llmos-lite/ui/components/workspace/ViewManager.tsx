@@ -17,7 +17,6 @@ const FloatingJarvis = lazy(() => import('@/components/system/FloatingJarvis'));
 // ============================================================================
 
 interface ViewManagerProps {
-  activeSession: string | null;
   activeVolume: 'system' | 'team' | 'user';
   onArtifactSelect?: (artifactId: string) => void;
   onAppletSelect?: (appletId: string) => void;
@@ -100,7 +99,6 @@ function EmptyView({ mode }: { mode: ContextViewMode }) {
 // ============================================================================
 
 export default function ViewManager({
-  activeSession,
   activeVolume,
   onArtifactSelect,
   onAppletSelect,
@@ -158,7 +156,6 @@ export default function ViewManager({
         return (
           <Suspense fallback={<ViewLoader />}>
             <ArtifactPanel
-              activeSession={activeSession}
               activeVolume={activeVolume}
             />
           </Suspense>

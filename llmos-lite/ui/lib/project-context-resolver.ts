@@ -1,88 +1,41 @@
 /**
- * Project Context Resolver
+ * Workspace Context Resolver
  *
- * Resolves UI project context to VFS project context for the SystemAgent.
- * Enables continuation of work on existing projects.
+ * Resolves workspace context from volumes for the SystemAgent.
+ * The workspace IS the volume - the AI decides what context is relevant.
+ *
+ * Previously this was "project-context-resolver" but we've simplified
+ * to remove the concept of projects. Now everything works with volumes directly.
  */
 
 import { getVFS } from './virtual-fs';
-import type { ProjectContext } from './system-agent-orchestrator';
-import type { Project } from '@/contexts/ProjectContext';
+import type { WorkspaceContext } from './system-agent-orchestrator';
+
+export type VolumeType = 'user' | 'team' | 'system';
 
 /**
- * Convert a project name to a valid VFS directory name
+ * List all files in a directory recursively (for workspace context)
  */
-export function projectNameToPath(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s_-]/g, '') // Remove special chars except spaces, underscores, hyphens
-    .replace(/\s+/g, '_')          // Replace spaces with underscores
-    .replace(/_+/g, '_')           // Collapse multiple underscores
-    .replace(/^_|_$/g, '');        // Trim leading/trailing underscores
-}
-
-/**
- * Find the VFS project path for a given project name
- * Searches in both user and team volumes
- */
-export function findProjectPath(projectName: string, volume: 'user' | 'team' | 'system'): string | null {
-  const vfs = getVFS();
-  const basePath = 'projects';
-
-  // Try exact match first
-  const exactPath = `${basePath}/${projectName}`;
-  if (vfs.exists(exactPath)) {
-    return exactPath;
-  }
-
-  // Try normalized path
-  const normalizedPath = `${basePath}/${projectNameToPath(projectName)}`;
-  if (vfs.exists(normalizedPath)) {
-    return normalizedPath;
-  }
-
-  // Search for similar names in the projects directory
-  try {
-    const projectDirs = vfs.listDirectory(basePath);
-    if (projectDirs?.directories) {
-      const normalizedName = projectNameToPath(projectName);
-
-      // Find closest match
-      for (const dir of projectDirs.directories) {
-        const dirNormalized = projectNameToPath(dir);
-        if (dirNormalized === normalizedName || dir.toLowerCase() === projectName.toLowerCase()) {
-          return `${basePath}/${dir}`;
-        }
-      }
-    }
-  } catch (e) {
-    console.log('[ProjectContextResolver] Could not list projects directory:', e);
-  }
-
-  return null;
-}
-
-/**
- * List all files in a project directory recursively
- */
-function listProjectFiles(projectPath: string, maxDepth: number = 5): string[] {
+function listWorkspaceFiles(basePath: string, maxDepth: number = 5, maxFiles: number = 100): string[] {
   const vfs = getVFS();
   const files: string[] = [];
 
   function traverse(path: string, depth: number) {
-    if (depth > maxDepth) return;
+    if (depth > maxDepth || files.length >= maxFiles) return;
 
     try {
       const listing = vfs.listDirectory(path);
 
       if (listing?.files) {
         for (const file of listing.files) {
+          if (files.length >= maxFiles) break;
           files.push(`${path}/${file}`);
         }
       }
 
       if (listing?.directories) {
         for (const dir of listing.directories) {
+          if (files.length >= maxFiles) break;
           // Skip hidden directories and common non-essential ones
           if (dir.startsWith('.') || dir === 'node_modules' || dir === '__pycache__') {
             continue;
@@ -95,87 +48,224 @@ function listProjectFiles(projectPath: string, maxDepth: number = 5): string[] {
     }
   }
 
-  traverse(projectPath, 0);
+  traverse(basePath, 0);
   return files;
 }
 
 /**
- * Resolve project context for the SystemAgent
- * Returns full context including existing files and memory
+ * Get top-level directories in a volume (these are the "work areas")
  */
-export async function resolveProjectContext(
-  project: Project | null,
-  volume: 'user' | 'team' | 'system'
-): Promise<ProjectContext | null> {
-  if (!project) {
-    return null;
-  }
-
+function getVolumeSections(volumeRoot: string): string[] {
   const vfs = getVFS();
+  const sections: string[] = [];
 
-  // Find the VFS path for this project
-  const projectPath = findProjectPath(project.name, volume);
-
-  if (!projectPath) {
-    // No existing VFS project found
-    console.log('[ProjectContextResolver] No VFS project found for:', project.name);
-    return null;
-  }
-
-  // Read context.md if it exists
-  let contextFile: string | undefined;
-  const contextPath = `${projectPath}/context.md`;
   try {
-    if (vfs.exists(contextPath)) {
-      const content = vfs.readFileContent(contextPath);
-      if (content) contextFile = content;
+    const listing = vfs.listDirectory(volumeRoot);
+    if (listing?.directories) {
+      sections.push(...listing.directories.filter(d => !d.startsWith('.')));
     }
   } catch (e) {
-    console.log('[ProjectContextResolver] Could not read context.md:', e);
+    console.log('[WorkspaceContextResolver] Could not list volume:', e);
   }
 
-  // Read memory.md if it exists
+  return sections;
+}
+
+/**
+ * Resolve workspace context for the SystemAgent
+ * The entire volume is the workspace - AI decides what's relevant
+ */
+export async function resolveWorkspaceContext(
+  volume: VolumeType
+): Promise<WorkspaceContext | null> {
+  const vfs = getVFS();
+
+  // The volume root is the workspace
+  // User volume is the default, team volume for team work
+  const volumeRoot = volume === 'system' ? 'system' : '';
+
+  console.log('[WorkspaceContextResolver] Resolving workspace for volume:', volume);
+
+  // Get sections in the workspace
+  const sections = getVolumeSections(volumeRoot || '.');
+
+  // List important files in the workspace (limit to prevent context overflow)
+  const workspaceFiles = listWorkspaceFiles(volumeRoot || '.', 4, 50);
+
+  // Read workspace memory if it exists
   let memoryFile: string | undefined;
-  const memoryPath = `${projectPath}/memory.md`;
+  const memoryPath = `${volumeRoot ? volumeRoot + '/' : ''}memory/workspace_memory.md`;
   try {
     if (vfs.exists(memoryPath)) {
       const content = vfs.readFileContent(memoryPath);
       if (content) memoryFile = content;
     }
   } catch (e) {
-    console.log('[ProjectContextResolver] Could not read memory.md:', e);
+    console.log('[WorkspaceContextResolver] Could not read workspace memory:', e);
   }
 
-  // List existing files
-  const existingFiles = listProjectFiles(projectPath);
+  // Read system memory log
+  let systemMemory: string | undefined;
+  const systemMemoryPath = 'system/memory_log.md';
+  try {
+    if (vfs.exists(systemMemoryPath)) {
+      const content = vfs.readFileContent(systemMemoryPath);
+      if (content) {
+        // Only take last 2000 chars to prevent context overflow
+        systemMemory = content.length > 2000
+          ? '...\n' + content.substring(content.length - 2000)
+          : content;
+      }
+    }
+  } catch (e) {
+    console.log('[WorkspaceContextResolver] Could not read system memory:', e);
+  }
 
-  console.log('[ProjectContextResolver] Resolved context:', {
-    projectPath,
-    projectName: project.name,
-    hasContext: !!contextFile,
+  console.log('[WorkspaceContextResolver] Resolved context:', {
+    volume,
+    sections: sections.length,
+    fileCount: workspaceFiles.length,
     hasMemory: !!memoryFile,
-    fileCount: existingFiles.length,
+    hasSystemMemory: !!systemMemory,
   });
 
   return {
-    projectPath,
-    projectName: project.name,
-    contextFile,
+    volume,
+    workspacePath: volumeRoot || '.',
+    sections,
+    existingFiles: workspaceFiles,
     memoryFile,
-    existingFiles,
-    isExistingProject: true,
+    systemMemory,
   };
 }
 
 /**
- * Quick check if a project has an existing VFS directory
+ * Get a summary of the workspace for display
+ */
+export function getWorkspaceSummary(volume: VolumeType): {
+  hasAgents: boolean;
+  hasApplets: boolean;
+  hasCode: boolean;
+  hasProjects: boolean;
+  agentCount: number;
+  appletCount: number;
+  projectCount: number;
+} {
+  const vfs = getVFS();
+  const volumeRoot = volume === 'system' ? 'system' : '';
+
+  let hasAgents = false;
+  let hasApplets = false;
+  let hasCode = false;
+  let hasProjects = false;
+  let agentCount = 0;
+  let appletCount = 0;
+  let projectCount = 0;
+
+  try {
+    // Check for agents in components/agents
+    const agentsPath = `${volumeRoot ? volumeRoot + '/' : ''}components/agents`;
+    if (vfs.exists(agentsPath)) {
+      const agents = vfs.listDirectory(agentsPath);
+      agentCount = agents?.files?.filter(f => f.path.endsWith('.md')).length || 0;
+      hasAgents = agentCount > 0;
+    }
+
+    // Check for applets
+    const appletsPath = `${volumeRoot ? volumeRoot + '/' : ''}applets`;
+    if (vfs.exists(appletsPath)) {
+      const applets = vfs.listDirectory(appletsPath);
+      appletCount = applets?.files?.filter(f => f.path.endsWith('.tsx') || f.path.endsWith('.jsx')).length || 0;
+      hasApplets = appletCount > 0;
+    }
+
+    // Check for projects folder (legacy structure)
+    const projectsPath = `${volumeRoot ? volumeRoot + '/' : ''}projects`;
+    if (vfs.exists(projectsPath)) {
+      const projects = vfs.listDirectory(projectsPath);
+      projectCount = projects?.directories?.length || 0;
+      hasProjects = projectCount > 0;
+    }
+
+    // Check for code files in output
+    const outputPath = `${volumeRoot ? volumeRoot + '/' : ''}output`;
+    if (vfs.exists(outputPath)) {
+      const codeFiles = listWorkspaceFiles(outputPath, 3, 20);
+      hasCode = codeFiles.some(f =>
+        f.endsWith('.py') || f.endsWith('.js') || f.endsWith('.ts')
+      );
+    }
+  } catch (e) {
+    console.log('[WorkspaceContextResolver] Error getting workspace summary:', e);
+  }
+
+  return {
+    hasAgents,
+    hasApplets,
+    hasCode,
+    hasProjects,
+    agentCount,
+    appletCount,
+    projectCount,
+  };
+}
+
+// ============================================
+// BACKWARD COMPATIBILITY - Deprecated functions
+// ============================================
+
+/**
+ * @deprecated Use resolveWorkspaceContext instead
+ */
+export function projectNameToPath(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+/**
+ * @deprecated Projects no longer exist - use volumes directly
+ */
+export function findProjectPath(projectName: string, volume: 'user' | 'team' | 'system'): string | null {
+  const vfs = getVFS();
+  const basePath = 'projects';
+
+  const exactPath = `${basePath}/${projectName}`;
+  if (vfs.exists(exactPath)) {
+    return exactPath;
+  }
+
+  const normalizedPath = `${basePath}/${projectNameToPath(projectName)}`;
+  if (vfs.exists(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  return null;
+}
+
+/**
+ * @deprecated Use resolveWorkspaceContext instead
+ */
+export async function resolveProjectContext(
+  project: any,
+  volume: 'user' | 'team' | 'system'
+): Promise<any | null> {
+  // Just return workspace context for the volume
+  return resolveWorkspaceContext(volume);
+}
+
+/**
+ * @deprecated Projects no longer exist
  */
 export function hasExistingProjectFiles(projectName: string, volume: 'user' | 'team' | 'system'): boolean {
   return findProjectPath(projectName, volume) !== null;
 }
 
 /**
- * Get a summary of an existing project for display
+ * @deprecated Use getWorkspaceSummary instead
  */
 export function getProjectSummary(projectPath: string): {
   hasAgents: boolean;
@@ -185,51 +275,8 @@ export function getProjectSummary(projectPath: string): {
   appletCount: number;
   codeFileCount: number;
 } {
-  const vfs = getVFS();
-
-  let hasAgents = false;
-  let hasApplets = false;
-  let hasCode = false;
-  let agentCount = 0;
-  let appletCount = 0;
-  let codeFileCount = 0;
-
-  try {
-    // Check for agents
-    const agentsPath = `${projectPath}/components/agents`;
-    if (vfs.exists(agentsPath)) {
-      const agents = vfs.listDirectory(agentsPath);
-      agentCount = agents?.files?.filter(f => f.path.endsWith('.md')).length || 0;
-      hasAgents = agentCount > 0;
-    }
-
-    // Check for applets
-    const appletsPath = `${projectPath}/applets`;
-    if (vfs.exists(appletsPath)) {
-      const applets = vfs.listDirectory(appletsPath);
-      appletCount = applets?.files?.filter(f => f.path.endsWith('.tsx') || f.path.endsWith('.jsx')).length || 0;
-      hasApplets = appletCount > 0;
-    }
-
-    // Check for code files
-    const codePath = `${projectPath}/output/code`;
-    if (vfs.exists(codePath)) {
-      const codeFiles = vfs.listDirectory(codePath);
-      codeFileCount = codeFiles?.files?.filter(f =>
-        f.path.endsWith('.py') || f.path.endsWith('.js') || f.path.endsWith('.ts')
-      ).length || 0;
-      hasCode = codeFileCount > 0;
-    }
-  } catch (e) {
-    console.log('[ProjectContextResolver] Error getting project summary:', e);
-  }
-
   return {
-    hasAgents,
-    hasApplets,
-    hasCode,
-    agentCount,
-    appletCount,
-    codeFileCount,
+    ...getWorkspaceSummary('user'),
+    codeFileCount: 0,
   };
 }

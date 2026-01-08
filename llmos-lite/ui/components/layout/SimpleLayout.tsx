@@ -201,11 +201,7 @@ function LayoutContent() {
           <div className="flex-1 overflow-hidden">
             {viewMode === 'chat' ? (
               <ChatPanel
-                activeSession={activeSession}
                 activeVolume={activeVolume}
-                onSessionCreated={(sessionId) => setActiveSession(sessionId)}
-                pendingPrompt={null}
-                onPromptProcessed={() => {}}
               />
             ) : (
               <CanvasView

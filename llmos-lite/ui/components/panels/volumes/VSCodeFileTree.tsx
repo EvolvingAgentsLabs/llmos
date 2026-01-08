@@ -4,8 +4,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { getVFS } from '@/lib/virtual-fs';
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
-import NewProjectDialog from '@/components/project/NewProjectDialog';
-import { useProjectContext, ProjectType } from '@/contexts/ProjectContext';
 
 // Import icons from extracted module
 import {
@@ -19,9 +17,6 @@ import {
   EditIcon,
   FolderPlusIcon,
   FilePlusIcon,
-  ProjectsFolderIcon,
-  ProjectIcon,
-  NewProjectIcon,
 } from './icons';
 
 interface TreeNode {
@@ -46,11 +41,9 @@ interface VSCodeFileTreeProps {
   onFileSelect?: (node: TreeNode) => void;
   onCodeFileSelect?: (path: string) => void;
   selectedFile?: string | null;
-  onProjectSelect?: (projectName: string, volume: 'team' | 'user') => void;
 }
 
-// Mock data structure - Single tree with volumes as root drives
-// Note: Desktop/Applets functionality moved to the view mode toggle in the main layout
+// Root tree structure - volumes as drives
 const ROOT_TREE: TreeNode[] = [
   {
     id: 'system',
@@ -100,22 +93,6 @@ const ROOT_TREE: TreeNode[] = [
         ],
       },
       {
-        id: 'system-code',
-        name: 'code',
-        type: 'folder',
-        path: '/volumes/system/code',
-        metadata: { readonly: true },
-        children: [],
-      },
-      {
-        id: 'system-workflows',
-        name: 'workflows',
-        type: 'folder',
-        path: '/volumes/system/workflows',
-        metadata: { readonly: true },
-        children: [],
-      },
-      {
         id: 'system-memory-log',
         name: 'memory_log.md',
         type: 'file',
@@ -130,15 +107,7 @@ const ROOT_TREE: TreeNode[] = [
     type: 'volume',
     path: '/volumes/team',
     metadata: { volume: 'team' },
-    children: [
-      {
-        id: 'team-projects',
-        name: 'projects',
-        type: 'folder',
-        path: '/volumes/team/projects',
-        children: [], // Will be populated dynamically from VFS
-      },
-    ],
+    children: [], // Populated from VFS
   },
   {
     id: 'user',
@@ -146,15 +115,7 @@ const ROOT_TREE: TreeNode[] = [
     type: 'volume',
     path: '/volumes/user',
     metadata: { volume: 'user' },
-    children: [
-      {
-        id: 'user-projects',
-        name: 'projects',
-        type: 'folder',
-        path: '/volumes/user/projects',
-        children: [], // Will be populated dynamically from VFS
-      },
-    ],
+    children: [], // Populated from VFS
   },
 ];
 
@@ -164,19 +125,13 @@ export default function VSCodeFileTree({
   onFileSelect,
   onCodeFileSelect,
   selectedFile,
-  onProjectSelect,
 }: VSCodeFileTreeProps) {
-  // Start with system collapsed, expand user and team by default
+  // Start with user and team expanded
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    new Set(['team', 'user', 'team-projects', 'user-projects'])
+    new Set(['team', 'user'])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-
-  // New Project Dialog state
-  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
-
-  // Project context for creating new projects
-  const { addProject, setActiveProject } = useProjectContext();
+  const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
 
   // Check if a file is a code file based on extension
   const isCodeFile = (filename: string): boolean => {
@@ -184,7 +139,6 @@ export default function VSCodeFileTree({
     const ext = filename.split('.').pop()?.toLowerCase() || '';
     return codeExtensions.includes(ext);
   };
-  const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -212,53 +166,42 @@ export default function VSCodeFileTree({
     name: string;
   } | null>(null);
 
-  // Load VFS projects on mount and when activeVolume changes
+  // Load VFS files on mount and periodically refresh
   useEffect(() => {
-    const loadVFSProjects = () => {
+    const loadVFSFiles = () => {
       try {
         const vfs = getVFS();
-        const { files, directories } = vfs.listDirectory('projects');
+        const allFiles = vfs.getAllFiles();
 
-        // Build tree from VFS
-        const vfsProjects = buildVFSTree(files, directories);
+        // Build tree from all VFS files
+        const vfsTree = buildVFSTree(allFiles);
 
         // Update tree data
         setTreeData(prev => {
           const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
           const userVolume = newTree.find(v => v.id === 'user');
-          if (userVolume && userVolume.children) {
-            const projectsFolder = userVolume.children.find(f => f.id === 'user-projects');
-            if (projectsFolder) {
-              projectsFolder.children = vfsProjects;
-            }
+          if (userVolume) {
+            userVolume.children = vfsTree;
           }
           return newTree;
         });
       } catch (error) {
-        console.error('Failed to load VFS projects:', error);
+        console.error('Failed to load VFS files:', error);
       }
     };
 
-    loadVFSProjects();
+    loadVFSFiles();
 
-    // Refresh every 2 seconds to pick up new files
-    const interval = setInterval(loadVFSProjects, 2000);
+    // Refresh every 2 seconds
+    const interval = setInterval(loadVFSFiles, 2000);
     return () => clearInterval(interval);
   }, [activeVolume]);
 
-  // Helper to build tree from VFS files
-  const buildVFSTree = (files: any[], directories: string[]): TreeNode[] => {
-    // Get all VFS files (not just direct children)
-    const vfs = getVFS();
-    const allFiles = vfs.getAllFiles();
-
-    // Filter for files in projects/ directory
-    const projectFiles = allFiles.filter(f => f.path.startsWith('projects/'));
-
-    // Build a map of all nodes (directories and files)
+  // Build tree from VFS files
+  const buildVFSTree = (files: any[]): TreeNode[] => {
     const nodeMap = new Map<string, TreeNode>();
 
-    // Helper to ensure a directory node exists
+    // Helper to ensure a directory exists
     const ensureDirectory = (path: string): TreeNode => {
       if (nodeMap.has(path)) {
         return nodeMap.get(path)!;
@@ -277,8 +220,8 @@ export default function VSCodeFileTree({
 
       nodeMap.set(path, node);
 
-      // Ensure parent directory exists and add this as a child
-      if (parts.length > 2) { // More than just 'projects/projectname'
+      // Ensure parent exists
+      if (parts.length > 1) {
         const parentPath = parts.slice(0, -1).join('/');
         const parentNode = ensureDirectory(parentPath);
         if (parentNode.children && !parentNode.children.find(c => c.id === node.id)) {
@@ -290,11 +233,11 @@ export default function VSCodeFileTree({
     };
 
     // Process all files
-    projectFiles.forEach(file => {
+    files.forEach(file => {
       const parts = file.path.split('/');
 
-      // Ensure all parent directories exist
-      if (parts.length > 2) {
+      // Ensure parent directories exist
+      if (parts.length > 1) {
         const dirPath = parts.slice(0, -1).join('/');
         ensureDirectory(dirPath);
       }
@@ -312,51 +255,60 @@ export default function VSCodeFileTree({
         },
       };
 
-      // Add file to its parent directory
-      const parentPath = parts.slice(0, -1).join('/');
-      const parentNode = nodeMap.get(parentPath);
-      if (parentNode && parentNode.children) {
-        parentNode.children.push(fileNode);
-      }
-    });
-
-    // Return only top-level project directories (children of 'projects/')
-    const topLevelProjects: TreeNode[] = [];
-    nodeMap.forEach((node, path) => {
-      const parts = path.split('/');
-      if (parts.length === 2 && parts[0] === 'projects') {
-        // Sort children (directories first, then files, both alphabetically)
-        if (node.children) {
-          node.children.sort((a, b) => {
-            if (a.type === b.type) {
-              return a.name.localeCompare(b.name);
-            }
-            return a.type === 'folder' ? -1 : 1;
-          });
-
-          // Recursively sort all descendants
-          const sortChildren = (n: TreeNode) => {
-            if (n.children) {
-              n.children.sort((a, b) => {
-                if (a.type === b.type) {
-                  return a.name.localeCompare(b.name);
-                }
-                return a.type === 'folder' ? -1 : 1;
-              });
-              n.children.forEach(sortChildren);
-            }
-          };
-          sortChildren(node);
+      // Add to parent
+      if (parts.length > 1) {
+        const parentPath = parts.slice(0, -1).join('/');
+        const parentNode = nodeMap.get(parentPath);
+        if (parentNode && parentNode.children) {
+          parentNode.children.push(fileNode);
         }
-
-        topLevelProjects.push(node);
+      } else {
+        // Root level file
+        nodeMap.set(file.path, fileNode as any);
       }
     });
 
-    // Sort top-level projects
-    topLevelProjects.sort((a, b) => a.name.localeCompare(b.name));
+    // Return top-level nodes
+    const topLevel: TreeNode[] = [];
+    nodeMap.forEach((node, path) => {
+      if (!path.includes('/')) {
+        // Sort children
+        const sortChildren = (n: TreeNode) => {
+          if (n.children) {
+            n.children.sort((a, b) => {
+              if (a.type === b.type) return a.name.localeCompare(b.name);
+              return a.type === 'folder' ? -1 : 1;
+            });
+            n.children.forEach(sortChildren);
+          }
+        };
+        sortChildren(node);
+        topLevel.push(node);
+      }
+    });
 
-    return topLevelProjects;
+    // Also include root-level files
+    files.filter(f => !f.path.includes('/')).forEach(file => {
+      const fileNode: TreeNode = {
+        id: `vfs-file-${file.path}`,
+        name: file.path,
+        type: 'file',
+        path: file.path,
+        metadata: {
+          size: `${(file.size / 1024).toFixed(1)} KB`,
+        },
+      };
+      if (!topLevel.find(n => n.id === fileNode.id)) {
+        topLevel.push(fileNode);
+      }
+    });
+
+    topLevel.sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'folder' ? -1 : 1;
+    });
+
+    return topLevel;
   };
 
   const toggleNode = useCallback((nodeId: string, volumeType?: 'system' | 'team' | 'user') => {
@@ -370,26 +322,18 @@ export default function VSCodeFileTree({
       return next;
     });
 
-    // If clicking a volume node, notify parent
     if (volumeType) {
       onVolumeChange(volumeType);
     }
   }, [onVolumeChange]);
 
-  // Handle right-click context menu
+  // Handle context menu
   const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Don't show context menu for system volume items (read-only)
-    if (node.metadata?.readonly) {
-      return;
-    }
-
-    // Only show context menu for VFS files/folders (user projects)
-    if (!node.id.startsWith('vfs-')) {
-      return;
-    }
+    if (node.metadata?.readonly) return;
+    if (!node.id.startsWith('vfs-')) return;
 
     setContextMenu({
       isOpen: true,
@@ -398,30 +342,23 @@ export default function VSCodeFileTree({
     });
   }, []);
 
-  // Close context menu
   const closeContextMenu = useCallback(() => {
     setContextMenu({ isOpen: false, position: { x: 0, y: 0 }, node: null });
   }, []);
 
-  // Handle delete confirmation
   const handleDeleteClick = useCallback((node: TreeNode) => {
     setDeleteConfirm({ isOpen: true, node });
     closeContextMenu();
   }, [closeContextMenu]);
 
-  // Perform delete
   const handleDelete = useCallback(() => {
     const node = deleteConfirm.node;
     if (!node) return;
 
     try {
       const vfs = getVFS();
-
-      // Extract the actual VFS path from the node
-      // VFS paths are stored as 'projects/...' but node.path might be the full path
       let vfsPath = node.path;
 
-      // If it's a vfs node, extract path from id
       if (node.id.startsWith('vfs-file-')) {
         vfsPath = node.id.replace('vfs-file-', '');
       } else if (node.id.startsWith('vfs-dir-')) {
@@ -434,20 +371,17 @@ export default function VSCodeFileTree({
         vfs.deleteFile(vfsPath);
       }
 
-      // Close dialog
       setDeleteConfirm({ isOpen: false, node: null });
     } catch (error) {
       console.error('Failed to delete:', error);
     }
   }, [deleteConfirm.node]);
 
-  // Handle rename
   const handleRename = useCallback((node: TreeNode) => {
     setRenameNode({ id: node.id, name: node.name });
     closeContextMenu();
   }, [closeContextMenu]);
 
-  // Perform rename
   const performRename = useCallback((newName: string) => {
     if (!renameNode || !newName.trim()) {
       setRenameNode(null);
@@ -456,8 +390,6 @@ export default function VSCodeFileTree({
 
     try {
       const vfs = getVFS();
-
-      // Extract path from node id
       let oldPath = '';
       if (renameNode.id.startsWith('vfs-file-')) {
         oldPath = renameNode.id.replace('vfs-file-', '');
@@ -469,7 +401,6 @@ export default function VSCodeFileTree({
         const pathParts = oldPath.split('/');
         pathParts[pathParts.length - 1] = newName.trim();
         const newPath = pathParts.join('/');
-
         vfs.rename(oldPath, newPath);
       }
 
@@ -480,48 +411,6 @@ export default function VSCodeFileTree({
     }
   }, [renameNode]);
 
-  // Handle creating a new project
-  const handleCreateProject = useCallback((data: { name: string; type: ProjectType; goal?: string }) => {
-    const volume = data.type === 'team' ? 'team' : 'user';
-
-    // Create the project in the context
-    const newProject = addProject({
-      name: data.name,
-      type: data.type,
-      status: 'temporal',
-      volume,
-      goal: data.goal,
-    });
-
-    // Create project folder in VFS
-    try {
-      const vfs = getVFS();
-      vfs.createDirectory(`projects/${data.name}`);
-
-      // Create initial memory files
-      vfs.writeFile(`projects/${data.name}/context.md`, `# ${data.name}\n\n## Goal\n${data.goal || 'No goal specified'}\n\n## Context\nProject created on ${new Date().toLocaleString()}\n`);
-      vfs.writeFile(`projects/${data.name}/memory.md`, `# Memory Log - ${data.name}\n\nThis file tracks important learnings and context for this project.\n\n## Entries\n\n`);
-    } catch (error) {
-      console.error('Failed to create project folder:', error);
-    }
-
-    // Set as active project
-    setActiveProject(newProject.id);
-
-    // Notify parent if callback provided
-    if (onProjectSelect) {
-      onProjectSelect(data.name, volume);
-    }
-
-    // Expand the projects folder
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
-      next.add(`${volume}-projects`);
-      return next;
-    });
-  }, [addProject, setActiveProject, onProjectSelect]);
-
-  // Get context menu items for a node
   const getContextMenuItems = useCallback((node: TreeNode): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [];
 
@@ -530,21 +419,15 @@ export default function VSCodeFileTree({
         id: 'new-file',
         label: 'New File',
         icon: <FilePlusIcon />,
-        action: () => {
-          // TODO: Implement new file creation
-          closeContextMenu();
-        },
-        disabled: true, // For now
+        action: () => closeContextMenu(),
+        disabled: true,
       });
       items.push({
         id: 'new-folder',
         label: 'New Folder',
         icon: <FolderPlusIcon />,
-        action: () => {
-          // TODO: Implement new folder creation
-          closeContextMenu();
-        },
-        disabled: true, // For now
+        action: () => closeContextMenu(),
+        disabled: true,
       });
       items.push({ id: 'divider1', label: '', action: () => {}, divider: true });
     }
@@ -570,36 +453,18 @@ export default function VSCodeFileTree({
   }, [closeContextMenu, handleDeleteClick, handleRename]);
 
   const getNodeIcon = (node: TreeNode, isExpanded: boolean): JSX.Element => {
-    // Volume/Drive icon
     if (node.type === 'volume' && node.metadata?.volume) {
       return <DriveIcon type={node.metadata.volume as 'system' | 'team' | 'user'} />;
     }
 
-    // Folder icon - check for special project folders
     if (node.type === 'folder') {
-      // Projects folder under Team or User
-      if (node.id === 'team-projects' || node.id === 'user-projects') {
-        return <ProjectsFolderIcon open={isExpanded} />;
-      }
-
-      // Individual project folders (top-level folders in projects/)
-      // These have IDs like 'vfs-dir-projects/projectname'
-      if (node.id.startsWith('vfs-dir-projects/') && !node.id.includes('/', 17)) {
-        // This is a direct child of projects/ (a project folder)
-        return <ProjectIcon />;
-      }
-
       return <FolderIcon open={isExpanded} />;
     }
 
-    // File icons
     if (node.type === 'file') {
-      // Special file types
       if (node.metadata?.fileType) {
         return <SpecialIcon type={node.metadata.fileType} />;
       }
-
-      // Regular file by extension
       const ext = node.name.split('.').pop()?.toLowerCase() || 'file';
       return <FileIcon ext={ext} />;
     }
@@ -616,35 +481,15 @@ export default function VSCodeFileTree({
     const isRenaming = renameNode?.id === node.id;
     const isVFSNode = node.id.startsWith('vfs-');
 
-    // Check if this node is a project folder (direct child of projects/)
-    const isProjectFolder = node.id.startsWith('vfs-dir-projects/') && !node.id.slice(17).includes('/');
-
-    // Handle node click
     const handleNodeClick = () => {
       setSelectedNodeId(node.id);
 
-      // Handle project folder selection - notify parent and set as active
-      if (isProjectFolder && node.type === 'folder') {
-        // Extract volume type from parent context
-        // The path is like 'projects/projectname', we need to determine if it's in team or user
-        const volume = activeVolume === 'team' ? 'team' : 'user';
-        if (onProjectSelect) {
-          onProjectSelect(node.name, volume);
-        }
-        // Also toggle expand
-        toggleNode(node.id);
-        return;
-      }
-
-      // Handle folders and volumes - toggle expand
       if (node.type === 'folder' || node.type === 'volume') {
         toggleNode(node.id, node.metadata?.volume as 'system' | 'team' | 'user' | undefined);
         return;
       }
 
-      // Handle files
       if (node.type === 'file') {
-        // Check if it's a code file
         if (isCodeFile(node.name) && onCodeFileSelect) {
           onCodeFileSelect(node.path);
         } else if (onFileSelect) {
@@ -655,7 +500,6 @@ export default function VSCodeFileTree({
 
     return (
       <div key={node.id}>
-        {/* Node row */}
         <div
           className={`
             group flex items-center gap-1 py-0.5 px-1 cursor-pointer
@@ -667,7 +511,6 @@ export default function VSCodeFileTree({
           onClick={handleNodeClick}
           onContextMenu={(e) => handleContextMenu(e, node)}
         >
-          {/* Chevron (only for nodes with children) */}
           <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
             {hasChildren && (
               isExpanded ? (
@@ -678,12 +521,10 @@ export default function VSCodeFileTree({
             )}
           </div>
 
-          {/* Icon */}
           <div className="flex-shrink-0">
             {getNodeIcon(node, isExpanded)}
           </div>
 
-          {/* Name or Rename Input */}
           {isRenaming ? (
             <input
               type="text"
@@ -710,14 +551,12 @@ export default function VSCodeFileTree({
             </span>
           )}
 
-          {/* Read-only badge */}
           {isReadOnly && node.type === 'volume' && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-bg-elevated text-fg-tertiary font-normal">
               RO
             </span>
           )}
 
-          {/* Delete button on hover (for VFS nodes only) */}
           {isVFSNode && !isReadOnly && !isRenaming && (
             <button
               className="opacity-30 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-all ml-auto"
@@ -725,7 +564,7 @@ export default function VSCodeFileTree({
                 e.stopPropagation();
                 handleDeleteClick(node);
               }}
-              title="Delete (or right-click for more options)"
+              title="Delete"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -734,7 +573,6 @@ export default function VSCodeFileTree({
           )}
         </div>
 
-        {/* Children */}
         {hasChildren && isExpanded && (
           <div>
             {node.children!.map((child) => renderTreeNode(child, depth + 1))}
@@ -744,7 +582,6 @@ export default function VSCodeFileTree({
     );
   };
 
-  // Count total items in active volume
   const countItems = (nodes: TreeNode[]): number => {
     return nodes.reduce((count, node) => {
       let total = node.type === 'file' ? 1 : 0;
@@ -760,21 +597,12 @@ export default function VSCodeFileTree({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Tree header with toolbar */}
+      {/* Header */}
       <div className="px-3 py-2 border-b border-border-primary/50 flex items-center justify-between">
         <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
           Explorer
         </span>
         <div className="flex items-center gap-1">
-          {/* New Project Button */}
-          <button
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-accent-primary/20 transition-colors group"
-            onClick={() => setShowNewProjectDialog(true)}
-            title="New Project"
-          >
-            <NewProjectIcon />
-          </button>
-          {/* Collapse All Button */}
           <button
             className="w-5 h-5 flex items-center justify-center rounded hover:bg-bg-tertiary transition-colors"
             onClick={() => setExpandedNodes(new Set())}
@@ -787,12 +615,12 @@ export default function VSCodeFileTree({
         </div>
       </div>
 
-      {/* File tree - Single unified tree with volumes as drives */}
+      {/* File tree */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 py-2 scrollbar-thin">
         {treeData.map((volumeNode) => renderTreeNode(volumeNode, 0))}
       </div>
 
-      {/* Tree footer (stats) */}
+      {/* Footer */}
       <div className="px-3 py-1.5 border-t border-border-primary/50 bg-bg-secondary/30">
         <div className="text-[10px] text-fg-tertiary flex items-center gap-3">
           <span className="flex items-center gap-1">
@@ -812,24 +640,16 @@ export default function VSCodeFileTree({
         onClose={closeContextMenu}
       />
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
         title={deleteConfirm.node?.type === 'folder' ? 'Delete Folder' : 'Delete File'}
-        message={`Are you sure you want to delete "${deleteConfirm.node?.name}"?${deleteConfirm.node?.type === 'folder' ? ' This will delete all contents inside.' : ''} This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deleteConfirm.node?.name}"?${deleteConfirm.node?.type === 'folder' ? ' This will delete all contents.' : ''}`}
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm({ isOpen: false, node: null })}
         danger
-      />
-
-      {/* New Project Dialog */}
-      <NewProjectDialog
-        isOpen={showNewProjectDialog}
-        onClose={() => setShowNewProjectDialog(false)}
-        onCreate={handleCreateProject}
-        defaultVolume={activeVolume}
       />
     </div>
   );

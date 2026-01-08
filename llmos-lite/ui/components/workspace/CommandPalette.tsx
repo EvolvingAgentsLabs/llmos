@@ -125,7 +125,7 @@ export default function CommandPalette() {
     setFocusedPanel,
     setActiveFile,
   } = useWorkspace();
-  const { projects, addProject, setActiveProject } = useProjectContext();
+  const { activeVolume, clearMessages } = useProjectContext();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -312,33 +312,20 @@ export default function CommandPalette() {
       action: () => { resetLayout(); closeCommandPalette(); },
     },
 
-    // Sessions
+    // Workspace Actions
     {
-      id: 'session-new',
-      label: 'New Project',
-      description: 'Create a new project',
-      icon: icons.plus,
-      category: 'session',
+      id: 'clear-chat',
+      label: 'Clear Chat History',
+      description: `Clear messages in ${activeVolume} workspace`,
+      icon: icons.refresh,
+      category: 'action',
       action: () => {
-        const newProject = addProject({
-          name: `Project ${Date.now()}`,
-          type: 'user',
-          status: 'temporal',
-          volume: 'user',
-        });
-        setActiveProject(newProject.id);
+        if (confirm('Are you sure you want to clear the chat history?')) {
+          clearMessages();
+        }
         closeCommandPalette();
       },
     },
-    // Add recent projects
-    ...projects.slice(0, 5).map((project, index) => ({
-      id: `project-${project.id}`,
-      label: project.name,
-      description: `${project.messages.length} messages · ${project.timeAgo}`,
-      icon: icons.chat,
-      category: 'session' as const,
-      action: () => { setActiveProject(project.id); closeCommandPalette(); },
-    })),
 
     // Actions
     {
@@ -371,7 +358,7 @@ export default function CommandPalette() {
         closeCommandPalette();
       },
     })),
-  ], [projects, vfsFiles, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, setActiveFile, addProject, setActiveProject, closeCommandPalette]);
+  ], [activeVolume, vfsFiles, toggleSidebar, toggleContext, setContextViewMode, resetLayout, suggestLayout, setFocusedPanel, setActiveFile, clearMessages, closeCommandPalette]);
 
   // Filter commands by query
   const filteredCommands = useMemo(() => {
