@@ -12,7 +12,7 @@
  * - AI-powered error fixing (uses LLM to analyze and fix code errors)
  */
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import {
   AppletRuntime,
   AppletMetadata,
@@ -22,6 +22,7 @@ import {
 } from '@/lib/runtime/applet-runtime';
 import { fixAppletError, isCodeError } from '@/lib/applets/applet-error-fixer';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { AppletErrorBoundary } from '@/components/shared/ErrorBoundary';
 import {
   X,
   Minimize2,
@@ -80,6 +81,8 @@ export function AppletViewer({
   const [fixAttempt, setFixAttempt] = useState(0);
   const [currentCode, setCurrentCode] = useState(code);
   const [isAutoFixing, setIsAutoFixing] = useState(false);
+  const [runtimeError, setRuntimeError] = useState<Error | null>(null);
+  const errorBoundaryRef = useRef<{ reset: () => void } | null>(null);
   const MAX_AUTO_RETRIES = 3;
   const MAX_FIX_ATTEMPTS = 3;
 
@@ -314,6 +317,35 @@ export function AppletViewer({
 
   const metadata = exports?.metadata || initialMetadata;
 
+  // Handle runtime errors from the AppletErrorBoundary
+  const handleRuntimeError = useCallback((error: Error) => {
+    setRuntimeError(error);
+    logActivity('error', 'Applet runtime crash', error.message.slice(0, 100));
+    setAgentState('error');
+    setTimeout(() => setAgentState('idle'), 3000);
+  }, [logActivity, setAgentState]);
+
+  // Handle AI fix for runtime errors
+  const handleRuntimeAIFix = useCallback(async (error: Error) => {
+    setRuntimeError(null);
+    setFixAttempt(0);
+    setIsAutoFixing(true);
+    const fixed = await attemptAIFix(error.message, currentCode);
+    setIsAutoFixing(false);
+    if (fixed) {
+      // Reset will happen automatically when code updates
+      logActivity('success', 'Runtime error fixed by AI', appletName);
+    }
+  }, [currentCode, attemptAIFix, appletName, logActivity]);
+
+  // Handle retry from error boundary
+  const handleBoundaryRetry = useCallback(() => {
+    setRuntimeError(null);
+    logActivity('action', 'Retrying crashed applet', appletName);
+    // Force a recompile
+    compile();
+  }, [compile, appletName, logActivity]);
+
   // Render the compiled component
   const renderApplet = () => {
     if (!exports?.Component) return null;
@@ -328,16 +360,24 @@ export function AppletViewer({
     };
 
     return (
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-            <span className="ml-2 text-gray-400">Loading applet...</span>
-          </div>
-        }
+      <AppletErrorBoundary
+        appletName={appletName}
+        onError={handleRuntimeError}
+        onRetry={handleBoundaryRetry}
+        onAIFix={handleRuntimeAIFix}
+        onClose={onClose}
       >
-        <AppletComponent {...appletProps} />
-      </Suspense>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+              <span className="ml-2 text-gray-400">Loading applet...</span>
+            </div>
+          }
+        >
+          <AppletComponent {...appletProps} />
+        </Suspense>
+      </AppletErrorBoundary>
     );
   };
 
