@@ -441,7 +441,7 @@ export class ClientEvolutionEngine {
       const { frontmatter, body } = this.parseFrontmatter(content);
 
       // Extract goal from body or frontmatter
-      let goal = frontmatter.goal || frontmatter.task || '';
+      let goal = String(frontmatter.goal || frontmatter.task || '');
       if (!goal) {
         const goalMatch = body.match(/## (?:User )?Goal\s*\n+([^\n#]+)/i);
         goal = goalMatch ? goalMatch[1].trim() : '';
@@ -450,19 +450,19 @@ export class ClientEvolutionEngine {
       if (!goal) return null;
 
       return {
-        traceId: frontmatter.trace_id || path,
-        timestamp: frontmatter.timestamp || new Date().toISOString(),
-        project: frontmatter.project || this.extractProjectFromPath(path),
-        goal,
-        agentName: frontmatter.agent_name || 'unknown',
-        agentPath: frontmatter.agent_path,
-        status: this.parseStatus(frontmatter.status),
+        traceId: String(frontmatter.trace_id || path),
+        timestamp: String(frontmatter.timestamp || new Date().toISOString()),
+        project: String(frontmatter.project || this.extractProjectFromPath(path)),
+        goal: String(goal),
+        agentName: String(frontmatter.agent_name || 'unknown'),
+        agentPath: frontmatter.agent_path ? String(frontmatter.agent_path) : undefined,
+        status: this.parseStatus(frontmatter.status ? String(frontmatter.status) : undefined),
         successRating: this.parseSuccessRating(frontmatter, body),
-        toolsUsed: frontmatter.tools_used || [],
-        duration: frontmatter.duration_ms || 0,
-        parentTraceId: frontmatter.parent_trace_id,
-        linkType: frontmatter.link_type,
-        lifecycleState: frontmatter.lifecycle_state || 'active',
+        toolsUsed: Array.isArray(frontmatter.tools_used) ? frontmatter.tools_used.map(String) : [],
+        duration: Number(frontmatter.duration_ms) || 0,
+        parentTraceId: frontmatter.parent_trace_id ? String(frontmatter.parent_trace_id) : undefined,
+        linkType: this.parseLinkType(frontmatter.link_type),
+        lifecycleState: this.parseLifecycleState(frontmatter.lifecycle_state),
       };
     } catch {
       return null;
@@ -502,6 +502,22 @@ export class ClientEvolutionEngine {
     if (status === 'success' || status === 'completed') return 'success';
     if (status === 'failure' || status === 'failed') return 'failure';
     return 'partial';
+  }
+
+  private parseLinkType(linkType: unknown): ExecutionTrace['linkType'] {
+    const lt = String(linkType || '');
+    if (lt === 'sequential' || lt === 'hierarchical' || lt === 'dependency' || lt === 'parallel') {
+      return lt;
+    }
+    return undefined;
+  }
+
+  private parseLifecycleState(state: unknown): ExecutionTrace['lifecycleState'] {
+    const s = String(state || 'active');
+    if (s === 'active' || s === 'consolidated' || s === 'archived') {
+      return s;
+    }
+    return 'active';
   }
 
   private parseSuccessRating(frontmatter: Record<string, unknown>, body: string): number {
