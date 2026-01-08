@@ -10,6 +10,7 @@
 
 import { getVFS } from '../virtual-fs';
 import { executePython } from '../pyodide-runtime';
+import { getLLMPatternMatcher, QueryMemoryOptions } from './llm-pattern-matcher';
 
 // =============================================================================
 // MCP Tool Schema Types (following MCP specification)
@@ -183,12 +184,56 @@ export const QUERY_MEMORY_TOOL: MCPToolDefinition = {
         type: 'string',
         description: 'Natural language query describing what you\'re looking for (e.g., "How to create FFT visualizations" or "Previous data analysis workflows")'
       },
+      memory_type: {
+        type: 'string',
+        description: 'Type of memory to search',
+        enum: ['agent_templates', 'workflow_patterns', 'domain_knowledge', 'skills', 'traces', 'all']
+      },
+      scope: {
+        type: 'string',
+        description: 'Search scope: project (current only), global (all projects), similar (matching domains)',
+        enum: ['project', 'global', 'similar']
+      },
       limit: {
         type: 'number',
-        description: 'Maximum number of results to return (default: 5)'
+        description: 'Maximum number of results to return (default: 10)'
+      },
+      min_relevance: {
+        type: 'number',
+        description: 'Minimum relevance score 0.0-1.0 (default: 0.3)'
       }
     },
     required: ['query']
+  }
+};
+
+export const ARCHIVE_TRACES_TOOL: MCPToolDefinition = {
+  name: 'archive_traces',
+  description: 'Archive old consolidated traces to reduce active memory footprint. Traces older than the specified days will be moved to archived state.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      older_than_days: {
+        type: 'number',
+        description: 'Archive traces older than this many days (default: 7)'
+      }
+    },
+    required: []
+  }
+};
+
+export const BUILD_TRACE_GRAPH_TOOL: MCPToolDefinition = {
+  name: 'build_trace_graph',
+  description: 'Build a graph visualization of trace relationships showing parent-child and dependency links between execution traces.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      root_trace_id: {
+        type: 'string',
+        description: 'Optional root trace ID to start from. If not provided, includes all traces.'
+      }
+    },
+    required: []
   }
 };
 
@@ -421,7 +466,7 @@ async function executeExecutePython(args: Record<string, any>): Promise<MCPToolR
 }
 
 async function executeQueryMemory(args: Record<string, any>): Promise<MCPToolResult> {
-  const { query, limit = 5 } = args;
+  const { query, memory_type, scope, limit = 10, min_relevance = 0.3 } = args;
 
   if (!query) {
     return {
@@ -431,63 +476,217 @@ async function executeQueryMemory(args: Record<string, any>): Promise<MCPToolRes
   }
 
   try {
-    const vfs = getVFS();
-    const memoryPath = 'system/memory_log.md';
+    // Use the enhanced pattern matcher for structured queries
+    const patternMatcher = getLLMPatternMatcher();
 
-    let memoryContent = '';
-    try {
-      memoryContent = vfs.readFileContent(memoryPath) || '';
-    } catch {
-      // Try fetching from public
+    const options: QueryMemoryOptions = {
+      memoryType: memory_type || 'all',
+      scope: scope || 'global',
+      limit,
+      minRelevance: min_relevance
+    };
+
+    const result = await patternMatcher.queryMemory(query, options);
+
+    if (result.matches.length === 0) {
+      // Fallback to file-based search
+      const vfs = getVFS();
+      const memoryPath = 'system/memory_log.md';
+
+      let memoryContent = '';
       try {
-        const response = await fetch('/system/memory_log.md');
-        if (response.ok) {
-          memoryContent = await response.text();
-        }
+        memoryContent = vfs.readFileContent(memoryPath) || '';
       } catch {
-        memoryContent = '';
+        try {
+          const response = await fetch('/system/memory_log.md');
+          if (response.ok) {
+            memoryContent = await response.text();
+          }
+        } catch {
+          memoryContent = '';
+        }
       }
-    }
 
-    if (!memoryContent) {
+      if (!memoryContent) {
+        return {
+          content: [{ type: 'text', text: `No relevant memories found for: "${query}"\n\nThe system is still learning.` }]
+        };
+      }
+
+      // Parse memory entries from file
+      const entries = memoryContent.split('---').filter(e => e.trim());
+      const queryTerms = query.toLowerCase().split(/\s+/);
+      const scored = entries.map(entry => {
+        const lower = entry.toLowerCase();
+        const score = queryTerms.reduce((sum: number, term: string) =>
+          sum + (lower.includes(term) ? 1 : 0), 0);
+        return { entry, score };
+      });
+
+      const relevant = scored
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(s => s.entry.trim());
+
+      if (relevant.length === 0) {
+        return {
+          content: [{ type: 'text', text: `No relevant memories found for: "${query}"` }]
+        };
+      }
+
       return {
-        content: [{ type: 'text', text: 'No memory entries found. The system is still learning.' }]
+        content: [{
+          type: 'text',
+          text: `Found ${relevant.length} relevant memories (file search):\n\n${relevant.join('\n\n---\n\n')}`
+        }]
       };
     }
 
-    // Parse memory entries
-    const entries = memoryContent.split('---').filter(e => e.trim());
+    // Format structured results
+    let output = `# Memory Query Results\n\n`;
+    output += `**Query:** "${query}"\n`;
+    output += `**Scope:** ${options.scope}\n`;
+    output += `**Type:** ${options.memoryType}\n`;
+    output += `**Search Time:** ${result.searchTimeMs}ms\n\n`;
+    output += `${result.querySummary}\n\n`;
 
-    // Simple keyword matching (will be enhanced with LLM-based matching)
-    const queryTerms = query.toLowerCase().split(/\s+/);
-    const scored = entries.map(entry => {
-      const lower = entry.toLowerCase();
-      const score = queryTerms.reduce((sum: number, term: string) =>
-        sum + (lower.includes(term) ? 1 : 0), 0);
-      return { entry, score };
-    });
-
-    const relevant = scored
-      .filter(s => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-      .map(s => s.entry.trim());
-
-    if (relevant.length === 0) {
-      return {
-        content: [{ type: 'text', text: `No relevant memories found for: "${query}"` }]
-      };
+    for (const match of result.matches) {
+      output += `---\n\n`;
+      output += `### ${match.type} (relevance: ${(match.relevance * 100).toFixed(0)}%)\n`;
+      output += `**Path:** ${match.path}\n`;
+      output += `**Excerpt:** ${match.excerpt}\n`;
+      if (match.metadata.agentName) {
+        output += `**Agent:** ${match.metadata.agentName}\n`;
+      }
+      if (match.metadata.toolsUsed?.length > 0) {
+        output += `**Tools:** ${match.metadata.toolsUsed.join(', ')}\n`;
+      }
+      output += `**Success:** ${match.metadata.success ? 'Yes' : 'No'}\n`;
+      output += `**Timestamp:** ${match.metadata.timestamp}\n`;
+      output += `**State:** ${match.metadata.lifecycleState || 'active'}\n\n`;
     }
 
     return {
-      content: [{
-        type: 'text',
-        text: `Found ${relevant.length} relevant memories:\n\n${relevant.join('\n\n---\n\n')}`
-      }]
+      content: [{ type: 'text', text: output }]
     };
   } catch (error: any) {
     return {
       content: [{ type: 'text', text: `Error querying memory: ${error.message}` }],
+      isError: true
+    };
+  }
+}
+
+async function executeArchiveTraces(args: Record<string, any>): Promise<MCPToolResult> {
+  const { older_than_days = 7 } = args;
+
+  try {
+    const patternMatcher = getLLMPatternMatcher();
+    const archivedCount = patternMatcher.archiveOldTraces(older_than_days);
+
+    const activeTraces = patternMatcher.getTracesByLifecycle('active');
+    const consolidatedTraces = patternMatcher.getTracesByLifecycle('consolidated');
+    const archivedTraces = patternMatcher.getTracesByLifecycle('archived');
+
+    let output = `# Trace Archival Report\n\n`;
+    output += `**Archived:** ${archivedCount} traces older than ${older_than_days} days\n\n`;
+    output += `## Current State\n`;
+    output += `- Active: ${activeTraces.length} traces\n`;
+    output += `- Consolidated: ${consolidatedTraces.length} traces\n`;
+    output += `- Archived: ${archivedTraces.length} traces\n`;
+
+    return {
+      content: [{ type: 'text', text: output }]
+    };
+  } catch (error: any) {
+    return {
+      content: [{ type: 'text', text: `Error archiving traces: ${error.message}` }],
+      isError: true
+    };
+  }
+}
+
+async function executeBuildTraceGraph(args: Record<string, any>): Promise<MCPToolResult> {
+  const { root_trace_id } = args;
+
+  try {
+    const patternMatcher = getLLMPatternMatcher();
+    const graph = patternMatcher.buildTraceGraph(root_trace_id);
+
+    let output = `# Trace Execution Graph\n\n`;
+    output += `**Nodes:** ${graph.nodes.size} traces\n`;
+    output += `**Edges:** ${graph.edges.length} links\n`;
+    if (graph.rootTraceId) {
+      output += `**Root:** ${graph.rootTraceId}\n`;
+    }
+    output += `\n`;
+
+    // Build visual representation
+    output += `## Trace Hierarchy\n\n`;
+    output += '```\n';
+
+    // Find root nodes (no parent)
+    const rootNodes: string[] = [];
+    for (const [id, trace] of graph.nodes) {
+      if (!trace.parentTraceId) {
+        rootNodes.push(id);
+      }
+    }
+
+    const printNode = (nodeId: string, indent: number = 0): string => {
+      const trace = graph.nodes.get(nodeId);
+      if (!trace) return '';
+
+      const prefix = '  '.repeat(indent) + (indent > 0 ? '├── ' : '');
+      let result = `${prefix}[${trace.success ? '✓' : '✗'}] ${trace.id.substring(0, 20)}...\n`;
+      result += `${' '.repeat(indent * 2 + 4)}Goal: ${trace.goal.substring(0, 50)}...\n`;
+
+      // Find children
+      const children = graph.edges
+        .filter(e => e.from === nodeId && e.type === 'hierarchical')
+        .map(e => e.to);
+
+      for (const childId of children) {
+        result += printNode(childId, indent + 1);
+      }
+
+      return result;
+    };
+
+    for (const rootId of rootNodes) {
+      output += printNode(rootId);
+      output += '\n';
+    }
+    output += '```\n\n';
+
+    // Show dependency edges
+    const depEdges = graph.edges.filter(e => e.type === 'dependency');
+    if (depEdges.length > 0) {
+      output += `## Dependencies\n\n`;
+      for (const edge of depEdges) {
+        output += `- ${edge.from.substring(0, 15)}... → ${edge.to.substring(0, 15)}...`;
+        if (edge.artifact) {
+          output += ` (via ${edge.artifact})`;
+        }
+        output += '\n';
+      }
+    }
+
+    // Execution order
+    const order = patternMatcher.getExecutionOrder(root_trace_id);
+    output += `\n## Execution Order\n\n`;
+    order.forEach((id, i) => {
+      const trace = graph.nodes.get(id);
+      output += `${i + 1}. ${id.substring(0, 20)}... - ${trace?.goal.substring(0, 40) || 'Unknown'}...\n`;
+    });
+
+    return {
+      content: [{ type: 'text', text: output }]
+    };
+  } catch (error: any) {
+    return {
+      content: [{ type: 'text', text: `Error building trace graph: ${error.message}` }],
       isError: true
     };
   }
@@ -506,6 +705,10 @@ export function createMCPToolRegistry(): MCPToolRegistry {
   registry.register(LIST_DIRECTORY_TOOL, executeListDirectory);
   registry.register(EXECUTE_PYTHON_TOOL, executeExecutePython);
   registry.register(QUERY_MEMORY_TOOL, executeQueryMemory);
+
+  // Register new tools from llmunix gap analysis
+  registry.register(ARCHIVE_TRACES_TOOL, executeArchiveTraces);
+  registry.register(BUILD_TRACE_GRAPH_TOOL, executeBuildTraceGraph);
 
   return registry;
 }

@@ -2,7 +2,12 @@
 name: SystemAgent
 type: orchestrator
 id: system-agent
+category: core_orchestration
+mode: EXECUTION
 description: Master orchestrator for LLMunix - discovers, creates, evolves, and delegates to markdown sub-agents
+version: "2.0"
+evolved_from: null
+origin: created
 model: anthropic/claude-sonnet-4.5
 maxIterations: 20
 tools:
