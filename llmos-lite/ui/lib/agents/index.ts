@@ -250,3 +250,15 @@ export {
   createModelAwareOrchestrator,
   executeWithModelAwareness
 } from './model-aware-orchestrator';
+
+// =============================================================================
+// Client-Side Agent Manager (Full Browser-Based Agent Management)
+// =============================================================================
+
+export {
+  type Agent,
+  type AgentFrontmatter as ClientAgentFrontmatter,
+  type AgentValidationResult,
+  ClientAgentManager,
+  getAgentManager
+} from './client-agent-manager';

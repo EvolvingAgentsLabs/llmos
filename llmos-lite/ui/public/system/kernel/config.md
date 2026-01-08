@@ -194,9 +194,11 @@ features:
   enableQuantumBackend: true
 
   experimental:
-    llmDrivenEvolution: false # Use LLM for pattern matching
-    selfModifyingKernel: false # AI can edit kernel files
+    llmDrivenEvolution: true  # Use LLM for pattern matching
+    selfModifyingKernel: true # AI can edit kernel files (HYBRID ARCHITECTURE)
     multiModelOrchestration: false # Different models per agent
+    dynamicAgentCreation: true # Create agents on-the-fly via markdown
+    pureMarkdownAgents: true  # Agents are text files, not code
 ```
 
 ---
@@ -219,6 +221,79 @@ environment:
     storage: "memory"
     kv: "memory"
     logging: "warn"
+```
+
+---
+
+## Dynamic Agent Creation (Hybrid Architecture)
+
+```yaml
+dynamicAgents:
+  # Agent creation settings
+  creation:
+    allowedLocations:
+      - "projects/*/agents/*"
+      - "projects/*/components/agents/*"
+    requiredFrontmatter:
+      - name
+      - type
+      - capabilities
+    originTracking: true        # Track copied/evolved/created
+
+  # Agent discovery
+  discovery:
+    patterns:
+      - "**/agents/*.md"
+      - "**/components/agents/*.md"
+    systemAgentsPath: "/system/agents/"
+    cacheDiscovery: true
+    refreshIntervalMs: 30000
+
+  # Self-modification rules
+  selfModification:
+    agentsModifiable: true      # AI can edit agents
+    skillsModifiable: true      # AI can edit skills
+    kernelModifiable: false     # Kernel requires approval
+    memoryCappable: true        # AI can consolidate memory
+
+  # Evolution from pure code to pure text
+  hybridMode:
+    enabled: true
+    pythonAsExecutor: true      # Python backend becomes "dumb executor"
+    markdownAsLogic: true       # Markdown files define behavior
+    instantEvolution: true      # Changes take effect immediately
+```
+
+---
+
+## Claude Code Integration
+
+```yaml
+claudeCode:
+  slashCommand:
+    name: "llmos"
+    path: ".claude/commands/llmos.md"
+    enabled: true
+
+  toolMappings:
+    createAgent: "Write to agents/*.md"
+    discoverAgents: "Glob **/agents/*.md"
+    queryMemory: "Grep + Read"
+    logTrace: "Write to memory/short_term/"
+    executeCode: "Bash python3"
+
+  workflowPhases:
+    - discovery
+    - memoryConsultation
+    - planning
+    - multiAgentPlanning
+    - structureCreation
+    - agentCreation
+    - execution
+    - synthesis
+    - validation
+    - communication
+    - memoryUpdate
 ```
 
 ---

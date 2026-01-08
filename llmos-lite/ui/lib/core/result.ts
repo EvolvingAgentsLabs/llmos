@@ -277,6 +277,8 @@ export const ErrorCodes = {
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   TIMEOUT: 'TIMEOUT',
   UNKNOWN: 'UNKNOWN',
+  PROCESSING_ERROR: 'PROCESSING_ERROR',
+  CONFIGURATION_ERROR: 'CONFIGURATION_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
