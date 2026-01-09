@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@/lib/debug/logger';
+import { llmMetrics } from '@/lib/debug/llm-metrics-store';
 import { getFileTools } from '@/lib/llm-tools/file-tools';
 import {
   Message,
@@ -65,6 +66,20 @@ export class LLMClient {
       }
     }
 
+    // Calculate request payload size for metrics
+    const requestPayload = JSON.stringify({
+      model: this.config.model,
+      messages: finalMessages,
+    });
+    const requestChars = requestPayload.length;
+
+    // Start tracking this request
+    const metricsId = llmMetrics.startRequest(
+      this.config.model,
+      requestChars,
+      finalMessages.length
+    );
+
     try {
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
@@ -74,16 +89,14 @@ export class LLMClient {
           'X-Title': 'LLMos-Lite',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: finalMessages,
-        }),
+        body: requestPayload,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('llm', `OpenRouter API error (${response.status})`, { errorText });
         logger.timeEnd('llm-request', false);
+        llmMetrics.failRequest(metricsId, `API error: ${response.status}`);
 
         try {
           const errorJson = JSON.parse(errorText);
@@ -98,16 +111,33 @@ export class LLMClient {
       if (!data.choices?.[0]?.message) {
         logger.error('llm', 'Unexpected response structure', { data });
         logger.timeEnd('llm-request', false);
+        llmMetrics.failRequest(metricsId, 'Invalid response structure');
         throw new Error('Invalid response structure from OpenRouter API');
       }
 
       const content = data.choices[0].message.content;
+      const responseChars = content?.length || 0;
+
+      // Complete metrics tracking with actual token usage if available
+      llmMetrics.completeRequest(
+        metricsId,
+        responseChars,
+        data.usage ? {
+          prompt: data.usage.prompt_tokens || 0,
+          completion: data.usage.completion_tokens || 0,
+          total: data.usage.total_tokens || 0,
+        } : undefined
+      );
+
       logger.timeEnd('llm-request', true, {
         tokensUsed: data.usage?.total_tokens,
         model: data.model,
+        requestChars,
+        responseChars,
       });
       return content;
     } catch (error) {
+      llmMetrics.failRequest(metricsId, error instanceof Error ? error.message : String(error));
       logger.error('llm', 'Request failed', { error: error instanceof Error ? error.message : error });
       throw error;
     }
@@ -176,6 +206,32 @@ export class LLMClient {
   ): AsyncGenerator<StreamChunk> {
     const tools = this.fileTools.getToolDefinitions();
 
+    // Calculate request payload size for metrics
+    const requestPayload = JSON.stringify({
+      model: this.config.model,
+      messages: this.formatMessages(messages),
+      tools: tools.map(t => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters
+        }
+      })),
+      tool_choice: 'auto',
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? 4096,
+      stream: true
+    });
+    const requestChars = requestPayload.length;
+
+    // Start tracking this streaming request
+    const metricsId = llmMetrics.startRequest(
+      this.config.model,
+      requestChars,
+      messages.length
+    );
+
     const response = await fetch(`${this.baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -184,36 +240,24 @@ export class LLMClient {
         'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : '',
         'X-Title': 'LLMos-Lite'
       },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: this.formatMessages(messages),
-        tools: tools.map(t => ({
-          type: 'function',
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters
-          }
-        })),
-        tool_choice: 'auto',
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-        stream: true
-      })
+      body: requestPayload
     });
 
     if (!response.ok) {
+      llmMetrics.failRequest(metricsId, `LLM API error: ${response.status}`);
       throw new Error(`LLM API error: ${response.status}`);
     }
 
     const reader = response.body?.getReader();
     if (!reader) {
+      llmMetrics.failRequest(metricsId, 'No response body');
       throw new Error('No response body');
     }
 
     const decoder = new TextDecoder();
     let buffer = '';
     const toolCalls: ToolCall[] = [];
+    let totalResponseChars = 0;
 
     try {
       while (true) {
@@ -234,6 +278,10 @@ export class LLMClient {
           if (!delta) continue;
 
           if (delta.content) {
+            const chunkChars = delta.content.length;
+            totalResponseChars += chunkChars;
+            // Track streaming chunk
+            llmMetrics.updateStreamingChunk(metricsId, chunkChars);
             yield { type: 'text', content: delta.content };
           }
 
@@ -263,6 +311,9 @@ export class LLMClient {
         }
       }
 
+      // Complete the metrics tracking
+      llmMetrics.completeRequest(metricsId, totalResponseChars);
+
       // Execute tool calls if any
       if (toolCalls.length > 0) {
         for (const toolCall of toolCalls) {
@@ -278,6 +329,9 @@ export class LLMClient {
       }
 
       yield { type: 'done' };
+    } catch (error) {
+      llmMetrics.failRequest(metricsId, error instanceof Error ? error.message : String(error));
+      throw error;
     } finally {
       reader.releaseLock();
     }

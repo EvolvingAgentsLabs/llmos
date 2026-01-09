@@ -34,7 +34,9 @@ import {
   AlertTriangle,
   Info,
   Zap,
+  BarChart2,
 } from 'lucide-react';
+import LLMMetricsDisplay, { LLMMetricsBadge } from './LLMMetricsDisplay';
 
 // =============================================================================
 // Event Icon Component
@@ -309,6 +311,7 @@ export default function PlanExecutionLog() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
 
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {
@@ -378,6 +381,20 @@ export default function PlanExecutionLog() {
         </div>
 
         <div className="flex items-center gap-1">
+          {/* LLM Metrics Badge (compact) */}
+          <LLMMetricsBadge />
+
+          {/* Metrics toggle */}
+          <button
+            onClick={() => setShowMetrics(!showMetrics)}
+            className={`p-1 rounded hover:bg-bg-tertiary transition-colors ${
+              showMetrics ? 'text-purple-400' : 'text-fg-muted'
+            }`}
+            title={showMetrics ? 'Hide LLM metrics' : 'Show LLM metrics'}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+          </button>
+
           {/* Auto-scroll toggle */}
           <button
             onClick={() => setAutoScroll(!autoScroll)}
@@ -448,6 +465,13 @@ export default function PlanExecutionLog() {
       {/* Full view */}
       {!isMinimized && (
         <div className="flex flex-col max-h-[calc(70vh-48px)]">
+          {/* LLM Metrics Panel */}
+          {showMetrics && (
+            <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-tertiary/20">
+              <LLMMetricsDisplay compact={false} showLive={true} />
+            </div>
+          )}
+
           {/* Task info */}
           {execution && (
             <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/30">
@@ -537,8 +561,9 @@ export default function PlanExecutionLog() {
           {execution && (
             <div className="px-3 py-2 border-t border-border-primary/50 bg-bg-secondary/30 flex items-center justify-between text-xs text-fg-muted">
               <span>{execution.toolCallCount} tool calls</span>
-              <span>{execution.filesCreated.length} files created</span>
+              <span>{execution.filesCreated.length} files</span>
               <span>{events.length} events</span>
+              {!showMetrics && <LLMMetricsDisplay compact={true} />}
             </div>
           )}
         </div>
