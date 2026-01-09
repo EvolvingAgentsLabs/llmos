@@ -1,8 +1,18 @@
 /**
  * Virtual File System for Browser
  *
- * Stores files in localStorage with a hierarchical structure
- * Supports projects/, memory/, and output/ directories
+ * Stores files in localStorage with a hierarchical structure.
+ *
+ * Volume-based structure:
+ * - user/     - User workspace (default)
+ * - team/     - Shared team workspace
+ * - system/   - System files (read-only for agents)
+ *
+ * Each volume can contain:
+ * - applets/           - UI components
+ * - output/            - Generated files (code, visualizations)
+ * - memory/            - Agent memory (short_term, long_term)
+ * - components/agents/ - Sub-agent definitions
  */
 
 export interface VFSFile {
@@ -82,7 +92,7 @@ export class VirtualFileSystem {
     if (!index) {
       localStorage.setItem(VFS_INDEX_KEY, JSON.stringify({
         files: [],
-        directories: ['/', '/projects', '/system']
+        directories: ['/', '/user', '/team', '/system']
       }));
     }
   }
@@ -114,15 +124,15 @@ export class VirtualFileSystem {
     // Remove leading/trailing slashes
     let normalized = path.replace(/^\/+|\/+$/g, '');
 
-    // Check if path already starts with a valid root directory
-    const rootDirs = ['projects', 'system', 'user', 'team'];
-    const hasValidRoot = rootDirs.some(root =>
-      normalized === root || normalized.startsWith(root + '/')
+    // Check if path already starts with a valid volume
+    const validVolumes = ['user', 'team', 'system'];
+    const hasValidVolume = validVolumes.some(volume =>
+      normalized === volume || normalized.startsWith(volume + '/')
     );
 
-    // If not, default to projects/
-    if (!hasValidRoot && normalized) {
-      normalized = 'projects/' + normalized;
+    // If not, default to user/ volume
+    if (!hasValidVolume && normalized) {
+      normalized = 'user/' + normalized;
     }
 
     return normalized;
@@ -445,7 +455,7 @@ export class VirtualFileSystem {
     // Reset index
     localStorage.setItem(VFS_INDEX_KEY, JSON.stringify({
       files: [],
-      directories: ['/', '/projects', '/system']
+      directories: ['/', '/user', '/team', '/system']
     }));
   }
 }

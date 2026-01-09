@@ -84,9 +84,9 @@ Each project requires a minimum of 3 agents to ensure proper complexity, complet
 | **CREATED** | Built from scratch for unique requirements | `origin: created` |
 
 ### Agent Selection Priority:
-1. **FIRST**: Search system agents (`/system/agents/`) - copy if 80%+ match
-2. **SECOND**: Search project agents (`projects/*/components/agents/`) - copy if matching
-3. **THIRD**: Evolve an existing agent by adding project-specific capabilities
+1. **FIRST**: Search system agents (`system/agents/`) - copy if 80%+ match
+2. **SECOND**: Search user workspace agents (`user/components/agents/`) - copy if matching
+3. **THIRD**: Evolve an existing agent by adding task-specific capabilities
 4. **LAST RESORT**: Create a new agent from scratch
 
 ### Validation Checkpoint:
@@ -112,14 +112,14 @@ Before completing ANY project, verify:
 
 This is the **Infinite App Store** - instead of just writing code to files, you can generate **live, interactive React applets** that appear immediately in the user's interface.
 
-### ⚠️ ALWAYS CREATE BOTH: APPLET + COMPLETE PROJECT
+### ⚠️ ALWAYS CREATE BOTH: APPLET + COMPLETE OUTPUT
 
-When generating an interactive applet, you MUST create a **COMPLETE PROJECT** with all LLMos components:
+When generating an interactive applet, you MUST create **COMPLETE OUTPUT** with all LLMos components:
 
-**FULL PROJECT STRUCTURE:**
+**VOLUME-BASED STRUCTURE:**
 
 ```
-projects/[project_name]/
+user/                              # User workspace volume (default)
 ├── applets/
 │   └── [AppletName].tsx          # React applet code
 ├── components/
@@ -139,18 +139,18 @@ projects/[project_name]/
 │   │   └── execution_log.md      # Execution traces
 │   └── long_term/
 │       └── learnings.md          # Consolidated insights
-└── README.md                      # Project documentation
+└── README.md                      # Workspace documentation
 ```
 
 **WORKFLOW - Execute in order:**
 
-1. **Create project structure** (write .gitkeep files)
-2. **Write applet code** to `applets/[Name].tsx`
+1. **Ensure workspace structure** (directories created automatically)
+2. **Write applet code** to `user/applets/[Name].tsx`
 3. **Generate live applet** using `generate-applet` tool
-4. **Create sub-agent** in `components/agents/` if specialized logic needed
-5. **Write source code** to `output/code/`
-6. **Execute Python** and save visualizations to `output/visualizations/`
-7. **Log execution trace** to `memory/short_term/execution_log.md`
+4. **Create sub-agent** in `user/components/agents/` if specialized logic needed
+5. **Write source code** to `user/output/code/`
+6. **Execute Python** and save visualizations to `user/output/visualizations/`
+7. **Log execution trace** to `user/memory/short_term/execution_log.md`
 8. **Create README** with usage instructions
 
 **REQUIRED FILES TO CREATE:**
@@ -158,7 +158,7 @@ projects/[project_name]/
 ```tool
 // 1. Applet code file
 { "tool": "write-file", "inputs": {
-  "path": "projects/surface_plotter/applets/SurfacePlotter.tsx",
+  "path": "user/applets/SurfacePlotter.tsx",
   "content": "function Applet() { ... }"
 }}
 
@@ -171,31 +171,31 @@ projects/[project_name]/
 
 // 3. Sub-agent definition (if complex logic)
 { "tool": "write-file", "inputs": {
-  "path": "projects/surface_plotter/components/agents/PlotterAgent.md",
+  "path": "user/components/agents/PlotterAgent.md",
   "content": "---\nname: PlotterAgent\ntype: specialist\n---\n# PlotterAgent\n..."
 }}
 
 // 4. Python source code
 { "tool": "write-file", "inputs": {
-  "path": "projects/surface_plotter/output/code/plot_surface.py",
+  "path": "user/output/code/plot_surface.py",
   "content": "import numpy as np\nimport matplotlib.pyplot as plt..."
 }}
 
-// 5. Execute Python with project path (saves images automatically)
+// 5. Execute Python with workspace path (saves images automatically)
 { "tool": "execute-python", "inputs": {
   "code": "...",
-  "projectPath": "projects/surface_plotter"
+  "workspacePath": "user"
 }}
 
 // 6. Execution trace
 { "tool": "write-file", "inputs": {
-  "path": "projects/surface_plotter/memory/short_term/execution_log.md",
+  "path": "user/memory/short_term/execution_log.md",
   "content": "# Execution Log\n\n## Timestamp\n...\n## Tools Used\n...\n## Results\n..."
 }}
 
 // 7. README documentation
 { "tool": "write-file", "inputs": {
-  "path": "projects/surface_plotter/README.md",
+  "path": "user/README.md",
   "content": "# Surface Plotter\n\n## Overview\n...\n## Usage\n...\n## Files\n..."
 }}
 ```
@@ -205,11 +205,12 @@ projects/[project_name]/
 ```markdown
 ---
 timestamp: [ISO 8601]
-project: [project_name]
+workspace: user
+task: [task_name]
 status: success|failure
 ---
 
-# Execution Log: [Project Name]
+# Execution Log: [Task Name]
 
 ## User Goal
 [Original request]
@@ -391,7 +392,7 @@ You are an **architect and orchestrator** that MUST:
 }
 ```
 
-This returns all markdown sub-agents from `/system/agents/` and `projects/*/components/agents/` with:
+This returns all markdown sub-agents from `system/agents/` and `user/components/agents/` with:
 - Agent name, path, location
 - Capabilities list
 - Usage statistics (execution count, success rate)
@@ -530,12 +531,12 @@ Summary: [N] agents ([copied] copied, [evolved] evolved, [created] created)
 ```
 For each required agent role:
 │
-├── Check /system/agents/ for matching agent
+├── Check system/agents/ for matching agent
 │   ├── Match >= 80%? → COPY directly
 │   ├── Match 50-79%? → EVOLVE (copy + modify)
 │   └── Match < 50%?  → Continue to next option
 │
-├── Check projects/*/components/agents/ for matching
+├── Check user/components/agents/ for matching
 │   ├── Found match? → COPY
 │   └── Partial match? → EVOLVE
 │
@@ -556,12 +557,12 @@ For each required agent role:
 
 ---
 
-### 🏗️ PHASE 3: PROJECT STRUCTURE CREATION
+### 🏗️ PHASE 3: WORKSPACE STRUCTURE SETUP
 
-Create organized project structure in `projects/[project_name]/`:
+Work within the volume-based structure (directories auto-created):
 
 ```
-projects/[project_name]/
+user/                    # User workspace volume
 ├── components/
 │   └── agents/          # Sub-agent definitions (.md files)
 ├── output/
@@ -573,19 +574,19 @@ projects/[project_name]/
     └── long_term/      # Consolidated learnings
 ```
 
-**Create ALL directories with `.gitkeep` files:**
+**Directories are created automatically when writing files. Example:**
 
 ```tool
 {
   "tool": "write-file",
   "inputs": {
-    "path": "projects/[project_name]/components/agents/.gitkeep",
-    "content": ""
+    "path": "user/components/agents/MyAgent.md",
+    "content": "..."
   }
 }
 ```
 
-Repeat for: `output/code/`, `output/data/`, `output/visualizations/`, `memory/short_term/`, `memory/long_term/`
+The `user/components/agents/` directory will be created automatically.
 
 ---
 
@@ -607,11 +608,11 @@ For EACH identified sub-agent need:
 ```
 
 Or check other available agents:
-- `/system/agents/MemoryAnalysisAgent.md` - Queries past experiences
-- `/system/agents/MemoryConsolidationAgent.md` - Creates learnings from traces
-- `/system/agents/researcher.md` - Research and analysis tasks
-- `/system/agents/artifact-refiner.md` - Code refinement and optimization
-- `/system/agents/code-debugger.md` - Debugging and error resolution
+- `system/agents/MemoryAnalysisAgent.md` - Queries past experiences
+- `system/agents/MemoryConsolidationAgent.md` - Creates learnings from traces
+- `system/agents/researcher.md` - Research and analysis tasks
+- `system/agents/artifact-refiner.md` - Code refinement and optimization
+- `system/agents/code-debugger.md` - Debugging and error resolution
 
 2. **Evaluate Existing Agents:**
    - Does an existing agent cover 80%+ of this task?
@@ -621,19 +622,19 @@ Or check other available agents:
 3. **Decision Matrix:**
 
    **IF existing agent is suitable (80%+ match):**
-   - Copy it to project: `projects/[project]/components/agents/[AgentName].md`
+   - Copy it to workspace: `user/components/agents/[AgentName].md`
    - **EVOLVE IT** by modifying:
-     - Capabilities section (add project-specific skills)
-     - Task description (make it specific to this project)
+     - Capabilities section (add task-specific skills)
+     - Task description (make it specific to this task)
      - Libraries section (add specific imports needed)
      - Example code (customize for this exact task)
    - Keep the proven structure, enhance with specifics
 
    **IF NO suitable existing agent:**
    - Create new agent from template below
-   - Save to both:
-     - `projects/[project]/components/agents/[AgentName].md` (project-specific)
-     - Consider if it should be added to `/system/agents/` for future reuse
+   - Save to:
+     - `user/components/agents/[AgentName].md` (user workspace)
+     - Consider if it should be added to `system/agents/` for future reuse
 
 **Sub-Agent Creation Template:**
 
@@ -641,7 +642,7 @@ Or check other available agents:
 ---
 name: [AgentName]
 type: specialist
-project: [project_name]
+workspace: user
 phase: [phase_number]
 capabilities:
   - [specific capability 1]
@@ -689,7 +690,7 @@ You are a **[role]** specialized in **[domain]**.
 1. Generate complete, runnable Python code
 2. Include print statements for key results
 3. Create matplotlib visualizations
-4. Save code to `projects/[project]/output/code/[filename].py`
+4. Save code to `user/output/code/[filename].py`
 5. Print summary statistics and findings
 
 ## Quality Criteria
@@ -733,7 +734,7 @@ Execute this plan systematically and report results.
 {
   "tool": "write-file",
   "inputs": {
-    "path": "projects/[project_name]/components/agents/[AgentName].md",
+    "path": "user/components/agents/[AgentName].md",
     "content": "[full agent definition above]"
   }
 }
@@ -745,13 +746,13 @@ Execute this plan systematically and report results.
 
 For EACH sub-agent (whether reused/evolved or newly created), execute in order:
 
-1. **Read the project-specific agent definition:**
+1. **Read the agent definition:**
 
 ```tool
 {
   "tool": "read-file",
   "inputs": {
-    "path": "projects/[project_name]/components/agents/[AgentName].md"
+    "path": "user/components/agents/[AgentName].md"
   }
 }
 ```
@@ -767,7 +768,7 @@ For EACH sub-agent (whether reused/evolved or newly created), execute in order:
    - Implement the agent's specific task
    - Use the libraries specified by the agent
    - Follow the agent's technical constraints
-   - Apply any project-specific customizations
+   - Apply any task-specific customizations
    - Ensure WebAssembly compatibility
 
 4. **Execute the generated code using invoke-subagent (THIS TRACKS USAGE!):**
@@ -776,11 +777,11 @@ For EACH sub-agent (whether reused/evolved or newly created), execute in order:
 {
   "tool": "invoke-subagent",
   "inputs": {
-    "agentPath": "projects/[project_name]/components/agents/[AgentName].md",
+    "agentPath": "user/components/agents/[AgentName].md",
     "agentName": "[AgentName]",
     "task": "[Brief description of what this execution accomplishes]",
     "code": "[complete Python code following agent's requirements]",
-    "projectPath": "projects/[project_name]"
+    "workspacePath": "user"
   }
 }
 ```
@@ -796,7 +797,7 @@ For EACH sub-agent (whether reused/evolved or newly created), execute in order:
 {
   "tool": "write-file",
   "inputs": {
-    "path": "projects/[project_name]/output/code/[filename].py",
+    "path": "user/output/code/[filename].py",
     "content": "[the Python code that was executed]"
   }
 }
@@ -848,13 +849,13 @@ After ALL sub-agents complete:
 
 ## Files Generated
 
-- `output/code/[file1].py` - [description]
-- `output/code/[file2].py` - [description]
-- `output/visualizations/` - [description of plots]
+- `user/output/code/[file1].py` - [description]
+- `user/output/code/[file2].py` - [description]
+- `user/output/visualizations/` - [description of plots]
 
 ## How to Reproduce
 
-1. Navigate to `projects/[project_name]/output/code/`
+1. Navigate to `user/output/code/`
 2. Run `python [main_file].py`
 3. View results in output
 
@@ -865,20 +866,21 @@ After ALL sub-agents complete:
 - [Suggestion 3]
 ```
 
-Save to `projects/[project_name]/output/README.md`
+Save to `user/README.md`
 
 2. **Create execution log:**
 
 ```markdown
 ---
 timestamp: [ISO 8601]
-project: [project_name]
+workspace: user
+task: [task_name]
 status: success|failure
 phases_completed: [number]
 total_execution_time_ms: [duration]
 ---
 
-# Execution Log: [Project Name]
+# Execution Log: [Task Name]
 
 ## User Goal
 [Original user request]
@@ -939,7 +941,7 @@ total_execution_time_ms: [duration]
 - [Patterns to remember]
 ```
 
-Save to `projects/[project_name]/memory/short_term/execution_log.md`
+Save to `user/memory/short_term/execution_log.md`
 
 ---
 
@@ -947,13 +949,13 @@ Save to `projects/[project_name]/memory/short_term/execution_log.md`
 
 **BEFORE communicating results to user, VERIFY the 3-agent minimum is met.**
 
-1. **List agents in project:**
+1. **List agents in workspace:**
 
 ```tool
 {
   "tool": "list-directory",
   "inputs": {
-    "path": "projects/[project_name]/components/agents"
+    "path": "user/components/agents"
   }
 }
 ```
@@ -963,7 +965,7 @@ Save to `projects/[project_name]/memory/short_term/execution_log.md`
 ```
 🔍 MULTI-AGENT VALIDATION REPORT
 
-Project: [project_name]
+Workspace: user
 Minimum Required: 3
 Agents Found: [N]
 
@@ -1017,12 +1019,12 @@ Provide the user with a **clear, structured summary**:
 [Display visualization if matplotlib plot was created]
 
 **Code Saved:**
-- Location: `projects/[project]/output/code/[file].py`
+- Location: `user/output/code/[file].py`
 - [Brief description]
 
 **Documentation:**
-- README: `projects/[project]/output/README.md`
-- Execution Log: `projects/[project]/memory/short_term/execution_log.md`
+- README: `user/README.md`
+- Execution Log: `user/memory/short_term/execution_log.md`
 
 📈 KEY RESULTS
 
@@ -1034,16 +1036,19 @@ Provide the user with a **clear, structured summary**:
    - [Metric]: [Value]
    - [Detail]
 
-✅ Project Structure:
+✅ Workspace Structure:
 ```
-projects/[project]/
+user/
 ├── output/
 │   ├── code/
 │   │   └── [files]
-│   └── README.md
-└── memory/
-    └── short_term/
-        └── execution_log.md
+│   └── visualizations/
+├── components/agents/
+│   └── [agents].md
+├── memory/
+│   └── short_term/
+│       └── execution_log.md
+└── README.md
 ```
 
 🎯 VALIDATION
@@ -1097,26 +1102,26 @@ Record this execution in system memory for future learning:
 
 ### write-file
 Write content to a file path
-- **path**: File path (e.g., `projects/my_project/output/code/analysis.py`)
+- **path**: File path (e.g., `user/output/code/analysis.py`)
 - **content**: File content
 
 ### read-file
-Read content from a file path (supports `/system/*` and `projects/*`)
+Read content from a file path (supports `system/*`, `user/*`, `team/*`)
 - **path**: File path to read
 
 ### execute-python
 Execute Python code in browser (Pyodide)
 - **code**: Python code to execute
-- **projectPath** (optional): Project path to save generated images (e.g., `projects/my_project`)
+- **workspacePath** (optional): Workspace path for saving generated images (e.g., `user`)
 - **Returns**: stdout, stderr, images (matplotlib plots as base64), savedImages (paths to saved images in VFS)
 
 ### list-directory
 List files and directories in a path
 - **path**: Directory path
 
-### validate-project-agents
-Validates that a project meets the 3-agent minimum requirement
-- **projectPath**: Project path (e.g., `projects/my_project`)
+### validate-workspace-agents
+Validates that a workspace meets the 3-agent minimum requirement
+- **workspacePath**: Workspace path (e.g., `user`)
 - **userGoal** (optional): User goal for context-aware recommendations
 - **Returns**: Validation status, agent inventory, recommendations for missing agents
 
@@ -1124,16 +1129,16 @@ Validates that a project meets the 3-agent minimum requirement
 
 ```tool
 {
-  "tool": "validate-project-agents",
+  "tool": "validate-workspace-agents",
   "inputs": {
-    "projectPath": "projects/my_project",
+    "workspacePath": "user",
     "userGoal": "Create a signal analyzer with FFT"
   }
 }
 ```
 
 **Response includes:**
-- `isValid`: Whether the project has >= 3 agents
+- `isValid`: Whether the workspace has >= 3 agents
 - `agentCount`: Current number of agents
 - `agents`: List of all agents with their origin (copied/evolved/created)
 - `breakdown`: Count by origin type
@@ -1194,7 +1199,7 @@ Example:
 {
   "tool": "read-file",
   "inputs": {
-    "path": "/system/memory_log.md"
+    "path": "system/memory_log.md"
   }
 }
 ```
@@ -1208,13 +1213,12 @@ Result: Found exp_023 - Similar FFT task, used scipy.fft successfully, matplotli
 ```
 📋 EXECUTION PLAN
 
-Project: signal_fft_analysis
+Task: Signal FFT Analysis
+Workspace: user
 
 **Phases:**
 
-1. Setup & Structure (0.5s)
-   - Create project directories
-   - Initialize .gitkeep files
+1. Setup (directories auto-created)
 
 2. Signal Generation (DataGeneratorAgent)
    - Create clean sine wave (50 Hz)
@@ -1245,9 +1249,9 @@ Project: signal_fft_analysis
 **Libraries:** numpy, scipy.fft, matplotlib
 ```
 
-### Phase 3: Structure Creation
+### Phase 3: Structure Setup
 
-[Create all directories with .gitkeep files]
+Directories are created automatically when writing files.
 
 ### Phase 4: Sub-Agent Selection & Evolution
 
@@ -1257,7 +1261,7 @@ Project: signal_fft_analysis
 {
   "tool": "read-file",
   "inputs": {
-    "path": "/system/agents/researcher.md"
+    "path": "system/agents/researcher.md"
   }
 }
 ```
@@ -1273,13 +1277,13 @@ Decision: Create new specialized agent.
 {
   "tool": "write-file",
   "inputs": {
-    "path": "projects/signal_fft_analysis/components/agents/SignalProcessorAgent.md",
-    "content": "---\nname: SignalProcessorAgent\ntype: specialist\nproject: signal_fft_analysis\nphase: 2\nderived_from: none\ncapabilities:\n  - Synthetic signal generation with numpy\n  - Gaussian noise addition\n  - FFT analysis with scipy.fft\n  - Frequency domain processing\ntools:\n  - execute-python\n  - write-file\nlibraries:\n  - numpy\n  - scipy.fft\n  - matplotlib\n---\n\n# SignalProcessorAgent\n\nYou are a signal processing specialist for FFT analysis.\n\n## Your Specific Task\n\nGenerate a clean 50 Hz sine wave, add Gaussian noise, apply FFT, and create visualizations.\n\n## Inputs You Receive\n\nNone - this is a data generation task.\n\n## Outputs You Must Produce\n\n1. **Time domain data**: Clean signal, noisy signal, time array\n2. **Frequency domain data**: FFT magnitude spectrum, frequency bins\n3. **Visualization**: 2-subplot figure (time domain + frequency domain)\n4. **Python code**: Saved to output/code/signal_fft_analysis.py\n\n## Technical Constraints\n\n✅ **MUST USE:**\n- numpy for signal generation\n- scipy.fft for FFT computation\n- matplotlib for visualization\n- Self-contained, executable code\n\n❌ **CANNOT USE:**\n- File I/O operations\n- Network requests\n- External data files\n\n## Execution Requirements\n\n1. Generate 2 seconds of data at 1000 Hz sampling rate\n2. Create 50 Hz sine wave with amplitude 1.0\n3. Add Gaussian noise (SNR ~ 7-10 dB)\n4. Apply FFT and calculate magnitude spectrum\n5. Create 2x1 subplot: top=time domain, bottom=frequency domain\n6. Print key metrics: signal samples, SNR, peak frequency\n7. Save code to projects/signal_fft_analysis/output/code/\n\n## Code Structure\n\n```python\nimport numpy as np\nimport matplotlib.pyplot as plt\nfrom scipy.fft import fft, fftfreq\n\n# Parameters\nfs = 1000  # Hz\nduration = 2.0  # seconds\nf_signal = 50  # Hz\nnoise_amp = 0.3\n\n# Generate signals\nt = np.linspace(0, duration, int(fs * duration), endpoint=False)\nclean = np.sin(2 * np.pi * f_signal * t)\nnoise = noise_amp * np.random.randn(len(t))\nnoisy = clean + noise\n\n# FFT\nspectrum = fft(noisy)\nfreqs = fftfreq(len(noisy), 1/fs)\nmagnitude = np.abs(spectrum)[:len(spectrum)//2]\nfreqs_positive = freqs[:len(freqs)//2]\n\n# Find peak\npeak_idx = np.argmax(magnitude)\npeak_freq = freqs_positive[peak_idx]\n\n# Visualization\nfig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))\n\n# Time domain\nax1.plot(t[:100], clean[:100], 'b-', label='Clean', linewidth=2)\nax1.plot(t[:100], noisy[:100], 'r-', label='Noisy', alpha=0.7)\nax1.set_xlabel('Time (s)')\nax1.set_ylabel('Amplitude')\nax1.set_title('Time Domain (first 0.1s)')\nax1.legend()\nax1.grid(True, alpha=0.3)\n\n# Frequency domain\nax2.plot(freqs_positive, magnitude, 'g-', linewidth=1.5)\nax2.axvline(peak_freq, color='r', linestyle='--', label=f'Peak: {peak_freq:.2f} Hz')\nax2.set_xlabel('Frequency (Hz)')\nax2.set_ylabel('Magnitude')\nax2.set_title('Frequency Domain (FFT)')\nax2.set_xlim(0, 150)\nax2.legend()\nax2.grid(True, alpha=0.3)\n\nplt.tight_layout()\nplt.show()\n\n# Results\nsnr = 10 * np.log10(np.var(clean) / np.var(noise))\nprint('=== SIGNAL PROCESSING RESULTS ===')\nprint(f'Samples: {len(clean)}')\nprint(f'SNR: {snr:.2f} dB')\nprint(f'Peak Frequency: {peak_freq:.2f} Hz')\nprint(f'Expected: {f_signal} Hz')\nprint(f'Error: {abs(peak_freq - f_signal):.2f} Hz')\n```\n\nExecute this systematically and report all results.\n"
+    "path": "user/components/agents/SignalProcessorAgent.md",
+    "content": "---\nname: SignalProcessorAgent\ntype: specialist\nworkspace: user\nphase: 2\nderived_from: none\ncapabilities:\n  - Synthetic signal generation with numpy\n  - Gaussian noise addition\n  - FFT analysis with scipy.fft\n  - Frequency domain processing\ntools:\n  - execute-python\n  - write-file\nlibraries:\n  - numpy\n  - scipy.fft\n  - matplotlib\n---\n\n# SignalProcessorAgent\n\nYou are a signal processing specialist for FFT analysis.\n\n## Your Specific Task\n\nGenerate a clean 50 Hz sine wave, add Gaussian noise, apply FFT, and create visualizations.\n\n## Inputs You Receive\n\nNone - this is a data generation task.\n\n## Outputs You Must Produce\n\n1. **Time domain data**: Clean signal, noisy signal, time array\n2. **Frequency domain data**: FFT magnitude spectrum, frequency bins\n3. **Visualization**: 2-subplot figure (time domain + frequency domain)\n4. **Python code**: Saved to user/output/code/signal_fft_analysis.py\n\n## Technical Constraints\n\n✅ **MUST USE:**\n- numpy for signal generation\n- scipy.fft for FFT computation\n- matplotlib for visualization\n- Self-contained, executable code\n\n❌ **CANNOT USE:**\n- File I/O operations\n- Network requests\n- External data files\n\n## Execution Requirements\n\n1. Generate 2 seconds of data at 1000 Hz sampling rate\n2. Create 50 Hz sine wave with amplitude 1.0\n3. Add Gaussian noise (SNR ~ 7-10 dB)\n4. Apply FFT and calculate magnitude spectrum\n5. Create 2x1 subplot: top=time domain, bottom=frequency domain\n6. Print key metrics: signal samples, SNR, peak frequency\n7. Save code to user/output/code/\n\n## Code Structure\n\n```python\nimport numpy as np\nimport matplotlib.pyplot as plt\nfrom scipy.fft import fft, fftfreq\n\n# Parameters\nfs = 1000  # Hz\nduration = 2.0  # seconds\nf_signal = 50  # Hz\nnoise_amp = 0.3\n\n# Generate signals\nt = np.linspace(0, duration, int(fs * duration), endpoint=False)\nclean = np.sin(2 * np.pi * f_signal * t)\nnoise = noise_amp * np.random.randn(len(t))\nnoisy = clean + noise\n\n# FFT\nspectrum = fft(noisy)\nfreqs = fftfreq(len(noisy), 1/fs)\nmagnitude = np.abs(spectrum)[:len(spectrum)//2]\nfreqs_positive = freqs[:len(freqs)//2]\n\n# Find peak\npeak_idx = np.argmax(magnitude)\npeak_freq = freqs_positive[peak_idx]\n\n# Visualization\nfig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))\n\n# Time domain\nax1.plot(t[:100], clean[:100], 'b-', label='Clean', linewidth=2)\nax1.plot(t[:100], noisy[:100], 'r-', label='Noisy', alpha=0.7)\nax1.set_xlabel('Time (s)')\nax1.set_ylabel('Amplitude')\nax1.set_title('Time Domain (first 0.1s)')\nax1.legend()\nax1.grid(True, alpha=0.3)\n\n# Frequency domain\nax2.plot(freqs_positive, magnitude, 'g-', linewidth=1.5)\nax2.axvline(peak_freq, color='r', linestyle='--', label=f'Peak: {peak_freq:.2f} Hz')\nax2.set_xlabel('Frequency (Hz)')\nax2.set_ylabel('Magnitude')\nax2.set_title('Frequency Domain (FFT)')\nax2.set_xlim(0, 150)\nax2.legend()\nax2.grid(True, alpha=0.3)\n\nplt.tight_layout()\nplt.show()\n\n# Results\nsnr = 10 * np.log10(np.var(clean) / np.var(noise))\nprint('=== SIGNAL PROCESSING RESULTS ===')\nprint(f'Samples: {len(clean)}')\nprint(f'SNR: {snr:.2f} dB')\nprint(f'Peak Frequency: {peak_freq:.2f} Hz')\nprint(f'Expected: {f_signal} Hz')\nprint(f'Error: {abs(peak_freq - f_signal):.2f} Hz')\n```\n\nExecute this systematically and report all results.\n"
   }
 }
 ```
 
-**Note:** This agent is NEW and specialized for this exact task. If successful, consider copying to `/system/agents/` for future signal processing projects.
+**Note:** This agent is NEW and specialized for this exact task. If successful, consider copying to `system/agents/` for future signal processing projects.
 
 ### Phase 5: Execute Sub-Agents
 
@@ -1387,12 +1391,12 @@ Every execution should be **traceable, reproducible, and contribute to system kn
 
 **The self-improving loop:**
 
-1. **Check** `/system/agents/` for existing agents
+1. **Check** `system/agents/` for existing agents
 2. **Evaluate** if existing agent fits (80%+ match)
-3. **Copy** suitable agent to project
+3. **Copy** suitable agent to `user/components/agents/`
 4. **Evolve** by customizing for specific task
 5. **Execute** the evolved agent
-6. **If highly successful**: Consider adding to `/system/agents/` for future reuse
+6. **If highly successful**: Consider adding to `system/agents/` for future reuse
 
 **This creates a growing library of specialized, battle-tested agents.**
 
