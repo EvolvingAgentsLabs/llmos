@@ -316,7 +316,7 @@ export const WriteFileTool: ToolDefinition = {
     {
       name: 'path',
       type: 'string',
-      description: 'File path (e.g., projects/my_project/output/code/analysis.py)',
+      description: 'File path (e.g., user/output/code/analysis.py)',
       required: true,
     },
     {
@@ -360,7 +360,7 @@ export const ReadFileTool: ToolDefinition = {
     {
       name: 'path',
       type: 'string',
-      description: 'File path to read (supports /system/* for system files and projects/* for VFS files)',
+      description: 'File path to read (supports system/*, user/*, team/* volumes)',
       required: true,
     },
   ],
@@ -395,7 +395,7 @@ export const ReadFileTool: ToolDefinition = {
       }
     }
 
-    // Handle VFS files (projects/*)
+    // Handle VFS files (user/*, team/*)
     const vfs = getVFS();
     const file = vfs.readFile(path);
 
@@ -460,14 +460,14 @@ export const ExecutePythonTool: ToolDefinition = {
       required: true,
     },
     {
-      name: 'projectPath',
+      name: 'workspacePath',
       type: 'string',
-      description: 'Optional project path to save generated images (e.g., projects/my_project)',
+      description: 'Optional workspace path to save generated images (e.g., user)',
       required: false,
     },
   ],
   execute: async (inputs) => {
-    const { code, projectPath } = inputs;
+    const { code, workspacePath } = inputs;
 
     if (!code || typeof code !== 'string') {
       throw new Error('Invalid code parameter');
@@ -479,11 +479,11 @@ export const ExecutePythonTool: ToolDefinition = {
       throw new Error(result.error || 'Python execution failed');
     }
 
-    // Save images to VFS if project path provided
+    // Save images to VFS if workspace path provided
     const savedImagePaths: string[] = [];
-    if (projectPath && result.images && result.images.length > 0) {
+    if (workspacePath && result.images && result.images.length > 0) {
       const vfs = getVFS();
-      const visualizationPath = `${projectPath}/output/visualizations`;
+      const visualizationPath = `${workspacePath}/output/visualizations`;
 
       for (let i = 0; i < result.images.length; i++) {
         const base64Image = result.images[i];
@@ -526,12 +526,12 @@ export const ExecutePythonTool: ToolDefinition = {
 export const DiscoverSubAgentsTool: ToolDefinition = {
   id: 'discover-subagents',
   name: 'Discover Sub-Agents',
-  description: 'Discover available markdown sub-agent definitions. Searches /system/agents/ for system agents and projects/*/components/agents/ for project-specific agents. Returns agent metadata and usage statistics to help decide which agent to use.',
+  description: 'Discover available markdown sub-agent definitions. Searches system/agents/ for system agents and user/components/agents/ for user workspace agents. Returns agent metadata and usage statistics to help decide which agent to use.',
   inputs: [
     {
       name: 'location',
       type: 'string',
-      description: 'Where to search: "system" for /system/agents/, "projects" for all projects, or specific path like "projects/my_project/components/agents/"',
+      description: 'Where to search: "system" for system/agents/, "user" for user workspace, or specific path like "user/components/agents/"',
       required: false,
     },
     {
@@ -661,55 +661,38 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
       }
     }
 
-    // Search project agents (via VFS)
-    const searchProjects = !location || location === 'projects' || location?.startsWith('projects/');
-    if (searchProjects) {
-      const projectsToSearch: string[] = [];
+    // Search user workspace agents (via VFS)
+    const searchUser = !location || location === 'user' || location?.startsWith('user/');
+    if (searchUser) {
+      const agentsDir = 'user/components/agents';
+      try {
+        const { files } = vfs.listDirectory(agentsDir);
+        for (const file of files) {
+          if (!file.path.endsWith('.md')) continue;
 
-      if (location?.startsWith('projects/') && location !== 'projects') {
-        // Specific project path
-        projectsToSearch.push(location.replace(/\/components\/agents\/?$/, ''));
-      } else {
-        // List all projects
-        try {
-          const { directories } = vfs.listDirectory('projects');
-          projectsToSearch.push(...directories);
-        } catch (e) {
-          // No projects directory
+          const content = vfs.readFileContent(file.path);
+          if (!content) continue;
+
+          const parsed = parseAgentFrontmatter(content, file.path);
+          const usage = usageStats.find(u => u.agentPath === file.path);
+
+          agents.push({
+            name: parsed.name || file.path.split('/').pop()?.replace('.md', '') || 'Unknown',
+            path: file.path,
+            location: 'user',
+            type: parsed.type,
+            description: parsed.description,
+            capabilities: parsed.capabilities || [],
+            libraries: parsed.libraries || [],
+            usageCount: usage?.executionCount || 0,
+            successRate: usage
+              ? Math.round((usage.successCount / Math.max(1, usage.executionCount)) * 100)
+              : null,
+            lastUsed: usage?.lastExecuted || null,
+          });
         }
-      }
-
-      for (const projectPath of projectsToSearch) {
-        const agentsDir = `${projectPath}/components/agents`;
-        try {
-          const { files } = vfs.listDirectory(agentsDir);
-          for (const file of files) {
-            if (!file.path.endsWith('.md')) continue;
-
-            const content = vfs.readFileContent(file.path);
-            if (!content) continue;
-
-            const parsed = parseAgentFrontmatter(content, file.path);
-            const usage = usageStats.find(u => u.agentPath === file.path);
-
-            agents.push({
-              name: parsed.name || file.path.split('/').pop()?.replace('.md', '') || 'Unknown',
-              path: file.path,
-              location: projectPath,
-              type: parsed.type,
-              description: parsed.description,
-              capabilities: parsed.capabilities || [],
-              libraries: parsed.libraries || [],
-              usageCount: usage?.executionCount || 0,
-              successRate: usage
-                ? Math.round((usage.successCount / Math.max(1, usage.executionCount)) * 100)
-                : null,
-              lastUsed: usage?.lastExecuted || null,
-            });
-          }
-        } catch (e) {
-          // No agents directory in this project
-        }
+      } catch (e) {
+        // No agents directory in user workspace
       }
     }
 
@@ -755,7 +738,7 @@ export const InvokeSubAgentTool: ToolDefinition = {
     {
       name: 'agentPath',
       type: 'string',
-      description: 'Path to the markdown sub-agent definition (e.g., /system/agents/SignalProcessorAgent.md or projects/my_project/components/agents/MyAgent.md)',
+      description: 'Path to the markdown sub-agent definition (e.g., system/agents/SignalProcessorAgent.md or user/components/agents/MyAgent.md)',
       required: true,
     },
     {
@@ -777,14 +760,14 @@ export const InvokeSubAgentTool: ToolDefinition = {
       required: true,
     },
     {
-      name: 'projectPath',
+      name: 'workspacePath',
       type: 'string',
-      description: 'Optional project path to save generated images',
+      description: 'Optional workspace path to save generated images (e.g., user)',
       required: false,
     },
   ],
   execute: async (inputs) => {
-    const { agentPath, agentName, task, code, projectPath } = inputs;
+    const { agentPath, agentName, task, code, workspacePath } = inputs;
     const startTime = Date.now();
 
     if (!agentPath || typeof agentPath !== 'string') {
@@ -822,10 +805,10 @@ export const InvokeSubAgentTool: ToolDefinition = {
       executionTime
     );
 
-    // Save images to VFS if project path provided
+    // Save images to VFS if workspace path provided
     const savedImagePaths: string[] = [];
-    if (projectPath && result.images && result.images.length > 0) {
-      const visualizationPath = `${projectPath}/output/visualizations`;
+    if (workspacePath && result.images && result.images.length > 0) {
+      const visualizationPath = `${workspacePath}/output/visualizations`;
 
       for (let i = 0; i < result.images.length; i++) {
         const base64Image = result.images[i];
@@ -879,25 +862,25 @@ export const InvokeSubAgentTool: ToolDefinition = {
 };
 
 /**
- * Validate Project Agents Tool
- * Validates that a project meets the 3-agent minimum requirement
+ * Validate Workspace Agents Tool
+ * Validates that a workspace meets the 3-agent minimum requirement
  */
 export const ValidateProjectAgentsTool: ToolDefinition = {
-  id: 'validate-project-agents',
-  name: 'Validate Project Agents',
-  description: `Validates that a project meets the multi-agent requirement (minimum ${MIN_AGENTS_REQUIRED} agents).
+  id: 'validate-workspace-agents',
+  name: 'Validate Workspace Agents',
+  description: `Validates that a workspace meets the multi-agent requirement (minimum ${MIN_AGENTS_REQUIRED} agents).
 
 Use this tool to:
-- Check if a project has enough agents before completion
+- Check if a workspace has enough agents before completion
 - Get recommendations for additional agents if needed
 - See breakdown of agents by origin (copied, evolved, created)
 
 Returns validation status, agent inventory, and recommendations for missing agents.`,
   inputs: [
     {
-      name: 'projectPath',
+      name: 'workspacePath',
       type: 'string',
-      description: 'Path to the project (e.g., "projects/my_project")',
+      description: 'Path to the workspace volume (e.g., "user")',
       required: true,
     },
     {
@@ -908,19 +891,19 @@ Returns validation status, agent inventory, and recommendations for missing agen
     },
   ],
   execute: async (inputs) => {
-    const { projectPath, userGoal } = inputs;
+    const { workspacePath, userGoal } = inputs;
 
-    if (!projectPath || typeof projectPath !== 'string') {
-      throw new Error('Invalid projectPath parameter');
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      throw new Error('Invalid workspacePath parameter');
     }
 
-    // Validate the project
-    const validation = validateProjectAgents(projectPath);
+    // Validate the workspace
+    const validation = validateProjectAgents(workspacePath);
 
     // Get context-aware suggestions if goal provided and validation failed
     let suggestions: any[] = [];
     if (!validation.isValid && userGoal) {
-      suggestions = await suggestAgentsForProject(projectPath, userGoal);
+      suggestions = await suggestAgentsForProject(workspacePath, userGoal);
     }
 
     return {
@@ -1123,9 +1106,9 @@ export const CreateDeviceProjectTool: ToolDefinition = {
       throw new Error(`Device ${deviceId} not connected`);
     }
 
-    const projectPath = `projects/${projectName}`;
+    const workspacePath = `user/devices/${projectName}`;
 
-    // Create project structure
+    // Create device workspace structure
     const deviceConfig = {
       deviceId,
       name: projectName,
@@ -1133,20 +1116,20 @@ export const CreateDeviceProjectTool: ToolDefinition = {
       pollInterval,
     };
 
-    vfs.writeFile(`${projectPath}/device.config.json`, JSON.stringify(deviceConfig, null, 2));
-    vfs.writeFile(`${projectPath}/state/connection.json`, JSON.stringify({
+    vfs.writeFile(`${workspacePath}/device.config.json`, JSON.stringify(deviceConfig, null, 2));
+    vfs.writeFile(`${workspacePath}/state/connection.json`, JSON.stringify({
       connected: true,
       deviceId,
       lastUpdate: new Date().toISOString()
     }, null, 2));
-    vfs.writeFile(`${projectPath}/state/sensors.json`, JSON.stringify({}, null, 2));
-    vfs.writeFile(`${projectPath}/state/gpio.json`, JSON.stringify({}, null, 2));
+    vfs.writeFile(`${workspacePath}/state/sensors.json`, JSON.stringify({}, null, 2));
+    vfs.writeFile(`${workspacePath}/state/gpio.json`, JSON.stringify({}, null, 2));
 
     // Create cron job for polling
     const cronConfig = {
       id: `device-poll-${deviceId}`,
       name: `Poll ${projectName}`,
-      projectPath,
+      workspacePath,
       deviceId,
       interval: pollInterval,
       enabled: true,
@@ -1155,7 +1138,7 @@ export const CreateDeviceProjectTool: ToolDefinition = {
       ],
     };
 
-    vfs.writeFile(`${projectPath}/cron/poll-device.json`, JSON.stringify(cronConfig, null, 2));
+    vfs.writeFile(`${workspacePath}/cron/poll-device.json`, JSON.stringify(cronConfig, null, 2));
 
     // Register cron with device handler
     const { registerDeviceCron } = await import('./hardware/device-cron-handler');
@@ -1163,10 +1146,10 @@ export const CreateDeviceProjectTool: ToolDefinition = {
 
     return {
       success: true,
-      projectPath,
+      workspacePath,
       cronId: cronConfig.id,
       pollInterval,
-      message: `Device project created at ${projectPath}. Polling every ${pollInterval}ms.`,
+      message: `Device workspace created at ${workspacePath}. Polling every ${pollInterval}ms.`,
     };
   },
 };

@@ -11,7 +11,7 @@ import { getVFS } from '../virtual-fs';
 export interface DeviceCronConfig {
   id: string;
   deviceId: string;
-  projectPath: string;
+  workspacePath: string;
   commands: DeviceCommand[];
   interval: number; // milliseconds
   enabled: boolean;
@@ -39,7 +39,7 @@ export async function executeDevicePoll(config: DeviceCronConfig): Promise<void>
       console.warn(`[DeviceCron] Device ${config.deviceId} not connected, skipping poll`);
 
       // Update connection state
-      const connectionPath = `${config.projectPath}/state/connection.json`;
+      const connectionPath = `${config.workspacePath}/state/connection.json`;
       vfs.writeFile(connectionPath, JSON.stringify({
         connected: false,
         lastUpdate: new Date().toISOString(),
@@ -69,10 +69,10 @@ export async function executeDevicePoll(config: DeviceCronConfig): Promise<void>
     }
 
     // Update state files
-    await updateDeviceState(config.projectPath, config.deviceId, results);
+    await updateDeviceState(config.workspacePath, config.deviceId, results);
 
     // Log telemetry
-    await logTelemetry(config.projectPath, results);
+    await logTelemetry(config.workspacePath, results);
 
   } catch (error) {
     console.error(`[DeviceCron] Poll execution failed:`, error);
@@ -83,7 +83,7 @@ export async function executeDevicePoll(config: DeviceCronConfig): Promise<void>
  * Update device state files in VFS
  */
 async function updateDeviceState(
-  projectPath: string,
+  workspacePath: string,
   deviceId: string,
   results: Record<string, any>
 ): Promise<void> {
@@ -110,7 +110,7 @@ async function updateDeviceState(
     }
 
     if (Object.keys(sensorData).length > 0) {
-      const sensorsPath = `${projectPath}/state/sensors.json`;
+      const sensorsPath = `${workspacePath}/state/sensors.json`;
       vfs.writeFile(sensorsPath, JSON.stringify({
         ...sensorData,
         timestamp: new Date().toISOString(),
@@ -119,7 +119,7 @@ async function updateDeviceState(
 
     // Update gpio.json
     if (results.read_gpio) {
-      const gpioPath = `${projectPath}/state/gpio.json`;
+      const gpioPath = `${workspacePath}/state/gpio.json`;
       const currentGpio = JSON.parse(vfs.readFileContent(gpioPath) || '{}');
 
       currentGpio[`pin${results.read_gpio.pin}`] = results.read_gpio.state;
@@ -129,7 +129,7 @@ async function updateDeviceState(
     }
 
     // Update connection.json
-    const connectionPath = `${projectPath}/state/connection.json`;
+    const connectionPath = `${workspacePath}/state/connection.json`;
     vfs.writeFile(connectionPath, JSON.stringify({
       connected: true,
       lastUpdate: new Date().toISOString(),
@@ -144,13 +144,13 @@ async function updateDeviceState(
 /**
  * Log telemetry data to output/telemetry/<date>.log
  */
-async function logTelemetry(projectPath: string, results: Record<string, any>): Promise<void> {
+async function logTelemetry(workspacePath: string, results: Record<string, any>): Promise<void> {
   const vfs = getVFS();
 
   try {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    const telemetryPath = `${projectPath}/output/telemetry/${dateStr}.log`;
+    const telemetryPath = `${workspacePath}/output/telemetry/${dateStr}.log`;
 
     // Read existing log or create new
     let logContent = vfs.readFileContent(telemetryPath) || '';
@@ -180,7 +180,7 @@ export async function registerDeviceCron(config: DeviceCronConfig): Promise<void
 
   scheduler.registerCron({
     id: config.id,
-    name: `Device Poll: ${config.projectPath}`,
+    name: `Device Poll: ${config.workspacePath}`,
     volume: 'user',
     intervalMs: config.interval,
     enabled: config.enabled,
