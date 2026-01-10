@@ -130,7 +130,8 @@ export const WASM4RobotApplet: React.FC<WASM4RobotAppletProps> = ({
     if (!vm) return;
 
     const rgba = vm.getFramebufferRGBA();
-    const imageData = new ImageData(rgba, 160, 160);
+    const imageData = ctx.createImageData(160, 160);
+    imageData.data.set(rgba);
     ctx.putImageData(imageData, 0, 0);
   }, []);
 
