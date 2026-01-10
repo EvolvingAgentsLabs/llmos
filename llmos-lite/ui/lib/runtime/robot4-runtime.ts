@@ -191,7 +191,8 @@ export class Robot4Runtime {
     };
 
     // Compile and instantiate
-    const module = await WebAssembly.compile(wasmBinary);
+    // Use the underlying ArrayBuffer for WebAssembly.compile
+    const module = await WebAssembly.compile(wasmBinary.buffer);
     this.wasmInstance = await WebAssembly.instantiate(module, imports);
 
     // Initialize memory view
