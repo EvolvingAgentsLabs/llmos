@@ -704,7 +704,7 @@ export class VirtualESP32 {
    */
   private handleGetPose(): DeviceResponse {
     return {
-      status: 'telemetry',
+      status: 'ok',
       pose: {
         x: parseFloat(this.robotPose.x.toFixed(4)),
         y: parseFloat(this.robotPose.y.toFixed(4)),
@@ -771,7 +771,7 @@ export class VirtualESP32 {
    */
   private handleGetRobotTelemetry(): DeviceResponse {
     return {
-      status: 'telemetry',
+      status: 'ok',
       pose: {
         x: parseFloat(this.robotPose.x.toFixed(4)),
         y: parseFloat(this.robotPose.y.toFixed(4)),
