@@ -58,6 +58,31 @@ interface EncoderState {
   right: number;
 }
 
+// Robot4 Camera Frame
+interface CameraFrame {
+  width: number;
+  height: number;
+  data: Uint8Array;
+  timestamp: number;
+}
+
+// Robot4 Distance Sensors
+interface DistanceSensors {
+  front: number;
+  frontLeft: number;
+  frontRight: number;
+  left: number;
+  right: number;
+  back: number;
+  backLeft: number;
+  backRight: number;
+}
+
+// Robot4 Line Sensors
+interface LineSensors {
+  values: number[];  // 5 sensors, 0-255
+}
+
 export class VirtualESP32 {
   private gpioState = new Map<number, VirtualPin>();
   private firmwareVersion = '1.0.0-virtual';
@@ -99,6 +124,52 @@ export class VirtualESP32 {
   private encoders: EncoderState = { left: 0, right: 0 };
   private batteryVoltage = 4.2; // Fully charged LiPo
   private physicsInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Robot4 Camera simulation
+  private cameraFrame: CameraFrame = {
+    width: 160,
+    height: 120,
+    data: new Uint8Array(160 * 120),
+    timestamp: 0,
+  };
+  private cameraEnabled = false;
+  private cameraStreaming = false;
+
+  // Robot4 Distance sensors (cm)
+  private distanceSensors: DistanceSensors = {
+    front: 255,
+    frontLeft: 255,
+    frontRight: 255,
+    left: 255,
+    right: 255,
+    back: 255,
+    backLeft: 255,
+    backRight: 255,
+  };
+
+  // Robot4 Line sensors
+  private lineSensors: LineSensors = {
+    values: [0, 0, 0, 0, 0],  // 5 sensors
+  };
+
+  // Robot4 Bumper/button state
+  private buttonsState = 0;
+
+  // Robot4 World configuration for simulation
+  private robot4World: {
+    walls: Array<{ x1: number; y1: number; x2: number; y2: number }>;
+    obstacles: Array<{ x: number; y: number; radius: number }>;
+    lines: Array<{ points: Array<{ x: number; y: number }> }>;
+  } = {
+    walls: [
+      { x1: -2, y1: -2, x2: 2, y2: -2 },
+      { x1: 2, y1: -2, x2: 2, y2: 2 },
+      { x1: 2, y1: 2, x2: -2, y2: 2 },
+      { x1: -2, y1: 2, x2: -2, y2: -2 },
+    ],
+    obstacles: [],
+    lines: [],
+  };
 
   // Robot physics constants
   private readonly WHEEL_BASE = 0.5;       // Distance between wheels (meters)
@@ -261,6 +332,28 @@ export class VirtualESP32 {
 
         case 'get_robot_telemetry':
           return this.handleGetRobotTelemetry();
+
+        // Robot4 WASM4-style commands
+        case 'r4_get_state':
+          return this.handleR4GetState();
+
+        case 'r4_set_world':
+          return this.handleR4SetWorld(command);
+
+        case 'r4_get_sensors':
+          return this.handleR4GetSensors();
+
+        case 'r4_capture_frame':
+          return this.handleR4CaptureFrame();
+
+        case 'r4_get_frame':
+          return this.handleR4GetFrame();
+
+        case 'r4_set_buttons':
+          return this.handleR4SetButtons(command);
+
+        case 'r4_set_line_sensors':
+          return this.handleR4SetLineSensors(command);
 
         default:
           // Handle custom_ prefixed commands
@@ -948,6 +1041,416 @@ export class VirtualESP32 {
       clearInterval(this.physicsInterval);
       this.physicsInterval = null;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROBOT4 WASM4-STYLE COMMANDS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get full Robot4 state (for WASM runtime sync)
+   */
+  private handleR4GetState(): DeviceResponse {
+    // Update simulated sensors based on pose
+    this.updateR4Sensors();
+
+    return {
+      status: 'ok',
+      pose: {
+        x: parseFloat(this.robotPose.x.toFixed(4)),
+        y: parseFloat(this.robotPose.y.toFixed(4)),
+        rotation: parseFloat(this.robotPose.rotation.toFixed(4)),
+      },
+      motors: { ...this.diffDriveMotors },
+      encoders: { ...this.encoders },
+      led: { ...this.ledState },
+      battery: Math.round((this.batteryVoltage - 3.0) / 1.2 * 100), // Convert to percentage
+      sensors: [
+        this.distanceSensors.front,
+        this.distanceSensors.frontLeft,
+        this.distanceSensors.frontRight,
+        this.distanceSensors.left,
+        this.distanceSensors.right,
+        this.distanceSensors.back,
+        this.distanceSensors.backLeft,
+        this.distanceSensors.backRight,
+      ],
+      line_sensors: this.lineSensors.values,
+      buttons: this.buttonsState,
+      camera_enabled: this.cameraEnabled,
+      timestamp_ms: Date.now() - this.startTime,
+    };
+  }
+
+  /**
+   * Set Robot4 world configuration
+   */
+  private handleR4SetWorld(command: DeviceCommand): DeviceResponse {
+    const { walls, obstacles, lines } = command;
+
+    if (walls) {
+      this.robot4World.walls = walls;
+    }
+    if (obstacles) {
+      this.robot4World.obstacles = obstacles;
+    }
+    if (lines) {
+      this.robot4World.lines = lines;
+    }
+
+    return {
+      status: 'ok',
+      msg: 'World updated',
+      world: this.robot4World,
+    };
+  }
+
+  /**
+   * Get Robot4 sensor readings
+   */
+  private handleR4GetSensors(): DeviceResponse {
+    this.updateR4Sensors();
+
+    return {
+      status: 'ok',
+      distance: [
+        this.distanceSensors.front,
+        this.distanceSensors.frontLeft,
+        this.distanceSensors.frontRight,
+        this.distanceSensors.left,
+        this.distanceSensors.right,
+        this.distanceSensors.back,
+        this.distanceSensors.backLeft,
+        this.distanceSensors.backRight,
+      ],
+      line: this.lineSensors.values,
+      buttons: this.buttonsState,
+    };
+  }
+
+  /**
+   * Capture camera frame (simulated)
+   */
+  private handleR4CaptureFrame(): DeviceResponse {
+    this.generateR4CameraFrame();
+
+    return {
+      status: 'ok',
+      msg: 'Frame captured',
+      width: this.cameraFrame.width,
+      height: this.cameraFrame.height,
+      timestamp: this.cameraFrame.timestamp,
+    };
+  }
+
+  /**
+   * Get camera frame data (base64 encoded)
+   */
+  private handleR4GetFrame(): DeviceResponse {
+    // Convert to base64
+    let binary = '';
+    for (let i = 0; i < this.cameraFrame.data.length; i++) {
+      binary += String.fromCharCode(this.cameraFrame.data[i]);
+    }
+    const base64 = btoa(binary);
+
+    return {
+      status: 'ok',
+      width: this.cameraFrame.width,
+      height: this.cameraFrame.height,
+      data: base64,
+      timestamp: this.cameraFrame.timestamp,
+    };
+  }
+
+  /**
+   * Set button/bumper state (for testing)
+   */
+  private handleR4SetButtons(command: DeviceCommand): DeviceResponse {
+    const { buttons } = command;
+
+    if (typeof buttons === 'number') {
+      this.buttonsState = buttons & 0xFF;
+    }
+
+    return {
+      status: 'ok',
+      buttons: this.buttonsState,
+    };
+  }
+
+  /**
+   * Set line sensor values (for testing)
+   */
+  private handleR4SetLineSensors(command: DeviceCommand): DeviceResponse {
+    const { values } = command;
+
+    if (Array.isArray(values) && values.length === 5) {
+      this.lineSensors.values = values.map(v => Math.max(0, Math.min(255, Math.round(v))));
+    }
+
+    return {
+      status: 'ok',
+      line_sensors: this.lineSensors.values,
+    };
+  }
+
+  /**
+   * Update Robot4 distance sensors based on world and pose
+   */
+  private updateR4Sensors(): void {
+    const sensorAngles = [0, -45, 45, -90, 90, 180, -135, 135]; // degrees
+    const sensorKeys: (keyof DistanceSensors)[] = [
+      'front', 'frontLeft', 'frontRight', 'left', 'right', 'back', 'backLeft', 'backRight',
+    ];
+
+    for (let i = 0; i < sensorAngles.length; i++) {
+      const angle = this.robotPose.rotation + (sensorAngles[i] * Math.PI / 180);
+      const distance = this.raycastR4(this.robotPose.x, this.robotPose.y, angle, 2.55);
+      this.distanceSensors[sensorKeys[i]] = Math.min(255, Math.round(distance * 100));
+    }
+
+    // Update line sensors
+    const lineWidth = 0.08;
+    for (let i = 0; i < 5; i++) {
+      const offset = (i - 2) * (lineWidth / 4);
+      const sensorX = this.robotPose.x + Math.cos(this.robotPose.rotation) * 0.05 +
+                      Math.cos(this.robotPose.rotation + Math.PI / 2) * offset;
+      const sensorY = this.robotPose.y + Math.sin(this.robotPose.rotation) * 0.05 +
+                      Math.sin(this.robotPose.rotation + Math.PI / 2) * offset;
+
+      const onLine = this.isPointOnLineR4(sensorX, sensorY);
+      this.lineSensors.values[i] = onLine ? 255 : 0;
+    }
+
+    // Check for bumper collision
+    const robotRadius = 0.08;
+    let collision = false;
+
+    for (const wall of this.robot4World.walls) {
+      const dist = this.pointToLineDistanceR4(
+        this.robotPose.x, this.robotPose.y,
+        wall.x1, wall.y1, wall.x2, wall.y2
+      );
+      if (dist < robotRadius) {
+        collision = true;
+        break;
+      }
+    }
+
+    for (const obs of this.robot4World.obstacles) {
+      const dist = Math.sqrt(
+        (this.robotPose.x - obs.x) ** 2 + (this.robotPose.y - obs.y) ** 2
+      );
+      if (dist < robotRadius + obs.radius) {
+        collision = true;
+        break;
+      }
+    }
+
+    if (collision) {
+      this.buttonsState |= 0x01; // Front bumper
+    } else {
+      this.buttonsState &= ~0x01;
+    }
+  }
+
+  /**
+   * Raycast for distance measurement
+   */
+  private raycastR4(x: number, y: number, angle: number, maxDist: number): number {
+    let minDist = maxDist;
+
+    for (const wall of this.robot4World.walls) {
+      const dist = this.rayLineIntersectionR4(x, y, angle, wall.x1, wall.y1, wall.x2, wall.y2);
+      if (dist !== null && dist < minDist) {
+        minDist = dist;
+      }
+    }
+
+    for (const obs of this.robot4World.obstacles) {
+      const dist = this.rayCircleIntersectionR4(x, y, angle, obs.x, obs.y, obs.radius);
+      if (dist !== null && dist < minDist) {
+        minDist = dist;
+      }
+    }
+
+    return minDist;
+  }
+
+  /**
+   * Ray-line segment intersection
+   */
+  private rayLineIntersectionR4(
+    rx: number, ry: number, angle: number,
+    x1: number, y1: number, x2: number, y2: number
+  ): number | null {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    const x3 = rx;
+    const y3 = ry;
+    const x4 = rx + dx * 10;
+    const y4 = ry + dy * 10;
+
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denom) < 0.0001) return null;
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+
+    if (t >= 0 && t <= 1 && u >= 0) {
+      const ix = x1 + t * (x2 - x1);
+      const iy = y1 + t * (y2 - y1);
+      return Math.sqrt((ix - rx) ** 2 + (iy - ry) ** 2);
+    }
+
+    return null;
+  }
+
+  /**
+   * Ray-circle intersection
+   */
+  private rayCircleIntersectionR4(
+    rx: number, ry: number, angle: number,
+    cx: number, cy: number, radius: number
+  ): number | null {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    const fx = rx - cx;
+    const fy = ry - cy;
+
+    const a = dx * dx + dy * dy;
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - radius * radius;
+
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) return null;
+
+    const sqrtDisc = Math.sqrt(discriminant);
+    const t1 = (-b - sqrtDisc) / (2 * a);
+    const t2 = (-b + sqrtDisc) / (2 * a);
+
+    if (t1 >= 0) return t1;
+    if (t2 >= 0) return t2;
+    return null;
+  }
+
+  /**
+   * Check if point is on a line track
+   */
+  private isPointOnLineR4(x: number, y: number): boolean {
+    const lineThreshold = 0.02;
+
+    for (const line of this.robot4World.lines) {
+      for (let i = 0; i < line.points.length - 1; i++) {
+        const p1 = line.points[i];
+        const p2 = line.points[i + 1];
+        const dist = this.pointToLineDistanceR4(x, y, p1.x, p1.y, p2.x, p2.y);
+        if (dist < lineThreshold) return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Point to line segment distance
+   */
+  private pointToLineDistanceR4(
+    px: number, py: number,
+    x1: number, y1: number, x2: number, y2: number
+  ): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSq = dx * dx + dy * dy;
+
+    if (lengthSq === 0) {
+      return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    }
+
+    let t = ((px - x1) * dx + (py - y1) * dy) / lengthSq;
+    t = Math.max(0, Math.min(1, t));
+
+    const nearestX = x1 + t * dx;
+    const nearestY = y1 + t * dy;
+
+    return Math.sqrt((px - nearestX) ** 2 + (py - nearestY) ** 2);
+  }
+
+  /**
+   * Generate simulated camera frame
+   */
+  private generateR4CameraFrame(): void {
+    const fov = Math.PI / 3; // 60 degree FOV
+    const halfFov = fov / 2;
+
+    for (let y = 0; y < this.cameraFrame.height; y++) {
+      for (let x = 0; x < this.cameraFrame.width; x++) {
+        const pixelAngle = this.robotPose.rotation + halfFov -
+                          (x / this.cameraFrame.width) * fov;
+
+        const distance = this.raycastR4(this.robotPose.x, this.robotPose.y, pixelAngle, 3.0);
+
+        // Convert distance to brightness (closer = brighter)
+        let brightness = 0;
+        if (distance < 3.0) {
+          brightness = Math.round(255 * (1 - distance / 3.0));
+        }
+
+        // Vertical gradient
+        const verticalFactor = 1 - Math.abs(y - this.cameraFrame.height / 2) /
+                              (this.cameraFrame.height / 2) * 0.3;
+        brightness = Math.round(brightness * verticalFactor);
+
+        this.cameraFrame.data[y * this.cameraFrame.width + x] = Math.min(255, brightness);
+      }
+    }
+
+    this.cameraFrame.timestamp = Date.now();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROBOT4 PUBLIC API
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get Robot4 world configuration
+   */
+  getRobot4World() {
+    return { ...this.robot4World };
+  }
+
+  /**
+   * Set Robot4 world configuration
+   */
+  setRobot4World(world: typeof this.robot4World): void {
+    this.robot4World = { ...world };
+  }
+
+  /**
+   * Get distance sensors
+   */
+  getDistanceSensors(): DistanceSensors {
+    return { ...this.distanceSensors };
+  }
+
+  /**
+   * Get line sensors
+   */
+  getLineSensors(): number[] {
+    return [...this.lineSensors.values];
+  }
+
+  /**
+   * Get camera frame
+   */
+  getCameraFrame(): CameraFrame {
+    return {
+      ...this.cameraFrame,
+      data: new Uint8Array(this.cameraFrame.data),
+    };
   }
 }
 

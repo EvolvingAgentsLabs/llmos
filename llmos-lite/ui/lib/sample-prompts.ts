@@ -24,18 +24,32 @@ const developerPrompts: SamplePrompt[] = [
     category: 'Hardware + Applet',
   },
   {
-    title: '2-Wheel Robot World Simulator',
-    prompt: `Build a WASM4-style retro game world where I can program a 2-wheel robot with camera:
-- Pixel-art top-down world with walls, obstacles, and collectible items
-- Robot has differential drive (2 wheels) and front-facing camera sensor
-- Write robot behavior code that runs in the simulation loop
-- Camera returns pixel data of what's ahead (like a real OV2640)
-- Physics: collision detection, momentum, wheel slip on different surfaces
-- Multiple challenge levels: maze escape, item collection, line following
+    title: 'Robot4 WASM Simulator',
+    prompt: `Open the Robot4 World applet and show me how to program a wall-avoiding robot.
 
-Make it feel like programming a real robot in a game engine.`,
-    description: 'Retro game-style robot programming sandbox',
+I want to:
+1. Write C firmware using the robot4.h API (like WASM4 games)
+2. Compile it to WebAssembly in the browser
+3. Run it in the simulation arena
+4. Watch the robot navigate autonomously
+
+Show me the code structure with start() and update() functions, and explain how to use the sensors and motors.`,
+    description: 'WASM4-style robot firmware development',
     category: 'Simulation + WASM',
+  },
+  {
+    title: 'Robot4 Line Follower Challenge',
+    prompt: `Create a Robot4 firmware that follows a line track:
+
+Requirements:
+- Use the 5 line sensors (R4_LINE array)
+- Implement PD control for smooth steering
+- LED color indicates tracking status
+- Maximize speed while staying on track
+
+The arena should have a figure-8 or complex track pattern. Compile and run in the Robot4 World simulator.`,
+    description: 'Line following robot challenge',
+    category: 'Robotics + WASM',
   },
   {
     title: 'ESP32-S3 Robot Monitor',
