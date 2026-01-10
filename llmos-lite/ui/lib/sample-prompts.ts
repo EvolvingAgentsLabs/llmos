@@ -18,43 +18,46 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Quantum Circuit Playground',
-    prompt: `Build an interactive quantum circuit designer applet where I can:
-- Drag and drop quantum gates (H, X, Y, Z, CNOT, T, S)
-- Add up to 5 qubits
-- See the circuit diagram update in real-time
-- View the state vector and probability amplitudes
-- Export to Qiskit code for IBM Quantum execution
+    title: '2-Wheel Robot World Simulator',
+    prompt: `Build a WASM4-style retro game world where I can program a 2-wheel robot with camera:
+- Pixel-art top-down world with walls, obstacles, and collectible items
+- Robot has differential drive (2 wheels) and front-facing camera sensor
+- Write robot behavior code that runs in the simulation loop
+- Camera returns pixel data of what's ahead (like a real OV2640)
+- Physics: collision detection, momentum, wheel slip on different surfaces
+- Multiple challenge levels: maze escape, item collection, line following
 
-Make it visual with gate icons and qubit wire lines.`,
-    description: 'Interactive quantum computing sandbox',
-    category: 'Quantum + UI',
+Make it feel like programming a real robot in a game engine.`,
+    description: 'Retro game-style robot programming sandbox',
+    category: 'Simulation + WASM',
   },
   {
-    title: 'Signal Analyzer Studio',
-    prompt: `Create a signal processing applet with:
-- Sliders for frequency, amplitude, and phase of a sine wave
-- Option to add noise (adjustable SNR)
-- Real-time FFT visualization showing frequency spectrum
-- Time domain and frequency domain side-by-side
-- Run the analysis with Python/NumPy in background
+    title: 'ESP32-S3 Robot Monitor',
+    prompt: `Create a real-time monitoring dashboard for a physical ESP32-S3 2-wheel robot:
+- WebSocket connection to robot's IP address for live telemetry
+- Camera feed viewer (MJPEG stream from ESP32-CAM)
+- Motor status: current PWM values, wheel encoder ticks, battery voltage
+- Sensor readings: ultrasonic distance, IMU orientation, line sensor array
+- Manual control mode: WASD keys or virtual joystick
+- Command console to send custom commands to the robot
 
-I want to explore Fourier transforms interactively.`,
-    description: 'Live signal analysis with Python backend',
-    category: 'DSP + UI',
+Design it to connect to a real ESP32-S3 robot over WiFi.`,
+    description: 'Live dashboard for real ESP32 robot',
+    category: 'IoT + Monitoring',
   },
   {
-    title: '3D Function Plotter',
-    prompt: `Build an interactive 3D surface plotter where I can:
-- Enter a mathematical function z = f(x, y)
-- Adjust x and y range with sliders
-- Choose colormap (viridis, plasma, coolwarm)
-- Rotate and zoom the 3D view
-- Execute with matplotlib and display the result
+    title: 'Robot Code Generator',
+    prompt: `Build a visual robot programmer for ESP32-S3 2-wheel robots:
+- Drag-and-drop behavior blocks: move, turn, read camera, detect obstacle
+- Connect blocks to create robot programs visually
+- Preview behavior in a mini simulator before deploying
+- Generate Arduino/ESP-IDF C++ code from the visual program
+- Export .ino file ready to flash to the robot
+- Include motor driver setup (L298N/TB6612) and camera init code
 
-Start with z = sin(sqrt(x² + y²)) as default.`,
-    description: '3D math visualization with live rendering',
-    category: 'Visualization + UI',
+Support both simulation testing and real hardware deployment.`,
+    description: 'Visual programming to real robot code',
+    category: 'CodeGen + ESP32',
   },
   {
     title: 'Robot Arm Simulator',
