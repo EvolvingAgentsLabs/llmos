@@ -18,43 +18,46 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Quantum Circuit Playground',
-    prompt: `Build an interactive quantum circuit designer applet where I can:
-- Drag and drop quantum gates (H, X, Y, Z, CNOT, T, S)
-- Add up to 5 qubits
-- See the circuit diagram update in real-time
-- View the state vector and probability amplitudes
-- Export to Qiskit code for IBM Quantum execution
+    title: 'ESP32-S3 Robot Simulator',
+    prompt: `Build an interactive 2-wheel differential drive robot simulator with:
+- Visual top-down view of the robot with two wheels and camera FOV cone
+- Sliders for left and right wheel speeds (-100% to +100%)
+- Real-time position and heading display (x, y, θ)
+- Simulated ESP32-S3 pin outputs for motor control (GPIO pins)
+- Trail visualization showing the robot's path history
+- Reset button to return robot to starting position
 
-Make it visual with gate icons and qubit wire lines.`,
-    description: 'Interactive quantum computing sandbox',
-    category: 'Quantum + UI',
+Show the differential drive kinematics equations and simulate realistic wheel physics.`,
+    description: 'Two-wheel robot differential drive sandbox',
+    category: 'Robotics + ESP32',
   },
   {
-    title: 'Signal Analyzer Studio',
-    prompt: `Create a signal processing applet with:
-- Sliders for frequency, amplitude, and phase of a sine wave
-- Option to add noise (adjustable SNR)
-- Real-time FFT visualization showing frequency spectrum
-- Time domain and frequency domain side-by-side
-- Run the analysis with Python/NumPy in background
+    title: 'Robot Camera Vision Lab',
+    prompt: `Create an ESP32-S3 camera robot vision simulator with:
+- Simulated camera feed showing what the robot "sees" in a 2D world
+- Adjustable camera FOV angle (60° to 120°)
+- Place colored objects/markers in the environment
+- Color detection algorithm that highlights detected objects
+- Line following mode with a track the robot can follow
+- Display detected object positions relative to robot
 
-I want to explore Fourier transforms interactively.`,
-    description: 'Live signal analysis with Python backend',
-    category: 'DSP + UI',
+Simulate the OV2640/OV5640 camera module output for the ESP32-S3.`,
+    description: 'ESP32-CAM robot vision playground',
+    category: 'Vision + ESP32',
   },
   {
-    title: '3D Function Plotter',
-    prompt: `Build an interactive 3D surface plotter where I can:
-- Enter a mathematical function z = f(x, y)
-- Adjust x and y range with sliders
-- Choose colormap (viridis, plasma, coolwarm)
-- Rotate and zoom the 3D view
-- Execute with matplotlib and display the result
+    title: 'Robot Navigation Control',
+    prompt: `Build a robot navigation control panel for a 2-wheel ESP32-S3 robot with:
+- Set target waypoints by clicking on a map
+- Path planning visualization (A* or simple line-of-sight)
+- PID control sliders for smooth navigation tuning
+- Obstacle avoidance with virtual ultrasonic sensors
+- Motor PWM duty cycle display for each wheel
+- Generate Arduino/ESP-IDF code for the control logic
 
-Start with z = sin(sqrt(x² + y²)) as default.`,
-    description: '3D math visualization with live rendering',
-    category: 'Visualization + UI',
+Include realistic motor response curves and battery voltage effects.`,
+    description: 'Autonomous navigation with path planning',
+    category: 'Navigation + ESP32',
   },
   {
     title: 'Robot Arm Simulator',
