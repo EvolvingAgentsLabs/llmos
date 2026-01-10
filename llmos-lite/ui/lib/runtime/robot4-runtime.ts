@@ -191,8 +191,8 @@ export class Robot4Runtime {
     };
 
     // Compile and instantiate
-    // Use the underlying ArrayBuffer for WebAssembly.compile
-    const module = await WebAssembly.compile(wasmBinary.buffer);
+    // Cast to ArrayBuffer to satisfy TypeScript's strict BufferSource type
+    const module = await WebAssembly.compile(wasmBinary.buffer as ArrayBuffer);
     this.wasmInstance = await WebAssembly.instantiate(module, imports);
 
     // Initialize memory view
