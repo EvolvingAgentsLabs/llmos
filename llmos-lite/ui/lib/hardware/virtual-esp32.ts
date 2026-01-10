@@ -35,6 +35,29 @@ interface BarometerData {
   altitude_m: number;
 }
 
+// Differential Drive Robot State
+interface RobotPose {
+  x: number;       // Position in meters
+  y: number;       // Position in meters
+  rotation: number; // Heading in radians
+}
+
+interface DiffDriveMotors {
+  left: number;    // -255 to 255
+  right: number;   // -255 to 255
+}
+
+interface LEDState {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface EncoderState {
+  left: number;
+  right: number;
+}
+
 export class VirtualESP32 {
   private gpioState = new Map<number, VirtualPin>();
   private firmwareVersion = '1.0.0-virtual';
@@ -69,8 +92,66 @@ export class VirtualESP32 {
     altitude_m: 0,
   };
 
+  // Differential drive robot state
+  private robotPose: RobotPose = { x: 0, y: 0, rotation: 0 };
+  private diffDriveMotors: DiffDriveMotors = { left: 0, right: 0 };
+  private ledState: LEDState = { r: 0, g: 0, b: 0 };
+  private encoders: EncoderState = { left: 0, right: 0 };
+  private batteryVoltage = 4.2; // Fully charged LiPo
+  private physicsInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Robot physics constants
+  private readonly WHEEL_BASE = 0.5;       // Distance between wheels (meters)
+  private readonly SPEED_SCALE = 0.01;     // Motor power to m/s conversion
+  private readonly PHYSICS_DT = 0.1;       // Physics update interval (seconds)
+
   constructor() {
     this.initializeDefaultState();
+    this.startPhysicsLoop();
+  }
+
+  /**
+   * Start the physics simulation loop for differential drive kinematics
+   */
+  private startPhysicsLoop(): void {
+    if (this.physicsInterval) {
+      clearInterval(this.physicsInterval);
+    }
+    this.physicsInterval = setInterval(() => {
+      this.updateDiffDrivePhysics(this.PHYSICS_DT);
+    }, this.PHYSICS_DT * 1000);
+  }
+
+  /**
+   * Update robot position using differential drive kinematics
+   */
+  private updateDiffDrivePhysics(dt: number): void {
+    const vL = this.diffDriveMotors.left * this.SPEED_SCALE;
+    const vR = this.diffDriveMotors.right * this.SPEED_SCALE;
+
+    // Linear and angular velocity
+    const v = (vR + vL) / 2.0;
+    const omega = (vR - vL) / this.WHEEL_BASE;
+
+    // Update pose
+    this.robotPose.rotation += omega * dt;
+    // Normalize rotation to [-PI, PI]
+    while (this.robotPose.rotation > Math.PI) this.robotPose.rotation -= 2 * Math.PI;
+    while (this.robotPose.rotation < -Math.PI) this.robotPose.rotation += 2 * Math.PI;
+
+    this.robotPose.x += v * Math.cos(this.robotPose.rotation) * dt;
+    this.robotPose.y += v * Math.sin(this.robotPose.rotation) * dt;
+
+    // Update encoders (simulate ticks based on wheel rotation)
+    const TICKS_PER_METER = 1000;
+    this.encoders.left += Math.round(vL * dt * TICKS_PER_METER);
+    this.encoders.right += Math.round(vR * dt * TICKS_PER_METER);
+
+    // Simulate battery drain when motors are active
+    if (Math.abs(vL) > 0 || Math.abs(vR) > 0) {
+      const load = (Math.abs(this.diffDriveMotors.left) + Math.abs(this.diffDriveMotors.right)) / 510;
+      this.batteryVoltage = Math.max(3.0, this.batteryVoltage - load * 0.0001);
+    }
   }
 
   /**
@@ -158,6 +239,28 @@ export class VirtualESP32 {
 
         case 'set_altitude':
           return this.handleSetAltitude(command);
+
+        // Differential drive robot commands
+        case 'drive':
+          return this.handleDrive(command);
+
+        case 'stop':
+          return this.handleStop();
+
+        case 'get_pose':
+          return this.handleGetPose();
+
+        case 'reset_pose':
+          return this.handleResetPose();
+
+        case 'set_led':
+          return this.handleSetLED(command);
+
+        case 'get_camera_status':
+          return this.handleGetCameraStatus();
+
+        case 'get_robot_telemetry':
+          return this.handleGetRobotTelemetry();
 
         default:
           // Handle custom_ prefixed commands
@@ -558,6 +661,132 @@ export class VirtualESP32 {
     };
   }
 
+  // === Differential Drive Robot Commands ===
+
+  /**
+   * Set differential drive motor speeds
+   * Command: { action: 'drive', l: <int>, r: <int> }
+   */
+  private handleDrive(command: DeviceCommand): DeviceResponse {
+    const { l, r } = command;
+
+    if (typeof l !== 'number' || typeof r !== 'number') {
+      return { status: 'error', msg: 'Motor speeds l and r must be numbers' };
+    }
+
+    // Clamp to valid range
+    this.diffDriveMotors.left = Math.max(-255, Math.min(255, Math.round(l)));
+    this.diffDriveMotors.right = Math.max(-255, Math.min(255, Math.round(r)));
+
+    return {
+      status: 'ok',
+      msg: 'motors set',
+      motors: { ...this.diffDriveMotors },
+    };
+  }
+
+  /**
+   * Stop all motors
+   */
+  private handleStop(): DeviceResponse {
+    this.diffDriveMotors.left = 0;
+    this.diffDriveMotors.right = 0;
+
+    return {
+      status: 'ok',
+      msg: 'motors stopped',
+      motors: { ...this.diffDriveMotors },
+    };
+  }
+
+  /**
+   * Get current robot pose
+   */
+  private handleGetPose(): DeviceResponse {
+    return {
+      status: 'telemetry',
+      pose: {
+        x: parseFloat(this.robotPose.x.toFixed(4)),
+        y: parseFloat(this.robotPose.y.toFixed(4)),
+        rotation: parseFloat(this.robotPose.rotation.toFixed(4)),
+      },
+      motors: { ...this.diffDriveMotors },
+      encoders: { ...this.encoders },
+      timestamp_ms: Date.now(),
+    };
+  }
+
+  /**
+   * Reset robot pose to origin
+   */
+  private handleResetPose(): DeviceResponse {
+    this.robotPose = { x: 0, y: 0, rotation: 0 };
+    this.encoders = { left: 0, right: 0 };
+
+    return {
+      status: 'ok',
+      msg: 'pose reset',
+      pose: { ...this.robotPose },
+    };
+  }
+
+  /**
+   * Set LED color
+   * Command: { action: 'set_led', r: <int>, g: <int>, b: <int> }
+   */
+  private handleSetLED(command: DeviceCommand): DeviceResponse {
+    const { r, g, b } = command;
+
+    if (typeof r !== 'number' || typeof g !== 'number' || typeof b !== 'number') {
+      return { status: 'error', msg: 'LED values r, g, b must be numbers (0-255)' };
+    }
+
+    this.ledState = {
+      r: Math.max(0, Math.min(255, Math.round(r))),
+      g: Math.max(0, Math.min(255, Math.round(g))),
+      b: Math.max(0, Math.min(255, Math.round(b))),
+    };
+
+    return {
+      status: 'ok',
+      msg: 'LED color set',
+      led: { ...this.ledState },
+    };
+  }
+
+  /**
+   * Get camera status
+   */
+  private handleGetCameraStatus(): DeviceResponse {
+    return {
+      status: 'ok',
+      cam_status: 'ready',
+      resolution: '640x480',
+      fps: 30,
+    };
+  }
+
+  /**
+   * Get full robot telemetry (pose, motors, sensors, battery)
+   */
+  private handleGetRobotTelemetry(): DeviceResponse {
+    return {
+      status: 'telemetry',
+      pose: {
+        x: parseFloat(this.robotPose.x.toFixed(4)),
+        y: parseFloat(this.robotPose.y.toFixed(4)),
+        rotation: parseFloat(this.robotPose.rotation.toFixed(4)),
+      },
+      motors: { ...this.diffDriveMotors },
+      encoders: { ...this.encoders },
+      led: { ...this.ledState },
+      vbat: parseFloat(this.batteryVoltage.toFixed(2)),
+      cam_status: 'ready',
+      uptime_ms: Date.now() - this.startTime,
+      timestamp_ms: Date.now(),
+    };
+  }
+
   /**
    * Handle custom commands (extensibility point)
    */
@@ -636,6 +865,13 @@ export class VirtualESP32 {
       altitude_m: 0,
     };
 
+    // Reset robot state
+    this.robotPose = { x: 0, y: 0, rotation: 0 };
+    this.diffDriveMotors = { left: 0, right: 0 };
+    this.ledState = { r: 0, g: 0, b: 0 };
+    this.encoders = { left: 0, right: 0 };
+    this.batteryVoltage = 4.2;
+
     this.initializeDefaultState();
   }
 
@@ -665,6 +901,53 @@ export class VirtualESP32 {
    */
   getBarometerData(): BarometerData {
     return { ...this.barometerData };
+  }
+
+  // === Robot State Getters ===
+
+  /**
+   * Get current robot pose
+   */
+  getRobotPose(): RobotPose {
+    return { ...this.robotPose };
+  }
+
+  /**
+   * Get differential drive motor state
+   */
+  getDiffDriveMotors(): DiffDriveMotors {
+    return { ...this.diffDriveMotors };
+  }
+
+  /**
+   * Get LED state
+   */
+  getLEDState(): LEDState {
+    return { ...this.ledState };
+  }
+
+  /**
+   * Get encoder values
+   */
+  getEncoders(): EncoderState {
+    return { ...this.encoders };
+  }
+
+  /**
+   * Get battery voltage
+   */
+  getBatteryVoltage(): number {
+    return this.batteryVoltage;
+  }
+
+  /**
+   * Clean up resources (stop physics loop)
+   */
+  dispose(): void {
+    if (this.physicsInterval) {
+      clearInterval(this.physicsInterval);
+      this.physicsInterval = null;
+    }
   }
 }
 

@@ -746,6 +746,364 @@ export const SYSTEM_APPLETS: Record<string, SystemAppletDefinition> = {
   );
 }`,
   },
+
+  robotControl: {
+    name: 'Cube Robot Control',
+    description: 'Teleoperation and simulation for ESP32 differential drive cube robot',
+    category: 'hardware',
+    code: `function Component({ onSubmit }) {
+  // Robot pose state
+  const [pose, setPose] = useState({ x: 0, y: 0, rotation: 0 });
+  const [motors, setMotors] = useState({ left: 0, right: 0 });
+  const [battery, setBattery] = useState(4.2);
+  const [isConnected, setIsConnected] = useState(true);
+  const [trail, setTrail] = useState([]);
+  const intervalRef = useRef(null);
+  const pressedKeys = useRef(new Set());
+
+  // Scale factor for visualization (meters to pixels)
+  const SCALE = 40;
+  const FLOOR_SIZE = 10; // meters
+  const ROBOT_SIZE = 0.5; // meters
+
+  // Send drive command
+  const sendDrive = async (l, r) => {
+    try {
+      if (window.llmos && window.llmos.executeTool) {
+        await window.llmos.executeTool('send-device-command', {
+          command: { action: 'drive', l, r }
+        });
+      }
+      setMotors({ left: l, right: r });
+    } catch (e) {
+      console.log('Drive command (simulation):', { l, r });
+    }
+  };
+
+  // Poll telemetry
+  useEffect(() => {
+    const pollTelemetry = async () => {
+      try {
+        if (window.llmos && window.llmos.executeTool) {
+          const result = await window.llmos.executeTool('send-device-command', {
+            command: { action: 'get_pose' }
+          });
+          if (result && result.pose) {
+            setPose(result.pose);
+            setMotors(result.motors || { left: 0, right: 0 });
+            // Add to trail (limit to 200 points)
+            setTrail(t => [...t.slice(-199), { x: result.pose.x, y: result.pose.y }]);
+          }
+          // Get battery
+          const telemetry = await window.llmos.executeTool('send-device-command', {
+            command: { action: 'get_robot_telemetry' }
+          });
+          if (telemetry && telemetry.vbat) {
+            setBattery(telemetry.vbat);
+          }
+        }
+      } catch (e) {
+        // Simulation mode - update pose locally
+        const dt = 0.1;
+        const SPEED_SCALE = 0.01;
+        const WHEEL_BASE = 0.5;
+        const vL = motors.left * SPEED_SCALE;
+        const vR = motors.right * SPEED_SCALE;
+        const v = (vR + vL) / 2.0;
+        const omega = (vR - vL) / WHEEL_BASE;
+
+        setPose(p => {
+          let newRotation = p.rotation + omega * dt;
+          while (newRotation > Math.PI) newRotation -= 2 * Math.PI;
+          while (newRotation < -Math.PI) newRotation += 2 * Math.PI;
+          const newX = p.x + v * Math.cos(newRotation) * dt;
+          const newY = p.y + v * Math.sin(newRotation) * dt;
+          setTrail(t => [...t.slice(-199), { x: newX, y: newY }]);
+          return { x: newX, y: newY, rotation: newRotation };
+        });
+      }
+    };
+
+    intervalRef.current = setInterval(pollTelemetry, 100);
+    return () => clearInterval(intervalRef.current);
+  }, [motors]);
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (pressedKeys.current.has(e.key)) return;
+      pressedKeys.current.add(e.key);
+      updateMotorsFromKeys();
+    };
+
+    const handleKeyUp = (e) => {
+      pressedKeys.current.delete(e.key);
+      updateMotorsFromKeys();
+    };
+
+    const updateMotorsFromKeys = () => {
+      const keys = pressedKeys.current;
+      let l = 0, r = 0;
+      const speed = 120;
+
+      if (keys.has('ArrowUp') || keys.has('w')) { l += speed; r += speed; }
+      if (keys.has('ArrowDown') || keys.has('s')) { l -= speed; r -= speed; }
+      if (keys.has('ArrowLeft') || keys.has('a')) { l -= speed/2; r += speed/2; }
+      if (keys.has('ArrowRight') || keys.has('d')) { l += speed/2; r -= speed/2; }
+
+      sendDrive(Math.max(-255, Math.min(255, l)), Math.max(-255, Math.min(255, r)));
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Reset pose
+  const handleReset = async () => {
+    try {
+      if (window.llmos && window.llmos.executeTool) {
+        await window.llmos.executeTool('send-device-command', {
+          command: { action: 'reset_pose' }
+        });
+      }
+    } catch (e) {}
+    setPose({ x: 0, y: 0, rotation: 0 });
+    setMotors({ left: 0, right: 0 });
+    setTrail([]);
+  };
+
+  // Convert world coords to screen coords
+  const worldToScreen = (wx, wy) => ({
+    x: (FLOOR_SIZE / 2 + wx) * SCALE,
+    y: (FLOOR_SIZE / 2 - wy) * SCALE
+  });
+
+  const robotScreen = worldToScreen(pose.x, pose.y);
+
+  return (
+    <div className="h-full flex flex-col bg-gray-900">
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 border-b border-gray-700">
+        <div className="flex items-center gap-3">
+          <h2 className="text-white font-bold">Cube Robot Control</h2>
+          <span className={\`px-2 py-0.5 rounded text-xs \${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}\`}>
+            {isConnected ? 'VIRTUAL' : 'DISCONNECTED'}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="text-gray-400">
+            Battery: <span className={\`font-mono \${battery > 3.5 ? 'text-green-400' : battery > 3.2 ? 'text-yellow-400' : 'text-red-400'}\`}>
+              {battery.toFixed(2)}V
+            </span>
+          </div>
+          <button onClick={handleReset} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs">
+            Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex">
+        {/* 3D Viewport */}
+        <div className="flex-1 relative overflow-hidden" style={{ background: 'radial-gradient(circle at center, #1a1a2e 0%, #0d0d1a 100%)' }}>
+          {/* Grid floor */}
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox={\`0 0 \${FLOOR_SIZE * SCALE} \${FLOOR_SIZE * SCALE}\`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Grid lines */}
+            <defs>
+              <pattern id="grid" width={SCALE} height={SCALE} patternUnits="userSpaceOnUse">
+                <path d={\`M \${SCALE} 0 L 0 0 0 \${SCALE}\`} fill="none" stroke="#333" strokeWidth="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+
+            {/* Axes */}
+            <line x1={FLOOR_SIZE * SCALE / 2} y1={0} x2={FLOOR_SIZE * SCALE / 2} y2={FLOOR_SIZE * SCALE} stroke="#444" strokeWidth="2"/>
+            <line x1={0} y1={FLOOR_SIZE * SCALE / 2} x2={FLOOR_SIZE * SCALE} y2={FLOOR_SIZE * SCALE / 2} stroke="#444" strokeWidth="2"/>
+
+            {/* Trail */}
+            {trail.length > 1 && (
+              <polyline
+                points={trail.map(p => {
+                  const s = worldToScreen(p.x, p.y);
+                  return \`\${s.x},\${s.y}\`;
+                }).join(' ')}
+                fill="none"
+                stroke="#00ffcc"
+                strokeWidth="2"
+                opacity="0.5"
+              />
+            )}
+
+            {/* Robot body */}
+            <g transform={\`translate(\${robotScreen.x}, \${robotScreen.y}) rotate(\${-pose.rotation * 180 / Math.PI})\`}>
+              {/* Robot cube body */}
+              <rect
+                x={-ROBOT_SIZE * SCALE / 2}
+                y={-ROBOT_SIZE * SCALE / 2}
+                width={ROBOT_SIZE * SCALE}
+                height={ROBOT_SIZE * SCALE}
+                fill="#00ccaa"
+                stroke="#00ffcc"
+                strokeWidth="2"
+                rx="4"
+              />
+              {/* Direction indicator (camera) */}
+              <rect
+                x={ROBOT_SIZE * SCALE / 2 - 6}
+                y={-4}
+                width={8}
+                height={8}
+                fill="#ff4444"
+              />
+              {/* Wheels */}
+              <rect x={-ROBOT_SIZE * SCALE / 2 - 4} y={-ROBOT_SIZE * SCALE / 2 + 2} width={4} height={ROBOT_SIZE * SCALE - 4} fill="#666" rx="2"/>
+              <rect x={ROBOT_SIZE * SCALE / 2} y={-ROBOT_SIZE * SCALE / 2 + 2} width={4} height={ROBOT_SIZE * SCALE - 4} fill="#666" rx="2"/>
+            </g>
+          </svg>
+
+          {/* Telemetry overlay */}
+          <div className="absolute top-4 left-4 bg-black/70 rounded-lg p-3 text-xs font-mono">
+            <div className="text-gray-400 mb-1">Position</div>
+            <div className="text-white">X: {pose.x.toFixed(3)}m</div>
+            <div className="text-white">Y: {pose.y.toFixed(3)}m</div>
+            <div className="text-white">R: {(pose.rotation * 180 / Math.PI).toFixed(1)}deg</div>
+          </div>
+
+          {/* Motor status */}
+          <div className="absolute top-4 right-4 bg-black/70 rounded-lg p-3 text-xs font-mono">
+            <div className="text-gray-400 mb-1">Motors</div>
+            <div className="flex gap-4">
+              <div>
+                <div className="text-gray-500">Left</div>
+                <div className={\`text-lg \${motors.left > 0 ? 'text-green-400' : motors.left < 0 ? 'text-red-400' : 'text-gray-500'}\`}>
+                  {motors.left}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500">Right</div>
+                <div className={\`text-lg \${motors.right > 0 ? 'text-green-400' : motors.right < 0 ? 'text-red-400' : 'text-gray-500'}\`}>
+                  {motors.right}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Camera view placeholder */}
+          <div className="absolute bottom-4 right-4 w-40 h-30 bg-black border border-gray-600 rounded overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-xs text-gray-500">CAM FEED</div>
+            </div>
+            <div className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Control panel */}
+        <div className="w-48 bg-gray-800 border-l border-gray-700 p-4 flex flex-col">
+          <div className="text-xs text-gray-400 mb-3 uppercase tracking-wide">Manual Control</div>
+
+          {/* D-pad style controls */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div></div>
+            <button
+              onMouseDown={() => sendDrive(120, 120)}
+              onMouseUp={() => sendDrive(0, 0)}
+              onMouseLeave={() => sendDrive(0, 0)}
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 rounded-lg flex items-center justify-center text-white text-xl"
+            >
+              W
+            </button>
+            <div></div>
+            <button
+              onMouseDown={() => sendDrive(-80, 80)}
+              onMouseUp={() => sendDrive(0, 0)}
+              onMouseLeave={() => sendDrive(0, 0)}
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 rounded-lg flex items-center justify-center text-white text-xl"
+            >
+              A
+            </button>
+            <button
+              onMouseDown={() => sendDrive(0, 0)}
+              className="w-12 h-12 bg-red-600 hover:bg-red-500 rounded-lg flex items-center justify-center text-white text-xs font-bold"
+            >
+              STOP
+            </button>
+            <button
+              onMouseDown={() => sendDrive(80, -80)}
+              onMouseUp={() => sendDrive(0, 0)}
+              onMouseLeave={() => sendDrive(0, 0)}
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 rounded-lg flex items-center justify-center text-white text-xl"
+            >
+              D
+            </button>
+            <div></div>
+            <button
+              onMouseDown={() => sendDrive(-120, -120)}
+              onMouseUp={() => sendDrive(0, 0)}
+              onMouseLeave={() => sendDrive(0, 0)}
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 rounded-lg flex items-center justify-center text-white text-xl"
+            >
+              S
+            </button>
+            <div></div>
+          </div>
+
+          <div className="text-xs text-gray-500 mb-4">
+            Keyboard: WASD or Arrow keys
+          </div>
+
+          <div className="flex-1"></div>
+
+          {/* Quick actions */}
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                // Drive in a small square
+                const sequence = async () => {
+                  for (let i = 0; i < 4; i++) {
+                    sendDrive(100, 100);
+                    await new Promise(r => setTimeout(r, 1000));
+                    sendDrive(100, -100);
+                    await new Promise(r => setTimeout(r, 800));
+                  }
+                  sendDrive(0, 0);
+                };
+                sequence();
+              }}
+              className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white text-xs"
+            >
+              Demo: Square
+            </button>
+            <button
+              onClick={() => {
+                // Drive in a circle
+                sendDrive(100, 50);
+                setTimeout(() => sendDrive(0, 0), 6000);
+              }}
+              className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white text-xs"
+            >
+              Demo: Circle
+            </button>
+            <button
+              onClick={() => setTrail([])}
+              className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs"
+            >
+              Clear Trail
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}`,
+  },
 };
 
 export const APPLET_CATEGORIES = {
@@ -768,6 +1126,11 @@ export const APPLET_CATEGORIES = {
     label: 'Automation',
     icon: 'Workflow',
     applets: ['workflowBuilder'],
+  },
+  hardware: {
+    label: 'Hardware',
+    icon: 'Cpu',
+    applets: ['robotControl'],
   },
 };
 
