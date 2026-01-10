@@ -113,6 +113,7 @@ export class WasmCompiler {
       'wm_ext_wasm_native.h',
       'wm_ext_wasm_native_mqtt.h',
       'wm_ext_wasm_native_rainmaker.h',
+      'robot4.h',  // Robot4 WASM4-style robot firmware API
     ];
 
     for (const filename of headerFiles) {

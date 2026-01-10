@@ -1460,6 +1460,228 @@ export const UninstallWasmAppTool: ToolDefinition = {
 };
 
 /**
+ * Robot4 Firmware Compilation Tool
+ *
+ * Compiles C source code to WebAssembly using the Robot4 API (WASM4-style).
+ * The firmware can run in browser simulation or be deployed to real ESP32-S3 hardware.
+ */
+export const CompileRobot4FirmwareTool: ToolDefinition = {
+  id: 'compile-robot4-firmware',
+  name: 'Compile Robot4 Firmware',
+  description: `Compile C source code to WebAssembly for Robot4 robots.
+
+Robot4 is a WASM4-style API for programming 2-wheeled differential drive robots.
+Same firmware runs in browser simulation and on real ESP32-S3 hardware.
+
+The C code must include robot4.h and implement:
+- void start(void): Called once at startup
+- void update(void): Called 60 times per second (game loop)
+
+Available APIs:
+- Motors: drive(left, right), stop(), spin(speed)
+- Sensors: distance(idx), line(idx), bumper(mask)
+- LED: led(r, g, b), led_red(), led_green(), etc.
+- Camera: capture_frame(), pixel(x, y)
+- System: trace(msg), tone(freq, dur, vol), ticks()`,
+  inputs: [
+    {
+      name: 'source',
+      type: 'string',
+      description: 'C source code with robot4.h included and start()/update() functions',
+      required: true,
+    },
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Firmware name (default: "robot_firmware")',
+      required: false,
+    },
+    {
+      name: 'optimizationLevel',
+      type: 'string',
+      description: 'Optimization level: 0, 1, 2, 3, s, z (default: "2")',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { source, name = 'robot_firmware', optimizationLevel = '2' } = inputs;
+
+    if (!source || typeof source !== 'string') {
+      throw new Error('Invalid source parameter: must be a string of C code');
+    }
+
+    console.log(`[Robot4] Compiling ${name}...`);
+
+    try {
+      const { compileWasm } = await import('./runtime/wasm-compiler');
+
+      const result = await compileWasm({
+        source,
+        name,
+        optimizationLevel,
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Compilation failed',
+          details: result.details,
+          hint: result.hint || 'Check that robot4.h is included and start()/update() are defined',
+          compilationTime: result.compilationTime,
+        };
+      }
+
+      console.log(`[Robot4] Compilation successful: ${result.size} bytes in ${result.compilationTime}ms`);
+
+      // Store the binary for the Robot4 runtime to use
+      if (typeof window !== 'undefined') {
+        (window as any).__robot4_firmware = {
+          name,
+          binary: result.wasmBinary,
+          base64: result.wasmBase64,
+          size: result.size,
+          compiledAt: Date.now(),
+        };
+      }
+
+      return {
+        success: true,
+        name,
+        size: result.size,
+        compilationTime: result.compilationTime,
+        message: `Robot4 firmware "${name}" compiled successfully (${result.size} bytes)`,
+      };
+
+    } catch (error: any) {
+      console.error('[Robot4] Compilation error:', error);
+      return {
+        success: false,
+        error: error.message || 'Unknown compilation error',
+        hint: 'Ensure robot4.h is included and syntax is correct',
+      };
+    }
+  },
+};
+
+/**
+ * Robot4 Runtime Control Tool
+ *
+ * Start, stop, and reset the Robot4 firmware runtime.
+ */
+export const Robot4RuntimeTool: ToolDefinition = {
+  id: 'robot4-runtime',
+  name: 'Robot4 Runtime Control',
+  description: `Control the Robot4 WASM firmware runtime.
+
+Actions:
+- start: Load compiled firmware and start execution at 60 FPS
+- stop: Stop firmware execution
+- reset: Reset robot position and state
+- status: Get runtime status
+
+The firmware runs in the browser using the VirtualESP32 simulator.`,
+  inputs: [
+    {
+      name: 'action',
+      type: 'string',
+      description: 'Action to perform: start, stop, reset, status',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { action } = inputs;
+
+    if (!action || typeof action !== 'string') {
+      throw new Error('Invalid action parameter');
+    }
+
+    // Get or create Robot4 runtime instance
+    if (typeof window === 'undefined') {
+      return { success: false, error: 'Robot4 runtime requires browser environment' };
+    }
+
+    const win = window as any;
+
+    switch (action) {
+      case 'start': {
+        const firmware = win.__robot4_firmware;
+        if (!firmware || !firmware.binary) {
+          return {
+            success: false,
+            error: 'No firmware compiled. Use compile-robot4-firmware first.',
+          };
+        }
+
+        try {
+          const { createRobot4Runtime } = await import('./runtime/robot4-runtime');
+
+          // Create runtime if not exists
+          if (!win.__robot4_runtime) {
+            win.__robot4_runtime = createRobot4Runtime({
+              frameRate: 60,
+              physicsRate: 100,
+              onTrace: (msg: string) => console.log(`[Robot4] ${msg}`),
+            });
+          }
+
+          const runtime = win.__robot4_runtime;
+          await runtime.loadFirmware(firmware.binary);
+          runtime.start();
+
+          return {
+            success: true,
+            message: `Robot4 runtime started with firmware "${firmware.name}"`,
+            status: 'running',
+          };
+
+        } catch (error: any) {
+          return {
+            success: false,
+            error: error.message || 'Failed to start runtime',
+          };
+        }
+      }
+
+      case 'stop': {
+        const runtime = win.__robot4_runtime;
+        if (runtime) {
+          runtime.stop();
+          return { success: true, message: 'Robot4 runtime stopped', status: 'stopped' };
+        }
+        return { success: true, message: 'Runtime not running', status: 'stopped' };
+      }
+
+      case 'reset': {
+        const runtime = win.__robot4_runtime;
+        if (runtime) {
+          runtime.reset();
+          return { success: true, message: 'Robot4 runtime reset', status: 'reset' };
+        }
+        return { success: true, message: 'Runtime not initialized', status: 'not_initialized' };
+      }
+
+      case 'status': {
+        const runtime = win.__robot4_runtime;
+        const firmware = win.__robot4_firmware;
+
+        return {
+          success: true,
+          hasRuntime: !!runtime,
+          isRunning: runtime?.isRunning() || false,
+          hasFirmware: !!firmware,
+          firmwareName: firmware?.name,
+          firmwareSize: firmware?.size,
+          state: runtime?.getState() || null,
+        };
+      }
+
+      default:
+        return { success: false, error: `Unknown action: ${action}` };
+    }
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -1480,6 +1702,8 @@ export function getSystemTools(): ToolDefinition[] {
     DeployWasmAppTool,
     QueryWasmAppsTool,
     UninstallWasmAppTool,
+    CompileRobot4FirmwareTool,
+    Robot4RuntimeTool,
   ];
 }
 

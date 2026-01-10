@@ -1104,6 +1104,433 @@ export const SYSTEM_APPLETS: Record<string, SystemAppletDefinition> = {
   );
 }`,
   },
+
+  robot4World: {
+    name: 'Robot4 World',
+    description: 'WASM4-style robot simulation arena with firmware execution',
+    category: 'hardware',
+    code: `function Component({ onSubmit }) {
+  // Robot state
+  const [pose, setPose] = useState({ x: 0, y: 0, rotation: 0 });
+  const [motors, setMotors] = useState({ left: 0, right: 0 });
+  const [led, setLed] = useState({ r: 0, g: 0, b: 0 });
+  const [sensors, setSensors] = useState([255, 255, 255, 255, 255, 255, 255, 255]);
+  const [lineSensors, setLineSensors] = useState([0, 0, 0, 0, 0]);
+  const [battery, setBattery] = useState(100);
+  const [isRunning, setIsRunning] = useState(false);
+  const [trail, setTrail] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [firmwareCode, setFirmwareCode] = useState(\`// Robot4 Firmware - Wall Avoider
+#include "robot4.h"
+
+#define SPEED 150
+#define MIN_DIST 30
+
+void start(void) {
+  trace("Wall Avoider v1.0");
+  led(0, 255, 0);
+}
+
+void update(void) {
+  uint8_t front = distance(0);
+  uint8_t left = distance(1);
+  uint8_t right = distance(2);
+
+  if (front < MIN_DIST) {
+    if (left > right) {
+      drive(-100, 100);
+      led(255, 255, 0);
+    } else {
+      drive(100, -100);
+      led(255, 128, 0);
+    }
+  } else {
+    drive(SPEED, SPEED);
+    led(0, 255, 0);
+  }
+
+  if (bumper(0x01)) {
+    stop();
+    led(255, 0, 0);
+    tone(200, 500, 128);
+  }
+}\`);
+
+  // World configuration
+  const [world, setWorld] = useState({
+    walls: [
+      { x1: -2, y1: -2, x2: 2, y2: -2 },
+      { x1: 2, y1: -2, x2: 2, y2: 2 },
+      { x1: 2, y1: 2, x2: -2, y2: 2 },
+      { x1: -2, y1: 2, x2: -2, y2: -2 },
+    ],
+    obstacles: [
+      { x: 0.5, y: 0.5, radius: 0.15 },
+      { x: -0.7, y: -0.3, radius: 0.1 },
+    ],
+    beacons: [
+      { x: 1.5, y: 1.5, color: '#ff4444', active: true },
+      { x: -1.5, y: 1.5, color: '#44ff44', active: true },
+    ],
+    lines: [
+      { points: [{ x: 0, y: -1.5 }, { x: 0, y: 1.5 }] },
+    ],
+  });
+
+  const intervalRef = useRef(null);
+  const pressedKeys = useRef(new Set());
+
+  // Visualization settings
+  const SCALE = 80;
+  const ARENA_SIZE = 4.5;
+  const ROBOT_SIZE = 0.16;
+
+  // Poll robot state
+  useEffect(() => {
+    const pollState = async () => {
+      try {
+        if (window.llmos && window.llmos.executeTool) {
+          const result = await window.llmos.executeTool('send-device-command', {
+            command: { action: 'r4_get_state' }
+          });
+          if (result && result.pose) {
+            setPose(result.pose);
+            setMotors(result.motors || { left: 0, right: 0 });
+            setLed(result.led || { r: 0, g: 0, b: 0 });
+            setSensors(result.sensors || [255, 255, 255, 255, 255, 255, 255, 255]);
+            setLineSensors(result.line_sensors || [0, 0, 0, 0, 0]);
+            setBattery(result.battery || 100);
+            setTrail(t => [...t.slice(-199), { x: result.pose.x, y: result.pose.y }]);
+          }
+        }
+      } catch (e) {
+        // Fallback: local physics simulation
+        simulatePhysics();
+      }
+    };
+
+    const simulatePhysics = () => {
+      const dt = 0.05;
+      const SPEED_SCALE = 0.008;
+      const WHEEL_BASE = 0.15;
+      const vL = motors.left * SPEED_SCALE;
+      const vR = motors.right * SPEED_SCALE;
+      const v = (vR + vL) / 2.0;
+      const omega = (vR - vL) / WHEEL_BASE;
+
+      setPose(p => {
+        let newRotation = p.rotation + omega * dt;
+        while (newRotation > Math.PI) newRotation -= 2 * Math.PI;
+        while (newRotation < -Math.PI) newRotation += 2 * Math.PI;
+
+        const newX = p.x + v * Math.cos(newRotation) * dt;
+        const newY = p.y + v * Math.sin(newRotation) * dt;
+
+        // Bound check
+        const boundedX = Math.max(-2 + 0.1, Math.min(2 - 0.1, newX));
+        const boundedY = Math.max(-2 + 0.1, Math.min(2 - 0.1, newY));
+
+        setTrail(t => [...t.slice(-199), { x: boundedX, y: boundedY }]);
+        return { x: boundedX, y: boundedY, rotation: newRotation };
+      });
+    };
+
+    intervalRef.current = setInterval(pollState, 50);
+    return () => clearInterval(intervalRef.current);
+  }, [motors]);
+
+  // Keyboard controls (when not running firmware)
+  useEffect(() => {
+    if (isRunning) return;
+
+    const handleKeyDown = (e) => {
+      if (pressedKeys.current.has(e.key)) return;
+      pressedKeys.current.add(e.key);
+      updateMotors();
+    };
+
+    const handleKeyUp = (e) => {
+      pressedKeys.current.delete(e.key);
+      updateMotors();
+    };
+
+    const updateMotors = () => {
+      const keys = pressedKeys.current;
+      let l = 0, r = 0;
+      const speed = 150;
+
+      if (keys.has('ArrowUp') || keys.has('w')) { l += speed; r += speed; }
+      if (keys.has('ArrowDown') || keys.has('s')) { l -= speed; r -= speed; }
+      if (keys.has('ArrowLeft') || keys.has('a')) { l -= speed * 0.7; r += speed * 0.7; }
+      if (keys.has('ArrowRight') || keys.has('d')) { l += speed * 0.7; r -= speed * 0.7; }
+
+      const clampedL = Math.max(-255, Math.min(255, l));
+      const clampedR = Math.max(-255, Math.min(255, r));
+      setMotors({ left: clampedL, right: clampedR });
+
+      // Send command to virtual device
+      if (window.llmos && window.llmos.executeTool) {
+        window.llmos.executeTool('send-device-command', {
+          command: { action: 'drive', l: clampedL, r: clampedR }
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isRunning]);
+
+  // Reset robot
+  const handleReset = () => {
+    setPose({ x: 0, y: 0, rotation: 0 });
+    setMotors({ left: 0, right: 0 });
+    setLed({ r: 0, g: 0, b: 0 });
+    setTrail([]);
+    setLogs([]);
+
+    if (window.llmos && window.llmos.executeTool) {
+      window.llmos.executeTool('send-device-command', {
+        command: { action: 'reset_pose' }
+      }).catch(() => {});
+    }
+  };
+
+  // Compile and run firmware
+  const handleCompile = async () => {
+    setLogs(l => [...l, { type: 'info', msg: 'Compiling firmware...' }]);
+
+    try {
+      if (window.llmos && window.llmos.executeTool) {
+        const result = await window.llmos.executeTool('compile-robot4-firmware', {
+          source: firmwareCode,
+          name: 'robot_firmware'
+        });
+
+        if (result && result.success) {
+          setLogs(l => [...l, { type: 'success', msg: \`Compiled! Size: \${result.size} bytes\` }]);
+          setIsRunning(true);
+        } else {
+          setLogs(l => [...l, { type: 'error', msg: result.error || 'Compilation failed' }]);
+        }
+      } else {
+        setLogs(l => [...l, { type: 'warn', msg: 'Simulation mode: Run manually with keyboard' }]);
+      }
+    } catch (e) {
+      setLogs(l => [...l, { type: 'error', msg: e.message }]);
+    }
+  };
+
+  // Stop firmware
+  const handleStop = () => {
+    setIsRunning(false);
+    setMotors({ left: 0, right: 0 });
+
+    if (window.llmos && window.llmos.executeTool) {
+      window.llmos.executeTool('send-device-command', {
+        command: { action: 'stop' }
+      }).catch(() => {});
+    }
+  };
+
+  // Coordinate conversion
+  const worldToScreen = (wx, wy) => ({
+    x: (ARENA_SIZE / 2 + wx) * SCALE,
+    y: (ARENA_SIZE / 2 - wy) * SCALE
+  });
+
+  const robotScreen = worldToScreen(pose.x, pose.y);
+  const ledColor = \`rgb(\${led.r}, \${led.g}, \${led.b})\`;
+
+  return (
+    <div className="h-full flex bg-gray-900">
+      {/* Main arena */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex items-center justify-between p-2 border-b border-gray-700">
+          <div className="flex items-center gap-3">
+            <span className="text-white font-bold text-sm">Robot4 World</span>
+            <span className={\`px-2 py-0.5 rounded text-xs \${isRunning ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}\`}>
+              {isRunning ? 'RUNNING' : 'MANUAL'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-gray-400">
+              Battery: <span className={\`font-mono \${battery > 50 ? 'text-green-400' : battery > 20 ? 'text-yellow-400' : 'text-red-400'}\`}>{battery}%</span>
+            </div>
+            <button onClick={handleReset} className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs">Reset</button>
+          </div>
+        </div>
+
+        {/* Arena SVG */}
+        <div className="flex-1 overflow-hidden p-2">
+          <svg
+            className="w-full h-full"
+            viewBox={\`0 0 \${ARENA_SIZE * SCALE} \${ARENA_SIZE * SCALE}\`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Background */}
+            <rect width="100%" height="100%" fill="#111827" />
+
+            {/* Grid */}
+            <defs>
+              <pattern id="r4grid" width={SCALE / 2} height={SCALE / 2} patternUnits="userSpaceOnUse">
+                <path d={\`M \${SCALE/2} 0 L 0 0 0 \${SCALE/2}\`} fill="none" stroke="#1f2937" strokeWidth="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#r4grid)" />
+
+            {/* Arena boundary */}
+            <rect
+              x={(ARENA_SIZE/2 - 2) * SCALE}
+              y={(ARENA_SIZE/2 - 2) * SCALE}
+              width={4 * SCALE}
+              height={4 * SCALE}
+              fill="none"
+              stroke="#374151"
+              strokeWidth="3"
+            />
+
+            {/* Walls */}
+            {world.walls.map((w, i) => {
+              const s1 = worldToScreen(w.x1, w.y1);
+              const s2 = worldToScreen(w.x2, w.y2);
+              return <line key={\`wall-\${i}\`} x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="#6366f1" strokeWidth="4" />;
+            })}
+
+            {/* Obstacles */}
+            {world.obstacles.map((o, i) => {
+              const s = worldToScreen(o.x, o.y);
+              return <circle key={\`obs-\${i}\`} cx={s.x} cy={s.y} r={o.radius * SCALE} fill="#ef4444" opacity="0.8" />;
+            })}
+
+            {/* Lines (track) */}
+            {world.lines.map((line, i) => {
+              const points = line.points.map(p => {
+                const s = worldToScreen(p.x, p.y);
+                return \`\${s.x},\${s.y}\`;
+              }).join(' ');
+              return <polyline key={\`line-\${i}\`} points={points} fill="none" stroke="#000" strokeWidth="8" />;
+            })}
+
+            {/* Beacons */}
+            {world.beacons.filter(b => b.active).map((b, i) => {
+              const s = worldToScreen(b.x, b.y);
+              return (
+                <g key={\`beacon-\${i}\`}>
+                  <circle cx={s.x} cy={s.y} r="12" fill={b.color} opacity="0.3" />
+                  <circle cx={s.x} cy={s.y} r="6" fill={b.color} />
+                </g>
+              );
+            })}
+
+            {/* Trail */}
+            {trail.length > 1 && (
+              <polyline
+                points={trail.map(p => {
+                  const s = worldToScreen(p.x, p.y);
+                  return \`\${s.x},\${s.y}\`;
+                }).join(' ')}
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="2"
+                opacity="0.5"
+              />
+            )}
+
+            {/* Robot */}
+            <g transform={\`translate(\${robotScreen.x}, \${robotScreen.y}) rotate(\${-pose.rotation * 180 / Math.PI})\`}>
+              {/* Body */}
+              <rect x={-ROBOT_SIZE * SCALE / 2} y={-ROBOT_SIZE * SCALE / 2}
+                    width={ROBOT_SIZE * SCALE} height={ROBOT_SIZE * SCALE}
+                    fill="#10b981" stroke="#059669" strokeWidth="2" rx="4" />
+              {/* Direction indicator */}
+              <polygon points={\`\${ROBOT_SIZE * SCALE / 2},0 \${ROBOT_SIZE * SCALE / 2 - 8},-6 \${ROBOT_SIZE * SCALE / 2 - 8},6\`}
+                       fill="#22d3ee" />
+              {/* LED */}
+              <circle cx="0" cy="0" r="4" fill={ledColor} />
+              {/* Wheels */}
+              <rect x={-ROBOT_SIZE * SCALE / 2 - 2} y={-ROBOT_SIZE * SCALE / 2 + 2}
+                    width="4" height={ROBOT_SIZE * SCALE - 4} fill="#1f2937" />
+              <rect x={ROBOT_SIZE * SCALE / 2 - 2} y={-ROBOT_SIZE * SCALE / 2 + 2}
+                    width="4" height={ROBOT_SIZE * SCALE - 4} fill="#1f2937" />
+            </g>
+
+            {/* Sensor rays (when running) */}
+            {isRunning && [0, -45, 45].map((angle, i) => {
+              const dist = sensors[i] / 100; // Convert cm to m
+              const angleRad = pose.rotation + (angle * Math.PI / 180);
+              const endX = pose.x + Math.cos(angleRad) * Math.min(dist, 2);
+              const endY = pose.y + Math.sin(angleRad) * Math.min(dist, 2);
+              const start = worldToScreen(pose.x, pose.y);
+              const end = worldToScreen(endX, endY);
+              return (
+                <line key={\`ray-\${i}\`} x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+                      stroke="#f59e0b" strokeWidth="1" opacity="0.5" strokeDasharray="4,4" />
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Status bar */}
+        <div className="p-2 border-t border-gray-700 flex items-center gap-4 text-xs">
+          <div className="text-gray-400">
+            Pos: <span className="font-mono text-white">{pose.x.toFixed(2)}, {pose.y.toFixed(2)}</span>
+          </div>
+          <div className="text-gray-400">
+            Rot: <span className="font-mono text-white">{(pose.rotation * 180 / Math.PI).toFixed(1)}°</span>
+          </div>
+          <div className="text-gray-400">
+            Motors: <span className="font-mono text-cyan-400">L={motors.left} R={motors.right}</span>
+          </div>
+          <div className="text-gray-400">
+            Front: <span className="font-mono text-yellow-400">{sensors[0]}cm</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Code panel */}
+      <div className="w-80 flex flex-col border-l border-gray-700">
+        <div className="p-2 border-b border-gray-700 flex items-center justify-between">
+          <span className="text-sm text-gray-400">Firmware (C)</span>
+          <div className="flex gap-1">
+            {isRunning ? (
+              <button onClick={handleStop} className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs">Stop</button>
+            ) : (
+              <button onClick={handleCompile} className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs">Compile & Run</button>
+            )}
+          </div>
+        </div>
+
+        <textarea
+          value={firmwareCode}
+          onChange={(e) => setFirmwareCode(e.target.value)}
+          className="flex-1 p-2 bg-gray-950 text-gray-300 font-mono text-xs resize-none focus:outline-none"
+          spellCheck={false}
+          disabled={isRunning}
+        />
+
+        {/* Console */}
+        <div className="h-24 border-t border-gray-700 overflow-y-auto p-2 bg-gray-950">
+          {logs.map((log, i) => (
+            <div key={i} className={\`text-xs font-mono \${
+              log.type === 'error' ? 'text-red-400' :
+              log.type === 'success' ? 'text-green-400' :
+              log.type === 'warn' ? 'text-yellow-400' :
+              'text-gray-400'
+            }\`}>{log.msg}</div>
+          ))}
+          {logs.length === 0 && (
+            <div className="text-xs text-gray-600">Use WASD/arrows to drive manually, or compile firmware to run autonomously.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}`,
+  },
 };
 
 export const APPLET_CATEGORIES = {
@@ -1130,7 +1557,7 @@ export const APPLET_CATEGORIES = {
   hardware: {
     label: 'Hardware',
     icon: 'Cpu',
-    applets: ['robotControl'],
+    applets: ['robotControl', 'robot4World'],
   },
 };
 
