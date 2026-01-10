@@ -18,6 +18,12 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
+    title: 'Robot Control Applet Demo',
+    prompt: 'Open the Robot Control applet and simulate the robot driving in a square.',
+    description: 'Test the differential drive robot simulator',
+    category: 'Hardware + Applet',
+  },
+  {
     title: '2-Wheel Robot World Simulator',
     prompt: `Build a WASM4-style retro game world where I can program a 2-wheel robot with camera:
 - Pixel-art top-down world with walls, obstacles, and collectible items
