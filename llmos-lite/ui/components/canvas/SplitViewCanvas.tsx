@@ -45,62 +45,78 @@ export default function SplitViewCanvas({
   const fileSystem = getVolumeFileSystem();
 
   // Parse the file path to extract actual volume and relative path
-  // filePath might be: "/volumes/system/agents/file.md" or "projects/myproject/file.py"
-  const parseFilePath = (path: string): { actualVolume: VolumeType; relativePath: string; displayPath: string } => {
+  // filePath might be: "/volumes/system/agents/file.md" or "projects/myproject/file.py" or "user/applets/file.tsx"
+  const parseFilePath = (path: string): { actualVolume: VolumeType; relativePath: string; displayPath: string; vfsPath: string } => {
     let actualVolume: VolumeType = volume;
     let relativePath = path;
     let displayPath = path;
+    let vfsPath = path; // Path to use for VFS lookups
 
     // Handle /volumes/system/... paths
     if (path.startsWith('/volumes/system/')) {
       actualVolume = 'system';
       relativePath = path.replace('/volumes/system/', '');
       displayPath = `system/${relativePath}`;
+      vfsPath = 'system/' + relativePath;
     }
     // Handle /volumes/team/... paths
     else if (path.startsWith('/volumes/team/')) {
       actualVolume = 'team';
       relativePath = path.replace('/volumes/team/', '');
       displayPath = `team/${relativePath}`;
-    }
-    // Handle /volumes/user/projects/... paths
-    else if (path.startsWith('/volumes/user/projects/')) {
-      actualVolume = 'user';
-      relativePath = path.replace('/volumes/user/', '');
-      displayPath = `user/${relativePath}`;
+      vfsPath = 'team/' + relativePath;
     }
     // Handle /volumes/user/... paths
     else if (path.startsWith('/volumes/user/')) {
       actualVolume = 'user';
       relativePath = path.replace('/volumes/user/', '');
       displayPath = `user/${relativePath}`;
+      vfsPath = 'user/' + relativePath;
     }
-    // Handle paths starting with projects/ (VFS paths)
+    // Handle VFS path format: user/applets/file.tsx
+    else if (path.startsWith('user/')) {
+      actualVolume = 'user';
+      vfsPath = path;
+      relativePath = path.replace('user/', '');
+      displayPath = path;
+    }
+    // Handle VFS path format: team/...
+    else if (path.startsWith('team/')) {
+      actualVolume = 'team';
+      vfsPath = path;
+      relativePath = path.replace('team/', '');
+      displayPath = path;
+    }
+    // Handle VFS path format: system/...
+    else if (path.startsWith('system/')) {
+      actualVolume = 'system';
+      vfsPath = path;
+      relativePath = path.replace('system/', '');
+      displayPath = path;
+    }
+    // Handle paths starting with projects/ (legacy VFS paths)
     else if (path.startsWith('projects/')) {
       actualVolume = 'user';
       relativePath = path;
       displayPath = `user/${path}`;
-    }
-    // Handle system/ paths
-    else if (path.startsWith('system/')) {
-      actualVolume = 'system';
-      relativePath = path.replace('system/', '');
-      displayPath = path;
+      vfsPath = 'user/' + path;
     }
     // Handle leading slash
     else if (path.startsWith('/')) {
       relativePath = path.substring(1);
       displayPath = `${volume}/${relativePath}`;
+      vfsPath = 'user/' + relativePath;
     }
     // Default - use as-is with provided volume
     else {
       displayPath = `${volume}/${path}`;
+      vfsPath = volume + '/' + path;
     }
 
-    return { actualVolume, relativePath, displayPath };
+    return { actualVolume, relativePath, displayPath, vfsPath };
   };
 
-  const { actualVolume, relativePath, displayPath } = parseFilePath(filePath);
+  const { actualVolume, relativePath, displayPath, vfsPath } = parseFilePath(filePath);
 
   // Get file type label from file extension
   const getFileType = (path: string): string => {
@@ -171,15 +187,15 @@ export default function SplitViewCanvas({
   }, [relativePath, autoExecute]);
 
   const loadFile = async () => {
-    console.log('[SplitViewCanvas] Loading file:', { actualVolume, relativePath, displayPath, filePath });
+    console.log('[SplitViewCanvas] Loading file:', { actualVolume, relativePath, displayPath, vfsPath, filePath });
 
-    // For user volume files starting with 'projects/', read directly from VFS
-    if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+    // Try VFS first for user and team files
+    if (actualVolume === 'user' || actualVolume === 'team') {
       try {
         const vfs = getVFS();
-        const content = vfs.readFileContent(relativePath);
+        const content = vfs.readFileContent(vfsPath);
         if (content !== null) {
-          console.log('[SplitViewCanvas] Loaded from VFS:', relativePath);
+          console.log('[SplitViewCanvas] Loaded from VFS:', vfsPath);
           setCode(content);
           return;
         }
@@ -188,8 +204,22 @@ export default function SplitViewCanvas({
       }
     }
 
-    // For system files, try loading from public folder first
+    // For system files, try VFS first then public folder
     if (actualVolume === 'system') {
+      // First try VFS for system files
+      try {
+        const vfs = getVFS();
+        const content = vfs.readFileContent(vfsPath);
+        if (content !== null) {
+          console.log('[SplitViewCanvas] Loaded system file from VFS:', vfsPath);
+          setCode(content);
+          return;
+        }
+      } catch (vfsError) {
+        console.error('[SplitViewCanvas] Failed to load system file from VFS:', vfsError);
+      }
+
+      // Then try public folder
       try {
         const response = await fetch(`/system/${relativePath}`);
         if (response.ok) {
@@ -238,12 +268,12 @@ export default function SplitViewCanvas({
   };
 
   const saveFile = async () => {
-    // For user volume files starting with 'projects/', save directly to VFS
-    if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+    // Save to VFS for user and team files
+    if (actualVolume === 'user' || actualVolume === 'team') {
       try {
         const vfs = getVFS();
-        vfs.writeFile(relativePath, code);
-        console.log('[SplitViewCanvas] Saved to VFS:', relativePath);
+        vfs.writeFile(vfsPath, code);
+        console.log('[SplitViewCanvas] Saved to VFS:', vfsPath);
 
         if (autoExecute) {
           executeCode();

@@ -131,30 +131,52 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
   };
 
   // Parse file path for volume
-  const parseFilePath = (path: string): { actualVolume: VolumeType; relativePath: string } => {
+  // Handles both /volumes/... paths and VFS paths like user/..., team/..., system/...
+  const parseFilePath = (path: string): { actualVolume: VolumeType; relativePath: string; vfsPath: string } => {
     let actualVolume: VolumeType = volume;
     let relativePath = path;
+    let vfsPath = path; // Path to use for VFS lookups
 
     if (path.startsWith('/volumes/system/')) {
       actualVolume = 'system';
       relativePath = path.replace('/volumes/system/', '');
+      vfsPath = 'system/' + relativePath;
     } else if (path.startsWith('/volumes/team/')) {
       actualVolume = 'team';
       relativePath = path.replace('/volumes/team/', '');
+      vfsPath = 'team/' + relativePath;
     } else if (path.startsWith('/volumes/user/')) {
       actualVolume = 'user';
       relativePath = path.replace('/volumes/user/', '');
+      vfsPath = 'user/' + relativePath;
+    } else if (path.startsWith('user/')) {
+      // VFS path format: user/applets/file.tsx
+      actualVolume = 'user';
+      vfsPath = path;
+      relativePath = path.replace('user/', '');
+    } else if (path.startsWith('team/')) {
+      // VFS path format: team/...
+      actualVolume = 'team';
+      vfsPath = path;
+      relativePath = path.replace('team/', '');
+    } else if (path.startsWith('system/')) {
+      // VFS path format: system/...
+      actualVolume = 'system';
+      vfsPath = path;
+      relativePath = path.replace('system/', '');
     } else if (path.startsWith('projects/')) {
       actualVolume = 'user';
+      vfsPath = 'user/' + path;
       relativePath = path;
     } else if (path.startsWith('/')) {
       relativePath = path.substring(1);
+      vfsPath = 'user/' + relativePath;
     }
 
-    return { actualVolume, relativePath };
+    return { actualVolume, relativePath, vfsPath };
   };
 
-  const { actualVolume, relativePath } = parseFilePath(filePath);
+  const { actualVolume, relativePath, vfsPath } = parseFilePath(filePath);
 
   // Load file content
   useEffect(() => {
@@ -164,14 +186,14 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
       logActivity?.('action', 'Loading file', filePath);
 
       try {
-        // Try VFS first for user files
-        if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+        // Try VFS first for user and team files
+        if (actualVolume === 'user' || actualVolume === 'team') {
           const vfs = getVFS();
-          const content = vfs.readFileContent(relativePath);
+          const content = vfs.readFileContent(vfsPath);
           if (content !== null) {
             setCode(content);
             setOriginalCode(content);
-            logActivity?.('success', 'File loaded from VFS', relativePath);
+            logActivity?.('success', 'File loaded from VFS', vfsPath);
             setIsLoading(false);
             return;
           }
@@ -179,6 +201,18 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
 
         // Try public folder for system files
         if (actualVolume === 'system') {
+          // First try VFS for system files
+          const vfs = getVFS();
+          const vfsContent = vfs.readFileContent(vfsPath);
+          if (vfsContent !== null) {
+            setCode(vfsContent);
+            setOriginalCode(vfsContent);
+            logActivity?.('success', 'File loaded from VFS', vfsPath);
+            setIsLoading(false);
+            return;
+          }
+
+          // Then try public folder
           const response = await fetch(`/system/${relativePath}`);
           if (response.ok) {
             const content = await response.text();
@@ -190,7 +224,7 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
           }
         }
 
-        // Fallback to volume file system
+        // Fallback to volume file system (GitHub-backed)
         const content = await fileSystem.readFile(actualVolume, relativePath);
         setCode(content);
         setOriginalCode(content);
@@ -205,7 +239,7 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
     };
 
     loadFile();
-  }, [actualVolume, relativePath, logActivity]);
+  }, [actualVolume, relativePath, vfsPath, logActivity]);
 
   // Handle code changes
   const handleCodeChange = useCallback((value: string | undefined) => {
@@ -217,10 +251,11 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
   // Save file
   const handleSave = useCallback(async () => {
     try {
-      if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+      // Save to VFS for user and team files
+      if (actualVolume === 'user' || actualVolume === 'team') {
         const vfs = getVFS();
-        vfs.writeFile(relativePath, code);
-        logActivity?.('success', 'File saved to VFS', relativePath);
+        vfs.writeFile(vfsPath, code);
+        logActivity?.('success', 'File saved to VFS', vfsPath);
       } else {
         const original = await fileSystem.readFile(actualVolume, relativePath);
         await fileSystem.editFile(actualVolume, relativePath, original, code);
@@ -231,7 +266,7 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
     } catch (err) {
       logActivity?.('error', 'Failed to save file', err instanceof Error ? err.message : 'Unknown error');
     }
-  }, [actualVolume, relativePath, code, fileSystem, logActivity]);
+  }, [actualVolume, relativePath, vfsPath, code, fileSystem, logActivity]);
 
   // Execute code
   const handleExecute = useCallback(async () => {
@@ -279,27 +314,31 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
   const handleReload = useCallback(async () => {
     setIsLoading(true);
     try {
-      if (actualVolume === 'user' && relativePath.startsWith('projects/')) {
+      // Try VFS first for user and team files
+      if (actualVolume === 'user' || actualVolume === 'team') {
         const vfs = getVFS();
-        const content = vfs.readFileContent(relativePath);
+        const content = vfs.readFileContent(vfsPath);
         if (content !== null) {
           setCode(content);
           setOriginalCode(content);
           setHasUnsavedChanges(false);
+          logActivity?.('info', 'File reloaded from VFS', vfsPath);
+          setIsLoading(false);
+          return;
         }
-      } else {
-        const content = await fileSystem.readFile(actualVolume, relativePath);
-        setCode(content);
-        setOriginalCode(content);
-        setHasUnsavedChanges(false);
       }
+      // Fallback to volume file system
+      const content = await fileSystem.readFile(actualVolume, relativePath);
+      setCode(content);
+      setOriginalCode(content);
+      setHasUnsavedChanges(false);
       logActivity?.('info', 'File reloaded', relativePath);
     } catch (err) {
       logActivity?.('error', 'Failed to reload', err instanceof Error ? err.message : 'Unknown');
     } finally {
       setIsLoading(false);
     }
-  }, [actualVolume, relativePath, fileSystem, logActivity]);
+  }, [actualVolume, relativePath, vfsPath, fileSystem, logActivity]);
 
   const isApplet = isAppletFile(filePath);
   const isExecutable = isExecutableFile(filePath);
