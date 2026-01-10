@@ -18,46 +18,46 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'ESP32-S3 Robot Simulator',
-    prompt: `Build an interactive 2-wheel differential drive robot simulator with:
-- Visual top-down view of the robot with two wheels and camera FOV cone
-- Sliders for left and right wheel speeds (-100% to +100%)
-- Real-time position and heading display (x, y, θ)
-- Simulated ESP32-S3 pin outputs for motor control (GPIO pins)
-- Trail visualization showing the robot's path history
-- Reset button to return robot to starting position
+    title: '2-Wheel Robot World Simulator',
+    prompt: `Build a WASM4-style retro game world where I can program a 2-wheel robot with camera:
+- Pixel-art top-down world with walls, obstacles, and collectible items
+- Robot has differential drive (2 wheels) and front-facing camera sensor
+- Write robot behavior code that runs in the simulation loop
+- Camera returns pixel data of what's ahead (like a real OV2640)
+- Physics: collision detection, momentum, wheel slip on different surfaces
+- Multiple challenge levels: maze escape, item collection, line following
 
-Show the differential drive kinematics equations and simulate realistic wheel physics.`,
-    description: 'Two-wheel robot differential drive sandbox',
-    category: 'Robotics + ESP32',
+Make it feel like programming a real robot in a game engine.`,
+    description: 'Retro game-style robot programming sandbox',
+    category: 'Simulation + WASM',
   },
   {
-    title: 'Robot Camera Vision Lab',
-    prompt: `Create an ESP32-S3 camera robot vision simulator with:
-- Simulated camera feed showing what the robot "sees" in a 2D world
-- Adjustable camera FOV angle (60° to 120°)
-- Place colored objects/markers in the environment
-- Color detection algorithm that highlights detected objects
-- Line following mode with a track the robot can follow
-- Display detected object positions relative to robot
+    title: 'ESP32-S3 Robot Monitor',
+    prompt: `Create a real-time monitoring dashboard for a physical ESP32-S3 2-wheel robot:
+- WebSocket connection to robot's IP address for live telemetry
+- Camera feed viewer (MJPEG stream from ESP32-CAM)
+- Motor status: current PWM values, wheel encoder ticks, battery voltage
+- Sensor readings: ultrasonic distance, IMU orientation, line sensor array
+- Manual control mode: WASD keys or virtual joystick
+- Command console to send custom commands to the robot
 
-Simulate the OV2640/OV5640 camera module output for the ESP32-S3.`,
-    description: 'ESP32-CAM robot vision playground',
-    category: 'Vision + ESP32',
+Design it to connect to a real ESP32-S3 robot over WiFi.`,
+    description: 'Live dashboard for real ESP32 robot',
+    category: 'IoT + Monitoring',
   },
   {
-    title: 'Robot Navigation Control',
-    prompt: `Build a robot navigation control panel for a 2-wheel ESP32-S3 robot with:
-- Set target waypoints by clicking on a map
-- Path planning visualization (A* or simple line-of-sight)
-- PID control sliders for smooth navigation tuning
-- Obstacle avoidance with virtual ultrasonic sensors
-- Motor PWM duty cycle display for each wheel
-- Generate Arduino/ESP-IDF code for the control logic
+    title: 'Robot Code Generator',
+    prompt: `Build a visual robot programmer for ESP32-S3 2-wheel robots:
+- Drag-and-drop behavior blocks: move, turn, read camera, detect obstacle
+- Connect blocks to create robot programs visually
+- Preview behavior in a mini simulator before deploying
+- Generate Arduino/ESP-IDF C++ code from the visual program
+- Export .ino file ready to flash to the robot
+- Include motor driver setup (L298N/TB6612) and camera init code
 
-Include realistic motor response curves and battery voltage effects.`,
-    description: 'Autonomous navigation with path planning',
-    category: 'Navigation + ESP32',
+Support both simulation testing and real hardware deployment.`,
+    description: 'Visual programming to real robot code',
+    category: 'CodeGen + ESP32',
   },
   {
     title: 'Robot Arm Simulator',
