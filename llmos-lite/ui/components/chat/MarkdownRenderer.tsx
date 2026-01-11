@@ -175,21 +175,21 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
   const hasVisualOutput = result?.success && (result?.images?.length || 0) > 0;
 
   return (
-    <div className="my-4 rounded-lg overflow-hidden border border-border-primary">
+    <div className="my-4 rounded-lg overflow-hidden border border-[#30363d]">
       {/* Header with controls */}
-      <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary border-b border-border-primary">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d]">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono text-fg-tertiary uppercase">
+          <span className="text-xs font-mono text-[#8b949e] uppercase">
             {language || 'code'}
           </span>
           {isExecutable && hasVisualOutput && (
-            <div className="flex items-center gap-1 bg-bg-tertiary rounded px-2 py-0.5">
+            <div className="flex items-center gap-1 bg-[#21262d] rounded px-2 py-0.5">
               <button
                 onClick={() => setShowCode(false)}
                 className={`px-2 py-0.5 text-xs rounded transition-colors ${
                   !showCode
-                    ? 'bg-accent-primary text-white'
-                    : 'text-fg-tertiary hover:text-fg-primary'
+                    ? 'bg-[#58a6ff] text-white'
+                    : 'text-[#8b949e] hover:text-[#e6edf3]'
                 }`}
               >
                 Visual
@@ -198,8 +198,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                 onClick={() => setShowCode(true)}
                 className={`px-2 py-0.5 text-xs rounded transition-colors ${
                   showCode
-                    ? 'bg-accent-primary text-white'
-                    : 'text-fg-tertiary hover:text-fg-primary'
+                    ? 'bg-[#58a6ff] text-white'
+                    : 'text-[#8b949e] hover:text-[#e6edf3]'
                 }`}
               >
                 Code
@@ -212,7 +212,7 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
           {(language === 'python' || language === 'py' || language === 'javascript' || language === 'js') && onOpenInCanvas && (
             <button
               onClick={() => onOpenInCanvas(codeString, language)}
-              className="px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 bg-accent-info/20 text-accent-info hover:bg-accent-info/30 border border-accent-info/50"
+              className="px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 bg-[#58a6ff]/20 text-[#58a6ff] hover:bg-[#58a6ff]/30 border border-[#58a6ff]/50"
               title="Open in interactive canvas"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -227,13 +227,13 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
               disabled={isExecuting}
               className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-2 ${
                 isExecuting
-                  ? 'bg-bg-tertiary text-fg-tertiary cursor-not-allowed'
-                  : 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30 border border-accent-success/50'
+                  ? 'bg-[#21262d] text-[#8b949e] cursor-not-allowed'
+                  : 'bg-[#3fb950]/20 text-[#3fb950] hover:bg-[#3fb950]/30 border border-[#3fb950]/50'
               }`}
             >
               {isExecuting ? (
                 <>
-                  <div className="w-3 h-3 border-2 border-accent-success border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3 h-3 border-2 border-[#3fb950] border-t-transparent rounded-full animate-spin" />
                   Running...
                 </>
               ) : (
@@ -252,15 +252,15 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
       {/* Visual output or code based on toggle */}
       {isExecutable && hasVisualOutput && !showCode ? (
         // Show visual output by default
-        <div className="p-4 bg-bg-primary space-y-3">
+        <div className="p-4 bg-[#0d1117] space-y-3">
           {result.images && result.images.length > 0 && (
             <div className="space-y-3">
               {result.images.map((img, idx) => (
-                <div key={idx} className="bg-bg-secondary p-3 rounded-lg">
+                <div key={idx} className="bg-[#161b22] p-3 rounded-lg">
                   <img
                     src={`data:image/png;base64,${img}`}
                     alt={`Output ${idx + 1}`}
-                    className="max-w-full h-auto rounded border border-border-primary mx-auto"
+                    className="max-w-full h-auto rounded border border-[#30363d] mx-auto"
                   />
                 </div>
               ))}
@@ -268,31 +268,31 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
           )}
           {isExecuting && (
             <div className="flex flex-col items-center justify-center py-8 space-y-3">
-              <div className="flex items-center gap-3 text-fg-tertiary">
-                <div className="w-5 h-5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+              <div className="flex items-center gap-3 text-[#8b949e]">
+                <div className="w-5 h-5 border-2 border-[#58a6ff] border-t-transparent rounded-full animate-spin" />
                 <span className="text-sm font-medium">{executionStatus || 'Processing...'}</span>
               </div>
               {/* Progress steps visualization */}
-              <div className="flex items-center gap-2 text-xs text-fg-muted">
-                <div className={`px-2 py-1 rounded ${executionStatus.includes('Validating') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+              <div className="flex items-center gap-2 text-xs text-[#6e7681]">
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Validating') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#21262d] text-[#8b949e]'}`}>
                   Validate
                 </div>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <div className={`px-2 py-1 rounded ${executionStatus.includes('Loading') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Loading') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#21262d] text-[#8b949e]'}`}>
                   Load
                 </div>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <div className={`px-2 py-1 rounded ${executionStatus.includes('Executing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Executing') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#21262d] text-[#8b949e]'}`}>
                   Execute
                 </div>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <div className={`px-2 py-1 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-tertiary text-fg-tertiary'}`}>
+                <div className={`px-2 py-1 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#21262d] text-[#8b949e]'}`}>
                   Render
                 </div>
               </div>
@@ -302,28 +302,28 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
       ) : (
         // Show code when toggled or no visual output
         <>
-          <pre className="!my-0 !bg-bg-primary overflow-x-auto">
+          <pre className="!my-0 !bg-[#0d1117] overflow-x-auto">
             <code className={className}>{children}</code>
           </pre>
           {/* Show execution progress overlay for code view */}
           {isExecuting && (
-            <div className="border-t border-border-primary bg-bg-tertiary p-4">
+            <div className="border-t border-[#30363d] bg-[#21262d] p-4">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-[#58a6ff] border-t-transparent rounded-full animate-spin" />
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-fg-primary">{executionStatus || 'Processing...'}</div>
+                  <div className="text-sm font-medium text-[#e6edf3]">{executionStatus || 'Processing...'}</div>
                   {/* Progress steps */}
                   <div className="flex items-center gap-2 mt-2 text-xs">
-                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Validating') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Validating') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : executionStatus ? 'bg-[#3fb950]/20 text-[#3fb950]' : 'bg-[#161b22] text-[#8b949e]'}`}>
                       {executionStatus.includes('Validating') ? '⏳' : '✓'} Validate
                     </div>
-                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Loading') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus.includes('Executing') || executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Loading') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : executionStatus.includes('Executing') || executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-[#3fb950]/20 text-[#3fb950]' : 'bg-[#161b22] text-[#8b949e]'}`}>
                       {executionStatus.includes('Loading') ? '⏳' : executionStatus.includes('Executing') || executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '✓' : '⋯'} Load
                     </div>
-                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Executing') ? 'bg-accent-primary/20 text-accent-primary' : executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Executing') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-[#3fb950]/20 text-[#3fb950]' : 'bg-[#161b22] text-[#8b949e]'}`}>
                       {executionStatus.includes('Executing') ? '⏳' : executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '✓' : '⋯'} Execute
                     </div>
-                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-secondary text-fg-tertiary'}`}>
+                    <div className={`px-2 py-0.5 rounded ${executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? 'bg-[#58a6ff]/20 text-[#58a6ff]' : 'bg-[#161b22] text-[#8b949e]'}`}>
                       {executionStatus.includes('Rendering') || executionStatus.includes('Processing') ? '⏳' : '⋯'} Render
                     </div>
                   </div>
@@ -336,10 +336,10 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
 
       {/* Additional output details (console, return values, errors) - shown when in visual mode or when explicitly showing output */}
       {showOutput && result && !hasVisualOutput && (
-        <div className="border-t border-border-primary bg-bg-tertiary">
-          <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary border-b border-border-primary">
+        <div className="border-t border-[#30363d] bg-[#21262d]">
+          <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d]">
             <div className="flex items-center gap-2 text-xs">
-              <span className={result.success ? 'text-accent-success' : 'text-accent-error'}>
+              <span className={result.success ? 'text-[#3fb950]' : 'text-[#f85149]'}>
                 {result.success ? (
                   <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -350,16 +350,16 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                   </svg>
                 )}
               </span>
-              <span className="text-fg-secondary">
+              <span className="text-[#c9d1d9]">
                 {result.success ? 'Execution successful' : 'Execution failed'}
               </span>
-              <span className="text-fg-tertiary">
+              <span className="text-[#8b949e]">
                 ({result.executionTime.toFixed(0)}ms)
               </span>
             </div>
             <button
               onClick={() => setShowOutput(false)}
-              className="text-xs text-fg-tertiary hover:text-fg-primary"
+              className="text-xs text-[#8b949e] hover:text-[#e6edf3]"
             >
               Close
             </button>
@@ -371,8 +371,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                 {/* Return value */}
                 {result.output !== undefined && result.output !== null && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-accent-success">Return Value:</div>
-                    <pre className="text-xs text-fg-primary bg-bg-primary p-3 rounded overflow-auto">
+                    <div className="text-xs font-semibold text-[#3fb950]">Return Value:</div>
+                    <pre className="text-xs text-[#e6edf3] bg-[#0d1117] p-3 rounded overflow-auto">
                       {typeof result.output === 'object'
                         ? JSON.stringify(result.output, null, 2)
                         : String(result.output)}
@@ -383,8 +383,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                 {/* Console output */}
                 {result.stdout && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-accent-info">Console Output:</div>
-                    <pre className="text-xs text-fg-secondary bg-bg-primary p-3 rounded overflow-auto whitespace-pre-wrap">
+                    <div className="text-xs font-semibold text-[#58a6ff]">Console Output:</div>
+                    <pre className="text-xs text-[#c9d1d9] bg-[#0d1117] p-3 rounded overflow-auto whitespace-pre-wrap">
                       {result.stdout}
                     </pre>
                   </div>
@@ -393,8 +393,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                 {/* Warnings */}
                 {result.stderr && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-accent-warning">Warnings:</div>
-                    <pre className="text-xs text-accent-warning bg-bg-primary p-3 rounded overflow-auto whitespace-pre-wrap">
+                    <div className="text-xs font-semibold text-[#d29922]">Warnings:</div>
+                    <pre className="text-xs text-[#d29922] bg-[#0d1117] p-3 rounded overflow-auto whitespace-pre-wrap">
                       {result.stderr}
                     </pre>
                   </div>
@@ -404,8 +404,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
               <div className="space-y-3">
                 {/* Error */}
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold text-accent-error">Error:</div>
-                  <pre className="text-xs text-accent-error bg-bg-primary p-3 rounded overflow-auto whitespace-pre-wrap">
+                  <div className="text-xs font-semibold text-[#f85149]">Error:</div>
+                  <pre className="text-xs text-[#f85149] bg-[#0d1117] p-3 rounded overflow-auto whitespace-pre-wrap">
                     {result.error}
                   </pre>
                 </div>
@@ -413,8 +413,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
                 {/* Output before error */}
                 {result.stdout && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-fg-tertiary">Output before error:</div>
-                    <pre className="text-xs text-fg-secondary bg-bg-primary p-3 rounded overflow-auto whitespace-pre-wrap">
+                    <div className="text-xs font-semibold text-[#8b949e]">Output before error:</div>
+                    <pre className="text-xs text-[#c9d1d9] bg-[#0d1117] p-3 rounded overflow-auto whitespace-pre-wrap">
                       {result.stdout}
                     </pre>
                   </div>
@@ -427,12 +427,12 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
 
       {/* Show additional metadata in visual mode (console output, return values) */}
       {hasVisualOutput && !showCode && result && (result.stdout || result.stderr || (result.output !== undefined && result.output !== null)) && (
-        <div className="border-t border-border-primary bg-bg-tertiary p-4 space-y-2">
+        <div className="border-t border-[#30363d] bg-[#21262d] p-4 space-y-2">
           {/* Return value */}
           {result.output !== undefined && result.output !== null && (
             <div className="space-y-1">
-              <div className="text-xs font-semibold text-accent-info">Return Value:</div>
-              <pre className="text-xs text-fg-primary bg-bg-primary p-2 rounded overflow-auto">
+              <div className="text-xs font-semibold text-[#58a6ff]">Return Value:</div>
+              <pre className="text-xs text-[#e6edf3] bg-[#0d1117] p-2 rounded overflow-auto">
                 {typeof result.output === 'object'
                   ? JSON.stringify(result.output, null, 2)
                   : String(result.output)}
@@ -443,8 +443,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
           {/* Console output */}
           {result.stdout && (
             <div className="space-y-1">
-              <div className="text-xs font-semibold text-accent-info">Console Output:</div>
-              <pre className="text-xs text-fg-secondary bg-bg-primary p-2 rounded overflow-auto whitespace-pre-wrap">
+              <div className="text-xs font-semibold text-[#58a6ff]">Console Output:</div>
+              <pre className="text-xs text-[#c9d1d9] bg-[#0d1117] p-2 rounded overflow-auto whitespace-pre-wrap">
                 {result.stdout}
               </pre>
             </div>
@@ -453,8 +453,8 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
           {/* Warnings */}
           {result.stderr && (
             <div className="space-y-1">
-              <div className="text-xs font-semibold text-accent-warning">Warnings:</div>
-              <pre className="text-xs text-accent-warning bg-bg-primary p-2 rounded overflow-auto whitespace-pre-wrap">
+              <div className="text-xs font-semibold text-[#d29922]">Warnings:</div>
+              <pre className="text-xs text-[#d29922] bg-[#0d1117] p-2 rounded overflow-auto whitespace-pre-wrap">
                 {result.stderr}
               </pre>
             </div>
@@ -518,7 +518,7 @@ export default function MarkdownRenderer({ content, enableCodeExecution = true, 
               {...props}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-accent-primary hover:text-accent-secondary underline transition-colors"
+              className="text-[#58a6ff] hover:text-accent-secondary underline transition-colors"
             />
           ),
         }}

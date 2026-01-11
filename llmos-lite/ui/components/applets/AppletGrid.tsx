@@ -116,9 +116,9 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
         {/* Floating suggestion bubble */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2
                        px-4 py-2 rounded-xl
-                       bg-bg-elevated/80 backdrop-blur-xl
+                       bg-[#21262d]/80 backdrop-blur-xl
                        border border-white/10 shadow-lg">
-          <p className="text-sm text-fg-secondary text-center">
+          <p className="text-sm text-[#c9d1d9] text-center">
             {customMessage || 'Ask me to build anything - or launch a system app below!'}
           </p>
         </div>
@@ -137,7 +137,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
                            transition-all duration-200 ${
                   activeCategory === cat.id
                     ? `bg-gradient-to-r ${cat.color} text-white shadow-lg`
-                    : 'bg-white/5 text-fg-secondary hover:bg-white/10 border border-white/10'
+                    : 'bg-white/5 text-[#c9d1d9] hover:bg-white/10 border border-white/10'
                 }`}
               >
                 {cat.icon}
@@ -159,14 +159,14 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
                 onClick={() => onLaunchApplet?.(item.type)}
                 className="flex flex-col items-center gap-2 p-3 rounded-xl
                           bg-white/5 border border-white/10
-                          hover:bg-white/10 hover:border-accent-primary/30
+                          hover:bg-white/10 hover:border-[#C15F3C]/30
                           transition-all duration-200 group
                           hover:scale-105 active:scale-95 min-w-[70px]"
               >
-                <div className="text-fg-muted group-hover:text-accent-primary transition-colors">
+                <div className="text-[#6e7681] group-hover:text-[#C15F3C] transition-colors">
                   {item.icon}
                 </div>
-                <span className="text-[10px] text-fg-tertiary group-hover:text-fg-secondary text-center">
+                <span className="text-[10px] text-[#8b949e] group-hover:text-[#c9d1d9] text-center">
                   {item.label}
                 </span>
               </button>
@@ -177,7 +177,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
         {/* Recent User/Team Applets */}
         {recentApplets.length > 0 && (
           <div className="px-6 pb-4 pt-2 border-t border-white/5 mt-2">
-            <p className="text-[10px] text-fg-muted uppercase tracking-wider mb-3 text-center">
+            <p className="text-[10px] text-[#6e7681] uppercase tracking-wider mb-3 text-center">
               Recent Applets
             </p>
             <div className="flex flex-wrap justify-center gap-3">
@@ -187,11 +187,11 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
                   onClick={() => onOpenRecent?.(applet.id)}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg
                             bg-white/5 border border-white/10
-                            hover:bg-accent-primary/10 hover:border-accent-primary/30
+                            hover:bg-[#C15F3C]/10 hover:border-[#C15F3C]/30
                             transition-all duration-200 group"
                 >
-                  <Sparkles className="w-4 h-4 text-accent-primary" />
-                  <span className="text-xs text-fg-secondary group-hover:text-fg-primary truncate max-w-[120px]">
+                  <Sparkles className="w-4 h-4 text-[#C15F3C]" />
+                  <span className="text-xs text-[#c9d1d9] group-hover:text-[#e6edf3] truncate max-w-[120px]">
                     {applet.name}
                   </span>
                 </button>
@@ -219,14 +219,14 @@ function DesktopGrid({ applets, currentAppletId, onAppletClick, onAppletClose }:
   return (
     <div className="h-full flex flex-col">
       {/* Grid Header */}
-      <div className="px-4 py-3 border-b border-white/10 bg-bg-secondary/30">
+      <div className="px-4 py-3 border-b border-white/10 bg-[#161b22]/30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Grid3X3 className="w-4 h-4 text-fg-muted" />
-            <span className="text-xs font-medium text-fg-secondary">
+            <Grid3X3 className="w-4 h-4 text-[#6e7681]" />
+            <span className="text-xs font-medium text-[#c9d1d9]">
               Active Applets
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-accent-primary/20 text-accent-primary text-[10px]">
+            <span className="px-1.5 py-0.5 rounded bg-[#C15F3C]/20 text-[#C15F3C] text-[10px]">
               {applets.length}
             </span>
           </div>
@@ -252,8 +252,8 @@ function DesktopGrid({ applets, currentAppletId, onAppletClick, onAppletClose }:
       </div>
 
       {/* Hint */}
-      <div className="p-4 border-t border-white/10 bg-bg-secondary/30">
-        <p className="text-[10px] text-fg-muted text-center">
+      <div className="p-4 border-t border-white/10 bg-[#161b22]/30">
+        <p className="text-[10px] text-[#6e7681] text-center">
           Click an applet to open - Ask JARVIS to create more
         </p>
       </div>

@@ -1,13 +1,54 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useProjectContext, type VolumeType } from '@/contexts/ProjectContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { UserStorage } from '@/lib/user-storage';
-import { createLLMClient } from '@/lib/llm-client';
 import { getCurrentSamplePrompts } from '@/lib/sample-prompts';
+import {
+  getMultiAgentOrchestrator,
+  resetMultiAgentOrchestrator,
+  type ChatParticipant,
+  type ChatMessage,
+  type AgentCallInfo,
+  type FileReference,
+  type AgentProposal,
+} from '@/lib/multi-agent-chat-orchestrator';
 import UnifiedChat from './UnifiedChat';
 import ModelSelector from './ModelSelector';
+
+// Re-export types for UnifiedChat compatibility
+interface Participant {
+  id: string;
+  name: string;
+  type: 'user' | 'assistant' | 'agent' | 'system-agent' | 'sub-agent';
+  color: string;
+  avatar?: string;
+  role?: string;
+}
+
+interface Alternative {
+  id: string;
+  content: string;
+  proposer: string;
+  proposerType?: Participant['type'];
+  confidence: number;
+  votes: number;
+  selected?: boolean;
+}
+
+interface EnhancedMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  participantId?: string;
+  branchId?: number;
+  isDecisionPoint?: boolean;
+  alternatives?: Alternative[];
+  agentCalls?: AgentCallInfo[];
+  fileReferences?: FileReference[];
+  isSystemMessage?: boolean;
+}
 
 interface ChatPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -21,15 +62,130 @@ export default function ChatPanel({
   pendingPrompt,
   onPromptProcessed,
 }: ChatPanelProps) {
-  const { currentWorkspace, addMessage, setActiveVolume } = useProjectContext();
+  const { addMessage, setActiveVolume } = useProjectContext();
   const workspaceContext = useWorkspace();
   const { setAgentState, setTaskType, setContextViewMode, setActiveFile } = workspaceContext || {};
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>('');
+  const [messages, setMessages] = useState<EnhancedMessage[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [currentPhase, setCurrentPhase] = useState<string>('idle');
 
-  // Get messages from current workspace
-  const messages = currentWorkspace?.messages || [];
+  // Reference to orchestrator
+  const orchestratorRef = useRef<ReturnType<typeof getMultiAgentOrchestrator> | null>(null);
+
+  // Initialize orchestrator and set up event listeners
+  useEffect(() => {
+    const orchestrator = getMultiAgentOrchestrator();
+    orchestratorRef.current = orchestrator;
+
+    // Set initial participants
+    setParticipants(orchestrator.getParticipants().map(p => ({
+      id: p.id,
+      name: p.name,
+      type: p.type as Participant['type'],
+      color: p.color,
+      role: p.role,
+    })));
+
+    // Event handlers
+    const handleParticipantAdded = (participant: ChatParticipant) => {
+      setParticipants(prev => {
+        if (prev.find(p => p.id === participant.id)) return prev;
+        return [...prev, {
+          id: participant.id,
+          name: participant.name,
+          type: participant.type as Participant['type'],
+          color: participant.color,
+          role: participant.role,
+        }];
+      });
+    };
+
+    const handleParticipantStatus = ({ participantId, status }: { participantId: string; status: string }) => {
+      // Update loading status based on agent activity
+      if (status === 'thinking') {
+        const p = orchestrator.getParticipants().find(p => p.id === participantId);
+        setLoadingStatus(`${p?.name || participantId} is thinking...`);
+      } else if (status === 'executing') {
+        const p = orchestrator.getParticipants().find(p => p.id === participantId);
+        setLoadingStatus(`${p?.name || participantId} is executing...`);
+      }
+    };
+
+    const handleMessageAdded = (message: ChatMessage) => {
+      const enhanced: EnhancedMessage = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        participantId: message.participantId,
+        branchId: message.branchId,
+        isDecisionPoint: message.isDecisionPoint,
+        alternatives: message.alternatives?.map(alt => ({
+          id: alt.id,
+          content: alt.content,
+          proposer: alt.agentName,
+          confidence: alt.confidence,
+          votes: alt.votes,
+          selected: alt.selected,
+        })),
+        agentCalls: message.agentCalls,
+        fileReferences: message.fileReferences,
+        isSystemMessage: message.isSystemMessage,
+      };
+      setMessages(prev => [...prev, enhanced]);
+    };
+
+    const handleMessageUpdated = (message: ChatMessage) => {
+      setMessages(prev => prev.map(m => {
+        if (m.id === message.id) {
+          return {
+            ...m,
+            content: message.content,
+            alternatives: message.alternatives?.map(alt => ({
+              id: alt.id,
+              content: alt.content,
+              proposer: alt.agentName,
+              confidence: alt.confidence,
+              votes: alt.votes,
+              selected: alt.selected,
+            })),
+            agentCalls: message.agentCalls,
+            fileReferences: message.fileReferences,
+          };
+        }
+        return m;
+      }));
+    };
+
+    const handlePhaseChanged = ({ phase }: { phase: string }) => {
+      setCurrentPhase(phase);
+      if (phase === 'completed') {
+        setIsLoading(false);
+        setLoadingStatus('');
+        setAgentState?.('success');
+        setTimeout(() => setAgentState?.('idle'), 2000);
+      }
+    };
+
+    // Subscribe to events
+    orchestrator.on('participant:added', handleParticipantAdded);
+    orchestrator.on('participant:status', handleParticipantStatus);
+    orchestrator.on('message:added', handleMessageAdded);
+    orchestrator.on('message:updated', handleMessageUpdated);
+    orchestrator.on('phase:changed', handlePhaseChanged);
+
+    // Cleanup
+    return () => {
+      orchestrator.off('participant:added', handleParticipantAdded);
+      orchestrator.off('participant:status', handleParticipantStatus);
+      orchestrator.off('message:added', handleMessageAdded);
+      orchestrator.off('message:updated', handleMessageUpdated);
+      orchestrator.off('phase:changed', handlePhaseChanged);
+    };
+  }, [setAgentState]);
 
   // Sync active volume
   useEffect(() => {
@@ -44,143 +200,75 @@ export default function ChatPanel({
       onPromptProcessed?.();
       handleSend(pendingPrompt);
     }
-  }, [pendingPrompt]);
+  }, [pendingPrompt, isLoading, onPromptProcessed]);
 
+  // Handle file click - open in main panel
+  const handleFileClick = useCallback((file: FileReference) => {
+    console.log('[ChatPanel] Opening file:', file.path);
+    setActiveFile?.(file.path);
+    if (file.type === 'code') {
+      setContextViewMode?.('split-view');
+    } else {
+      setContextViewMode?.('canvas');
+    }
+  }, [setActiveFile, setContextViewMode]);
+
+  // Handle vote selection
+  const handleVote = useCallback((alternativeId: string) => {
+    console.log('[ChatPanel] Vote cast for:', alternativeId);
+    orchestratorRef.current?.voteForProposal(alternativeId, 'user');
+  }, []);
+
+  // Handle send - process with multi-agent orchestrator
   const handleSend = async (messageText: string) => {
     if (!messageText.trim() || isLoading) return;
 
     setIsLoading(true);
-    setLoadingStatus('Sending...');
+    setLoadingStatus('Initializing agents...');
     setAgentState?.('thinking');
     setTaskType?.('chatting');
 
     try {
-      // Add user message
+      // Process goal with multi-agent orchestrator
+      await orchestratorRef.current?.processUserGoal(messageText);
+
+      // Add to project context for persistence
       addMessage({ role: 'user', content: messageText });
 
-      const user = UserStorage.getUser();
-      const team = UserStorage.getTeam();
-
-      if (!user || !team) {
-        addMessage({
-          role: 'assistant',
-          content: 'Error: User profile not configured. Please complete setup.',
-        });
-        return;
-      }
-
-      setLoadingStatus('Connecting to AI...');
-      const client = createLLMClient();
-
-      if (!client) {
-        const { LLMStorage } = await import('@/lib/llm-client');
-        const apiKey = LLMStorage.getApiKey();
-        const model = LLMStorage.getModel();
-
-        let errorMsg = 'Error: LLM not configured. ';
-        if (!apiKey) errorMsg += 'Missing API key. ';
-        if (!model) errorMsg += 'Missing model. ';
-
-        addMessage({ role: 'assistant', content: errorMsg });
-        return;
-      }
-
-      // Execute SystemAgent
-      setLoadingStatus('Processing...');
-      const { SystemAgentOrchestrator } = await import('@/lib/system-agent-orchestrator');
-      const { resolveWorkspaceContext } = await import('@/lib/project-context-resolver');
-
-      const systemAgentMarkdown = await fetch('/system/agents/SystemAgent.md').then(r => r.text());
-      const frontmatterMatch = systemAgentMarkdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-      const systemPrompt = frontmatterMatch ? frontmatterMatch[2].trim() : systemAgentMarkdown;
-
-      const orchestrator = new SystemAgentOrchestrator(systemPrompt, (event) => {
-        if (event.type === 'execution' || event.type === 'tool-call') {
-          setAgentState?.('executing');
-          setTaskType?.('coding');
-          setLoadingStatus('Executing...');
-        } else if (event.type === 'thinking') {
-          setAgentState?.('thinking');
-          setLoadingStatus('Thinking...');
-        }
-      });
-
-      try {
-        const workspaceCtx = await resolveWorkspaceContext(activeVolume);
-        if (workspaceCtx) orchestrator.setWorkspaceContext(workspaceCtx);
-      } catch (e) {
-        console.warn('[ChatPanel] Failed to resolve workspace context:', e);
-      }
-
-      setAgentState?.('executing');
-      const result = await orchestrator.execute(messageText);
-
-      let response = result.response || '';
-
-      // Handle images from Python execution
-      const pythonCalls = result.toolCalls.filter(tc => tc.toolId === 'execute-python' && tc.success);
-      for (const tc of pythonCalls) {
-        if (tc.output?.images?.length > 0) {
-          response += '\n\n';
-          tc.output.images.forEach((img: string, i: number) => {
-            response += `![Output ${i + 1}](data:image/png;base64,${img})\n`;
-          });
-        }
-      }
-
-      // Handle created files
-      if (result.success && result.filesCreated.length > 0) {
-        response += `\n\n**Created ${result.filesCreated.length} file(s):**\n`;
-        result.filesCreated.slice(0, 5).forEach(f => {
-          response += `- \`${f}\`\n`;
-        });
-        if (result.filesCreated.length > 5) {
-          response += `- ...and ${result.filesCreated.length - 5} more\n`;
-        }
-
-        const firstFile = result.filesCreated[0];
-        if (firstFile?.match(/\.(png|jpg|svg|gif)$/i)) {
-          setContextViewMode?.('canvas');
-          setActiveFile?.(firstFile);
-        } else if (firstFile?.match(/\.(py|js|ts|tsx)$/i)) {
-          setContextViewMode?.('split-view');
-          setActiveFile?.(firstFile);
-        }
-        setAgentState?.('success');
-      }
-
-      if (!result.success && result.error) {
-        response = `Error: ${result.error}`;
-        setAgentState?.('error');
-      }
-
-      addMessage({ role: 'assistant', content: response });
-
     } catch (error) {
+      console.error('[ChatPanel] Error processing goal:', error);
       setAgentState?.('error');
-      addMessage({
+
+      // Add error message
+      const errorMsg = error instanceof Error ? error.message : 'Failed to process goal';
+      setMessages(prev => [...prev, {
+        id: `msg-error-${Date.now()}`,
         role: 'assistant',
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to process'}`,
-      });
+        content: `Error: ${errorMsg}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        participantId: 'system-agent',
+        isSystemMessage: true,
+      }]);
+
     } finally {
       setIsLoading(false);
       setLoadingStatus('');
-      setTimeout(() => {
-        setAgentState?.('idle');
-        setTaskType?.('idle');
-      }, 2000);
     }
   };
 
-  // Convert messages to UnifiedChat format
-  const unifiedMessages = useMemo(() => {
-    return messages.map((msg, idx) => ({
-      id: msg.id || `msg-${idx}`,
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-      timestamp: msg.timestamp,
-    }));
-  }, [messages]);
+  // Reset chat and orchestrator
+  const handleReset = useCallback(() => {
+    resetMultiAgentOrchestrator();
+    setMessages([]);
+    setParticipants([{
+      id: 'system-agent',
+      name: 'System Agent',
+      type: 'system-agent',
+      color: '#a371f7',
+    }]);
+    setCurrentPhase('idle');
+    orchestratorRef.current = getMultiAgentOrchestrator();
+  }, []);
 
   // Welcome screen when no messages
   if (messages.length === 0) {
@@ -191,10 +279,36 @@ export default function ChatPanel({
         <div className="flex-1 flex flex-col items-center justify-center p-6">
           <div className="max-w-lg space-y-6 text-center">
             <div>
-              <h2 className="text-xl font-semibold text-[#c9d1d9] mb-2">LLMos Chat</h2>
+              <h2 className="text-xl font-semibold text-[#e6edf3] mb-2">LLMos Multi-Agent System</h2>
               <p className="text-sm text-[#8b949e]">
-                A new way to interact with AI
+                Real agents collaborate to achieve your goals
               </p>
+            </div>
+
+            {/* Participant preview */}
+            <div className="flex justify-center gap-2 flex-wrap">
+              {participants.map(p => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium"
+                  style={{ backgroundColor: p.color + '20', color: p.color }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p.color }} />
+                  {p.name}
+                </div>
+              ))}
+            </div>
+
+            {/* Info about multi-agent */}
+            <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d] text-left">
+              <div className="text-sm font-medium text-[#e6edf3] mb-2">How it works:</div>
+              <ul className="text-xs text-[#8b949e] space-y-1">
+                <li>1. System Agent analyzes your goal</li>
+                <li>2. Creates 3+ specialized sub-agents</li>
+                <li>3. Agents propose different approaches</li>
+                <li>4. You can vote on proposals</li>
+                <li>5. Selected approach is executed</li>
+              </ul>
             </div>
 
             <div className="space-y-2">
@@ -204,7 +318,7 @@ export default function ChatPanel({
                   onClick={() => handleSend(sample.prompt)}
                   className="w-full text-left p-3 rounded-lg bg-[#161b22] border border-[#30363d] hover:border-[#58a6ff] transition-colors"
                 >
-                  <div className="text-sm font-medium text-[#c9d1d9]">{sample.title}</div>
+                  <div className="text-sm font-medium text-[#e6edf3]">{sample.title}</div>
                   <div className="text-xs text-[#8b949e] mt-1">{sample.description}</div>
                 </button>
               ))}
@@ -221,8 +335,8 @@ export default function ChatPanel({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Type a message..."
-              className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]"
+              placeholder="Describe your goal..."
+              className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2.5 text-sm text-[#e6edf3] placeholder-[#6e7681] focus:outline-none focus:border-[#58a6ff] focus:ring-1 focus:ring-[#58a6ff]/50"
               onKeyPress={(e) => {
                 if (e.key === 'Enter') {
                   handleSend((e.target as HTMLInputElement).value);
@@ -238,9 +352,9 @@ export default function ChatPanel({
                   input.value = '';
                 }
               }}
-              className="px-4 py-2 bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium rounded-lg transition-colors"
             >
-              Send
+              Start
             </button>
           </div>
         </div>
@@ -248,13 +362,45 @@ export default function ChatPanel({
     );
   }
 
-  // Active conversation
+  // Active conversation with multi-agent chat
   return (
-    <UnifiedChat
-      messages={unifiedMessages}
-      onSend={handleSend}
-      isLoading={isLoading}
-      loadingStatus={loadingStatus}
-    />
+    <div className="h-full flex flex-col bg-[#0d1117]">
+      {/* Phase indicator */}
+      {currentPhase !== 'idle' && currentPhase !== 'completed' && (
+        <div className="px-3 py-1.5 bg-[#161b22] border-b border-[#30363d] flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#d29922] animate-pulse" />
+          <span className="text-xs text-[#d29922] uppercase tracking-wider font-medium">
+            Phase: {currentPhase}
+          </span>
+          {loadingStatus && (
+            <span className="text-xs text-[#8b949e] ml-auto">{loadingStatus}</span>
+          )}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-hidden">
+        <UnifiedChat
+          messages={messages}
+          participants={participants}
+          onSend={handleSend}
+          onVote={handleVote}
+          onFileClick={handleFileClick}
+          isLoading={isLoading}
+          loadingStatus={loadingStatus}
+        />
+      </div>
+
+      {/* Reset button when completed */}
+      {currentPhase === 'completed' && (
+        <div className="px-3 py-2 bg-[#161b22] border-t border-[#30363d] flex justify-center">
+          <button
+            onClick={handleReset}
+            className="text-xs text-[#8b949e] hover:text-[#e6edf3] px-4 py-1.5 rounded-md hover:bg-[#21262d] transition-colors"
+          >
+            Start New Goal
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

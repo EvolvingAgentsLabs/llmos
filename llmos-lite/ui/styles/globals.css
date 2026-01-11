@@ -4,44 +4,45 @@
 
 @layer base {
   :root {
-    /* Claude Code color palette - Warm, minimal, sophisticated */
+    /* Dark theme color palette - Unified dark UI */
 
-    /* Backgrounds - Claude's warm neutrals */
-    --bg-primary: 244 243 238; /* #F4F3EE - Pampas (main background) */
-    --bg-secondary: 255 255 255; /* #FFFFFF - Pure white for cards */
-    --bg-tertiary: 238 236 228; /* Slightly darker warm gray */
-    --bg-elevated: 249 248 244; /* Elevated surfaces */
+    /* Backgrounds - Dark base colors */
+    --bg-primary: 13 17 23; /* #0d1117 - GitHub dark background */
+    --bg-secondary: 22 27 34; /* #161b22 - Slightly elevated */
+    --bg-tertiary: 33 38 45; /* #21262d - Interactive elements */
+    --bg-elevated: 48 54 61; /* #30363d - Elevated surfaces */
+    --bg-hover: 56 62 71; /* Hover state */
 
-    /* Foreground - Text colors */
-    --fg-primary: 31 31 31; /* #1f1f1f - Nearly black for main text */
-    --fg-secondary: 82 82 82; /* #525252 - Medium gray for secondary */
-    --fg-tertiary: 133 133 133; /* #858585 - Light gray for subtle text */
-    --fg-muted: 177 173 161; /* #B1ADA1 - Cloudy (very subtle) */
+    /* Foreground - Text colors for dark theme */
+    --fg-primary: 230 237 243; /* #e6edf3 - Primary text (high contrast) */
+    --fg-secondary: 139 148 158; /* #8b949e - Secondary text */
+    --fg-tertiary: 110 118 129; /* #6e7681 - Tertiary text */
+    --fg-muted: 72 79 88; /* #484f58 - Muted text */
 
-    /* Accent colors - Claude's signature warmth */
+    /* Accent colors - Vibrant on dark */
     --accent-primary: 193 95 60; /* #C15F3C - Crail (primary accent) */
     --accent-secondary: 214 123 89; /* Lighter warm orange */
-    --accent-success: 76 153 89; /* Warm green */
-    --accent-warning: 214 145 89; /* Warm amber */
-    --accent-error: 220 85 75; /* Warm red */
-    --accent-info: 89 145 214; /* Warm blue */
+    --accent-success: 63 185 80; /* #3fb950 - GitHub green */
+    --accent-warning: 210 145 34; /* #d29922 - GitHub amber */
+    --accent-error: 248 81 73; /* #f85149 - GitHub red */
+    --accent-info: 88 166 255; /* #58a6ff - GitHub blue */
 
-    /* Borders */
-    --border-primary: 228 225 217; /* #E4E1D9 - Very subtle warm border */
-    --border-secondary: 210 206 196; /* #D2CEC4 - More visible border */
-    --border-focus: 193 95 60; /* #C15F3C - Focus highlight (Crail) */
+    /* Borders - Subtle on dark */
+    --border-primary: 48 54 61; /* #30363d - Primary border */
+    --border-secondary: 56 62 71; /* #383e47 - Secondary border */
+    --border-focus: 88 166 255; /* #58a6ff - Focus highlight */
 
     /* Overlays */
-    --overlay: 31 31 31 / 0.4;
-    --glass-bg: 255 255 255 / 0.85;
-    --glass-border: 193 95 60 / 0.12;
+    --overlay: 0 0 0 / 0.6;
+    --glass-bg: 22 27 34 / 0.85;
+    --glass-border: 88 166 255 / 0.15;
 
-    /* Shadows - Softer, warmer shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(193 95 60 / 0.06);
-    --shadow-md: 0 2px 6px 0 rgb(193 95 60 / 0.08);
-    --shadow-lg: 0 4px 12px 0 rgb(193 95 60 / 0.1);
-    --shadow-xl: 0 8px 24px 0 rgb(193 95 60 / 0.12);
-    --shadow-glow: 0 0 16px rgb(193 95 60 / 0.25);
+    /* Shadows - Deeper for dark theme */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 2px 6px 0 rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 4px 12px 0 rgb(0 0 0 / 0.5);
+    --shadow-xl: 0 8px 24px 0 rgb(0 0 0 / 0.6);
+    --shadow-glow: 0 0 16px rgb(88 166 255 / 0.25);
   }
 
   * {
@@ -56,24 +57,24 @@
     /* Clean, minimal background - no gradients */
   }
 
-  /* Minimal scrollbar - Claude style */
+  /* Minimal scrollbar - Dark theme */
   ::-webkit-scrollbar {
     @apply w-2 h-2;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    @apply bg-bg-primary;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-fg-muted/40 rounded-full;
-    @apply hover:bg-fg-muted/60;
+    @apply bg-border-primary rounded-full;
+    @apply hover:bg-border-secondary;
     @apply transition-colors duration-150;
   }
 
-  /* Selection - Warm accent */
+  /* Selection - Blue accent for dark theme */
   ::selection {
-    @apply bg-accent-primary/20 text-fg-primary;
+    @apply bg-accent-info/30 text-fg-primary;
   }
 }
 
@@ -598,14 +599,14 @@
   background-color: rgba(193, 95, 60, 0.25) !important;
 }
 
-/* Syntax highlighting for code blocks (highlight.js) - Light theme */
+/* Syntax highlighting for code blocks (highlight.js) - Dark theme */
 .hljs {
   @apply bg-bg-secondary text-fg-primary;
   @apply rounded-xl p-4 overflow-x-auto;
   @apply font-mono text-sm border border-border-primary;
 }
 
-/* Warm, sophisticated syntax highlighting */
+/* GitHub-style dark theme syntax highlighting */
 .hljs-comment,
 .hljs-quote {
   @apply text-fg-tertiary italic;
@@ -614,7 +615,7 @@
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-subst {
-  @apply text-[rgb(166,65,145)]; /* Warm purple */
+  @apply text-[#ff7b72]; /* GitHub dark red */
 }
 
 .hljs-number,
@@ -622,44 +623,44 @@
 .hljs-variable,
 .hljs-template-variable,
 .hljs-tag .hljs-attr {
-  @apply text-[rgb(76,153,89)]; /* Warm green */
+  @apply text-[#79c0ff]; /* GitHub dark blue */
 }
 
 .hljs-string,
 .hljs-doctag {
-  @apply text-[rgb(193,95,60)]; /* Crail - primary accent */
+  @apply text-[#a5d6ff]; /* GitHub dark light blue */
 }
 
 .hljs-title,
 .hljs-section,
 .hljs-selector-id {
-  @apply text-[rgb(140,109,49)]; /* Warm gold */
+  @apply text-[#d2a8ff]; /* GitHub dark purple */
 }
 
 .hljs-type,
 .hljs-class .hljs-title {
-  @apply text-[rgb(89,145,214)]; /* Warm blue */
+  @apply text-[#ffa657]; /* GitHub dark orange */
 }
 
 .hljs-tag,
 .hljs-name,
 .hljs-attribute {
-  @apply text-[rgb(89,145,214)]; /* Warm blue */
+  @apply text-[#7ee787]; /* GitHub dark green */
 }
 
 .hljs-regexp,
 .hljs-link {
-  @apply text-accent-error;
+  @apply text-[#a5d6ff];
 }
 
 .hljs-symbol,
 .hljs-bullet {
-  @apply text-accent-primary;
+  @apply text-[#ffa657];
 }
 
 .hljs-built_in,
 .hljs-builtin-name {
-  @apply text-[rgb(140,109,49)]; /* Warm gold */
+  @apply text-[#ffa657]; /* GitHub dark orange */
 }
 
 .hljs-meta {
@@ -667,11 +668,11 @@
 }
 
 .hljs-deletion {
-  @apply bg-accent-error/10;
+  @apply bg-[#8b1c1c]/30 text-[#ff7b72];
 }
 
 .hljs-addition {
-  @apply bg-accent-success/10;
+  @apply bg-[#1b4721]/30 text-[#7ee787];
 }
 
 .hljs-emphasis {
@@ -682,39 +683,39 @@
   @apply font-semibold;
 }
 
-/* Markdown content styles - Claude's clean typography */
+/* Markdown content styles - Dark theme typography */
 .markdown-content {
-  @apply text-fg-primary leading-relaxed;
+  @apply text-[#e6edf3] leading-relaxed;
 }
 
 .markdown-content h1 {
-  @apply text-2xl font-semibold text-fg-primary mt-8 mb-4 pb-3 border-b border-border-primary;
+  @apply text-2xl font-semibold text-[#e6edf3] mt-8 mb-4 pb-3 border-b border-[#30363d];
 }
 
 .markdown-content h2 {
-  @apply text-xl font-semibold text-fg-primary mt-6 mb-3 pb-2 border-b border-border-primary;
+  @apply text-xl font-semibold text-[#e6edf3] mt-6 mb-3 pb-2 border-b border-[#30363d];
 }
 
 .markdown-content h3 {
-  @apply text-lg font-semibold text-fg-primary mt-5 mb-2;
+  @apply text-lg font-semibold text-[#e6edf3] mt-5 mb-2;
 }
 
 .markdown-content h4 {
-  @apply text-base font-semibold text-fg-primary mt-4 mb-2;
+  @apply text-base font-semibold text-[#e6edf3] mt-4 mb-2;
 }
 
 .markdown-content h5,
 .markdown-content h6 {
-  @apply text-sm font-semibold text-fg-secondary mt-3 mb-1;
+  @apply text-sm font-semibold text-[#c9d1d9] mt-3 mb-1;
 }
 
 .markdown-content p {
-  @apply my-4 text-fg-secondary leading-relaxed;
+  @apply my-4 text-[#c9d1d9] leading-relaxed;
 }
 
 .markdown-content ul,
 .markdown-content ol {
-  @apply my-4 ml-6 space-y-2 text-fg-secondary;
+  @apply my-4 ml-6 space-y-2 text-[#c9d1d9];
 }
 
 .markdown-content ul {
@@ -730,12 +731,12 @@
 }
 
 .markdown-content a {
-  @apply text-accent-primary hover:text-accent-secondary underline decoration-1 underline-offset-2;
+  @apply text-[#58a6ff] hover:text-[#79c0ff] underline decoration-1 underline-offset-2;
   @apply transition-colors duration-150;
 }
 
 .markdown-content code {
-  @apply bg-bg-tertiary text-accent-primary px-2 py-0.5 rounded-md text-sm font-mono;
+  @apply bg-[#21262d] text-[#79c0ff] px-2 py-0.5 rounded-md text-sm font-mono;
 }
 
 .markdown-content pre {
@@ -743,28 +744,28 @@
 }
 
 .markdown-content pre code {
-  @apply bg-transparent text-fg-primary p-0;
+  @apply bg-transparent text-[#e6edf3] p-0;
 }
 
 .markdown-content blockquote {
-  @apply border-l-4 border-accent-primary/40 pl-5 py-2 my-5;
-  @apply bg-accent-primary/5 text-fg-secondary;
+  @apply border-l-4 border-[#58a6ff]/40 pl-5 py-2 my-5;
+  @apply bg-[#58a6ff]/10 text-[#c9d1d9] rounded-r-lg;
 }
 
 .markdown-content table {
-  @apply w-full my-5 border border-border-primary rounded-xl overflow-hidden;
+  @apply w-full my-5 border border-[#30363d] rounded-xl overflow-hidden;
 }
 
 .markdown-content thead {
-  @apply bg-bg-tertiary;
+  @apply bg-[#21262d];
 }
 
 .markdown-content th {
-  @apply px-5 py-3 text-left text-sm font-semibold text-fg-primary border-b border-border-primary;
+  @apply px-5 py-3 text-left text-sm font-semibold text-[#e6edf3] border-b border-[#30363d];
 }
 
 .markdown-content td {
-  @apply px-5 py-3 text-sm text-fg-secondary border-b border-border-primary;
+  @apply px-5 py-3 text-sm text-[#c9d1d9] border-b border-[#30363d];
 }
 
 .markdown-content tbody tr:last-child td {
@@ -772,11 +773,11 @@
 }
 
 .markdown-content tbody tr:hover {
-  @apply bg-bg-tertiary/30;
+  @apply bg-[#21262d]/50;
 }
 
 .markdown-content hr {
-  @apply my-8 border-t border-border-primary;
+  @apply my-8 border-t border-[#30363d];
 }
 
 .markdown-content img {
@@ -784,9 +785,9 @@
 }
 
 .markdown-content strong {
-  @apply text-fg-primary font-semibold;
+  @apply text-[#e6edf3] font-semibold;
 }
 
 .markdown-content em {
-  @apply text-fg-secondary italic;
+  @apply text-[#c9d1d9] italic;
 }
