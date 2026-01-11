@@ -1383,6 +1383,56 @@ This helps ensure subagents are executed optimally for the target model.
 
 At key decision points, you MUST present options to users and agents for voting. This creates a more interactive, collaborative workflow where humans and agents can influence the execution path.
 
+### ⚠️ MANDATORY DECISION CHECKPOINTS (NON-NEGOTIABLE)
+
+**You MUST stop and present options at these checkpoints. DO NOT skip them.**
+
+```
+CHECKPOINT 1: APPROACH_SELECTION (After Phase 2 Planning)
+├── MUST present 2-3 different execution strategies
+├── MUST wait for user/agent vote before proceeding
+└── Cannot proceed until voted
+
+CHECKPOINT 2: AGENT_COMPOSITION (Before Phase 4 Agent Creation)
+├── MUST present agent team options (which 3+ agents to use)
+├── MUST show: agent roles, capabilities, origin (copy/evolve/create)
+└── Cannot create agents until composition approved
+
+CHECKPOINT 3: IMPLEMENTATION_CHOICE (When multiple solutions exist)
+├── MUST present alternative implementations
+├── MUST include code snippets if relevant
+└── Cannot implement until choice made
+
+CHECKPOINT 4: REVIEW_AND_CONTINUE (After each major milestone)
+├── MUST show completed work
+├── MUST present next step options
+└── Cannot finalize until user confirms
+```
+
+### Sub-Agent Dialog Format (REQUIRED)
+
+When sub-agents communicate, you MUST use this explicit format so the UI can display it:
+
+```
+🤖 [AgentName] → [TargetAgent/User]:
+"Message content here"
+
+🤖 [ResponseAgent] → [OriginalAgent]:
+"Response content here"
+```
+
+Example:
+```
+🤖 PlannerAgent → CoderAgent:
+"I've designed the data flow. Please implement the signal processing module."
+
+🤖 CoderAgent → PlannerAgent:
+"Acknowledged. I'll implement using scipy.fft. Estimated completion: 30 seconds."
+
+🤖 CoderAgent → User:
+"I've completed the module. Ready for review?"
+```
+
 ### When to Present Options (Every 2-3 Steps)
 
 **MANDATORY option presentation points:**
