@@ -592,41 +592,50 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   }
 
   /**
-   * Build a planning prompt that forces the LLM to provide options
+   * Build a planning prompt that forces the LLM to provide options with detailed execution plans
    */
   private buildPlanningPrompt(goal: string): string {
-    return `PLANNING PHASE - You MUST provide options before executing.
+    return `PLANNING PHASE - Analyze and present options with detailed execution plans.
 
 USER GOAL: ${goal}
 
 INSTRUCTIONS:
-1. Analyze the user's goal
-2. Present 2-3 different approaches to achieve it
-3. DO NOT execute any tools yet - just present the options
+1. Analyze the user's goal carefully
+2. Identify the specific tools you would need to use (e.g., create-virtual-device, generate-applet, drive-robot, write-file, etc.)
+3. Present 2-3 different approaches with DETAILED execution steps
+4. DO NOT execute any tools yet - just present the plan
 
-You MUST respond with a decision point in this EXACT format:
+You MUST respond with:
+
+🔍 ANALYZING USER GOAL
+Goal: ${goal}
+
+Key Requirements:
+- [List what needs to be created/done]
+- [List specific tools that will be needed]
 
 🗳️ DECISION POINT: Choose Approach
 
-**OPTION A: [First Approach Name]**
+**OPTION A: [Approach Name]**
 - Confidence: [0.0-1.0]
 - Description: [What this approach does]
+- Execution Plan:
+  1. [First tool call: tool-name with parameters]
+  2. [Second tool call: tool-name with parameters]
+  3. [Continue with specific steps...]
 - Pros: [Benefits]
 - Cons: [Drawbacks]
 
-**OPTION B: [Second Approach Name]**
+**OPTION B: [Alternative Approach]**
 - Confidence: [0.0-1.0]
 - Description: [What this approach does]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
-
-**OPTION C: [Third Approach Name]** (optional)
-- Confidence: [0.0-1.0]
-- Description: [What this approach does]
+- Execution Plan:
+  1. [Steps with tool names]
+- Pros/Cons: [Brief summary]
 
 ⏰ Voting time: 60 seconds
 
-Present these options NOW. Do not execute any tools.`;
+IMPORTANT: Include specific tool names and parameters in your execution plans so they can be executed in the next phase.`;
   }
 
   /**
@@ -641,11 +650,12 @@ Present these options NOW. Do not execute any tools.`;
     const options: AgentProposal[] = [];
 
     // Option A: Standard approach (what the LLM planned)
+    // Store full planning response so execution has complete context
     options.push({
       id: `opt-${Date.now()}-a`,
       agentId: 'system-agent',
       agentName: 'Option A: Standard Execution',
-      content: `Execute the planned approach: ${planningResponse.substring(0, 200)}...`,
+      content: `Execute the full planned approach. The LLM will use the tools and steps identified in the planning phase to accomplish the goal.`,
       confidence: 0.8,
       votes: 0,
     });
@@ -832,28 +842,46 @@ Present these options NOW. Do not execute any tools.`;
     try {
       const orchestrator = await this.initializeOrchestrator();
 
-      // Build continuation prompt with selected approach and planning context
+      // Build continuation prompt with selected approach and full planning context
       // This prompt must be explicit about EXECUTION mode to prevent re-analysis
-      const continuationPrompt = `EXECUTION PHASE - ACTION REQUIRED
+      // Include full planning context - don't truncate it
+      const fullPlanningContext = this.planningContext || 'No prior planning context available';
 
-You are now in EXECUTION MODE. The planning phase is COMPLETE. A decision has been made.
+      const continuationPrompt = `EXECUTION PHASE - IMMEDIATE ACTION REQUIRED
 
-ORIGINAL GOAL: ${this.pendingGoal}
+STATUS: Planning is COMPLETE. Decision has been made. NOW EXECUTE.
 
-SELECTED APPROACH: ${selectedOption.agentName}
+=== YOUR TASK ===
+GOAL: ${this.pendingGoal}
+
+APPROACH: ${selectedOption.agentName}
 ${selectedOption.content}
 
-PLANNING CONTEXT (from analysis phase):
-${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
+=== PLANNING ANALYSIS (from phase 1) ===
+${fullPlanningContext}
 
-CRITICAL INSTRUCTIONS:
-1. DO NOT propose more options or ask for choices - the decision is FINAL
-2. DO NOT re-analyze or re-plan - proceed directly to ACTION
-3. YOU MUST USE TOOLS to accomplish the goal
-4. Execute the selected approach step by step
-5. Show progress using sub-agent dialog format: 🤖 [AgentName] → [Target]: "message"
+=== EXECUTION REQUIREMENTS ===
+You MUST take action NOW by calling tools. Here is what you need to do:
 
-START EXECUTING NOW. Call the necessary tools to accomplish the goal.`;
+1. IMMEDIATELY call the appropriate tools to accomplish the goal
+2. For this specific goal "${this.pendingGoal}", you should:
+   - Use create-virtual-device if creating a robot/device
+   - Use generate-applet if creating a UI applet
+   - Use drive-robot or other device tools for robot control
+   - Use write-file for creating any files needed
+
+3. DO NOT:
+   - Propose options or ask questions
+   - Re-analyze or re-plan
+   - Output text without tool calls
+   - Wait for user input
+
+4. DO:
+   - Call tools immediately
+   - Execute step by step
+   - Complete the full workflow
+
+BEGIN EXECUTION - CALL TOOLS NOW:`;
 
       const result = await orchestrator.execute(continuationPrompt);
       await this.handleExecutionResult(result, timestamp);
