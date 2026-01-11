@@ -172,10 +172,10 @@ export function DecisionFlowGraph({
             if (!from || !to) return null;
 
             const isDashed = edge.type === 'prediction' || edge.type === 'speculative';
+            const isPrediction = edge.type === 'prediction';
             const color = EDGE_COLORS[edge.type] || 'stroke-gray-500';
 
             // Calculate control points for curved edges (branches)
-            const midX = (from.x + to.x) / 2;
             const midY = (from.y + to.y) / 2;
 
             // Use curves for branch/merge, straight for others
@@ -190,7 +190,7 @@ export function DecisionFlowGraph({
                   className={color}
                   strokeWidth={2}
                   strokeDasharray={isDashed ? '4 4' : undefined}
-                  opacity={edge.type === 'prediction' ? 0.5 : 1}
+                  opacity={1}
                 />
               );
             }
@@ -205,7 +205,7 @@ export function DecisionFlowGraph({
                 className={color}
                 strokeWidth={2}
                 strokeDasharray={isDashed ? '4 4' : undefined}
-                opacity={edge.type === 'prediction' ? 0.5 : 1}
+                opacity={isPrediction ? 0.5 : 1}
               />
             );
           })}
