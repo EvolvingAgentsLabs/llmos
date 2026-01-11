@@ -276,7 +276,7 @@ export default function ChatPanel({
 
     return (
       <div className="h-full flex flex-col bg-[#0d1117]">
-        <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center p-6 pt-8">
           <div className="max-w-lg space-y-6 text-center">
             <div>
               <h2 className="text-xl font-semibold text-[#e6edf3] mb-2">LLMos Multi-Agent System</h2>
