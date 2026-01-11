@@ -847,13 +847,30 @@ PLANNING CONTEXT (from analysis phase):
 ${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
 
 CRITICAL INSTRUCTIONS:
-1. DO NOT propose more options or ask for choices - the decision is FINAL
-2. DO NOT re-analyze or re-plan - proceed directly to ACTION
-3. YOU MUST USE TOOLS to accomplish the goal
-4. Execute the selected approach step by step
-5. Show progress using sub-agent dialog format: 🤖 [AgentName] → [Target]: "message"
+1. DO NOT re-analyze or re-plan - proceed directly to ACTION
+2. YOU MUST USE TOOLS to accomplish the goal
+3. Execute the selected approach step by step
+4. Show progress using sub-agent dialog format: 🤖 [AgentName] → [Target]: "message"
 
-START EXECUTING NOW. Call the necessary tools to accomplish the goal.`;
+START EXECUTING NOW. Call the necessary tools to accomplish the goal.
+
+AFTER EXECUTION: Once you have completed the current step or achieved part of the goal, you MUST present options for next steps in this EXACT format:
+
+🗳️ DECISION POINT: Next Steps
+
+**OPTION A: [Continue with Next Step Name]**
+- Confidence: [0.0-1.0]
+- Description: [What to do next to continue toward the goal]
+
+**OPTION B: [Alternative Next Step]**
+- Confidence: [0.0-1.0]
+- Description: [An alternative approach for the next step]
+
+**OPTION STOP: Complete/Stop**
+- Confidence: [appropriate value]
+- Description: [If goal is complete, describe what was achieved. If stopping early, explain current state.]
+
+Always provide these options after execution so the user can decide how to proceed.`;
 
       const result = await orchestrator.execute(continuationPrompt);
       await this.handleExecutionResult(result, timestamp);
@@ -1034,14 +1051,9 @@ START EXECUTING NOW. Call the necessary tools to accomplish the goal.`;
     }
 
     // Final response - check for decision points (options)
-    // Skip option parsing if we're in 'executing' phase (user already voted)
-    // to prevent infinite decision loops
-    const skipDecisionPoint = this.executionPhase === 'executing';
-    const options = skipDecisionPoint ? [] : this.parseOptionsFromResponse(result.response);
-
-    if (skipDecisionPoint && result.response.includes('OPTION')) {
-      logger.info('agent', 'Skipping decision point detection - already in execution phase');
-    }
+    // Always parse options from response - the LLM is expected to provide next step options
+    // after execution so the user can decide how to proceed
+    const options = this.parseOptionsFromResponse(result.response);
 
     // Generate predictions for next steps
     const predictions = this.generatePredictions(this.currentPhase, options);
