@@ -11,7 +11,7 @@ import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import ModelSelector from './ModelSelector';
 import CanvasModal from './CanvasModal';
-import DecisionBranchView from '../visualization/DecisionBranchView';
+import GitGraphView from '../visualization/GitGraphView';
 import FlowTimeline from '../visualization/FlowTimeline';
 import { DecisionBranch, DecisionNode, TimelineView, CompletedDecision } from '@/lib/chat/types';
 
@@ -554,11 +554,10 @@ export default function ChatPanel({
 
       {/* Content Area - Switches based on viewMode */}
       {viewMode === 'branches' ? (
-        <DecisionBranchView
+        <GitGraphView
           branch={decisionGraph}
           onSelectNode={(node) => console.log('Selected node:', node)}
-          showPredictions={true}
-          showRejected={true}
+          selectedNodeId={undefined}
         />
       ) : viewMode === 'timeline' ? (
         <FlowTimeline
