@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AVAILABLE_MODELS, LLMStorage, type ModelId } from '@/lib/llm-client';
+import { AVAILABLE_MODELS, LLMStorage, type ModelInfo } from '@/lib/llm-client';
 
 interface ModelSelectorProps {
-  onModelChange?: (modelId: ModelId) => void;
+  onModelChange?: (modelId: string) => void;
   dropdownPosition?: 'bottom' | 'top';
 }
 
+// Define provider order for consistent display
+const PROVIDER_ORDER = ['Anthropic', 'OpenAI', 'Google', 'DeepSeek', 'Meta', 'Mistral', 'Qwen'];
+
 export default function ModelSelector({ onModelChange, dropdownPosition = 'bottom' }: ModelSelectorProps) {
-  const [selectedModel, setSelectedModel] = useState<ModelId | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [customModel, setCustomModel] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(false);
@@ -25,9 +28,14 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
         setCustomModel(currentModel);
       }
     }
+    // Load previously saved custom model for the input field
+    const savedCustomModel = LLMStorage.getCustomModel();
+    if (savedCustomModel && !customModel) {
+      setCustomModel(savedCustomModel);
+    }
   }, []);
 
-  const handleModelSelect = (modelId: ModelId) => {
+  const handleModelSelect = (modelId: string) => {
     setSelectedModel(modelId);
     LLMStorage.saveModel(modelId);
     setIsOpen(false);
@@ -38,9 +46,10 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
   const handleCustomModelSubmit = () => {
     if (!customModel.trim()) return;
 
-    const customModelId = customModel.trim() as ModelId;
+    const customModelId = customModel.trim();
     setSelectedModel(customModelId);
     LLMStorage.saveModel(customModelId);
+    LLMStorage.saveCustomModel(customModelId);
     setIsOpen(false);
     setIsCustomMode(true);
     onModelChange?.(customModelId);
@@ -55,9 +64,19 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
     if (!acc[provider]) {
       acc[provider] = [];
     }
-    acc[provider].push({ key: key as ModelId, ...model });
+    acc[provider].push({ key, ...model });
     return acc;
-  }, {} as Record<string, Array<{ key: ModelId; id: string; name: string; provider: string; inputCost: string; outputCost: string; contextWindow: string }>>);
+  }, {} as Record<string, Array<{ key: string } & ModelInfo>>);
+
+  // Sort providers by defined order
+  const sortedProviders = Object.keys(modelsByProvider).sort((a, b) => {
+    const indexA = PROVIDER_ORDER.indexOf(a);
+    const indexB = PROVIDER_ORDER.indexOf(b);
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   return (
     <div className="relative">
@@ -138,12 +157,12 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
               </div>
 
               {/* Preset Models */}
-              {Object.entries(modelsByProvider).map(([provider, models]) => (
+              {sortedProviders.map((provider) => (
                 <div key={provider} className="space-y-1">
                   <div className="px-2 py-1">
                     <h4 className="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">{provider}</h4>
                   </div>
-                  {models.map((model) => (
+                  {modelsByProvider[provider].map((model) => (
                     <button
                       key={model.key}
                       onClick={() => handleModelSelect(model.key)}
@@ -159,6 +178,11 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
                             <span className={`text-xs font-medium ${selectedModel === model.key && !isCustomMode ? 'text-accent-primary' : 'text-fg-primary'}`}>
                               {model.name}
                             </span>
+                            {model.inputCost === 'Free' && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium bg-accent-success/20 text-accent-success rounded">
+                                FREE
+                              </span>
+                            )}
                             {selectedModel === model.key && !isCustomMode && (
                               <svg className="w-3.5 h-3.5 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -167,11 +191,11 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
                           </div>
                           <div className="flex items-center gap-3 mt-1">
                             <span className="text-[10px] text-fg-tertiary">
-                              Context: {model.contextWindow}
+                              {model.contextWindow}
                             </span>
                             <span className="text-[10px] text-fg-tertiary">•</span>
                             <span className="text-[10px] text-fg-tertiary">
-                              {model.inputCost} in / {model.outputCost} out
+                              {model.inputCost === 'Free' ? 'Free' : `${model.inputCost} in / ${model.outputCost} out`}
                             </span>
                           </div>
                         </div>

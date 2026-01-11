@@ -4,7 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useWorkspace, AgentState } from '@/contexts/WorkspaceContext';
 import { Pause, Play, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { AVAILABLE_MODELS, LLMStorage, type ModelId } from '@/lib/llm-client';
+import { AVAILABLE_MODELS, LLMStorage, type ModelInfo } from '@/lib/llm-client';
+
+// Define provider order for consistent display
+const PROVIDER_ORDER = ['Anthropic', 'OpenAI', 'Google', 'DeepSeek', 'Meta', 'Mistral', 'Qwen'];
 
 // ============================================================================
 // AGENT CORTEX HEADER - The "HAL 9000 Eye" status indicator with controls
@@ -54,7 +57,7 @@ export default function AgentCortexHeader() {
   const { state } = useWorkspace();
   const [pulsePhase, setPulsePhase] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelId | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
 
   const isActive = state.agentState !== 'idle' && state.agentState !== 'success';
@@ -91,7 +94,7 @@ export default function AgentCortexHeader() {
   }, [isPaused]);
 
   // Handle model selection
-  const handleModelSelect = useCallback((modelId: ModelId) => {
+  const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModel(modelId);
     LLMStorage.saveModel(modelId);
     setIsModelMenuOpen(false);
@@ -111,9 +114,19 @@ export default function AgentCortexHeader() {
     if (!acc[provider]) {
       acc[provider] = [];
     }
-    acc[provider].push({ key: key as ModelId, ...model });
+    acc[provider].push({ key, ...model });
     return acc;
-  }, {} as Record<string, Array<{ key: ModelId; id: string; name: string; provider: string; inputCost: string; outputCost: string; contextWindow: string }>>);
+  }, {} as Record<string, Array<{ key: string } & ModelInfo>>);
+
+  // Sort providers by defined order
+  const sortedProviders = Object.keys(modelsByProvider).sort((a, b) => {
+    const indexA = PROVIDER_ORDER.indexOf(a);
+    const indexB = PROVIDER_ORDER.indexOf(b);
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   return (
     <div className="flex items-center gap-4">
@@ -240,12 +253,12 @@ export default function AgentCortexHeader() {
               </div>
 
               <div className="p-2 space-y-2">
-                {Object.entries(modelsByProvider).map(([provider, models]) => (
+                {sortedProviders.map((provider) => (
                   <div key={provider} className="space-y-1">
                     <div className="px-2 py-1">
                       <h4 className="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">{provider}</h4>
                     </div>
-                    {models.map((model) => (
+                    {modelsByProvider[provider].map((model) => (
                       <button
                         key={model.key}
                         onClick={() => handleModelSelect(model.key)}
@@ -256,9 +269,16 @@ export default function AgentCortexHeader() {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className={`text-xs font-medium ${selectedModel === model.key ? 'text-accent-primary' : 'text-fg-primary'}`}>
-                            {model.name}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium ${selectedModel === model.key ? 'text-accent-primary' : 'text-fg-primary'}`}>
+                              {model.name}
+                            </span>
+                            {model.inputCost === 'Free' && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium bg-accent-success/20 text-accent-success rounded">
+                                FREE
+                              </span>
+                            )}
+                          </div>
                           {selectedModel === model.key && (
                             <svg className="w-3.5 h-3.5 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -266,7 +286,7 @@ export default function AgentCortexHeader() {
                           )}
                         </div>
                         <span className="text-[10px] text-fg-tertiary">
-                          {model.contextWindow} • {model.inputCost}/{model.outputCost}
+                          {model.contextWindow} • {model.inputCost === 'Free' ? 'Free' : `${model.inputCost}/${model.outputCost}`}
                         </span>
                       </button>
                     ))}

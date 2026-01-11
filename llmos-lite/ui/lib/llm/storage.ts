@@ -4,12 +4,11 @@
  * Local storage helpers for API key and model persistence
  */
 
-import { ModelId } from './types';
-
 const STORAGE_KEYS = {
   API_KEY: 'llmos_openrouter_api_key',
   MODEL: 'llmos_selected_model',
   PROVIDER: 'llmos_provider',
+  CUSTOM_MODEL: 'llmos_custom_model',
 } as const;
 
 export const LLMStorage = {
@@ -28,15 +27,28 @@ export const LLMStorage = {
     return null;
   },
 
-  saveModel(modelId: ModelId): void {
+  saveModel(modelId: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEYS.MODEL, modelId);
     }
   },
 
-  getModel(): ModelId | null {
+  getModel(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(STORAGE_KEYS.MODEL) as ModelId;
+      return localStorage.getItem(STORAGE_KEYS.MODEL);
+    }
+    return null;
+  },
+
+  saveCustomModel(modelId: string): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_MODEL, modelId);
+    }
+  },
+
+  getCustomModel(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(STORAGE_KEYS.CUSTOM_MODEL);
     }
     return null;
   },
