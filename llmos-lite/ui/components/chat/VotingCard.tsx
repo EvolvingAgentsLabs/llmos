@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { VotingSession, ProposedSolution, VoteType } from '@/lib/chat/types';
+import { VotingSession, ProposedSolution } from '@/lib/chat/types';
 
 interface VotingCardProps {
   session: VotingSession;
   currentUserId: string;
-  onVote: (solutionId: string, voteType: VoteType) => void;
+  onVote: (solutionId: string, voteType: 'up' | 'down') => void;
   onExtendTime?: (seconds: number) => void;
   onAutoDecide?: () => void;
   voteCounts: Map<string, number>;

@@ -1,10 +1,10 @@
 'use client';
 
-import { ProposedSolution, VoteType } from '@/lib/chat/types';
+import { ProposedSolution } from '@/lib/chat/types';
 
 interface SolutionProposalProps {
   proposal: ProposedSolution;
-  onVote?: (voteType: VoteType) => void;
+  onVote?: (voteType: 'up' | 'down') => void;
   showVoteButtons?: boolean;
   hasVoted?: boolean;
   expanded?: boolean;
