@@ -5,24 +5,58 @@ import MarkdownRenderer from './MarkdownRenderer';
 import { Bot, User, Cpu, GitBranch, Vote, FileCode, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 
 // Agent and participant colors - vibrant on dark
-const PARTICIPANT_COLORS = {
-  user: '#58a6ff',      // Blue for user
-  system: '#a371f7',    // Purple for system agent
-  planner: '#3fb950',   // Green for planning agent
-  coder: '#ffa657',     // Orange for coding agent
-  reviewer: '#f778ba',  // Pink for review agent
-  executor: '#79c0ff',  // Light blue for executor
-  default: '#8b949e',   // Gray fallback
+// These colors distinguish different actors in the timeline graph
+const PARTICIPANT_COLORS: Record<string, string> = {
+  user: '#58a6ff',           // Blue for user
+  you: '#58a6ff',            // Blue for user (alt)
+  system: '#a371f7',         // Purple for system agent
+  'system-agent': '#a371f7', // Purple for system agent
+  planner: '#3fb950',        // Green for planning agent
+  planning: '#3fb950',       // Green for planning agent
+  coder: '#ffa657',          // Orange for coding agent
+  developer: '#ffa657',      // Orange for coding agent
+  reviewer: '#f778ba',       // Pink for review agent
+  executor: '#d29922',       // Gold for executor
+  analyst: '#79c0ff',        // Light blue for analyst
+  default: '#8b949e',        // Gray fallback
 };
+
+// Get color for a participant by type, role, or name
+function getParticipantColor(participant: { type?: string; role?: string; name?: string; color?: string }): string {
+  // If color is already set, use it
+  if (participant.color && participant.color !== PARTICIPANT_COLORS.default) {
+    return participant.color;
+  }
+  // Try to match by type
+  if (participant.type) {
+    const typeKey = participant.type.toLowerCase().replace(/[\s-_]+/g, '');
+    if (PARTICIPANT_COLORS[typeKey]) return PARTICIPANT_COLORS[typeKey];
+  }
+  // Try to match by role
+  if (participant.role) {
+    const roleKey = participant.role.toLowerCase().replace(/[\s-_]+/g, '');
+    if (PARTICIPANT_COLORS[roleKey]) return PARTICIPANT_COLORS[roleKey];
+  }
+  // Try to match by name
+  if (participant.name) {
+    const nameKey = participant.name.toLowerCase().replace(/[\s-_]+/g, '');
+    for (const [key, color] of Object.entries(PARTICIPANT_COLORS)) {
+      if (nameKey.includes(key) || key.includes(nameKey)) {
+        return color;
+      }
+    }
+  }
+  return participant.color || PARTICIPANT_COLORS.default;
+}
 
 // Branch colors for visual distinction
 const BRANCH_COLORS = [
-  '#58a6ff', // blue - main
-  '#3fb950', // green
-  '#f85149', // red
-  '#d29922', // orange
-  '#a371f7', // purple
-  '#f778ba', // pink
+  '#58a6ff', // blue - user
+  '#a371f7', // purple - system
+  '#3fb950', // green - planner
+  '#ffa657', // orange - coder
+  '#f778ba', // pink - reviewer
+  '#d29922', // gold - executor
 ];
 
 // Participant types
@@ -275,12 +309,27 @@ export default function UnifiedChat({
 
   return (
     <div className="h-full flex flex-col bg-[#0d1117]">
-      {/* Participants Bar - always visible */}
+      {/* Participants Bar - shows all actors with their distinctive colors */}
       <div className="px-3 py-2 border-b border-[#30363d] bg-[#161b22] flex items-center gap-2 overflow-x-auto">
         <span className="text-[10px] text-[#8b949e] uppercase tracking-wider flex-shrink-0">Participants:</span>
-        {allParticipants.map(p => (
-          <ParticipantBadge key={p.id} participant={p} />
-        ))}
+        {allParticipants.map(p => {
+          const color = getParticipantColor(p);
+          return (
+            <div
+              key={p.id}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all hover:scale-105"
+              style={{ backgroundColor: color + '20', color: color, borderLeft: `3px solid ${color}` }}
+            >
+              {p.type === 'user' ? <User className="w-3 h-3" /> :
+               p.type === 'system-agent' ? <Bot className="w-3 h-3" /> :
+               <Cpu className="w-3 h-3" />}
+              <span>{p.name}</span>
+              {p.role && (
+                <span className="opacity-70">({p.role})</span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Messages with Graph Rail */}
@@ -294,16 +343,26 @@ export default function UnifiedChat({
             const participant = getParticipant(message);
             const branchId = message.branchId ?? 0;
             // Use participant color for graph elements - distinct colors per actor
-            const actorColor = participant.color;
+            const actorColor = getParticipantColor(participant);
             const hasAlternatives = message.alternatives && message.alternatives.length > 0;
             const isExpanded = expandedDecisions.has(message.id);
             const hasAgentCalls = message.agentCalls && message.agentCalls.length > 0;
             const hasFiles = message.fileReferences && message.fileReferences.length > 0;
 
-            // Calculate horizontal offset - user on left, agents shift right
+            // Calculate horizontal offset based on actor type for visual distinction
+            // User on left (0), System agent slightly right (1), Sub-agents further right (2)
             const actorOffset = participant.type === 'user' ? 0 :
                                participant.type === 'system-agent' ? 1 :
                                participant.type === 'sub-agent' ? 2 : 1;
+
+            // Get previous participant for connection lines
+            const prevParticipant = idx > 0 ? getParticipant(messages[idx - 1]) : null;
+            const prevColor = prevParticipant ? getParticipantColor(prevParticipant) : actorColor;
+            const prevOffset = prevParticipant ? (
+              prevParticipant.type === 'user' ? 0 :
+              prevParticipant.type === 'system-agent' ? 1 :
+              prevParticipant.type === 'sub-agent' ? 2 : 1
+            ) : actorOffset;
 
             return (
               <div key={message.id} className="relative">
@@ -339,17 +398,29 @@ export default function UnifiedChat({
                       }}
                     />
                   )}
-                  {/* Connection line when actor changes */}
-                  {idx > 0 && getParticipant(messages[idx - 1]).type !== participant.type && (
-                    <div
-                      className="absolute h-0.5 top-4"
-                      style={{
-                        backgroundColor: actorColor,
-                        left: Math.min(24 + actorOffset * 8, 24 + (getParticipant(messages[idx - 1]).type === 'user' ? 0 : 1) * 8),
-                        width: Math.abs(actorOffset - (getParticipant(messages[idx - 1]).type === 'user' ? 0 : 1)) * 8,
-                        opacity: 0.5,
-                      }}
-                    />
+                  {/* Connection line when actor changes - shows transition between actors */}
+                  {idx > 0 && prevParticipant && prevParticipant.type !== participant.type && (
+                    <>
+                      {/* Horizontal connector with gradient effect */}
+                      <div
+                        className="absolute h-0.5 top-4"
+                        style={{
+                          background: `linear-gradient(to right, ${prevColor}, ${actorColor})`,
+                          left: Math.min(24 + actorOffset * 8, 24 + prevOffset * 8),
+                          width: Math.abs(actorOffset - prevOffset) * 8 + 4,
+                          opacity: 0.8,
+                        }}
+                      />
+                      {/* Merge dot at junction point */}
+                      <div
+                        className="absolute w-2 h-2 rounded-full top-3.5"
+                        style={{
+                          backgroundColor: actorColor,
+                          left: 22 + actorOffset * 8,
+                          boxShadow: `0 0 6px ${actorColor}60`,
+                        }}
+                      />
+                    </>
                   )}
                 </div>
 
@@ -493,37 +564,48 @@ export default function UnifiedChat({
           })}
 
           {/* Loading indicator */}
-          {isLoading && (
-            <div className="relative">
-              <div className="absolute left-0 top-0 bottom-0 w-14 flex justify-center">
-                <div
-                  className="absolute w-0.5 top-0 bottom-0"
-                  style={{ backgroundColor: BRANCH_COLORS[0], left: 24, opacity: 0.6 }}
-                />
-                <div
-                  className="absolute w-3.5 h-3.5 rounded-full border-2 top-4 animate-pulse"
-                  style={{
-                    backgroundColor: BRANCH_COLORS[0],
-                    borderColor: BRANCH_COLORS[0],
-                    left: 21,
-                  }}
-                />
-              </div>
-              <div className="ml-16 pr-4 py-3">
-                <div className="flex items-center gap-3">
-                  <ParticipantBadge participant={allParticipants.find(p => p.type === 'system-agent') || allParticipants[1]} />
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#a371f7] animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 rounded-full bg-[#a371f7] animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 rounded-full bg-[#a371f7] animate-bounce" style={{ animationDelay: '300ms' }} />
+          {isLoading && (() => {
+            const systemAgent = allParticipants.find(p => p.type === 'system-agent') || allParticipants[1];
+            const systemColor = getParticipantColor(systemAgent);
+            return (
+              <div className="relative">
+                <div className="absolute left-0 top-0 bottom-0 w-14 flex justify-center">
+                  <div
+                    className="absolute w-0.5 top-0 bottom-0"
+                    style={{ backgroundColor: systemColor, left: 32, opacity: 0.6 }}
+                  />
+                  <div
+                    className="absolute w-3.5 h-3.5 rounded-full border-2 top-4 animate-pulse"
+                    style={{
+                      backgroundColor: systemColor,
+                      borderColor: systemColor,
+                      left: 29,
+                      boxShadow: `0 0 10px ${systemColor}60`,
+                    }}
+                  />
+                </div>
+                <div className="ml-16 pr-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ backgroundColor: systemColor + '20', color: systemColor }}
+                    >
+                      <Bot className="w-3 h-3" />
+                      <span>{systemAgent.name}</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: systemColor, animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: systemColor, animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: systemColor, animationDelay: '300ms' }} />
+                    </div>
+                    {loadingStatus && (
+                      <span className="text-xs text-[#8b949e]">{loadingStatus}</span>
+                    )}
                   </div>
-                  {loadingStatus && (
-                    <span className="text-xs text-[#8b949e]">{loadingStatus}</span>
-                  )}
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div ref={messagesEndRef} className="h-4" />
         </div>

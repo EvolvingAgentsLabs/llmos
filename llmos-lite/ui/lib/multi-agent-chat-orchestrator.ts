@@ -88,16 +88,42 @@ export interface OrchestratorEvents {
 }
 
 // Default agent colors - distinct for each actor type
+// These colors are used consistently across the chat timeline graph
 const AGENT_COLORS: Record<string, string> = {
   'user': '#58a6ff',           // Blue for user
+  'you': '#58a6ff',            // Blue for user (alt name)
   'system-agent': '#a371f7',   // Purple for system agent
+  'systemagent': '#a371f7',    // Purple for system agent (alt)
+  'system': '#a371f7',         // Purple for system agent (alt)
   'planner': '#3fb950',        // Green for planning agent
+  'planning': '#3fb950',       // Green for planning agent (alt)
   'coder': '#ffa657',          // Orange for coding agent
+  'developer': '#ffa657',      // Orange for coding agent (alt)
+  'coding': '#ffa657',         // Orange for coding agent (alt)
   'reviewer': '#f778ba',       // Pink for review agent
+  'review': '#f778ba',         // Pink for review agent (alt)
   'analyst': '#79c0ff',        // Light blue for analyst
-  'SystemAgent': '#a371f7',
-  'default': '#8b949e',
+  'analysis': '#79c0ff',       // Light blue for analyst (alt)
+  'executor': '#d29922',       // Gold for executor
+  'default': '#8b949e',        // Gray fallback
 };
+
+/**
+ * Get color for an agent by name or role
+ * Tries multiple variations to find a match
+ */
+function getAgentColor(identifier: string): string {
+  const normalized = identifier.toLowerCase().replace(/[\s-_]+/g, '');
+  // Try exact match first
+  if (AGENT_COLORS[normalized]) return AGENT_COLORS[normalized];
+  // Try partial matches
+  for (const [key, color] of Object.entries(AGENT_COLORS)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return color;
+    }
+  }
+  return AGENT_COLORS.default;
+}
 
 // Voting timeout in milliseconds (30 seconds default)
 const VOTING_TIMEOUT_MS = 30000;
@@ -370,7 +396,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       id: agentId,
       name: agentName,
       type: 'sub-agent',
-      color: AGENT_COLORS[agentId] || AGENT_COLORS.default,
+      color: getAgentColor(agentName),
       role: 'specialist',
       status: 'idle',
       capabilities: ['executing tasks'],
@@ -528,7 +554,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
             id: agentId,
             name: agent.name,
             type: 'sub-agent',
-            color: AGENT_COLORS[agent.type] || AGENT_COLORS.default,
+            color: getAgentColor(agent.type || agent.name),
             role: agent.type,
             status: 'done',
             capabilities: [`Origin: ${agent.origin}`],
