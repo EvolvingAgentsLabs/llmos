@@ -18,7 +18,6 @@ import {
   VotingSession,
   ChatParticipant,
   ProposedSolution,
-  VoteType,
 } from '@/lib/chat/types';
 
 interface MultiAgentChatPanelProps {
@@ -172,7 +171,7 @@ export default function MultiAgentChatPanel({
     }
   };
 
-  const handleVote = (solutionId: string, voteType: VoteType) => {
+  const handleVote = (solutionId: string, voteType: 'up' | 'down' = 'up') => {
     if (!activeVoting) return;
     chat.castVote(activeVoting.id, currentUserId.current, solutionId, voteType);
     updateState();
