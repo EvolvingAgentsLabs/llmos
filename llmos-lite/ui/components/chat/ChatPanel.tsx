@@ -11,6 +11,11 @@ import MarkdownRenderer from './MarkdownRenderer';
 import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay';
 import ModelSelector from './ModelSelector';
 import CanvasModal from './CanvasModal';
+import DecisionBranchView from '../visualization/DecisionBranchView';
+import FlowTimeline from '../visualization/FlowTimeline';
+import { DecisionBranch, DecisionNode, TimelineView, CompletedDecision } from '@/lib/chat/types';
+
+type ChatViewMode = 'linear' | 'branches' | 'timeline';
 
 interface ChatPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -46,10 +51,94 @@ export default function ChatPanel({
     language: '',
     isOpen: false,
   });
+  const [viewMode, setViewMode] = useState<ChatViewMode>('linear');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Get messages from current workspace (volume)
   const messages = currentWorkspace?.messages || [];
+
+  // Build decision graph from messages for branch visualization
+  const decisionGraph = useMemo<DecisionBranch>(() => {
+    const nodes = new Map<string, DecisionNode>();
+    const rootId = 'root';
+
+    // Create root node
+    nodes.set(rootId, {
+      id: rootId,
+      type: 'decision',
+      content: 'Conversation Start',
+      children: [],
+      status: 'selected',
+      metadata: {},
+      position: { x: 0, y: 0, column: 0 },
+      timestamp: Date.now(),
+    });
+
+    let lastNodeId = rootId;
+
+    // Create nodes from messages
+    messages.forEach((msg, idx) => {
+      const nodeId = `msg-${idx}`;
+      const isUser = msg.role === 'user';
+
+      nodes.set(nodeId, {
+        id: nodeId,
+        type: isUser ? 'question' : 'decision',
+        content: msg.content.slice(0, 50) + (msg.content.length > 50 ? '...' : ''),
+        parentId: lastNodeId,
+        children: [],
+        status: 'selected',
+        metadata: {},
+        position: { x: 0, y: (idx + 1) * 80, column: 0 },
+        timestamp: Date.now(),
+      });
+
+      // Update parent's children
+      const parent = nodes.get(lastNodeId);
+      if (parent) {
+        parent.children.push(nodeId);
+      }
+
+      lastNodeId = nodeId;
+    });
+
+    return {
+      id: 'main',
+      name: 'main',
+      nodes,
+      edges: Array.from(nodes.values())
+        .filter(n => n.parentId)
+        .map(n => ({
+          id: `edge-${n.id}`,
+          from: n.parentId!,
+          to: n.id,
+          type: 'branch' as const,
+        })),
+      currentHead: lastNodeId,
+      history: [],
+      rootId,
+    };
+  }, [messages]);
+
+  // Build timeline from messages
+  const timeline = useMemo<TimelineView>(() => {
+    const past: CompletedDecision[] = messages
+      .filter(m => m.role === 'user')
+      .map((m, idx) => ({
+        id: `decision-${idx}`,
+        question: m.content.slice(0, 100),
+        selectedOption: 'Completed',
+        alternatives: [],
+        timestamp: Date.now() - (messages.length - idx) * 60000,
+        participants: ['user', 'assistant'],
+      }));
+
+    return {
+      past,
+      present: null,
+      future: [],
+    };
+  }, [messages]);
 
   // Get workspace summary for display
   const workspaceSummary = useMemo(() => {
@@ -394,7 +483,7 @@ export default function ChatPanel({
   // Active conversation view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Workspace Header - Streamlined */}
+      {/* Workspace Header - With View Mode Toggle */}
       <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex items-center gap-3">
           {/* Model Selector */}
@@ -405,19 +494,80 @@ export default function ChatPanel({
           {/* Separator */}
           <div className="w-px h-4 bg-border-primary/50" />
 
+          {/* View Mode Toggle - Git Graph Style */}
+          <div className="flex items-center bg-bg-tertiary rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('linear')}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
+                viewMode === 'linear'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-fg-secondary hover:text-fg-primary'
+              }`}
+              title="Linear chat view"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              Chat
+            </button>
+            <button
+              onClick={() => setViewMode('branches')}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
+                viewMode === 'branches'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-fg-secondary hover:text-fg-primary'
+              }`}
+              title="Git-style branch view"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Graph
+            </button>
+            <button
+              onClick={() => setViewMode('timeline')}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
+                viewMode === 'timeline'
+                  ? 'bg-accent-primary text-white shadow-sm'
+                  : 'text-fg-secondary hover:text-fg-primary'
+              }`}
+              title="Timeline view"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Timeline
+            </button>
+          </div>
+
           {/* Workspace indicator */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm font-medium text-fg-primary capitalize">{activeVolume} Workspace</span>
+            <span className="text-xs text-fg-secondary capitalize">{activeVolume}</span>
           </div>
 
           {/* Right side - message count */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-fg-tertiary">{messages.length} messages</span>
+            <span className="text-[10px] text-fg-tertiary">{messages.length} msgs</span>
           </div>
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Content Area - Switches based on viewMode */}
+      {viewMode === 'branches' ? (
+        <DecisionBranchView
+          branch={decisionGraph}
+          onSelectNode={(node) => console.log('Selected node:', node)}
+          showPredictions={true}
+          showRejected={true}
+        />
+      ) : viewMode === 'timeline' ? (
+        <FlowTimeline
+          timeline={timeline}
+          onSelectDecision={(id) => console.log('Selected decision:', id)}
+          showPredictions={true}
+        />
+      ) : (
+      /* Linear Chat View */
       <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin">
         {messages.map((message, idx) => (
           <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
@@ -545,8 +695,9 @@ export default function ChatPanel({
 
         <div ref={messagesEndRef} />
       </div>
+      )}
 
-      {/* Input */}
+      {/* Input - Always visible */}
       <div className="px-3 py-2 border-t border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
         <div className="flex gap-2">
           <textarea
