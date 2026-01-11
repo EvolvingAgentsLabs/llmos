@@ -21,6 +21,7 @@ import { getVFS } from './virtual-fs';
 import { logger } from './debug/logger';
 import { SolutionProposer } from './chat/solution-proposer';
 import { getSpeculativeExecutor } from './speculative/speculative-executor';
+import { getSubAgentExecutor, SubAgentDefinition } from './subagents/subagent-executor';
 import type { ProposedSolution, FlowPrediction, PredictedStep } from './chat/types';
 
 // Types for multi-agent chat UI
@@ -663,6 +664,16 @@ Present these options NOW. Do not execute any tools.`;
       votes: 0,
     });
 
+    // Option STOP: Always include option to stop/cancel the process
+    options.push({
+      id: `opt-${Date.now()}-stop`,
+      agentId: 'system-agent',
+      agentName: 'Option STOP: Cancel Process',
+      content: `Stop the current process. Use this if you want to cancel the operation, rephrase your request, or need more time to think about the approach.`,
+      confidence: 0.1,
+      votes: 0,
+    });
+
     return options;
   }
 
@@ -677,7 +688,10 @@ Present these options NOW. Do not execute any tools.`;
     this.executionPhase = 'awaiting_vote';
     this.setPhase('coordinating');
 
-    // Build decision point message
+    // Have system agent and subagent cast their votes first
+    const { systemVote, subagentVote, subagent } = await this.castAgentVotes(options, goal);
+
+    // Build decision point message with voting info
     let content = `🗳️ **DECISION POINT: Choose Your Approach**\n\n`;
     content += `For: *${goal}*\n\n`;
 
@@ -685,11 +699,26 @@ Present these options NOW. Do not execute any tools.`;
       const letter = String.fromCharCode(65 + idx);
       content += `**${opt.agentName}**\n`;
       content += `- Confidence: ${(opt.confidence * 100).toFixed(0)}%\n`;
-      content += `- ${opt.content}\n\n`;
+      content += `- ${opt.content}\n`;
+      if (opt.votes > 0) {
+        content += `- 🗳️ Current votes: ${opt.votes}\n`;
+      }
+      content += `\n`;
     });
 
-    content += `\n⏰ **Voting time: 60 seconds** - Select an option or it will auto-select the highest confidence option.\n`;
-    content += `\nReply with **A**, **B**, or **C** to vote.`;
+    // Show agent voting summary
+    content += `\n---\n`;
+    content += `**🤖 Agent Votes Cast:**\n`;
+    content += `- **System Agent** voted for: ${systemVote?.agentName || 'None'}\n`;
+    if (subagent && subagentVote) {
+      const reason = this.generateSubagentVoteReason(subagent, subagentVote, options);
+      content += `- **${subagent.name}** voted for: ${subagentVote.agentName}\n`;
+      content += `  _"${reason}"_\n`;
+    }
+    content += `\n**👤 Your Vote (User):** Waiting...\n`;
+
+    content += `\n⏰ **Voting time: 60 seconds** - Select an option or it will auto-select the highest voted option.\n`;
+    content += `\nReply with **A**, **B**, **C**, or **STOP** to vote.`;
 
     // Generate predictions for this decision
     const predictions = this.generatePredictions('coordinating', options);
@@ -733,13 +762,29 @@ Present these options NOW. Do not execute any tools.`;
     this.executionPhase = 'awaiting_vote';
     this.setPhase('coordinating');
 
+    // Have system agent and subagent cast their votes first
+    const { systemVote, subagentVote, subagent } = await this.castAgentVotes(options, this.pendingGoal);
+
     // Generate predictions
     const predictions = this.generatePredictions('coordinating', options);
+
+    // Append voting summary to the response
+    let contentWithVoting = result.response;
+    contentWithVoting += `\n\n---\n`;
+    contentWithVoting += `**🤖 Agent Votes Cast:**\n`;
+    contentWithVoting += `- **System Agent** voted for: ${systemVote?.agentName || 'None'}\n`;
+    if (subagent && subagentVote) {
+      const reason = this.generateSubagentVoteReason(subagent, subagentVote, options);
+      contentWithVoting += `- **${subagent.name}** voted for: ${subagentVote.agentName}\n`;
+      contentWithVoting += `  _"${reason}"_\n`;
+    }
+    contentWithVoting += `\n**👤 Your Vote (User):** Waiting...\n`;
+    contentWithVoting += `\nReply with your choice or **STOP** to cancel.`;
 
     const decisionMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'assistant',
-      content: result.response,
+      content: contentWithVoting,
       timestamp,
       participantId: 'system-agent',
       isDecisionPoint: true,
@@ -1308,12 +1353,269 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
 
     // Deduplicate options by letter
     const seen = new Set<string>();
-    return options.filter(opt => {
+    const deduped = options.filter(opt => {
       const letter = opt.agentName;
       if (seen.has(letter)) return false;
       seen.add(letter);
       return true;
     });
+
+    // Always add a "Stop Process" option if there are other options
+    if (deduped.length > 0 && !deduped.some(opt => opt.agentName.toLowerCase().includes('stop') || opt.agentName.toLowerCase().includes('cancel'))) {
+      deduped.push({
+        id: `option-STOP-${Date.now()}`,
+        agentId: 'system-agent',
+        agentName: 'Option STOP: Cancel Process',
+        content: `Stop the current process. Use this if you want to cancel the operation, rephrase your request, or need more time to think about the approach.`,
+        confidence: 0.1,
+        votes: 0,
+      });
+    }
+
+    return deduped;
+  }
+
+  /**
+   * Select the best-fit subagent for a given task to participate in voting
+   * Returns the selected subagent as a ChatParticipant or null if none found
+   */
+  private async selectBestFitSubagent(goal: string, options: AgentProposal[]): Promise<ChatParticipant | null> {
+    try {
+      const subAgentExecutor = getSubAgentExecutor();
+
+      // Discover available agents from all volumes
+      const userAgents = await subAgentExecutor.discoverAgents('user');
+      const teamAgents = await subAgentExecutor.discoverAgents('team');
+      const systemAgents = await subAgentExecutor.discoverAgents('system');
+
+      const allAgents = [...userAgents, ...teamAgents, ...systemAgents];
+
+      if (allAgents.length === 0) {
+        logger.debug('agent', 'No subagents available for voting');
+        return null;
+      }
+
+      // Score agents based on capability match to the goal
+      const goalLower = goal.toLowerCase();
+      const optionTexts = options.map(o => o.content.toLowerCase()).join(' ');
+
+      let bestAgent: SubAgentDefinition | null = null;
+      let bestScore = 0;
+
+      for (const agent of allAgents) {
+        let score = 0;
+
+        // Check if agent name matches goal keywords
+        const agentNameLower = agent.name.toLowerCase();
+        if (goalLower.includes(agentNameLower) || agentNameLower.includes(goalLower.split(' ')[0])) {
+          score += 3;
+        }
+
+        // Check capabilities match
+        if (agent.capabilities) {
+          for (const cap of agent.capabilities) {
+            const capLower = cap.toLowerCase();
+            if (goalLower.includes(capLower) || optionTexts.includes(capLower)) {
+              score += 2;
+            }
+          }
+        }
+
+        // Check description match
+        if (agent.description) {
+          const descWords = agent.description.toLowerCase().split(/\s+/);
+          for (const word of descWords) {
+            if (word.length > 3 && (goalLower.includes(word) || optionTexts.includes(word))) {
+              score += 1;
+            }
+          }
+        }
+
+        // Prefer user agents over team over system (more specific)
+        if (agent.volume === 'user') score += 0.5;
+        else if (agent.volume === 'team') score += 0.3;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestAgent = agent;
+        }
+      }
+
+      // If no good match, pick a random agent
+      if (!bestAgent || bestScore < 1) {
+        bestAgent = allAgents[Math.floor(Math.random() * allAgents.length)];
+        logger.debug('agent', `No strong match found, selecting random subagent: ${bestAgent.name}`);
+      } else {
+        logger.info('agent', `Selected best-fit subagent: ${bestAgent.name}`, { score: bestScore });
+      }
+
+      // Create participant for the subagent
+      const agentId = bestAgent.name.toLowerCase().replace(/\s+/g, '-');
+
+      // Check if already exists
+      if (this.participants.has(agentId)) {
+        return this.participants.get(agentId) || null;
+      }
+
+      const participant: ChatParticipant = {
+        id: agentId,
+        name: bestAgent.name,
+        type: 'sub-agent',
+        color: getAgentColor(bestAgent.name),
+        role: 'specialist',
+        status: 'thinking',
+        capabilities: bestAgent.capabilities || [],
+      };
+
+      this.participants.set(agentId, participant);
+      this.emit('participant:added', participant);
+
+      return participant;
+    } catch (error) {
+      logger.error('agent', 'Failed to select subagent for voting', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Generate a vote reason from a subagent's perspective
+   * Simulates the subagent analyzing options and providing a reason
+   */
+  private generateSubagentVoteReason(
+    subagent: ChatParticipant,
+    selectedOption: AgentProposal,
+    allOptions: AgentProposal[]
+  ): string {
+    const agentCapabilities = subagent.capabilities?.join(', ') || 'general analysis';
+    const confidence = (selectedOption.confidence * 100).toFixed(0);
+
+    // Generate a contextual reason based on the option selected
+    if (selectedOption.agentName.toLowerCase().includes('stop')) {
+      return `As ${subagent.name}, I recommend caution. More information may be needed before proceeding.`;
+    }
+
+    if (selectedOption.confidence >= 0.8) {
+      return `Based on my expertise in ${agentCapabilities}, Option ${selectedOption.agentName.split(':')[0].replace('Option ', '')} has ${confidence}% confidence and aligns well with best practices.`;
+    } else if (selectedOption.confidence >= 0.6) {
+      return `Option ${selectedOption.agentName.split(':')[0].replace('Option ', '')} (${confidence}% confidence) seems reasonable given the requirements, though alternatives exist.`;
+    } else {
+      return `While confidence is moderate (${confidence}%), this approach offers flexibility for iteration.`;
+    }
+  }
+
+  /**
+   * Handle the STOP process command
+   * Cancels the current operation and resets to idle state
+   */
+  private async handleStopProcess(): Promise<void> {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Cancel any speculative executions
+    this.speculativeExecutor.cancelAll();
+
+    // Reset execution phase
+    this.executionPhase = 'completed';
+    this.pendingGoal = '';
+    this.selectedApproach = '';
+
+    // Update participant status
+    this.updateParticipantStatus('system-agent', 'idle');
+
+    // Set phase to completed
+    this.setPhase('completed');
+
+    // Add confirmation message
+    const stopMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `⏹️ **Process Stopped**\n\nThe current operation has been cancelled. You can:\n- Start a new request\n- Rephrase your previous request\n- Ask for clarification before proceeding\n\nWhat would you like to do next?`,
+      timestamp,
+      participantId: 'system-agent',
+      isSystemMessage: true,
+    };
+    this.messages.push(stopMessage);
+    this.emit('message:added', stopMessage);
+
+    logger.info('agent', 'Process stopped by user request');
+    this.emit('process:stopped', { timestamp, reason: 'user_request' });
+  }
+
+  /**
+   * Have system agent and subagent cast initial votes on options
+   * Ensures at least 3 voters: user, system-agent, and selected subagent
+   */
+  private async castAgentVotes(
+    options: AgentProposal[],
+    goal: string
+  ): Promise<{ systemVote: AgentProposal; subagentVote: AgentProposal | null; subagent: ChatParticipant | null }> {
+    // System agent votes for highest confidence option (but not STOP)
+    const nonStopOptions = options.filter(o => !o.agentName.toLowerCase().includes('stop'));
+    const systemChoice = nonStopOptions.reduce((best, curr) =>
+      curr.confidence > best.confidence ? curr : best
+    , nonStopOptions[0]);
+
+    if (systemChoice) {
+      systemChoice.votes++;
+      logger.info('agent', `System Agent voted for: ${systemChoice.agentName}`);
+    }
+
+    // Select and have subagent vote
+    const subagent = await this.selectBestFitSubagent(goal, options);
+    let subagentChoice: AgentProposal | null = null;
+
+    if (subagent) {
+      // Subagent analyzes and votes - may have different preference
+      // Simulate subagent analysis: prefer based on capabilities match
+      const subagentCapLower = (subagent.capabilities || []).join(' ').toLowerCase();
+
+      // Score options for subagent
+      let bestForSubagent: AgentProposal | null = null;
+      let bestSubagentScore = -1;
+
+      for (const option of nonStopOptions) {
+        let score = option.confidence * 10;
+        const contentLower = option.content.toLowerCase();
+
+        // Bonus if option content matches subagent capabilities
+        for (const cap of subagent.capabilities || []) {
+          if (contentLower.includes(cap.toLowerCase())) {
+            score += 3;
+          }
+        }
+
+        if (score > bestSubagentScore) {
+          bestSubagentScore = score;
+          bestForSubagent = option;
+        }
+      }
+
+      subagentChoice = bestForSubagent || nonStopOptions[0];
+      if (subagentChoice) {
+        subagentChoice.votes++;
+
+        // Add reason for vote
+        const reason = this.generateSubagentVoteReason(subagent, subagentChoice, options);
+
+        logger.info('agent', `${subagent.name} voted for: ${subagentChoice.agentName}`, { reason });
+
+        // Emit subagent vote event
+        this.emit('vote:cast', {
+          proposalId: subagentChoice.id,
+          voterId: subagent.id,
+          voterName: subagent.name,
+          reason
+        });
+      }
+
+      // Update subagent status
+      this.updateParticipantStatus(subagent.id, 'done');
+    }
+
+    return {
+      systemVote: systemChoice,
+      subagentVote: subagentChoice,
+      subagent
+    };
   }
 
   /**
@@ -1394,11 +1696,17 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
   }
 
   /**
-   * Select a specific option by letter (A, B, C, etc.)
+   * Select a specific option by letter (A, B, C, etc.) or STOP
    */
   async selectOption(optionLetter: string): Promise<void> {
     // Cancel any active voting timeout since user is responding
     this.cancelVotingTimeout();
+
+    // Check for STOP command
+    if (optionLetter.toUpperCase() === 'STOP') {
+      await this.handleStopProcess();
+      return;
+    }
 
     // Find the most recent decision point message
     for (let i = this.messages.length - 1; i >= 0; i--) {
@@ -1410,6 +1718,12 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
         );
 
         if (option) {
+          // Check if this is the STOP option
+          if (option.agentName.toLowerCase().includes('stop') || option.agentName.toLowerCase().includes('cancel')) {
+            await this.handleStopProcess();
+            return;
+          }
+
           // Mark as selected
           option.selected = true;
           option.votes++;
