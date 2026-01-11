@@ -1,30 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { UserStorage } from '@/lib/user-storage';
 import { useWorkspace, useWorkspaceLayout } from '@/contexts/WorkspaceContext';
-import dynamic from 'next/dynamic';
-import { Sparkles, Zap, LayoutGrid } from 'lucide-react';
+import { Sparkles, LayoutGrid, X } from 'lucide-react';
 import AgentCortexHeader from '@/components/workspace/AgentCortexHeader';
 
-const ProfileSettings = dynamic(() => import('@/components/settings/ProfileSettings'), {
-  ssr: false,
-});
-
-const SystemEvolutionModal = dynamic(() => import('@/components/evolution/SystemEvolutionModal'), {
-  ssr: false,
-});
-
 export default function Header() {
-  const [userDisplay, setUserDisplay] = useState('loading...');
-  const [showSettings, setShowSettings] = useState(false);
-  const [showEvolution, setShowEvolution] = useState(false);
   const { setContextViewMode, updatePreferences, state } = useWorkspace();
   const layout = useWorkspaceLayout();
-
-  useEffect(() => {
-    setUserDisplay(UserStorage.getUserDisplay());
-  }, []);
 
   // Handle Start/Desktop button click - opens applet grid
   const handleStartClick = () => {
@@ -73,41 +55,28 @@ export default function Header() {
           <AgentCortexHeader />
         </div>
 
-        {/* Right side: Quick actions */}
-        <div className="flex items-center gap-2">
-          {/* System Evolution button - compact */}
+        {/* Right side: Close Session */}
+        <div className="flex items-center">
           <button
-            onClick={() => setShowEvolution(true)}
+            onClick={() => {
+              // Clear session and reload
+              if (typeof window !== 'undefined') {
+                if (confirm('Close this session? This will clear your current chat history.')) {
+                  localStorage.removeItem('llmos-workspace');
+                  localStorage.removeItem('llmos-chat-messages');
+                  window.location.reload();
+                }
+              }
+            }}
             className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200
-                       bg-accent-primary/10 hover:bg-accent-primary/20
-                       border border-accent-primary/30 hover:border-accent-primary/50"
-            title="Run System Evolution analysis"
+                       bg-red-500/10 hover:bg-red-500/20
+                       border border-red-500/30 hover:border-red-500/50"
+            title="Close Session"
           >
-            <Zap className="w-4 h-4 text-accent-primary" />
-          </button>
-
-          {/* User profile button - compact */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 hover:bg-bg-tertiary"
-            title="Open profile settings"
-          >
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white text-xs font-semibold shadow-sm">
-              {userDisplay.charAt(0).toUpperCase()}
-            </div>
+            <X className="w-4 h-4 text-red-400" />
           </button>
         </div>
       </header>
-
-      {/* Settings modal */}
-      {showSettings && (
-        <ProfileSettings onClose={() => setShowSettings(false)} />
-      )}
-
-      {/* System Evolution modal */}
-      {showEvolution && (
-        <SystemEvolutionModal onClose={() => setShowEvolution(false)} />
-      )}
     </>
   );
 }
