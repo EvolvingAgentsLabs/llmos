@@ -498,10 +498,315 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     return [...this.messages];
   }
 
+  // Track execution phase for forced checkpoints
+  private executionPhase: 'planning' | 'awaiting_vote' | 'executing' | 'completed' = 'planning';
+  private pendingGoal: string = '';
+  private selectedApproach: string = '';
+
   /**
-   * Process a user goal using the real SystemAgentOrchestrator
+   * Process a user goal using phased execution with forced decision points
    */
   async processUserGoal(goal: string): Promise<void> {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Add user participant if not exists
+    if (!this.participants.has('user')) {
+      const userParticipant: ChatParticipant = {
+        id: 'user',
+        name: 'You',
+        type: 'user',
+        color: '#58a6ff',
+        status: 'idle',
+      };
+      this.participants.set('user', userParticipant);
+      this.emit('participant:added', userParticipant);
+    }
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: goal,
+      timestamp,
+      participantId: 'user',
+    };
+    this.messages.push(userMessage);
+    this.emit('message:added', userMessage);
+
+    // Store goal for continuation
+    this.pendingGoal = goal;
+    this.executionPhase = 'planning';
+
+    // Set phase to planning
+    this.setPhase('planning');
+    this.updateParticipantStatus('system-agent', 'thinking');
+
+    try {
+      // Initialize and get the real orchestrator (uses SystemAgent.md)
+      const orchestrator = await this.initializeOrchestrator();
+
+      // Add initial system message
+      this.addSystemMessage('Processing your goal with the System Agent...');
+
+      // PHASE 1: Get approach options (FORCED DECISION POINT)
+      const planningPrompt = this.buildPlanningPrompt(goal);
+      const planningResult = await orchestrator.execute(planningPrompt);
+
+      // Check if planning response contains options, if not inject forced options
+      const options = this.parseOptionsFromResponse(planningResult.response);
+
+      if (options.length === 0) {
+        // LLM didn't provide options, generate them from the planning response
+        const forcedOptions = await this.generateForcedOptions(orchestrator, goal, planningResult.response);
+
+        if (forcedOptions.length > 0) {
+          // Present forced options
+          await this.presentForcedDecisionPoint(forcedOptions, goal, timestamp);
+          return; // Wait for user vote
+        }
+      }
+
+      // If we got options from LLM, handle them
+      if (options.length > 0) {
+        await this.handleExecutionResultWithOptions(planningResult, options, timestamp);
+        return; // Wait for user vote
+      }
+
+      // No options needed, execute directly
+      const result: SystemAgentResult = await orchestrator.execute(goal);
+      await this.handleExecutionResult(result, timestamp);
+
+    } catch (error) {
+      logger.error('agent', 'Failed to process goal', { error });
+      this.addSystemMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.setPhase('completed');
+      this.updateParticipantStatus('system-agent', 'idle');
+    }
+  }
+
+  /**
+   * Build a planning prompt that forces the LLM to provide options
+   */
+  private buildPlanningPrompt(goal: string): string {
+    return `PLANNING PHASE - You MUST provide options before executing.
+
+USER GOAL: ${goal}
+
+INSTRUCTIONS:
+1. Analyze the user's goal
+2. Present 2-3 different approaches to achieve it
+3. DO NOT execute any tools yet - just present the options
+
+You MUST respond with a decision point in this EXACT format:
+
+🗳️ DECISION POINT: Choose Approach
+
+**OPTION A: [First Approach Name]**
+- Confidence: [0.0-1.0]
+- Description: [What this approach does]
+- Pros: [Benefits]
+- Cons: [Drawbacks]
+
+**OPTION B: [Second Approach Name]**
+- Confidence: [0.0-1.0]
+- Description: [What this approach does]
+- Pros: [Benefits]
+- Cons: [Drawbacks]
+
+**OPTION C: [Third Approach Name]** (optional)
+- Confidence: [0.0-1.0]
+- Description: [What this approach does]
+
+⏰ Voting time: 60 seconds
+
+Present these options NOW. Do not execute any tools.`;
+  }
+
+  /**
+   * Generate forced options when LLM doesn't provide them
+   */
+  private async generateForcedOptions(
+    orchestrator: SystemAgentOrchestrator,
+    goal: string,
+    planningResponse: string
+  ): Promise<AgentProposal[]> {
+    // Generate synthetic options based on the planning response
+    const options: AgentProposal[] = [];
+
+    // Option A: Standard approach (what the LLM planned)
+    options.push({
+      id: `opt-${Date.now()}-a`,
+      agentId: 'system-agent',
+      agentName: 'Option A: Standard Execution',
+      content: `Execute the planned approach: ${planningResponse.substring(0, 200)}...`,
+      confidence: 0.8,
+      votes: 0,
+    });
+
+    // Option B: Step-by-step with checkpoints
+    options.push({
+      id: `opt-${Date.now()}-b`,
+      agentId: 'system-agent',
+      agentName: 'Option B: Step-by-Step with Checkpoints',
+      content: `Execute step-by-step, pausing for confirmation at each major milestone. This gives you more control over the process.`,
+      confidence: 0.7,
+      votes: 0,
+    });
+
+    // Option C: Minimal approach
+    options.push({
+      id: `opt-${Date.now()}-c`,
+      agentId: 'system-agent',
+      agentName: 'Option C: Minimal MVP',
+      content: `Create a minimal working version first, then iterate. Focus on core functionality only.`,
+      confidence: 0.6,
+      votes: 0,
+    });
+
+    return options;
+  }
+
+  /**
+   * Present a forced decision point to the user
+   */
+  private async presentForcedDecisionPoint(
+    options: AgentProposal[],
+    goal: string,
+    timestamp: string
+  ): Promise<void> {
+    this.executionPhase = 'awaiting_vote';
+    this.setPhase('coordinating');
+
+    // Build decision point message
+    let content = `🗳️ **DECISION POINT: Choose Your Approach**\n\n`;
+    content += `For: *${goal}*\n\n`;
+
+    options.forEach((opt, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      content += `**${opt.agentName}**\n`;
+      content += `- Confidence: ${(opt.confidence * 100).toFixed(0)}%\n`;
+      content += `- ${opt.content}\n\n`;
+    });
+
+    content += `\n⏰ **Voting time: 60 seconds** - Select an option or it will auto-select the highest confidence option.\n`;
+    content += `\nReply with **A**, **B**, or **C** to vote.`;
+
+    // Generate predictions for this decision
+    const predictions = this.generatePredictions('coordinating', options);
+
+    const decisionMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content,
+      timestamp,
+      participantId: 'system-agent',
+      isDecisionPoint: true,
+      alternatives: options,
+      predictions: predictions.length > 0 ? predictions : undefined,
+    };
+
+    this.messages.push(decisionMessage);
+    this.emit('message:added', decisionMessage);
+
+    // Start speculative execution for high-probability options
+    await this.startSpeculativeExecution(options, goal);
+
+    // Emit predictions
+    if (predictions.length > 0) {
+      this.emit('predictions:updated', { predictions });
+    }
+
+    // Start voting timeout
+    this.startVotingTimeout(options, decisionMessage.id);
+
+    this.updateParticipantStatus('system-agent', 'idle');
+  }
+
+  /**
+   * Handle execution result that contains options
+   */
+  private async handleExecutionResultWithOptions(
+    result: SystemAgentResult,
+    options: AgentProposal[],
+    timestamp: string
+  ): Promise<void> {
+    this.executionPhase = 'awaiting_vote';
+    this.setPhase('coordinating');
+
+    // Generate predictions
+    const predictions = this.generatePredictions('coordinating', options);
+
+    const decisionMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: result.response,
+      timestamp,
+      participantId: 'system-agent',
+      isDecisionPoint: true,
+      alternatives: options,
+      predictions: predictions.length > 0 ? predictions : undefined,
+    };
+
+    this.messages.push(decisionMessage);
+    this.emit('message:added', decisionMessage);
+
+    // Start speculative execution
+    await this.startSpeculativeExecution(options, this.pendingGoal);
+
+    // Emit predictions
+    if (predictions.length > 0) {
+      this.emit('predictions:updated', { predictions });
+    }
+
+    // Start voting timeout
+    this.startVotingTimeout(options, decisionMessage.id);
+
+    this.updateParticipantStatus('system-agent', 'idle');
+  }
+
+  /**
+   * Continue execution after user selects an option
+   */
+  async continueWithSelectedOption(selectedOption: AgentProposal): Promise<void> {
+    this.executionPhase = 'executing';
+    this.selectedApproach = selectedOption.content;
+    this.setPhase('executing');
+    this.updateParticipantStatus('system-agent', 'thinking');
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Add message about selection
+    this.addSystemMessage(`✓ Selected: **${selectedOption.agentName}**\n\nProceeding with execution...`);
+
+    try {
+      const orchestrator = await this.initializeOrchestrator();
+
+      // Build continuation prompt with selected approach
+      const continuationPrompt = `CONTINUE EXECUTION with selected approach.
+
+ORIGINAL GOAL: ${this.pendingGoal}
+
+SELECTED APPROACH: ${selectedOption.agentName}
+${selectedOption.content}
+
+Now execute this approach. Use tools to accomplish the goal.
+Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "message"`;
+
+      const result = await orchestrator.execute(continuationPrompt);
+      await this.handleExecutionResult(result, timestamp);
+
+    } catch (error) {
+      logger.error('agent', 'Failed to continue execution', { error });
+      this.addSystemMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.setPhase('completed');
+      this.updateParticipantStatus('system-agent', 'idle');
+    }
+  }
+
+  /**
+   * Process a user goal using the real SystemAgentOrchestrator (original method, kept for compatibility)
+   */
+  async processUserGoalDirect(goal: string): Promise<void> {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     // Add user participant if not exists
@@ -1139,8 +1444,13 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
           // Cancel other speculative executions
           this.speculativeExecutor.cancelAll();
 
-          // Continue with this option
-          await this.continueWithSelection(`Option ${optionLetter}: ${option.content}`);
+          // Continue with this option using the phased execution
+          if (this.executionPhase === 'awaiting_vote') {
+            await this.continueWithSelectedOption(option);
+          } else {
+            // Fallback to legacy method
+            await this.continueWithSelection(`Option ${optionLetter}: ${option.content}`);
+          }
           return;
         }
       }
