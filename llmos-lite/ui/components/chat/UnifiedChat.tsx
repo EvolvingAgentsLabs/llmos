@@ -293,32 +293,39 @@ export default function UnifiedChat({
           {messages.map((message, idx) => {
             const participant = getParticipant(message);
             const branchId = message.branchId ?? 0;
-            const branchColor = getBranchColor(branchId);
+            // Use participant color for graph elements - distinct colors per actor
+            const actorColor = participant.color;
             const hasAlternatives = message.alternatives && message.alternatives.length > 0;
             const isExpanded = expandedDecisions.has(message.id);
             const hasAgentCalls = message.agentCalls && message.agentCalls.length > 0;
             const hasFiles = message.fileReferences && message.fileReferences.length > 0;
 
+            // Calculate horizontal offset - user on left, agents shift right
+            const actorOffset = participant.type === 'user' ? 0 :
+                               participant.type === 'system-agent' ? 1 :
+                               participant.type === 'sub-agent' ? 2 : 1;
+
             return (
               <div key={message.id} className="relative">
                 {/* Graph Rail */}
                 <div className="absolute left-0 top-0 bottom-0 w-14 flex justify-center">
-                  {/* Vertical Line */}
+                  {/* Vertical Line - colored by actor */}
                   <div
                     className="absolute w-0.5 top-0 bottom-0"
                     style={{
-                      backgroundColor: branchColor,
-                      left: 24 + branchId * 12,
-                      opacity: 0.6,
+                      backgroundColor: actorColor,
+                      left: 24 + actorOffset * 8,
+                      opacity: 0.7,
                     }}
                   />
-                  {/* Node */}
+                  {/* Node - colored by actor */}
                   <div
                     className="absolute w-3.5 h-3.5 rounded-full border-2 top-4"
                     style={{
-                      backgroundColor: message.role === 'user' ? '#0d1117' : branchColor,
-                      borderColor: branchColor,
-                      left: 21 + branchId * 12,
+                      backgroundColor: participant.type === 'user' ? '#0d1117' : actorColor,
+                      borderColor: actorColor,
+                      left: 21 + actorOffset * 8,
+                      boxShadow: `0 0 8px ${actorColor}40`,
                     }}
                   />
                   {/* Branch indicator for decision points */}
@@ -327,7 +334,20 @@ export default function UnifiedChat({
                       className="absolute w-2.5 h-2.5 rounded-full top-4 animate-pulse"
                       style={{
                         backgroundColor: '#d29922',
-                        left: 34 + branchId * 12,
+                        left: 34 + actorOffset * 8,
+                        boxShadow: '0 0 8px #d2992280',
+                      }}
+                    />
+                  )}
+                  {/* Connection line when actor changes */}
+                  {idx > 0 && getParticipant(messages[idx - 1]).type !== participant.type && (
+                    <div
+                      className="absolute h-0.5 top-4"
+                      style={{
+                        backgroundColor: actorColor,
+                        left: Math.min(24 + actorOffset * 8, 24 + (getParticipant(messages[idx - 1]).type === 'user' ? 0 : 1) * 8),
+                        width: Math.abs(actorOffset - (getParticipant(messages[idx - 1]).type === 'user' ? 0 : 1)) * 8,
+                        opacity: 0.5,
                       }}
                     />
                   )}
