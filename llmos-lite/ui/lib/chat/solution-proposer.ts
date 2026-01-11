@@ -91,10 +91,7 @@ export class SolutionProposer {
       const response = await this.llmClient.chatDirect([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], {
-        temperature: 0.7,
-        maxTokens: 2000,
-      });
+      ]);
 
       return this.parseProposalResponse(response, agent);
     } catch (error) {
@@ -378,10 +375,7 @@ Please propose a solution to address this. `;
             role: 'user',
             content: `Solution: ${proposal.content}\n\nContext: ${context}`,
           },
-        ], {
-          temperature: 0.3,
-          maxTokens: 500,
-        });
+        ]);
 
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {

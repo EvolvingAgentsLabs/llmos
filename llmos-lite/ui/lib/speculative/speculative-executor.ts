@@ -266,10 +266,7 @@ Respond with:
     try {
       const response = await this.llmClient.chatDirect([
         { role: 'user', content: prompt },
-      ], {
-        temperature: 0.3,
-        maxTokens: Math.min(this.config.maxTokens, 2000),
-      });
+      ]);
 
       // Parse response
       const codeMatch = response.match(/```[\w]*\n([\s\S]*?)```/);

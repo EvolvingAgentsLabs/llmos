@@ -124,10 +124,7 @@ Respond in JSON format:
     try {
       const response = await this.llmClient.chatDirect([
         { role: 'user', content: prompt },
-      ], {
-        temperature: 0.4,
-        maxTokens: 500,
-      });
+      ]);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
