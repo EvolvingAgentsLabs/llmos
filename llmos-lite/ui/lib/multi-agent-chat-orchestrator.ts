@@ -8,8 +8,9 @@
 
 import { EventEmitter } from 'events';
 import { LLMClient, createLLMClient, Message } from './llm-client';
-import { AgentExecutor, parseAgentFromMarkdown, AgentExecutionResult } from './agent-executor';
-import { getToolContext } from './tool-executor';
+// AgentExecutor and ToolContext available for future use when executing agents
+// import { AgentExecutor, parseAgentFromMarkdown, AgentExecutionResult } from './agent-executor';
+// import { ToolContext } from './tool-executor';
 import { getVFS } from './virtual-fs';
 import { logger } from './debug/logger';
 
@@ -99,7 +100,8 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   private llmClient: LLMClient | null = null;
   private participants: Map<string, ChatParticipant> = new Map();
   private messages: ChatMessage[] = [];
-  private activeAgents: Map<string, AgentExecutor> = new Map();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private activeAgents: Map<string, any> = new Map(); // For future agent execution
   private currentPhase: 'planning' | 'coordinating' | 'executing' | 'reviewing' | 'completed' = 'planning';
   private vfs = getVFS();
 
@@ -194,7 +196,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       await this.reviewResults();
 
     } catch (error) {
-      logger.error('orchestrator', 'Failed to process goal', { error });
+      logger.error('agent', 'Failed to process goal', { error });
       this.addSystemMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -388,7 +390,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     const agentPath = `user/agents/${agentType.id}.md`;
     this.vfs.writeFile(agentPath, agentMarkdown);
 
-    logger.info('orchestrator', `Created sub-agent: ${agentType.name}`, { path: agentPath });
+    logger.info('agent', `Created sub-agent: ${agentType.name}`, { path: agentPath });
   }
 
   /**
@@ -592,7 +594,7 @@ Your proposal:`;
         votes: Math.floor(Math.random() * 3), // Initial votes
       };
     } catch (error) {
-      logger.error('orchestrator', `Failed to get proposal from ${agentName}`, { error });
+      logger.error('agent', `Failed to get proposal from ${agentName}`, { error });
       return null;
     }
   }
