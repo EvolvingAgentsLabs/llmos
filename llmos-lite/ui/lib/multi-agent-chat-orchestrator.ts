@@ -1,20 +1,26 @@
 /**
  * Multi-Agent Chat Orchestrator
  *
- * Coordinates real agent interactions for goal-oriented tasks.
- * Creates and manages sub-agents dynamically, tracks all interactions,
- * and emits events for real-time UI display.
+ * HYBRID ARCHITECTURE:
+ * - Code Layer: This adapter translates SystemAgentOrchestrator events to chat UI
+ * - Markdown Layer: SystemAgent.md (evolutive) is the actual "brain"
+ *
+ * This follows the LLMos evolutive approach where:
+ * - The SystemAgent is defined in markdown and can evolve
+ * - Sub-agents are created as markdown files in VFS
+ * - This code is a "proxy" that connects the agent system to the chat UI
  */
 
 import { EventEmitter } from 'events';
-import { LLMClient, createLLMClient, Message } from './llm-client';
-// AgentExecutor and ToolContext available for future use when executing agents
-// import { AgentExecutor, parseAgentFromMarkdown, AgentExecutionResult } from './agent-executor';
-// import { ToolContext } from './tool-executor';
+import {
+  SystemAgentOrchestrator,
+  AgentProgressEvent,
+  SystemAgentResult,
+} from './system-agent-orchestrator';
 import { getVFS } from './virtual-fs';
 import { logger } from './debug/logger';
 
-// Types for multi-agent chat
+// Types for multi-agent chat UI
 export type ParticipantType = 'user' | 'system-agent' | 'sub-agent';
 
 export interface ChatParticipant {
@@ -64,7 +70,7 @@ export interface AgentCallInfo {
 export interface FileReference {
   path: string;
   name: string;
-  type: 'code' | 'plan' | 'output';
+  type: 'code' | 'plan' | 'output' | 'agent';
 }
 
 // Event types emitted by orchestrator
@@ -88,22 +94,30 @@ const AGENT_COLORS: Record<string, string> = {
   'coder': '#ffa657',
   'reviewer': '#f778ba',
   'analyst': '#79c0ff',
+  'SystemAgent': '#a371f7',
   'default': '#8b949e',
 };
 
 /**
  * Multi-Agent Chat Orchestrator
  *
- * Creates real sub-agents for goal execution and coordinates their work.
+ * This is an ADAPTER that:
+ * 1. Wraps the real SystemAgentOrchestrator (which uses SystemAgent.md)
+ * 2. Translates AgentProgressEvent → Chat UI events
+ * 3. Tracks participants and messages for the chat interface
+ *
+ * The actual agent logic lives in:
+ * - /system/agents/SystemAgent.md (the evolutive markdown agent)
+ * - SystemAgentOrchestrator (the execution engine)
  */
 export class MultiAgentChatOrchestrator extends EventEmitter {
-  private llmClient: LLMClient | null = null;
+  private systemOrchestrator: SystemAgentOrchestrator | null = null;
   private participants: Map<string, ChatParticipant> = new Map();
   private messages: ChatMessage[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private activeAgents: Map<string, any> = new Map(); // For future agent execution
   private currentPhase: 'planning' | 'coordinating' | 'executing' | 'reviewing' | 'completed' = 'planning';
   private vfs = getVFS();
+  private currentMessageId: string | null = null;
+  private pendingToolCalls: Map<string, AgentCallInfo> = new Map();
 
   constructor() {
     super();
@@ -126,16 +140,225 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   }
 
   /**
-   * Initialize LLM client
+   * Load SystemAgent.md and create the orchestrator
    */
-  private ensureLLMClient(): LLMClient {
-    if (!this.llmClient) {
-      this.llmClient = createLLMClient();
-      if (!this.llmClient) {
-        throw new Error('LLM client not configured. Please set API key and model.');
+  private async initializeOrchestrator(): Promise<SystemAgentOrchestrator> {
+    if (this.systemOrchestrator) {
+      return this.systemOrchestrator;
+    }
+
+    // Load the SystemAgent markdown from VFS
+    const systemAgentPath = 'system/agents/SystemAgent.md';
+    let systemAgentMarkdown: string;
+
+    try {
+      const vfsFile = this.vfs.readFile(systemAgentPath);
+      if (vfsFile && vfsFile.content) {
+        systemAgentMarkdown = vfsFile.content;
+        logger.info('agent', 'Loaded SystemAgent.md from VFS', { path: systemAgentPath });
+      } else {
+        throw new Error('File not found in VFS');
+      }
+    } catch {
+      // Fallback: fetch from public folder
+      try {
+        const response = await fetch('/system/agents/SystemAgent.md');
+        if (!response.ok) throw new Error('Failed to fetch SystemAgent.md');
+        systemAgentMarkdown = await response.text();
+        // Cache in VFS for future use
+        this.vfs.writeFile(systemAgentPath, systemAgentMarkdown);
+        logger.info('agent', 'Loaded SystemAgent.md from public folder', { path: systemAgentPath });
+      } catch (fetchError) {
+        logger.error('agent', 'Failed to load SystemAgent.md', { error: fetchError });
+        throw new Error('SystemAgent.md not found. Cannot proceed without the evolutive agent definition.');
       }
     }
-    return this.llmClient;
+
+    // Extract system prompt from markdown (content after frontmatter)
+    const systemPrompt = this.extractSystemPrompt(systemAgentMarkdown);
+
+    // Create the real orchestrator with progress callback
+    this.systemOrchestrator = new SystemAgentOrchestrator(
+      systemPrompt,
+      (event) => this.handleProgressEvent(event),
+      { maxIterations: 15, strategy: 'balanced', updateSystemMemory: true, persistWorkflow: true }
+    );
+
+    // Set workspace context
+    this.systemOrchestrator.setWorkspaceContext({
+      volume: 'user',
+      workspacePath: 'user',
+      sections: ['agents', 'output', 'plans'],
+    });
+
+    return this.systemOrchestrator;
+  }
+
+  /**
+   * Extract system prompt from markdown (skip YAML frontmatter)
+   */
+  private extractSystemPrompt(markdown: string): string {
+    // Check if it starts with frontmatter
+    if (markdown.startsWith('---')) {
+      const endOfFrontmatter = markdown.indexOf('---', 3);
+      if (endOfFrontmatter !== -1) {
+        return markdown.substring(endOfFrontmatter + 3).trim();
+      }
+    }
+    return markdown;
+  }
+
+  /**
+   * Handle progress events from SystemAgentOrchestrator
+   * Translate them to chat UI events
+   */
+  private handleProgressEvent(event: AgentProgressEvent): void {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    switch (event.type) {
+      case 'initializing':
+        this.updateParticipantStatus('system-agent', 'thinking');
+        this.addSystemMessage(`Initializing: ${event.details || event.action || ''}`);
+        break;
+
+      case 'thinking':
+        this.updateParticipantStatus('system-agent', 'thinking');
+        if (event.details) {
+          this.addSystemMessage(`Thinking: ${event.details}`);
+        }
+        break;
+
+      case 'tool-call':
+        this.handleToolCall(event, timestamp);
+        break;
+
+      case 'execution':
+        this.setPhase('executing');
+        this.updateParticipantStatus('system-agent', 'executing');
+        if (event.details) {
+          this.addSystemMessage(event.details);
+        }
+        break;
+
+      case 'multi-agent-validation':
+        this.handleMultiAgentValidation(event);
+        break;
+
+      case 'evolution':
+        if (event.details) {
+          this.addSystemMessage(`Evolution: ${event.details}`);
+        }
+        break;
+
+      case 'completed':
+        this.setPhase('completed');
+        this.updateParticipantStatus('system-agent', 'done');
+        break;
+
+      case 'api-call':
+        // Show that we're calling the LLM
+        this.updateParticipantStatus('system-agent', 'thinking');
+        break;
+
+      case 'parsing':
+        // Internal parsing, no UI update needed
+        break;
+
+      case 'waiting':
+        this.updateParticipantStatus('system-agent', 'idle');
+        break;
+    }
+  }
+
+  /**
+   * Handle tool-call events - these show sub-agent activity
+   */
+  private handleToolCall(event: AgentProgressEvent, timestamp: string): void {
+    const toolId = event.tool || 'unknown';
+    const toolName = event.action || toolId;
+
+    // Check if this is a sub-agent being created
+    if (toolId === 'write-file' && event.details?.includes('agents/')) {
+      this.handleAgentCreation(event, timestamp);
+      return;
+    }
+
+    // Track the tool call
+    const callInfo: AgentCallInfo = {
+      agentId: toolId,
+      agentName: toolName,
+      purpose: event.details || 'Executing tool',
+      status: 'running',
+      startTime: event.timestamp,
+    };
+    this.pendingToolCalls.set(toolId, callInfo);
+
+    // Add message for tool call
+    const message: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `Using tool: ${toolName}`,
+      timestamp,
+      participantId: 'system-agent',
+      isSystemMessage: true,
+      agentCalls: [callInfo],
+    };
+    this.messages.push(message);
+    this.emit('message:added', message);
+    this.currentMessageId = message.id;
+  }
+
+  /**
+   * Handle agent creation events
+   */
+  private handleAgentCreation(event: AgentProgressEvent, timestamp: string): void {
+    // Extract agent name from path
+    const pathMatch = event.details?.match(/agents\/([^.]+)\.md/);
+    const agentName = pathMatch ? pathMatch[1] : 'sub-agent';
+    const agentId = agentName.toLowerCase().replace(/\s+/g, '-');
+
+    // Create participant for the sub-agent
+    const participant: ChatParticipant = {
+      id: agentId,
+      name: agentName,
+      type: 'sub-agent',
+      color: AGENT_COLORS[agentId] || AGENT_COLORS.default,
+      role: 'specialist',
+      status: 'idle',
+      capabilities: ['executing tasks'],
+    };
+
+    if (!this.participants.has(agentId)) {
+      this.participants.set(agentId, participant);
+      this.emit('participant:added', participant);
+
+      // Add message about agent creation
+      const message: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `Created sub-agent: ${agentName}`,
+        timestamp,
+        participantId: 'system-agent',
+        isSystemMessage: true,
+        fileReferences: [{
+          path: event.details || '',
+          name: `${agentName}.md`,
+          type: 'agent',
+        }],
+      };
+      this.messages.push(message);
+      this.emit('message:added', message);
+    }
+  }
+
+  /**
+   * Handle multi-agent validation events
+   */
+  private handleMultiAgentValidation(event: AgentProgressEvent): void {
+    this.setPhase('coordinating');
+    if (event.details) {
+      this.addSystemMessage(`Agent Validation: ${event.details}`);
+    }
   }
 
   /**
@@ -153,7 +376,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   }
 
   /**
-   * Add user message and process goal
+   * Process a user goal using the real SystemAgentOrchestrator
    */
   async processUserGoal(goal: string): Promise<void> {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -182,583 +405,124 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     this.messages.push(userMessage);
     this.emit('message:added', userMessage);
 
+    // Set phase to planning
+    this.setPhase('planning');
+    this.updateParticipantStatus('system-agent', 'thinking');
+
     try {
-      // Phase 1: Planning
-      await this.planGoal(goal);
+      // Initialize and get the real orchestrator (uses SystemAgent.md)
+      const orchestrator = await this.initializeOrchestrator();
 
-      // Phase 2: Create sub-agents
-      await this.createSubAgents(goal);
+      // Add initial system message
+      this.addSystemMessage('Processing your goal with the System Agent...');
 
-      // Phase 3: Coordinate execution
-      await this.coordinateExecution(goal);
+      // Execute using the real SystemAgentOrchestrator
+      // This will use SystemAgent.md as the brain
+      const result: SystemAgentResult = await orchestrator.execute(goal);
 
-      // Phase 4: Review and summarize
-      await this.reviewResults();
+      // Handle the result
+      await this.handleExecutionResult(result, timestamp);
 
     } catch (error) {
       logger.error('agent', 'Failed to process goal', { error });
       this.addSystemMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.setPhase('completed');
+      this.updateParticipantStatus('system-agent', 'idle');
     }
   }
 
   /**
-   * Phase 1: Plan the goal
+   * Handle the result from SystemAgentOrchestrator
    */
-  private async planGoal(goal: string): Promise<void> {
-    this.setPhase('planning');
-    this.updateParticipantStatus('system-agent', 'thinking');
+  private async handleExecutionResult(result: SystemAgentResult, timestamp: string): Promise<void> {
+    // Add files created to the chat
+    if (result.filesCreated && result.filesCreated.length > 0) {
+      const fileRefs: FileReference[] = result.filesCreated.map(path => ({
+        path,
+        name: path.split('/').pop() || path,
+        type: path.includes('agent') ? 'agent' : path.endsWith('.md') ? 'plan' : 'code' as FileReference['type'],
+      }));
 
-    const planningMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: 'Analyzing your goal and creating an execution plan...',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      participantId: 'system-agent',
-      isSystemMessage: true,
-      agentCalls: [{
-        agentId: 'planner',
-        agentName: 'Planning Agent',
-        purpose: 'Decomposing goal into tasks',
-        status: 'pending',
-      }],
-    };
-    this.messages.push(planningMessage);
-    this.emit('message:added', planningMessage);
-
-    // Call LLM to create execution plan
-    const llmClient = this.ensureLLMClient();
-    const planPrompt = this.buildPlanningPrompt(goal);
-
-    try {
-      const planResponse = await llmClient.chatDirect([
-        { role: 'system', content: planPrompt },
-        { role: 'user', content: goal },
-      ]);
-
-      // Update planning message with result
-      planningMessage.content = planResponse;
-      planningMessage.agentCalls![0].status = 'completed';
-      planningMessage.agentCalls![0].result = 'Plan created successfully';
-      this.emit('message:updated', planningMessage);
-
-      // Store plan in VFS
-      const planPath = `user/plans/plan-${Date.now()}.md`;
-      this.vfs.writeFile(planPath, `# Execution Plan\n\n${planResponse}`);
-
-      planningMessage.fileReferences = [{
-        path: planPath,
-        name: 'execution_plan.md',
-        type: 'plan',
-      }];
-      this.emit('message:updated', planningMessage);
-
-    } catch (error) {
-      planningMessage.agentCalls![0].status = 'failed';
-      this.emit('message:updated', planningMessage);
-      throw error;
-    }
-
-    this.updateParticipantStatus('system-agent', 'idle');
-  }
-
-  /**
-   * Phase 2: Create sub-agents for the goal
-   */
-  private async createSubAgents(goal: string): Promise<void> {
-    this.setPhase('coordinating');
-    this.updateParticipantStatus('system-agent', 'executing');
-
-    // Create at least 3 sub-agents based on the goal
-    const agentTypes = this.determineRequiredAgents(goal);
-
-    const coordinationMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: `Creating ${agentTypes.length} specialized agents to work on this goal:`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      participantId: 'system-agent',
-      isSystemMessage: true,
-      agentCalls: agentTypes.map(agent => ({
-        agentId: agent.id,
-        agentName: agent.name,
-        purpose: agent.purpose,
-        status: 'pending' as const,
-      })),
-    };
-    this.messages.push(coordinationMessage);
-    this.emit('message:added', coordinationMessage);
-
-    // Create each agent
-    for (let i = 0; i < agentTypes.length; i++) {
-      const agentType = agentTypes[i];
-      await this.createAndRegisterAgent(agentType);
-
-      // Update status
-      coordinationMessage.agentCalls![i].status = 'completed';
-      coordinationMessage.agentCalls![i].result = `${agentType.name} ready`;
-      this.emit('message:updated', coordinationMessage);
-      this.emit('agent:completed', coordinationMessage.agentCalls![i]);
-
-      // Small delay for visual feedback
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-
-    this.updateParticipantStatus('system-agent', 'idle');
-  }
-
-  /**
-   * Determine which agents are needed based on goal
-   */
-  private determineRequiredAgents(goal: string): Array<{ id: string; name: string; role: string; purpose: string }> {
-    const goalLower = goal.toLowerCase();
-    const agents: Array<{ id: string; name: string; role: string; purpose: string }> = [];
-
-    // Always include a planner
-    agents.push({
-      id: 'planner',
-      name: 'Planner Agent',
-      role: 'planner',
-      purpose: 'Breaking down the task into steps',
-    });
-
-    // Code-related goals
-    if (goalLower.includes('code') || goalLower.includes('implement') || goalLower.includes('create') ||
-        goalLower.includes('build') || goalLower.includes('firmware') || goalLower.includes('script')) {
-      agents.push({
-        id: 'coder',
-        name: 'Coder Agent',
-        role: 'coder',
-        purpose: 'Writing and implementing code',
-      });
-    }
-
-    // Analysis-related goals
-    if (goalLower.includes('analyz') || goalLower.includes('research') || goalLower.includes('investigate') ||
-        goalLower.includes('study') || goalLower.includes('understand')) {
-      agents.push({
-        id: 'analyst',
-        name: 'Analyst Agent',
-        role: 'analyst',
-        purpose: 'Analyzing requirements and data',
-      });
-    }
-
-    // Always include a reviewer
-    agents.push({
-      id: 'reviewer',
-      name: 'Reviewer Agent',
-      role: 'reviewer',
-      purpose: 'Reviewing and validating results',
-    });
-
-    // Ensure at least 3 agents
-    if (agents.length < 3) {
-      if (!agents.find(a => a.id === 'coder')) {
-        agents.splice(1, 0, {
-          id: 'coder',
-          name: 'Coder Agent',
-          role: 'coder',
-          purpose: 'Implementing the solution',
-        });
-      }
-    }
-
-    return agents;
-  }
-
-  /**
-   * Create and register a sub-agent
-   */
-  private async createAndRegisterAgent(agentType: { id: string; name: string; role: string; purpose: string }): Promise<void> {
-    // Create participant
-    const participant: ChatParticipant = {
-      id: agentType.id,
-      name: agentType.name,
-      type: 'sub-agent',
-      color: AGENT_COLORS[agentType.role] || AGENT_COLORS.default,
-      role: agentType.role,
-      status: 'idle',
-      capabilities: [agentType.purpose],
-    };
-    this.participants.set(agentType.id, participant);
-    this.emit('participant:added', participant);
-
-    // Create agent markdown definition
-    const agentMarkdown = this.generateAgentMarkdown(agentType);
-
-    // Write to VFS
-    const agentPath = `user/agents/${agentType.id}.md`;
-    this.vfs.writeFile(agentPath, agentMarkdown);
-
-    logger.info('agent', `Created sub-agent: ${agentType.name}`, { path: agentPath });
-  }
-
-  /**
-   * Generate markdown for a sub-agent
-   */
-  private generateAgentMarkdown(agentType: { id: string; name: string; role: string; purpose: string }): string {
-    const templates: Record<string, string> = {
-      planner: `---
-name: ${agentType.name}
-type: specialist
-id: ${agentType.id}
-description: ${agentType.purpose}
-model: anthropic/claude-sonnet-4
-maxIterations: 5
-tools:
-  - read-file
-  - list-directory
-capabilities:
-  - Task decomposition
-  - Step-by-step planning
-  - Resource identification
-origin: created
----
-
-# ${agentType.name}
-
-You are a Planning Agent specialized in breaking down complex goals into actionable steps.
-
-## Your Role
-- Analyze the user's goal and understand requirements
-- Identify necessary resources and dependencies
-- Create a clear, step-by-step execution plan
-- Estimate complexity and potential challenges
-
-## Output Format
-Provide your plan as a structured markdown list with clear steps.
-`,
-      coder: `---
-name: ${agentType.name}
-type: specialist
-id: ${agentType.id}
-description: ${agentType.purpose}
-model: anthropic/claude-sonnet-4
-maxIterations: 10
-tools:
-  - write-file
-  - read-file
-  - execute-python
-capabilities:
-  - Code implementation
-  - Algorithm design
-  - File creation
-origin: created
----
-
-# ${agentType.name}
-
-You are a Coding Agent specialized in implementing solutions.
-
-## Your Role
-- Write clean, efficient code based on the plan
-- Follow best practices and coding standards
-- Create necessary files and structures
-- Test implementations when possible
-
-## Output Format
-Provide working code with clear comments explaining the implementation.
-`,
-      reviewer: `---
-name: ${agentType.name}
-type: specialist
-id: ${agentType.id}
-description: ${agentType.purpose}
-model: anthropic/claude-sonnet-4
-maxIterations: 3
-tools:
-  - read-file
-capabilities:
-  - Code review
-  - Quality assurance
-  - Validation
-origin: created
----
-
-# ${agentType.name}
-
-You are a Review Agent specialized in validating and improving work.
-
-## Your Role
-- Review code and outputs for correctness
-- Identify potential issues or improvements
-- Validate against requirements
-- Suggest optimizations
-
-## Output Format
-Provide a structured review with findings and recommendations.
-`,
-      analyst: `---
-name: ${agentType.name}
-type: specialist
-id: ${agentType.id}
-description: ${agentType.purpose}
-model: anthropic/claude-sonnet-4
-maxIterations: 5
-tools:
-  - read-file
-  - execute-python
-capabilities:
-  - Data analysis
-  - Research
-  - Pattern identification
-origin: created
----
-
-# ${agentType.name}
-
-You are an Analysis Agent specialized in understanding and researching problems.
-
-## Your Role
-- Analyze requirements and constraints
-- Research relevant information
-- Identify patterns and insights
-- Provide data-driven recommendations
-
-## Output Format
-Provide analysis results with clear findings and evidence.
-`,
-    };
-
-    return templates[agentType.role] || templates.coder;
-  }
-
-  /**
-   * Phase 3: Coordinate agent execution
-   */
-  private async coordinateExecution(goal: string): Promise<void> {
-    this.setPhase('executing');
-
-    // Get proposals from each agent
-    const proposals: AgentProposal[] = [];
-
-    for (const [agentId, participant] of this.participants) {
-      if (participant.type !== 'sub-agent') continue;
-
-      this.updateParticipantStatus(agentId, 'thinking');
-
-      // Get agent's proposal
-      const proposal = await this.getAgentProposal(agentId, participant.name, goal);
-      if (proposal) {
-        proposals.push(proposal);
-      }
-
-      this.updateParticipantStatus(agentId, 'idle');
-    }
-
-    // Create decision point message with alternatives
-    if (proposals.length > 0) {
-      const decisionMessage: ChatMessage = {
+      const filesMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: 'The agents have proposed different approaches. Please review and select one:',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        content: `Created ${result.filesCreated.length} file(s):`,
+        timestamp,
         participantId: 'system-agent',
         isSystemMessage: true,
-        isDecisionPoint: true,
-        alternatives: proposals,
+        fileReferences: fileRefs,
       };
-      this.messages.push(decisionMessage);
-      this.emit('message:added', decisionMessage);
+      this.messages.push(filesMessage);
+      this.emit('message:added', filesMessage);
+
+      for (const ref of fileRefs) {
+        this.emit('file:created', ref);
+      }
     }
 
-    // Execute with the first proposal (or wait for user selection in full implementation)
-    if (proposals.length > 0) {
-      await this.executeWithProposal(proposals[0], goal);
-    }
-  }
-
-  /**
-   * Get a proposal from an agent
-   */
-  private async getAgentProposal(agentId: string, agentName: string, goal: string): Promise<AgentProposal | null> {
-    try {
-      const llmClient = this.ensureLLMClient();
-
-      const proposalPrompt = `You are ${agentName}. Given this goal, propose your approach in 2-3 sentences. Be specific about what you would do.
-
-Goal: ${goal}
-
-Your proposal:`;
-
-      const response = await llmClient.chatDirect([
-        { role: 'user', content: proposalPrompt },
-      ]);
-
-      return {
-        id: `proposal-${agentId}-${Date.now()}`,
-        agentId,
-        agentName,
-        content: response.trim(),
-        confidence: 0.7 + Math.random() * 0.3, // Simulated confidence
-        votes: Math.floor(Math.random() * 3), // Initial votes
+    // Show multi-agent validation results
+    if (result.multiAgentValidation) {
+      const validation = result.multiAgentValidation;
+      const validationMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `**Multi-Agent Validation:**\n- Agents: ${validation.agentCount}/${validation.minimumRequired} required\n- Status: ${validation.isValid ? '✓ Valid' : '✗ Invalid'}\n- ${validation.message}`,
+        timestamp,
+        participantId: 'system-agent',
+        isSystemMessage: true,
       };
-    } catch (error) {
-      logger.error('agent', `Failed to get proposal from ${agentName}`, { error });
-      return null;
-    }
-  }
 
-  /**
-   * Execute with selected proposal
-   */
-  private async executeWithProposal(proposal: AgentProposal, goal: string): Promise<void> {
-    const executingAgent = this.participants.get(proposal.agentId);
-    if (!executingAgent) return;
-
-    this.updateParticipantStatus(proposal.agentId, 'executing');
-
-    // Execute the goal using the selected approach
-    const llmClient = this.ensureLLMClient();
-
-    const executionMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: `Executing ${proposal.agentName}'s approach...`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      participantId: proposal.agentId,
-      isSystemMessage: false,
-      agentCalls: [{
-        agentId: proposal.agentId,
-        agentName: proposal.agentName,
-        purpose: 'Implementing solution',
-        status: 'running',
-      }],
-    };
-    this.messages.push(executionMessage);
-    this.emit('message:added', executionMessage);
-
-    try {
-      const executionPrompt = `You are ${proposal.agentName}. Execute this task based on your proposed approach.
-
-Goal: ${goal}
-
-Your approach: ${proposal.content}
-
-Provide the complete implementation or result. If code is needed, write it. If files need to be created, specify them.`;
-
-      const result = await llmClient.chatDirect([
-        { role: 'user', content: executionPrompt },
-      ]);
-
-      // Update message with result
-      executionMessage.content = result;
-      executionMessage.agentCalls![0].status = 'completed';
-      executionMessage.agentCalls![0].result = 'Implementation complete';
-
-      // Check for code blocks and create files
-      const codeBlocks = this.extractCodeBlocks(result);
-      if (codeBlocks.length > 0) {
-        executionMessage.fileReferences = [];
-        for (const block of codeBlocks) {
-          const filePath = `user/output/${block.filename || `code-${Date.now()}.${block.language}`}`;
-          this.vfs.writeFile(filePath, block.code);
-          executionMessage.fileReferences.push({
-            path: filePath,
-            name: block.filename || `code.${block.language}`,
-            type: 'code',
-          });
-          this.emit('file:created', executionMessage.fileReferences[executionMessage.fileReferences.length - 1]);
+      // Add sub-agents to participants
+      for (const agent of validation.agents) {
+        const agentId = agent.name.toLowerCase().replace(/\s+/g, '-');
+        if (!this.participants.has(agentId)) {
+          const participant: ChatParticipant = {
+            id: agentId,
+            name: agent.name,
+            type: 'sub-agent',
+            color: AGENT_COLORS[agent.type] || AGENT_COLORS.default,
+            role: agent.type,
+            status: 'done',
+            capabilities: [`Origin: ${agent.origin}`],
+          };
+          this.participants.set(agentId, participant);
+          this.emit('participant:added', participant);
         }
       }
 
-      this.emit('message:updated', executionMessage);
-
-    } catch (error) {
-      executionMessage.agentCalls![0].status = 'failed';
-      executionMessage.content = `Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      this.emit('message:updated', executionMessage);
+      this.messages.push(validationMessage);
+      this.emit('message:added', validationMessage);
     }
 
-    this.updateParticipantStatus(proposal.agentId, 'done');
-  }
+    // Show sub-agent collaboration
+    if (result.subAgentCollaboration && result.subAgentCollaboration.subAgentsUsed.length > 0) {
+      const collab = result.subAgentCollaboration;
+      const agentNames = collab.subAgentsUsed.map(a => a.agentName).join(', ');
 
-  /**
-   * Extract code blocks from response
-   */
-  private extractCodeBlocks(content: string): Array<{ language: string; code: string; filename?: string }> {
-    const blocks: Array<{ language: string; code: string; filename?: string }> = [];
-    const codeBlockRegex = /```(\w+)?\s*(?:\n)?(?:\/\/\s*(\S+)\s*\n)?([\s\S]*?)```/g;
+      this.addSystemMessage(`**Sub-Agent Collaboration:**\n- Agents Used: ${agentNames}\n- ${collab.collaborationSummary}`);
+    }
 
-    let match;
-    while ((match = codeBlockRegex.exec(content)) !== null) {
-      const language = match[1] || 'txt';
-      const filename = match[2];
-      const code = match[3].trim();
+    // Final response
+    const finalMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: result.response,
+      timestamp,
+      participantId: 'system-agent',
+    };
+    this.messages.push(finalMessage);
+    this.emit('message:added', finalMessage);
 
-      if (code.length > 10) { // Skip tiny blocks
-        blocks.push({ language, code, filename });
+    // Show evolution info if available
+    if (result.evolution) {
+      const evo = result.evolution;
+      if (evo.learnings.length > 0) {
+        this.addSystemMessage(`**Evolution:**\n- Memory Updated: ${evo.memoryUpdated}\n- Learnings: ${evo.learnings.join(', ')}`);
       }
     }
 
-    return blocks;
-  }
-
-  /**
-   * Phase 4: Review results
-   */
-  private async reviewResults(): Promise<void> {
-    this.setPhase('reviewing');
-
-    const reviewer = this.participants.get('reviewer');
-    if (!reviewer) {
-      this.setPhase('completed');
-      return;
-    }
-
-    this.updateParticipantStatus('reviewer', 'thinking');
-
-    const reviewMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: 'Reviewing the implementation...',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      participantId: 'reviewer',
-      agentCalls: [{
-        agentId: 'reviewer',
-        agentName: 'Reviewer Agent',
-        purpose: 'Validating results',
-        status: 'running',
-      }],
-    };
-    this.messages.push(reviewMessage);
-    this.emit('message:added', reviewMessage);
-
-    try {
-      const llmClient = this.ensureLLMClient();
-
-      // Get recent execution context
-      const recentMessages = this.messages.slice(-5).map(m => m.content).join('\n\n');
-
-      const reviewPrompt = `You are a Review Agent. Review the following work and provide feedback.
-
-Work done:
-${recentMessages}
-
-Provide a brief review (2-3 points) on:
-1. What was done well
-2. Any issues or improvements needed
-3. Overall assessment`;
-
-      const review = await llmClient.chatDirect([
-        { role: 'user', content: reviewPrompt },
-      ]);
-
-      reviewMessage.content = review;
-      reviewMessage.agentCalls![0].status = 'completed';
-      this.emit('message:updated', reviewMessage);
-
-    } catch (error) {
-      reviewMessage.content = 'Review could not be completed.';
-      reviewMessage.agentCalls![0].status = 'failed';
-      this.emit('message:updated', reviewMessage);
-    }
-
-    this.updateParticipantStatus('reviewer', 'done');
     this.setPhase('completed');
-
-    // Final summary
-    this.addSystemMessage('Goal execution complete. All agents have finished their work.');
+    this.updateParticipantStatus('system-agent', 'done');
   }
 
   /**
@@ -785,7 +549,7 @@ Provide a brief review (2-3 points) on:
    */
   private addSystemMessage(content: string): void {
     const message: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: 'assistant',
       content,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -794,28 +558,6 @@ Provide a brief review (2-3 points) on:
     };
     this.messages.push(message);
     this.emit('message:added', message);
-  }
-
-  /**
-   * Build planning prompt for LLM
-   */
-  private buildPlanningPrompt(goal: string): string {
-    return `You are a Planning Agent in a multi-agent system. Your role is to analyze the user's goal and create a clear execution plan.
-
-## Your Task
-Analyze the goal and provide:
-1. A brief understanding of what needs to be done
-2. Key requirements and constraints
-3. A step-by-step plan (3-5 steps)
-4. What specialist agents would be needed
-
-## Guidelines
-- Be concise but thorough
-- Focus on actionable steps
-- Consider practical implementation
-- Identify potential challenges
-
-Respond in markdown format with clear sections.`;
   }
 
   /**
@@ -836,6 +578,26 @@ Respond in markdown format with clear sections.`;
       }
     }
   }
+
+  /**
+   * Get current phase
+   */
+  getCurrentPhase(): typeof this.currentPhase {
+    return this.currentPhase;
+  }
+
+  /**
+   * Reset the orchestrator for a new conversation
+   */
+  reset(): void {
+    this.systemOrchestrator = null;
+    this.participants.clear();
+    this.messages = [];
+    this.currentPhase = 'planning';
+    this.pendingToolCalls.clear();
+    this.initializeSystemAgent();
+    this.emit('phase:changed', { phase: 'planning' });
+  }
 }
 
 // Singleton instance
@@ -849,5 +611,8 @@ export function getMultiAgentOrchestrator(): MultiAgentChatOrchestrator {
 }
 
 export function resetMultiAgentOrchestrator(): void {
+  if (orchestratorInstance) {
+    orchestratorInstance.reset();
+  }
   orchestratorInstance = null;
 }

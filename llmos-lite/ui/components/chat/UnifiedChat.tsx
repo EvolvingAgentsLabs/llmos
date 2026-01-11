@@ -40,7 +40,7 @@ interface Participant {
 interface FileReference {
   path: string;
   name: string;
-  type: 'code' | 'plan' | 'output';
+  type: 'code' | 'plan' | 'output' | 'agent';
 }
 
 interface AgentCall {
