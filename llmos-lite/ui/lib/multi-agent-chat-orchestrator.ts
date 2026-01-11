@@ -801,7 +801,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     // Pattern: 🤖 [AgentName] → [TargetAgent]: "Message" or without emoji
     const dialogPattern = /(?:🤖\s*)?\[?(\w+(?:Agent)?)\]?\s*(?:→|->)\s*\[?(\w+(?:Agent)?|User)\]?\s*:\s*["']?([\s\S]*?)["']?(?=\n(?:🤖|\[?\w+(?:Agent)?\]?\s*(?:→|->))|\n\n|$)/gi;
 
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = dialogPattern.exec(response)) !== null) {
       dialogs.push({
         fromAgent: match[1],
@@ -813,12 +813,13 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
 
     // Also detect simpler patterns like "AgentName says:" or "AgentName:"
     const simplePattern = /(?:^|\n)(\w+Agent)\s*(?:says|responds)?:\s*["']?([\s\S]*?)["']?(?=\n\w+Agent|\n\n|$)/gi;
-    while ((match = simplePattern.exec(response)) !== null) {
-      if (!dialogs.some(d => d.fromAgent === match[1] && d.message === match[2].trim())) {
+    let simpleMatch: RegExpExecArray | null;
+    while ((simpleMatch = simplePattern.exec(response)) !== null) {
+      if (!dialogs.some(d => d.fromAgent === simpleMatch![1] && d.message === simpleMatch![2].trim())) {
         dialogs.push({
-          fromAgent: match[1],
+          fromAgent: simpleMatch[1],
           toAgent: 'User',
-          message: match[2].trim(),
+          message: simpleMatch[2].trim(),
           timestamp: Date.now(),
         });
       }
