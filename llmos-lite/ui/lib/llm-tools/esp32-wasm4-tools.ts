@@ -17,10 +17,9 @@ import {
   getDeviceManager,
   ESP32DeviceManager,
   DeviceCommand,
-  FLOOR_MAPS,
 } from '../hardware/esp32-device-manager';
 import { GAME_TEMPLATES, GAME_MODE } from '../hardware/esp32-wasm4-vm';
-import { FloorMap } from '../hardware/cube-robot-simulator';
+import { FloorMap, FLOOR_MAPS } from '../hardware/cube-robot-simulator';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DEVICE MANAGEMENT TOOLS
