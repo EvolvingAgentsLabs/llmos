@@ -12,7 +12,6 @@ import ParticipantList from './ParticipantList';
 import {
   MultiAgentChat,
   getMultiAgentChat,
-  ChatSettings,
 } from '@/lib/chat/multi-agent-chat';
 import {
   EnhancedMessage,
