@@ -684,6 +684,88 @@ Present these options NOW. Do not execute any tools.`;
   }
 
   /**
+   * Generate completion options after execution finishes
+   * Provides user with choices to continue, iterate, or stop
+   * STOP is first so it's auto-selected if user doesn't respond (task is already done)
+   */
+  private generateCompletionOptions(): AgentProposal[] {
+    const options: AgentProposal[] = [];
+    const timestamp = Date.now();
+
+    // Option STOP first - auto-selected if no response (since task is done)
+    options.push({
+      id: `opt-${timestamp}-stop`,
+      agentId: 'system-agent',
+      agentName: 'Option STOP: Done',
+      content: `Mark this task as complete. Use this if you're satisfied with the results.`,
+      confidence: 0.8,
+      votes: 0,
+    });
+
+    // Option A: Continue with follow-up
+    options.push({
+      id: `opt-${timestamp}-continue`,
+      agentId: 'system-agent',
+      agentName: 'Option A: Continue',
+      content: `Continue with a follow-up task or ask me to do something else.`,
+      confidence: 0.7,
+      votes: 0,
+    });
+
+    // Option B: Iterate/Improve
+    options.push({
+      id: `opt-${timestamp}-iterate`,
+      agentId: 'system-agent',
+      agentName: 'Option B: Iterate',
+      content: `Review and iterate on what was just done. Make improvements or adjustments.`,
+      confidence: 0.5,
+      votes: 0,
+    });
+
+    return options;
+  }
+
+  /**
+   * Present completion decision point after execution finishes
+   */
+  private async presentCompletionDecisionPoint(
+    options: AgentProposal[],
+    timestamp: string
+  ): Promise<void> {
+    this.executionPhase = 'awaiting_vote';
+    this.setPhase('coordinating');
+
+    // Build completion message with options
+    let content = `✅ **Task Completed**\n\n`;
+    content += `What would you like to do next?\n\n`;
+
+    options.forEach((opt) => {
+      content += `**${opt.agentName}**\n`;
+      content += `- ${opt.content}\n\n`;
+    });
+
+    content += `\nReply with **STOP**, **A**, or **B** to choose.`;
+
+    const decisionMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content,
+      timestamp,
+      participantId: 'system-agent',
+      isDecisionPoint: true,
+      alternatives: options,
+    };
+
+    this.messages.push(decisionMessage);
+    this.emit('message:added', decisionMessage);
+
+    // Start voting timeout - auto-select STOP if no response
+    this.startVotingTimeout(options, decisionMessage.id);
+
+    this.updateParticipantStatus('system-agent', 'idle');
+  }
+
+  /**
    * Present a forced decision point to the user
    */
   private async presentForcedDecisionPoint(
@@ -1089,10 +1171,10 @@ START EXECUTING NOW. Call the necessary tools to accomplish the goal.`;
       }
     }
 
-    // Mark execution as completed and reset state
-    this.executionPhase = 'completed';
-    this.setPhase('completed');
-    this.updateParticipantStatus('system-agent', 'done');
+    // After execution completes, present completion options instead of just marking as done
+    // This gives the user control to continue, stop, or start a new task
+    const completionOptions = this.generateCompletionOptions();
+    await this.presentCompletionDecisionPoint(completionOptions, timestamp);
   }
 
   /**
