@@ -16,7 +16,8 @@ import { DesktopAppletManager } from '@/lib/applets/desktop-applet-manager';
 import { useArtifactStore } from '@/lib/artifacts/store';
 import { getVFS } from '@/lib/virtual-fs';
 import CommandPalette from './CommandPalette';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import AgentCortexHeader from './AgentCortexHeader';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 
 // Lazy load panels
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
@@ -65,35 +66,6 @@ function SidebarWrapper({
   );
 }
 
-// ============================================================================
-// CORTEX STATUS (Header element)
-// ============================================================================
-
-function CortexStatus() {
-  const { state } = useWorkspace();
-
-  const statusConfig = {
-    idle: { color: 'bg-blue-500', label: 'Ready', pulse: false },
-    thinking: { color: 'bg-purple-500', label: 'Thinking...', pulse: true },
-    executing: { color: 'bg-amber-500', label: 'Executing...', pulse: true },
-    success: { color: 'bg-green-500', label: 'Complete', pulse: false },
-    error: { color: 'bg-red-500', label: 'Error', pulse: true },
-  };
-
-  const config = statusConfig[state.agentState];
-
-  return (
-    <div className="flex items-center gap-2">
-      <div className="relative">
-        <div className={`w-3 h-3 rounded-full ${config.color}`} />
-        {config.pulse && (
-          <div className={`absolute inset-0 rounded-full ${config.color} animate-ping`} />
-        )}
-      </div>
-      <span className="text-xs text-[#8b949e]">{config.label}</span>
-    </div>
-  );
-}
 
 // ============================================================================
 // RIGHT PANEL CONTENT - Renders based on contextViewMode
@@ -353,48 +325,27 @@ export default function FluidLayout() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <CortexStatus />
-
-          {activeFilePath && (
-            <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#21262d] text-xs text-[#8b949e]">
-              <span className="truncate max-w-[150px]">{activeFilePath.split('/').pop()}</span>
-              <button
-                onClick={() => setContextViewMode('applets')}
-                className="text-[#6e7681] hover:text-[#e6edf3]"
-                title="Close file"
-              >
-                x
-              </button>
-            </div>
-          )}
+        {/* Center: Agent Status with Pause Button and Model Selector */}
+        <div className="flex items-center">
+          <AgentCortexHeader />
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right: Close Session Button Only */}
+        <div className="flex items-center">
           <button
             onClick={() => {
-              if (confirm('Are you sure you want to logout?\n\nThis will clear all local data.')) {
-                UserStorage.clearAll();
-                LLMStorage.clearAll();
+              if (confirm('Close this session? This will clear your current chat history.')) {
+                localStorage.removeItem('llmos-workspace');
+                localStorage.removeItem('llmos-chat-messages');
                 window.location.reload();
               }
             }}
-            className="p-2 rounded-lg text-[#8b949e] hover:text-red-400 hover:bg-red-500/10 transition-all"
-            title="Logout & Clear Data"
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200
+                       bg-red-500/10 hover:bg-red-500/20
+                       border border-red-500/30 hover:border-red-500/50"
+            title="Close Session"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
-
-          <button
-            onClick={openCommandPalette}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#21262d] border border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-bg-hover transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <span className="text-xs">Ctrl+K</span>
+            <X className="w-4 h-4 text-red-400" />
           </button>
         </div>
       </header>
