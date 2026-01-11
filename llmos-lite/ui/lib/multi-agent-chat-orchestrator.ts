@@ -19,6 +19,9 @@ import {
 } from './system-agent-orchestrator';
 import { getVFS } from './virtual-fs';
 import { logger } from './debug/logger';
+import { SolutionProposer } from './chat/solution-proposer';
+import { getSpeculativeExecutor } from './speculative/speculative-executor';
+import type { ProposedSolution, FlowPrediction, PredictedStep } from './chat/types';
 
 // Types for multi-agent chat UI
 export type ParticipantType = 'user' | 'system-agent' | 'sub-agent';
@@ -55,6 +58,19 @@ export interface ChatMessage {
   agentCalls?: AgentCallInfo[];
   fileReferences?: FileReference[];
   isSystemMessage?: boolean;
+  // Sub-agent dialog chain
+  agentDialogs?: AgentDialogEntry[];
+  // Predictions for next steps
+  predictions?: PredictedStep[];
+  // Speculative execution preview
+  speculativePreview?: {
+    executionId: string;
+    status: 'computing' | 'completed' | 'cancelled';
+    partialOutput?: string;
+    tokensUsed: number;
+  };
+  // Checkpoint info
+  checkpoint?: DecisionCheckpoint;
 }
 
 export interface AgentCallInfo {
@@ -65,6 +81,21 @@ export interface AgentCallInfo {
   result?: string;
   startTime?: number;
   endTime?: number;
+}
+
+export interface AgentDialogEntry {
+  fromAgent: string;
+  toAgent: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface DecisionCheckpoint {
+  type: 'APPROACH_SELECTION' | 'AGENT_COMPOSITION' | 'IMPLEMENTATION_CHOICE' | 'REVIEW_AND_CONTINUE';
+  phase: number;
+  triggered: boolean;
+  resolvedAt?: number;
+  selectedOption?: string;
 }
 
 export interface FileReference {
@@ -156,6 +187,24 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   private isPaused: boolean = false;
   private pausePromiseResolve: (() => void) | null = null;
   private votingTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  // Sub-agent dialog tracking
+  private agentDialogs: AgentDialogEntry[] = [];
+
+  // Speculative execution
+  private speculativeExecutor = getSpeculativeExecutor();
+  private solutionProposer = new SolutionProposer();
+
+  // Decision checkpoints
+  private checkpoints: DecisionCheckpoint[] = [
+    { type: 'APPROACH_SELECTION', phase: 2, triggered: false },
+    { type: 'AGENT_COMPOSITION', phase: 4, triggered: false },
+    { type: 'IMPLEMENTATION_CHOICE', phase: 5, triggered: false },
+    { type: 'REVIEW_AND_CONTINUE', phase: 7, triggered: false },
+  ];
+
+  // Flow predictions
+  private predictions: FlowPrediction[] = [];
 
   constructor() {
     super();
@@ -576,8 +625,51 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       this.addSystemMessage(`**Sub-Agent Collaboration:**\n- Agents Used: ${agentNames}\n- ${collab.collaborationSummary}`);
     }
 
+    // Parse sub-agent dialogs from response
+    const dialogs = this.parseAgentDialogs(result.response);
+    if (dialogs.length > 0) {
+      this.agentDialogs.push(...dialogs);
+      logger.info('agent', `Detected ${dialogs.length} sub-agent dialog(s)`);
+
+      // Create participants for agents in dialogs
+      for (const dialog of dialogs) {
+        const agentId = dialog.fromAgent.toLowerCase().replace(/\s+/g, '-');
+        if (!this.participants.has(agentId) && dialog.fromAgent !== 'User') {
+          const participant: ChatParticipant = {
+            id: agentId,
+            name: dialog.fromAgent,
+            type: 'sub-agent',
+            color: getAgentColor(dialog.fromAgent),
+            role: 'specialist',
+            status: 'done',
+          };
+          this.participants.set(agentId, participant);
+          this.emit('participant:added', participant);
+        }
+      }
+
+      // Emit dialog messages for UI
+      for (const dialog of dialogs) {
+        const dialogMessage: ChatMessage = {
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          role: 'assistant',
+          content: `**${dialog.fromAgent}** → **${dialog.toAgent}**: ${dialog.message}`,
+          timestamp,
+          participantId: dialog.fromAgent.toLowerCase().replace(/\s+/g, '-'),
+          isSystemMessage: true,
+          agentDialogs: [dialog],
+        };
+        this.messages.push(dialogMessage);
+        this.emit('message:added', dialogMessage);
+        this.emit('agent:dialog', dialog);
+      }
+    }
+
     // Final response - check for decision points (options)
     const options = this.parseOptionsFromResponse(result.response);
+
+    // Generate predictions for next steps
+    const predictions = this.generatePredictions(this.currentPhase, options);
 
     const finalMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -587,6 +679,8 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       participantId: 'system-agent',
       isDecisionPoint: options.length > 0,
       alternatives: options.length > 0 ? options : undefined,
+      agentDialogs: dialogs.length > 0 ? dialogs : undefined,
+      predictions: predictions.length > 0 ? predictions : undefined,
     };
     this.messages.push(finalMessage);
     this.emit('message:added', finalMessage);
@@ -596,6 +690,14 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       this.setPhase('coordinating');
       this.updateParticipantStatus('system-agent', 'idle');
       logger.info('agent', `Decision point detected with ${options.length} options`);
+
+      // Start speculative execution for high-probability options
+      await this.startSpeculativeExecution(options, result.response);
+
+      // Emit predictions for UI
+      if (predictions.length > 0) {
+        this.emit('predictions:updated', { predictions });
+      }
 
       // Start voting timeout - auto-select first option if no response
       this.startVotingTimeout(options, finalMessage.id);
@@ -687,6 +789,151 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   private setPhase(phase: typeof this.currentPhase): void {
     this.currentPhase = phase;
     this.emit('phase:changed', { phase });
+  }
+
+  /**
+   * Parse sub-agent dialog patterns from response
+   * Format: 🤖 [AgentName] → [TargetAgent/User]: "Message"
+   */
+  private parseAgentDialogs(response: string): AgentDialogEntry[] {
+    const dialogs: AgentDialogEntry[] = [];
+
+    // Pattern: 🤖 [AgentName] → [TargetAgent]: "Message" or without emoji
+    const dialogPattern = /(?:🤖\s*)?\[?(\w+(?:Agent)?)\]?\s*(?:→|->)\s*\[?(\w+(?:Agent)?|User)\]?\s*:\s*["']?([\s\S]*?)["']?(?=\n(?:🤖|\[?\w+(?:Agent)?\]?\s*(?:→|->))|\n\n|$)/gi;
+
+    let match;
+    while ((match = dialogPattern.exec(response)) !== null) {
+      dialogs.push({
+        fromAgent: match[1],
+        toAgent: match[2],
+        message: match[3].trim(),
+        timestamp: Date.now(),
+      });
+    }
+
+    // Also detect simpler patterns like "AgentName says:" or "AgentName:"
+    const simplePattern = /(?:^|\n)(\w+Agent)\s*(?:says|responds)?:\s*["']?([\s\S]*?)["']?(?=\n\w+Agent|\n\n|$)/gi;
+    while ((match = simplePattern.exec(response)) !== null) {
+      if (!dialogs.some(d => d.fromAgent === match[1] && d.message === match[2].trim())) {
+        dialogs.push({
+          fromAgent: match[1],
+          toAgent: 'User',
+          message: match[2].trim(),
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    return dialogs;
+  }
+
+  /**
+   * Start speculative execution for high-probability options
+   */
+  private async startSpeculativeExecution(options: AgentProposal[], context: string): Promise<void> {
+    // Find options above threshold (70% confidence)
+    const highProbOptions = options.filter(opt => opt.confidence >= 0.7);
+
+    if (highProbOptions.length === 0) {
+      return;
+    }
+
+    // Convert AgentProposal to ProposedSolution for speculative executor
+    for (const option of highProbOptions.slice(0, 2)) { // Max 2 concurrent
+      const solution: ProposedSolution = {
+        id: option.id,
+        proposerId: option.agentId,
+        proposerName: option.agentName,
+        proposerType: 'agent',
+        content: option.content,
+        confidence: option.confidence,
+        reasoning: `Option with ${(option.confidence * 100).toFixed(0)}% confidence`,
+        estimatedImpact: 'medium',
+        votes: [],
+        status: 'exploring',
+        timestamp: Date.now(),
+      };
+
+      if (this.speculativeExecutor.shouldExecute(solution, option.confidence)) {
+        logger.info('agent', `Starting speculative execution for ${option.agentName}`, {
+          confidence: option.confidence,
+        });
+
+        const execution = await this.speculativeExecutor.execute(
+          solution,
+          context,
+          option.confidence
+        );
+
+        // Emit event for UI to show speculative preview
+        this.emit('speculation:started', {
+          optionId: option.id,
+          executionId: execution.id,
+          confidence: option.confidence,
+        });
+      }
+    }
+  }
+
+  /**
+   * Generate flow predictions for next steps
+   */
+  private generatePredictions(currentPhase: string, options: AgentProposal[]): PredictedStep[] {
+    const predictions: PredictedStep[] = [];
+
+    // Based on current phase and options, predict likely next steps
+    if (options.length > 0) {
+      // Predict based on highest confidence option
+      const topOption = options.reduce((best, curr) =>
+        curr.confidence > best.confidence ? curr : best
+      );
+
+      predictions.push({
+        id: `pred-${Date.now()}-1`,
+        description: `User likely selects: ${topOption.agentName}`,
+        probability: topOption.confidence,
+        estimatedDuration: '5-10 seconds',
+        dependencies: [],
+        speculativelyComputed: this.speculativeExecutor.getExecutionBySolution(topOption.id) !== undefined,
+        status: 'predicted',
+      });
+
+      predictions.push({
+        id: `pred-${Date.now()}-2`,
+        description: `Execute ${topOption.agentName} implementation`,
+        probability: topOption.confidence * 0.9,
+        estimatedDuration: '30-60 seconds',
+        dependencies: [predictions[0].id],
+        speculativelyComputed: false,
+        status: 'predicted',
+      });
+    }
+
+    // Add phase-specific predictions
+    switch (currentPhase) {
+      case 'planning':
+        predictions.push({
+          id: `pred-${Date.now()}-phase`,
+          description: 'Move to agent composition phase',
+          probability: 0.85,
+          dependencies: [],
+          speculativelyComputed: false,
+          status: 'predicted',
+        });
+        break;
+      case 'executing':
+        predictions.push({
+          id: `pred-${Date.now()}-phase`,
+          description: 'Complete execution and review results',
+          probability: 0.9,
+          dependencies: [],
+          speculativelyComputed: false,
+          status: 'predicted',
+        });
+        break;
+    }
+
+    return predictions;
   }
 
   /**
@@ -863,6 +1110,34 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
           this.emit('vote:cast', { proposalId: option.id, voterId: 'user' });
           this.emit('message:updated', message);
 
+          // Check if speculative execution was done for this option
+          const speculativeExecution = this.speculativeExecutor.getExecutionBySolution(option.id);
+          if (speculativeExecution && speculativeExecution.status === 'completed') {
+            // Confirm speculative execution - we can use the pre-computed result!
+            const result = this.speculativeExecutor.confirm(speculativeExecution.id);
+            if (result) {
+              logger.info('agent', `Using pre-computed result from speculative execution`, {
+                executionId: speculativeExecution.id,
+                tokensUsed: result.metrics.tokensUsed,
+                timeSaved: speculativeExecution.endTime! - speculativeExecution.startTime,
+              });
+
+              this.emit('speculation:confirmed', {
+                executionId: speculativeExecution.id,
+                optionId: option.id,
+                timeSaved: speculativeExecution.endTime! - speculativeExecution.startTime,
+              });
+
+              // Add message about time saved
+              this.addSystemMessage(
+                `⚡ Used pre-computed result (saved ~${Math.round((speculativeExecution.endTime! - speculativeExecution.startTime) / 1000)}s)`
+              );
+            }
+          }
+
+          // Cancel other speculative executions
+          this.speculativeExecutor.cancelAll();
+
           // Continue with this option
           await this.continueWithSelection(`Option ${optionLetter}: ${option.content}`);
           return;
@@ -872,6 +1147,27 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
 
     // No matching option found, treat as free-form response
     await this.continueWithSelection(optionLetter);
+  }
+
+  /**
+   * Get agent dialogs for display
+   */
+  getAgentDialogs(): AgentDialogEntry[] {
+    return [...this.agentDialogs];
+  }
+
+  /**
+   * Get current predictions
+   */
+  getPredictions(): FlowPrediction[] {
+    return [...this.predictions];
+  }
+
+  /**
+   * Get speculative execution stats
+   */
+  getSpeculativeStats() {
+    return this.speculativeExecutor.getStats();
   }
 
   /**
