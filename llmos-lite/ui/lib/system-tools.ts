@@ -16,6 +16,9 @@ import {
   MIN_AGENTS_REQUIRED,
 } from './agents/multi-agent-validator';
 
+// Import ESP32 WASM4 tools
+import { getESP32WASM4Tools } from './llm-tools/esp32-wasm4-tools';
+
 // Dynamic import for applet runtime to avoid SSR issues
 let compileAppletFn: ((code: string) => Promise<any>) | null = null;
 let fixAppletErrorFn: ((originalCode: string, errorMessage: string, appletName?: string, attemptNumber?: number) => Promise<any>) | null = null;
@@ -1704,6 +1707,8 @@ export function getSystemTools(): ToolDefinition[] {
     UninstallWasmAppTool,
     CompileRobot4FirmwareTool,
     Robot4RuntimeTool,
+    // ESP32 WASM4 robot tools
+    ...getESP32WASM4Tools(),
   ];
 }
 
