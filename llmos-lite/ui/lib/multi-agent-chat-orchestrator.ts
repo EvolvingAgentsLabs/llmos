@@ -502,16 +502,28 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       this.addSystemMessage(`**Sub-Agent Collaboration:**\n- Agents Used: ${agentNames}\n- ${collab.collaborationSummary}`);
     }
 
-    // Final response
+    // Final response - check for decision points (options)
+    const options = this.parseOptionsFromResponse(result.response);
+
     const finalMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'assistant',
       content: result.response,
       timestamp,
       participantId: 'system-agent',
+      isDecisionPoint: options.length > 0,
+      alternatives: options.length > 0 ? options : undefined,
     };
     this.messages.push(finalMessage);
     this.emit('message:added', finalMessage);
+
+    // If there are options, set phase to coordinating (waiting for vote)
+    if (options.length > 0) {
+      this.setPhase('coordinating');
+      this.updateParticipantStatus('system-agent', 'idle');
+      logger.info('agent', `Decision point detected with ${options.length} options`);
+      return; // Don't mark as completed - waiting for user vote
+    }
 
     // Show evolution info if available
     if (result.evolution) {
@@ -545,6 +557,80 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   }
 
   /**
+   * Parse options/alternatives from System Agent response
+   * Detects the 🗳️ DECISION POINT format and extracts options
+   */
+  private parseOptionsFromResponse(response: string): AgentProposal[] {
+    const options: AgentProposal[] = [];
+
+    // Check if this is a decision point
+    if (!response.includes('DECISION POINT') && !response.includes('🗳️')) {
+      // Also check for "Would you like me to:" pattern (simpler format)
+      const simpleOptionsMatch = response.match(/Would you like me to:([\s\S]*?)(?:\n\n|$)/i);
+      if (simpleOptionsMatch) {
+        const optionsText = simpleOptionsMatch[1];
+        // Parse numbered or bullet options
+        const optionLines = optionsText.match(/(?:^|\n)\s*(?:\d+\.|[-•*])\s*(.+?)(?=\n\s*(?:\d+\.|[-•*])|\n\n|$)/g);
+
+        if (optionLines) {
+          optionLines.forEach((line, index) => {
+            const cleanLine = line.replace(/^\s*(?:\d+\.|[-•*])\s*/, '').trim();
+            if (cleanLine.length > 5) {
+              const optionLabel = String.fromCharCode(65 + index); // A, B, C...
+              options.push({
+                id: `option-${optionLabel}-${Date.now()}`,
+                agentId: 'system-agent',
+                agentName: `Option ${optionLabel}`,
+                content: cleanLine,
+                confidence: 0.7 + Math.random() * 0.2,
+                votes: 0,
+              });
+            }
+          });
+        }
+      }
+      return options;
+    }
+
+    // Parse structured OPTION blocks
+    // Match patterns like "**OPTION A**: Title" or "│ **OPTION A**: Title"
+    const optionPattern = /\*\*OPTION\s+([A-Z])\*\*:?\s*([^\n│]+)(?:[\s\S]*?(?:description|approach)[:\s]*([^│\n]+))?/gi;
+
+    let match;
+    while ((match = optionPattern.exec(response)) !== null) {
+      const optionLetter = match[1];
+      const title = match[2].trim();
+      const description = match[3]?.trim() || '';
+
+      // Try to extract confidence if present
+      const confidenceMatch = response.substring(match.index, match.index + 500).match(/Confidence:\s*(\d+)%/i);
+      const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : 0.7 + Math.random() * 0.2;
+
+      // Try to extract effort if present
+      const effortMatch = response.substring(match.index, match.index + 500).match(/effort:\s*(low|medium|high)/i);
+      const effort = effortMatch ? effortMatch[1] : '';
+
+      options.push({
+        id: `option-${optionLetter}-${Date.now()}`,
+        agentId: 'system-agent',
+        agentName: `Option ${optionLetter}`,
+        content: `**${title}**${description ? `\n${description}` : ''}${effort ? `\n_Effort: ${effort}_` : ''}`,
+        confidence,
+        votes: 0,
+      });
+    }
+
+    // Deduplicate options by letter
+    const seen = new Set<string>();
+    return options.filter(opt => {
+      const letter = opt.agentName;
+      if (seen.has(letter)) return false;
+      seen.add(letter);
+      return true;
+    });
+  }
+
+  /**
    * Helper: Add system message
    */
   private addSystemMessage(content: string): void {
@@ -561,7 +647,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   }
 
   /**
-   * Vote for a proposal
+   * Vote for a proposal and optionally continue with selection
    */
   voteForProposal(proposalId: string, voterId: string = 'user'): void {
     for (const message of this.messages) {
@@ -577,6 +663,79 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
         }
       }
     }
+  }
+
+  /**
+   * Continue execution with user's selected option
+   * This is called when user selects an option from a decision point
+   */
+  async continueWithSelection(selection: string): Promise<void> {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Add user's selection as a message
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: selection,
+      timestamp,
+      participantId: 'user',
+    };
+    this.messages.push(userMessage);
+    this.emit('message:added', userMessage);
+
+    // Update phase to executing
+    this.setPhase('executing');
+    this.updateParticipantStatus('system-agent', 'thinking');
+
+    try {
+      // Get the orchestrator and continue with the selection
+      const orchestrator = await this.initializeOrchestrator();
+
+      this.addSystemMessage(`Continuing with your selection: "${selection.substring(0, 50)}${selection.length > 50 ? '...' : ''}"`);
+
+      // Execute with the user's selection as context
+      const result = await orchestrator.execute(`Continue with the user's choice: ${selection}`);
+
+      // Handle the result
+      await this.handleExecutionResult(result, timestamp);
+
+    } catch (error) {
+      logger.error('agent', 'Failed to continue with selection', { error });
+      this.addSystemMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.setPhase('completed');
+      this.updateParticipantStatus('system-agent', 'idle');
+    }
+  }
+
+  /**
+   * Select a specific option by letter (A, B, C, etc.)
+   */
+  async selectOption(optionLetter: string): Promise<void> {
+    // Find the most recent decision point message
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const message = this.messages[i];
+      if (message.isDecisionPoint && message.alternatives) {
+        // Find the matching option
+        const option = message.alternatives.find(
+          alt => alt.agentName.includes(optionLetter.toUpperCase())
+        );
+
+        if (option) {
+          // Mark as selected
+          option.selected = true;
+          option.votes++;
+          this.emit('vote:cast', { proposalId: option.id, voterId: 'user' });
+          this.emit('message:updated', message);
+
+          // Continue with this option
+          await this.continueWithSelection(`Option ${optionLetter}: ${option.content}`);
+          return;
+        }
+      }
+    }
+
+    // No matching option found, treat as free-form response
+    await this.continueWithSelection(optionLetter);
   }
 
   /**
