@@ -12,11 +12,9 @@ import AgentActivityDisplay, { type AgentActivity } from './AgentActivityDisplay
 import ModelSelector from './ModelSelector';
 import CanvasModal from './CanvasModal';
 import GitGraphView from '../visualization/GitGraphView';
-import FlowTimeline from '../visualization/FlowTimeline';
-import VotingCard from './VotingCard';
-import { DecisionBranch, DecisionNode, TimelineView, CompletedDecision, VotingSession, ProposedSolution } from '@/lib/chat/types';
+import { DecisionBranch, DecisionNode } from '@/lib/chat/types';
 
-type ChatViewMode = 'linear' | 'branches' | 'timeline';
+type ChatViewMode = 'linear' | 'branches';
 
 interface ChatPanelProps {
   activeVolume: 'system' | 'team' | 'user';
@@ -53,120 +51,7 @@ export default function ChatPanel({
     isOpen: false,
   });
   const [viewMode, setViewMode] = useState<ChatViewMode>('linear');
-  const [activeVoting, setActiveVoting] = useState<VotingSession | null>(null);
-  const [voteCounts, setVoteCounts] = useState<Map<string, number>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Demo voting handler
-  const handleVote = (solutionId: string, voteType: 'up' | 'down') => {
-    if (!activeVoting) return;
-
-    setVoteCounts(prev => {
-      const newCounts = new Map(prev);
-      const current = newCounts.get(solutionId) || 0;
-      newCounts.set(solutionId, voteType === 'up' ? current + 1 : current - 1);
-      return newCounts;
-    });
-
-    // Update voting session with vote
-    setActiveVoting(prev => {
-      if (!prev) return null;
-      const newVote = {
-        id: `vote-${Date.now()}`,
-        participantId: 'user',
-        participantName: 'User',
-        participantType: 'user' as const,
-        solutionId,
-        voteType,
-        weight: 1,
-        timestamp: Date.now(),
-      };
-      return {
-        ...prev,
-        solutions: prev.solutions.map(s =>
-          s.id === solutionId
-            ? { ...s, votes: [...s.votes, newVote] }
-            : s
-        ),
-      };
-    });
-  };
-
-  // Create demo voting session when user sends a question that suggests options
-  const createDemoVoting = (question: string): VotingSession | null => {
-    if (!question.toLowerCase().includes('should') &&
-        !question.toLowerCase().includes('which') &&
-        !question.toLowerCase().includes('what approach')) {
-      return null;
-    }
-
-    const solutions: ProposedSolution[] = [
-      {
-        id: 'sol-1',
-        proposerId: 'agent-1',
-        proposerName: 'Claude (Strategy)',
-        proposerType: 'agent',
-        content: 'I recommend a systematic approach with careful planning and testing at each step.',
-        confidence: 0.85,
-        reasoning: 'Based on best practices for sustainable development',
-        estimatedImpact: 'medium',
-        votes: [],
-        status: 'voting',
-        timestamp: Date.now(),
-      },
-      {
-        id: 'sol-2',
-        proposerId: 'agent-2',
-        proposerName: 'Claude (Speed)',
-        proposerType: 'agent',
-        content: 'Let\'s implement quickly with an MVP and iterate based on feedback.',
-        confidence: 0.75,
-        reasoning: 'Faster time to value with continuous improvement',
-        estimatedImpact: 'high',
-        votes: [],
-        status: 'voting',
-        timestamp: Date.now(),
-      },
-      {
-        id: 'sol-3',
-        proposerId: 'user',
-        proposerName: 'User Choice',
-        proposerType: 'user',
-        content: 'Custom approach based on specific requirements.',
-        confidence: 0.6,
-        reasoning: 'User-defined approach',
-        estimatedImpact: 'low',
-        votes: [],
-        status: 'voting',
-        timestamp: Date.now(),
-      },
-    ];
-
-    return {
-      id: `vote-${Date.now()}`,
-      questionId: `q-${Date.now()}`,
-      question: question,
-      solutions,
-      participants: [
-        { id: 'user', name: 'User', type: 'user', role: 'voter', online: true },
-        { id: 'agent-1', name: 'Claude (Strategy)', type: 'agent', role: 'proposer', online: true },
-        { id: 'agent-2', name: 'Claude (Speed)', type: 'agent', role: 'proposer', online: true },
-      ],
-      rules: {
-        timeoutSeconds: 60,
-        minVotes: 1,
-        userVoteWeight: 2,
-        agentVoteWeight: 1,
-        autoDecideOnTimeout: true,
-        requireUserVote: false,
-        majorityThreshold: 0.5,
-      },
-      status: 'active',
-      startTime: Date.now(),
-      endTime: Date.now() + 60000, // 60 seconds
-      totalVotes: 0,
-    };
-  };
 
   // Get messages from current workspace (volume)
   const messages = currentWorkspace?.messages || [];
@@ -231,26 +116,6 @@ export default function ChatPanel({
       currentHead: lastNodeId,
       history: [],
       rootId,
-    };
-  }, [messages]);
-
-  // Build timeline from messages
-  const timeline = useMemo<TimelineView>(() => {
-    const past: CompletedDecision[] = messages
-      .filter(m => m.role === 'user')
-      .map((m, idx) => ({
-        id: `decision-${idx}`,
-        question: m.content.slice(0, 100),
-        selectedOption: 'Completed',
-        alternatives: [],
-        timestamp: Date.now() - (messages.length - idx) * 60000,
-        participants: ['user', 'assistant'],
-      }));
-
-    return {
-      past,
-      present: null,
-      future: [],
     };
   }, [messages]);
 
@@ -597,120 +462,52 @@ export default function ChatPanel({
   // Active conversation view
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Workspace Header - With View Mode Toggle */}
-      <div className="px-3 py-2 border-b border-border-primary/50 bg-bg-secondary/50 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          {/* Model Selector */}
-          <ModelSelector onModelChange={(modelId) => {
-            console.log('[ChatPanel] Model changed to:', modelId);
-          }} />
-
-          {/* Separator */}
-          <div className="w-px h-4 bg-border-primary/50" />
-
-          {/* View Mode Toggle - Git Graph Style */}
-          <div className="flex items-center bg-bg-tertiary rounded-lg p-0.5">
+      {/* Minimal Header */}
+      <div className="px-3 py-1.5 border-b border-border-primary/30 bg-bg-secondary/30 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          {/* Left: View Toggle */}
+          <div className="flex items-center bg-bg-tertiary/50 rounded p-0.5">
             <button
               onClick={() => setViewMode('linear')}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
+              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
                 viewMode === 'linear'
-                  ? 'bg-accent-primary text-white shadow-sm'
-                  : 'text-fg-secondary hover:text-fg-primary'
+                  ? 'bg-bg-elevated text-fg-primary'
+                  : 'text-fg-muted hover:text-fg-secondary'
               }`}
-              title="Linear chat view"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
               Chat
             </button>
             <button
               onClick={() => setViewMode('branches')}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
+              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
                 viewMode === 'branches'
-                  ? 'bg-accent-primary text-white shadow-sm'
-                  : 'text-fg-secondary hover:text-fg-primary'
+                  ? 'bg-bg-elevated text-fg-primary'
+                  : 'text-fg-muted hover:text-fg-secondary'
               }`}
-              title="Git-style branch view"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
               Graph
             </button>
-            <button
-              onClick={() => setViewMode('timeline')}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
-                viewMode === 'timeline'
-                  ? 'bg-accent-primary text-white shadow-sm'
-                  : 'text-fg-secondary hover:text-fg-primary'
-              }`}
-              title="Timeline view"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Timeline
-            </button>
           </div>
 
-          {/* Separator */}
-          <div className="w-px h-4 bg-border-primary/50" />
-
-          {/* Voting Demo Toggle */}
-          <button
-            onClick={() => {
-              if (activeVoting) {
-                setActiveVoting(null);
-                setVoteCounts(new Map());
-              } else {
-                const demoVoting = createDemoVoting('Which approach should we take for this task?');
-                if (demoVoting) {
-                  setActiveVoting(demoVoting);
-                  setVoteCounts(new Map(demoVoting.solutions.map(s => [s.id, 0])));
-                }
-              }
-            }}
-            className={`px-2.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1 ${
-              activeVoting
-                ? 'bg-accent-success text-white'
-                : 'bg-bg-tertiary text-fg-secondary hover:text-fg-primary hover:bg-bg-elevated'
-            }`}
-            title="Toggle voting demo"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-            Vote
-          </button>
-
-          {/* Workspace indicator */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-xs text-fg-secondary capitalize">{activeVolume}</span>
-          </div>
-
-          {/* Right side - message count */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-fg-tertiary">{messages.length} msgs</span>
+          {/* Right: Model & Count */}
+          <div className="flex items-center gap-2">
+            <ModelSelector onModelChange={(modelId) => {
+              console.log('[ChatPanel] Model changed to:', modelId);
+            }} />
+            <span className="text-[10px] text-fg-muted">{messages.length}</span>
           </div>
         </div>
       </div>
 
-      {/* Content Area - Switches based on viewMode */}
+      {/* Content Area */}
       {viewMode === 'branches' ? (
         <GitGraphView
           branch={decisionGraph}
           onSelectNode={(node) => console.log('Selected node:', node)}
           selectedNodeId={undefined}
         />
-      ) : viewMode === 'timeline' ? (
-        <FlowTimeline
-          timeline={timeline}
-          onSelectDecision={(id) => console.log('Selected decision:', id)}
-          showPredictions={true}
-        />
       ) : (
-      /* Linear Chat View */
+      /* Chat View */
       <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin">
         {messages.map((message, idx) => (
           <div key={message.id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
@@ -783,31 +580,6 @@ export default function ChatPanel({
             )}
           </div>
         ))}
-
-        {/* Active Voting Session */}
-        {activeVoting && activeVoting.status === 'active' && (
-          <div className="animate-fade-in">
-            <VotingCard
-              session={activeVoting}
-              currentUserId="user"
-              onVote={handleVote}
-              onExtendTime={(seconds) => {
-                setActiveVoting(prev => prev ? {
-                  ...prev,
-                  endTime: prev.endTime + seconds * 1000
-                } : null);
-              }}
-              onAutoDecide={() => {
-                // Pick winner based on votes
-                const maxVotes = Math.max(...Array.from(voteCounts.values()));
-                const winnerId = Array.from(voteCounts.entries()).find(([_, v]) => v === maxVotes)?.[0] || activeVoting.solutions[0].id;
-                setActiveVoting(prev => prev ? { ...prev, status: 'completed', winner: winnerId } : null);
-              }}
-              voteCounts={voteCounts}
-              winningProbabilities={new Map(activeVoting.solutions.map(s => [s.id, s.confidence]))}
-            />
-          </div>
-        )}
 
         {/* Agent Activity Display */}
         {(isLoading || agentActivities.length > 0) && (
