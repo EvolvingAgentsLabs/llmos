@@ -87,16 +87,24 @@ export interface OrchestratorEvents {
   'phase:changed': { phase: 'planning' | 'coordinating' | 'executing' | 'reviewing' | 'completed' };
 }
 
-// Default agent colors
+// Default agent colors - distinct for each actor type
 const AGENT_COLORS: Record<string, string> = {
-  'system-agent': '#a371f7',
-  'planner': '#3fb950',
-  'coder': '#ffa657',
-  'reviewer': '#f778ba',
-  'analyst': '#79c0ff',
+  'user': '#58a6ff',           // Blue for user
+  'system-agent': '#a371f7',   // Purple for system agent
+  'planner': '#3fb950',        // Green for planning agent
+  'coder': '#ffa657',          // Orange for coding agent
+  'reviewer': '#f778ba',       // Pink for review agent
+  'analyst': '#79c0ff',        // Light blue for analyst
   'SystemAgent': '#a371f7',
   'default': '#8b949e',
 };
+
+// Voting timeout in milliseconds (30 seconds default)
+const VOTING_TIMEOUT_MS = 30000;
+
+// Pause/Resume event names
+const ORCHESTRATOR_PAUSE_EVENT = 'orchestrator:pause';
+const ORCHESTRATOR_RESUME_EVENT = 'orchestrator:resume';
 
 /**
  * Multi-Agent Chat Orchestrator
@@ -105,6 +113,7 @@ const AGENT_COLORS: Record<string, string> = {
  * 1. Wraps the real SystemAgentOrchestrator (which uses SystemAgent.md)
  * 2. Translates AgentProgressEvent → Chat UI events
  * 3. Tracks participants and messages for the chat interface
+ * 4. Handles voting timeouts and pause/resume functionality
  *
  * The actual agent logic lives in:
  * - /system/agents/SystemAgent.md (the evolutive markdown agent)
@@ -118,10 +127,49 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   private vfs = getVFS();
   private currentMessageId: string | null = null;
   private pendingToolCalls: Map<string, AgentCallInfo> = new Map();
+  private isPaused: boolean = false;
+  private pausePromiseResolve: (() => void) | null = null;
+  private votingTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
     this.initializeSystemAgent();
+    this.setupPauseListeners();
+  }
+
+  /**
+   * Setup listeners for pause/resume events from header
+   */
+  private setupPauseListeners(): void {
+    if (typeof window !== 'undefined') {
+      window.addEventListener(ORCHESTRATOR_PAUSE_EVENT, () => {
+        this.isPaused = true;
+        logger.info('agent', 'Orchestrator paused');
+        this.emit('paused', { paused: true });
+      });
+
+      window.addEventListener(ORCHESTRATOR_RESUME_EVENT, () => {
+        this.isPaused = false;
+        logger.info('agent', 'Orchestrator resumed');
+        this.emit('paused', { paused: false });
+        // Resolve any pending pause promise
+        if (this.pausePromiseResolve) {
+          this.pausePromiseResolve();
+          this.pausePromiseResolve = null;
+        }
+      });
+    }
+  }
+
+  /**
+   * Wait if paused - returns immediately if not paused
+   */
+  private async waitIfPaused(): Promise<void> {
+    if (!this.isPaused) return;
+
+    return new Promise<void>((resolve) => {
+      this.pausePromiseResolve = resolve;
+    });
   }
 
   /**
@@ -522,6 +570,10 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       this.setPhase('coordinating');
       this.updateParticipantStatus('system-agent', 'idle');
       logger.info('agent', `Decision point detected with ${options.length} options`);
+
+      // Start voting timeout - auto-select first option if no response
+      this.startVotingTimeout(options, finalMessage.id);
+
       return; // Don't mark as completed - waiting for user vote
     }
 
@@ -535,6 +587,61 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
 
     this.setPhase('completed');
     this.updateParticipantStatus('system-agent', 'done');
+  }
+
+  /**
+   * Start a voting timeout - auto-selects first option if no user response
+   */
+  private startVotingTimeout(options: AgentProposal[], messageId: string): void {
+    // Clear any existing timeout
+    this.cancelVotingTimeout();
+
+    // Emit countdown event for UI
+    let remainingSeconds = VOTING_TIMEOUT_MS / 1000;
+    const countdownInterval = setInterval(() => {
+      remainingSeconds--;
+      this.emit('voting:countdown', { seconds: remainingSeconds, messageId });
+      if (remainingSeconds <= 0) {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+
+    this.votingTimeoutId = setTimeout(async () => {
+      clearInterval(countdownInterval);
+
+      // Check if still in coordinating phase (user hasn't voted yet)
+      if (this.currentPhase === 'coordinating' && !this.isPaused) {
+        // Auto-select the first option (or one marked as recommended)
+        const recommendedOption = options[0];
+        if (recommendedOption) {
+          logger.info('agent', `Voting timeout - auto-selecting: ${recommendedOption.agentName}`);
+          this.addSystemMessage(`⏱️ Voting timeout - automatically proceeding with ${recommendedOption.agentName}`);
+
+          // Mark as selected
+          recommendedOption.selected = true;
+          recommendedOption.votes++;
+
+          // Find and update the message
+          const message = this.messages.find(m => m.id === messageId);
+          if (message) {
+            this.emit('message:updated', message);
+          }
+
+          // Continue with the auto-selected option
+          await this.continueWithSelection(`Auto-selected ${recommendedOption.agentName}: ${recommendedOption.content}`);
+        }
+      }
+    }, VOTING_TIMEOUT_MS);
+  }
+
+  /**
+   * Cancel any active voting timeout
+   */
+  private cancelVotingTimeout(): void {
+    if (this.votingTimeoutId) {
+      clearTimeout(this.votingTimeoutId);
+      this.votingTimeoutId = null;
+    }
   }
 
   /**
@@ -711,6 +818,9 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
    * Select a specific option by letter (A, B, C, etc.)
    */
   async selectOption(optionLetter: string): Promise<void> {
+    // Cancel any active voting timeout since user is responding
+    this.cancelVotingTimeout();
+
     // Find the most recent decision point message
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const message = this.messages[i];
