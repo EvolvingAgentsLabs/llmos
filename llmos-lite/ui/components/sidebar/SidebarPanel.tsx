@@ -200,7 +200,7 @@ export default function SidebarPanel({
 
         {/* Chat Content */}
         {expandedSection === 'chat' && (
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto">
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-2">
