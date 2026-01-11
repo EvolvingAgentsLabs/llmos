@@ -123,6 +123,7 @@ export interface DecisionNode {
     timeToDecision?: number;
     proposalId?: string;
     votingSessionId?: string;
+    selectedId?: string;
   };
   position: { x: number; y: number; column: number };
   timestamp: number;
