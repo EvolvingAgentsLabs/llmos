@@ -503,6 +503,7 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
   private executionPhase: 'planning' | 'awaiting_vote' | 'executing' | 'completed' = 'planning';
   private pendingGoal: string = '';
   private selectedApproach: string = '';
+  private planningContext: string = ''; // Store planning analysis for continuation
 
   /**
    * Process a user goal using phased execution with forced decision points
@@ -534,9 +535,11 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     this.messages.push(userMessage);
     this.emit('message:added', userMessage);
 
-    // Store goal for continuation
+    // Store goal for continuation and reset state
     this.pendingGoal = goal;
     this.executionPhase = 'planning';
+    this.planningContext = ''; // Clear previous planning context
+    this.selectedApproach = '';
 
     // Set phase to planning
     this.setPhase('planning');
@@ -552,6 +555,9 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
       // PHASE 1: Get approach options (FORCED DECISION POINT)
       const planningPrompt = this.buildPlanningPrompt(goal);
       const planningResult = await orchestrator.execute(planningPrompt);
+
+      // Store planning context for use in continuation phase
+      this.planningContext = planningResult.response;
 
       // Check if planning response contains options, if not inject forced options
       const options = this.parseOptionsFromResponse(planningResult.response);
@@ -826,16 +832,28 @@ Present these options NOW. Do not execute any tools.`;
     try {
       const orchestrator = await this.initializeOrchestrator();
 
-      // Build continuation prompt with selected approach
-      const continuationPrompt = `CONTINUE EXECUTION with selected approach.
+      // Build continuation prompt with selected approach and planning context
+      // This prompt must be explicit about EXECUTION mode to prevent re-analysis
+      const continuationPrompt = `EXECUTION PHASE - ACTION REQUIRED
+
+You are now in EXECUTION MODE. The planning phase is COMPLETE. A decision has been made.
 
 ORIGINAL GOAL: ${this.pendingGoal}
 
 SELECTED APPROACH: ${selectedOption.agentName}
 ${selectedOption.content}
 
-Now execute this approach. Use tools to accomplish the goal.
-Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "message"`;
+PLANNING CONTEXT (from analysis phase):
+${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
+
+CRITICAL INSTRUCTIONS:
+1. DO NOT propose more options or ask for choices - the decision is FINAL
+2. DO NOT re-analyze or re-plan - proceed directly to ACTION
+3. YOU MUST USE TOOLS to accomplish the goal
+4. Execute the selected approach step by step
+5. Show progress using sub-agent dialog format: 🤖 [AgentName] → [Target]: "message"
+
+START EXECUTING NOW. Call the necessary tools to accomplish the goal.`;
 
       const result = await orchestrator.execute(continuationPrompt);
       await this.handleExecutionResult(result, timestamp);
@@ -1016,7 +1034,14 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
     }
 
     // Final response - check for decision points (options)
-    const options = this.parseOptionsFromResponse(result.response);
+    // Skip option parsing if we're in 'executing' phase (user already voted)
+    // to prevent infinite decision loops
+    const skipDecisionPoint = this.executionPhase === 'executing';
+    const options = skipDecisionPoint ? [] : this.parseOptionsFromResponse(result.response);
+
+    if (skipDecisionPoint && result.response.includes('OPTION')) {
+      logger.info('agent', 'Skipping decision point detection - already in execution phase');
+    }
 
     // Generate predictions for next steps
     const predictions = this.generatePredictions(this.currentPhase, options);
@@ -1036,6 +1061,7 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
     this.emit('message:added', finalMessage);
 
     // If there are options, set phase to coordinating (waiting for vote)
+    // Only create new decision points if not already in execution phase
     if (options.length > 0) {
       this.setPhase('coordinating');
       this.updateParticipantStatus('system-agent', 'idle');
@@ -1063,6 +1089,8 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
       }
     }
 
+    // Mark execution as completed and reset state
+    this.executionPhase = 'completed';
     this.setPhase('completed');
     this.updateParticipantStatus('system-agent', 'done');
   }
@@ -1513,10 +1541,11 @@ Remember to show sub-agent dialog using format: 🤖 [AgentName] → [Target]: "
     // Cancel any speculative executions
     this.speculativeExecutor.cancelAll();
 
-    // Reset execution phase
+    // Reset execution phase and all state
     this.executionPhase = 'completed';
     this.pendingGoal = '';
     this.selectedApproach = '';
+    this.planningContext = '';
 
     // Update participant status
     this.updateParticipantStatus('system-agent', 'idle');
