@@ -98,7 +98,7 @@ export default function SidebarPanel({
   };
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col overflow-hidden bg-bg-secondary">
+    <div ref={containerRef} className="h-full flex flex-col overflow-hidden bg-[#161b22]">
       {/* ========== FILES SECTION ========== */}
       <div className={`flex flex-col overflow-hidden transition-all duration-200 ${
         expandedSection === 'files' ? 'flex-1' : 'flex-shrink-0'
@@ -108,25 +108,25 @@ export default function SidebarPanel({
           onClick={() => handleSectionToggle('files')}
           className={`w-full px-3 py-2.5 flex items-center justify-between transition-colors ${
             expandedSection === 'files'
-              ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
-              : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
-          } border-b border-border-primary/50`}
+              ? 'bg-[#21262d] border-l-2 border-l-[#58a6ff] shadow-sm'
+              : 'bg-[#30363d]/60 border-l-2 border-l-transparent hover:bg-[#30363d]'
+          } border-b border-[#30363d]/50`}
         >
           <div className="flex items-center gap-2">
             {expandedSection === 'files' ? (
-              <ChevronDown className="w-4 h-4 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-[#58a6ff]" />
             ) : (
-              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-[#8b949e]" />
             )}
-            <FolderTree className={`w-4 h-4 ${expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <FolderTree className={`w-4 h-4 ${expandedSection === 'files' ? 'text-[#58a6ff]' : 'text-[#c9d1d9]'}`} />
             <span className={`text-xs font-semibold uppercase tracking-wide ${
-              expandedSection === 'files' ? 'text-accent-primary' : 'text-fg-secondary'
+              expandedSection === 'files' ? 'text-[#58a6ff]' : 'text-[#c9d1d9]'
             }`}>
               Files
             </span>
           </div>
           {expandedSection !== 'files' && (
-            <span className="px-2 py-0.5 rounded-full bg-bg-elevated text-fg-tertiary text-[10px] font-medium capitalize">
+            <span className="px-2 py-0.5 rounded-full bg-[#21262d] text-[#8b949e] text-[10px] font-medium capitalize">
               {activeVolume}
             </span>
           )}
@@ -153,26 +153,26 @@ export default function SidebarPanel({
         {/* Chat Header */}
         <div className={`flex items-center justify-between transition-colors ${
           expandedSection === 'chat'
-            ? 'bg-bg-elevated border-l-2 border-l-accent-primary shadow-sm'
-            : 'bg-bg-tertiary/60 border-l-2 border-l-transparent hover:bg-bg-tertiary'
-        } border-b border-border-primary/50`}>
+            ? 'bg-[#21262d] border-l-2 border-l-[#58a6ff] shadow-sm'
+            : 'bg-[#30363d]/60 border-l-2 border-l-transparent hover:bg-[#30363d]'
+        } border-b border-[#30363d]/50`}>
           <button
             onClick={() => handleSectionToggle('chat')}
             className="flex-1 px-3 py-2.5 flex items-center gap-2"
           >
             {expandedSection === 'chat' ? (
-              <ChevronDown className="w-4 h-4 text-accent-primary" />
+              <ChevronDown className="w-4 h-4 text-[#58a6ff]" />
             ) : (
-              <ChevronRight className="w-4 h-4 text-fg-tertiary" />
+              <ChevronRight className="w-4 h-4 text-[#8b949e]" />
             )}
-            <Bot className={`w-4 h-4 ${expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-secondary'}`} />
+            <Bot className={`w-4 h-4 ${expandedSection === 'chat' ? 'text-[#58a6ff]' : 'text-[#c9d1d9]'}`} />
             <span className={`text-xs font-semibold uppercase tracking-wide ${
-              expandedSection === 'chat' ? 'text-accent-primary' : 'text-fg-secondary'
+              expandedSection === 'chat' ? 'text-[#58a6ff]' : 'text-[#c9d1d9]'
             }`}>
               Chat
             </span>
             {messageCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-bg-primary text-fg-tertiary text-[10px] font-medium">
+              <span className="px-2 py-0.5 rounded-full bg-[#0d1117] text-[#8b949e] text-[10px] font-medium">
                 {messageCount} msg
               </span>
             )}
@@ -189,7 +189,7 @@ export default function SidebarPanel({
             <div className="flex items-center gap-1 pr-2">
               <button
                 onClick={handleClearChat}
-                className="p-1.5 rounded hover:bg-red-500/20 text-fg-tertiary hover:text-red-400 transition-colors"
+                className="p-1.5 rounded hover:bg-red-500/20 text-[#8b949e] hover:text-red-400 transition-colors"
                 title="Clear chat history"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -204,7 +204,7 @@ export default function SidebarPanel({
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 border-2 border-accent-primary/20 border-t-accent-primary rounded-full animate-spin" />
+                  <div className="w-8 h-8 border-2 border-[#58a6ff]/20 border-t-[#58a6ff] rounded-full animate-spin" />
                   <span className="text-xs text-fg-muted">Loading chat...</span>
                 </div>
               </div>
@@ -220,23 +220,23 @@ export default function SidebarPanel({
       {/* Clear Chat Confirmation Dialog */}
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-bg-secondary border border-border-primary rounded-lg shadow-xl p-4 max-w-sm mx-4 animate-fade-in">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl p-4 max-w-sm mx-4 animate-fade-in">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-fg-primary">Clear Chat History?</h3>
-                <p className="text-xs text-fg-tertiary">This will remove {messageCount} message(s)</p>
+                <h3 className="text-sm font-semibold text-[#e6edf3]">Clear Chat History?</h3>
+                <p className="text-xs text-[#8b949e]">This will remove {messageCount} message(s)</p>
               </div>
             </div>
-            <p className="text-xs text-fg-secondary mb-4">
+            <p className="text-xs text-[#c9d1d9] mb-4">
               This action cannot be undone. All chat history for the {activeVolume} workspace will be cleared.
             </p>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setShowClearConfirm(false)}
-                className="px-3 py-1.5 text-xs rounded bg-bg-tertiary text-fg-secondary hover:bg-bg-elevated transition-colors"
+                className="px-3 py-1.5 text-xs rounded bg-[#30363d] text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
               >
                 Cancel
               </button>

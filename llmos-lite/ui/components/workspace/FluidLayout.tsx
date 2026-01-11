@@ -33,8 +33,8 @@ function PanelLoader() {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 border-3 border-accent-primary/20 border-t-accent-primary rounded-full animate-spin" />
-        <span className="text-sm text-fg-muted">Loading...</span>
+        <div className="w-12 h-12 border-3 border-[#C15F3C]/20 border-t-[#C15F3C] rounded-full animate-spin" />
+        <span className="text-sm text-[#484f58]">Loading...</span>
       </div>
     </div>
   );
@@ -54,8 +54,8 @@ function SidebarWrapper({
   onVolumeChange,
 }: SidebarWrapperProps) {
   return (
-    <div className="h-full bg-bg-secondary/30">
-      <Suspense fallback={<div className="p-4 text-fg-muted">Loading...</div>}>
+    <div className="h-full bg-[#161b22]/30">
+      <Suspense fallback={<div className="p-4 text-[#484f58]">Loading...</div>}>
         <SidebarPanel
           activeVolume={activeVolume}
           onVolumeChange={onVolumeChange}
@@ -90,7 +90,7 @@ function CortexStatus() {
           <div className={`absolute inset-0 rounded-full ${config.color} animate-ping`} />
         )}
       </div>
-      <span className="text-xs text-fg-secondary">{config.label}</span>
+      <span className="text-xs text-[#8b949e]">{config.label}</span>
     </div>
   );
 }
@@ -321,13 +321,13 @@ export default function FluidLayout() {
   }, [openCommandPalette]);
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-primary relative">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#0d1117] relative">
       {/* HEADER */}
-      <header className="h-12 flex items-center justify-between px-4 bg-bg-secondary border-b border-border-primary">
+      <header className="h-12 flex items-center justify-between px-4 bg-[#161b22] border-b border-[#30363d]">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-            className={`p-1.5 rounded-lg transition-colors ${!isLeftPanelCollapsed ? 'bg-accent-primary/20 text-accent-primary' : 'hover:bg-white/10 text-fg-secondary'}`}
+            className={`p-1.5 rounded-lg transition-colors ${!isLeftPanelCollapsed ? 'bg-[#C15F3C]/20 text-[#C15F3C]' : 'hover:bg-white/10 text-[#8b949e]'}`}
             title="Toggle sidebar (Ctrl+B)"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -337,7 +337,7 @@ export default function FluidLayout() {
 
           <button
             onClick={() => setContextViewMode('applets')}
-            className={`p-1.5 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-accent-primary text-white' : 'hover:bg-white/10 text-fg-secondary'}`}
+            className={`p-1.5 rounded-lg transition-colors ${contextViewMode === 'applets' ? 'bg-[#C15F3C] text-white' : 'hover:bg-white/10 text-[#8b949e]'}`}
             title="Desktop"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -346,10 +346,10 @@ export default function FluidLayout() {
           </button>
 
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-md bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
+            <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[#C15F3C] to-accent-secondary flex items-center justify-center">
               <span className="text-white text-[10px] font-bold">L</span>
             </div>
-            <span className="font-medium text-sm text-fg-primary">LLMos</span>
+            <span className="font-medium text-sm text-[#e6edf3]">LLMos</span>
           </div>
         </div>
 
@@ -357,11 +357,11 @@ export default function FluidLayout() {
           <CortexStatus />
 
           {activeFilePath && (
-            <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-elevated text-xs text-fg-secondary">
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#21262d] text-xs text-[#8b949e]">
               <span className="truncate max-w-[150px]">{activeFilePath.split('/').pop()}</span>
               <button
                 onClick={() => setContextViewMode('applets')}
-                className="text-fg-tertiary hover:text-fg-primary"
+                className="text-[#6e7681] hover:text-[#e6edf3]"
                 title="Close file"
               >
                 x
@@ -379,7 +379,7 @@ export default function FluidLayout() {
                 window.location.reload();
               }
             }}
-            className="p-2 rounded-lg text-fg-secondary hover:text-red-400 hover:bg-red-500/10 transition-all"
+            className="p-2 rounded-lg text-[#8b949e] hover:text-red-400 hover:bg-red-500/10 transition-all"
             title="Logout & Clear Data"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -389,7 +389,7 @@ export default function FluidLayout() {
 
           <button
             onClick={openCommandPalette}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-elevated border border-border-primary text-fg-secondary hover:text-fg-primary hover:bg-bg-hover transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#21262d] border border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-bg-hover transition-all"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -406,16 +406,16 @@ export default function FluidLayout() {
         {/* LEFT PANEL */}
         {!isLeftPanelCollapsed && (
           <div
-            className={`flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 ${
+            className={`flex flex-col bg-[#161b22] border-r border-[#30363d] transition-all duration-200 ${
               maximizedPanel === 'right' ? 'hidden' : maximizedPanel === 'left' ? 'w-full' : ''
             }`}
             style={{ width: maximizedPanel === 'left' ? '100%' : maximizedPanel === 'right' ? 0 : leftPanelWidth }}
           >
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
-              <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">Explorer</span>
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#30363d] bg-[#21262d]/50">
+              <span className="text-[10px] font-semibold text-[#6e7681] uppercase tracking-wider">Explorer</span>
               <button
                 onClick={() => toggleMaximize('left')}
-                className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
+                className="p-1 rounded hover:bg-white/10 text-[#484f58] hover:text-[#e6edf3] transition-colors"
                 title={maximizedPanel === 'left' ? 'Restore' : 'Maximize'}
               >
                 {maximizedPanel === 'left' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
@@ -434,31 +434,31 @@ export default function FluidLayout() {
         {/* RESIZE HANDLE */}
         {maximizedPanel === null && !isLeftPanelCollapsed && (
           <div
-            className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary cursor-col-resize transition-all flex-shrink-0 relative group"
+            className="w-1 hover:w-1.5 bg-border-primary hover:bg-[#C15F3C] cursor-col-resize transition-all flex-shrink-0 relative group"
             onMouseDown={handleResizeStart}
           >
-            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-accent-primary/20" />
+            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-[#C15F3C]/20" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="w-1 h-1 rounded-full bg-accent-primary" />
-              <div className="w-1 h-1 rounded-full bg-accent-primary" />
-              <div className="w-1 h-1 rounded-full bg-accent-primary" />
+              <div className="w-1 h-1 rounded-full bg-[#C15F3C]" />
+              <div className="w-1 h-1 rounded-full bg-[#C15F3C]" />
+              <div className="w-1 h-1 rounded-full bg-[#C15F3C]" />
             </div>
           </div>
         )}
 
         {/* RIGHT PANEL */}
         <div
-          className={`flex-1 flex flex-col overflow-hidden bg-bg-primary relative ${
+          className={`flex-1 flex flex-col overflow-hidden bg-[#0d1117] relative ${
             maximizedPanel === 'left' ? 'hidden' : maximizedPanel === 'right' ? 'w-full' : ''
           }`}
         >
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-primary bg-bg-elevated/50">
-            <span className="text-[10px] font-semibold text-fg-tertiary uppercase tracking-wider">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#30363d] bg-[#21262d]/50">
+            <span className="text-[10px] font-semibold text-[#6e7681] uppercase tracking-wider">
               {activeFilePath ? activeFilePath.split('/').pop() : 'Desktop'}
             </span>
             <button
               onClick={() => toggleMaximize('right')}
-              className="p-1 rounded hover:bg-white/10 text-fg-muted hover:text-fg-primary transition-colors"
+              className="p-1 rounded hover:bg-white/10 text-[#484f58] hover:text-[#e6edf3] transition-colors"
               title={maximizedPanel === 'right' ? 'Restore' : 'Maximize'}
             >
               {maximizedPanel === 'right' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
