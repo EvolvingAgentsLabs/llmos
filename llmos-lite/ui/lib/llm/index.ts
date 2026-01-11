@@ -15,6 +15,8 @@ export type {
   ChatCompletionOptions,
   StreamChunk,
   ModelId,
+  ModelInfo,
+  PresetModelId,
 } from './types';
 
 export { AVAILABLE_MODELS } from './types';

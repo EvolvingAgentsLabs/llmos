@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AVAILABLE_MODELS, LLMStorage, type ModelId } from '@/lib/llm-client';
+import { AVAILABLE_MODELS, LLMStorage } from '@/lib/llm-client';
 
 interface ModelSelectorProps {
-  onModelChange?: (modelId: ModelId) => void;
+  onModelChange?: (modelId: string) => void;
   dropdownPosition?: 'bottom' | 'top';
 }
 
-export default function ModelSelector({ onModelChange, dropdownPosition = 'bottom' }: ModelSelectorProps) {
-  const [selectedModel, setSelectedModel] = useState<ModelId | null>(null);
+export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [customModel, setCustomModel] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(false);
@@ -25,9 +25,14 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
         setCustomModel(currentModel);
       }
     }
+    // Load previously saved custom model for the input field
+    const savedCustomModel = LLMStorage.getCustomModel();
+    if (savedCustomModel && !customModel) {
+      setCustomModel(savedCustomModel);
+    }
   }, []);
 
-  const handleModelSelect = (modelId: ModelId) => {
+  const handleModelSelect = (modelId: string) => {
     setSelectedModel(modelId);
     LLMStorage.saveModel(modelId);
     setIsOpen(false);
@@ -38,26 +43,20 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
   const handleCustomModelSubmit = () => {
     if (!customModel.trim()) return;
 
-    const customModelId = customModel.trim() as ModelId;
+    const customModelId = customModel.trim();
     setSelectedModel(customModelId);
     LLMStorage.saveModel(customModelId);
+    LLMStorage.saveCustomModel(customModelId);
     setIsOpen(false);
     setIsCustomMode(true);
     onModelChange?.(customModelId);
   };
 
   const currentModelInfo = selectedModel ? AVAILABLE_MODELS[selectedModel] : null;
-  const displayName = currentModelInfo?.name || (isCustomMode ? customModel : 'Select Model');
+  const displayName = currentModelInfo?.name || (isCustomMode ? customModel.split('/').pop() : 'Select Model');
 
-  // Group models by provider
-  const modelsByProvider = Object.entries(AVAILABLE_MODELS).reduce((acc, [key, model]) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push({ key: key as ModelId, ...model });
-    return acc;
-  }, {} as Record<string, Array<{ key: ModelId; id: string; name: string; provider: string; inputCost: string; outputCost: string; contextWindow: string }>>);
+  // Get models as array
+  const models = Object.entries(AVAILABLE_MODELS).map(([key, model]) => ({ key, ...model }));
 
   return (
     <div className="relative">
@@ -92,7 +91,7 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
 
           {/* Menu - Centered in viewport */}
           <div
-            className="fixed w-96 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl max-h-[70vh] overflow-y-auto"
+            className="fixed w-80 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl"
             style={{
               zIndex: 9999,
               top: '50%',
@@ -102,90 +101,74 @@ export default function ModelSelector({ onModelChange, dropdownPosition = 'botto
           >
             <div className="p-3 border-b border-border-primary bg-bg-tertiary">
               <h3 className="text-xs font-semibold text-fg-primary">Select AI Model</h3>
-              <p className="text-[10px] text-fg-tertiary mt-0.5">Choose the model for your conversations</p>
             </div>
 
-            <div className="p-2 space-y-3">
-              {/* Custom Model Input */}
-              <div className="space-y-2 pb-3 border-b border-border-primary">
-                <div className="px-2 py-1">
-                  <h4 className="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">Custom Model</h4>
-                </div>
-                <div className="px-2 space-y-2">
-                  <input
-                    type="text"
-                    value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleCustomModelSubmit();
-                      }
-                    }}
-                    placeholder="e.g., deepseek/deepseek-r1-0528:free"
-                    className="w-full px-3 py-2 text-xs bg-bg-tertiary border border-border-primary rounded-lg focus:outline-none focus:border-accent-primary transition-colors"
-                  />
-                  <button
-                    onClick={handleCustomModelSubmit}
-                    disabled={!customModel.trim()}
-                    className="w-full px-3 py-2 text-xs font-medium bg-accent-primary/20 text-accent-primary border border-accent-primary/50 rounded-lg hover:bg-accent-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Use Custom Model
-                  </button>
-                  <p className="text-[10px] text-fg-tertiary">
-                    Enter any OpenRouter model ID
-                  </p>
-                </div>
-              </div>
-
+            <div className="p-3 space-y-2">
               {/* Preset Models */}
-              {Object.entries(modelsByProvider).map(([provider, models]) => (
-                <div key={provider} className="space-y-1">
-                  <div className="px-2 py-1">
-                    <h4 className="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">{provider}</h4>
-                  </div>
-                  {models.map((model) => (
-                    <button
-                      key={model.key}
-                      onClick={() => handleModelSelect(model.key)}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-all duration-200 ${
-                        selectedModel === model.key && !isCustomMode
-                          ? 'bg-accent-primary/20 border border-accent-primary/50'
-                          : 'bg-bg-tertiary border border-transparent hover:border-border-primary hover:bg-bg-elevated'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-medium ${selectedModel === model.key && !isCustomMode ? 'text-accent-primary' : 'text-fg-primary'}`}>
-                              {model.name}
-                            </span>
-                            {selectedModel === model.key && !isCustomMode && (
-                              <svg className="w-3.5 h-3.5 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-[10px] text-fg-tertiary">
-                              Context: {model.contextWindow}
-                            </span>
-                            <span className="text-[10px] text-fg-tertiary">•</span>
-                            <span className="text-[10px] text-fg-tertiary">
-                              {model.inputCost} in / {model.outputCost} out
-                            </span>
-                          </div>
-                        </div>
+              {models.map((model) => (
+                <button
+                  key={model.key}
+                  onClick={() => handleModelSelect(model.key)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                    selectedModel === model.key && !isCustomMode
+                      ? 'bg-accent-primary/20 border border-accent-primary/50'
+                      : 'bg-bg-tertiary border border-transparent hover:border-border-primary hover:bg-bg-elevated'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className={`text-sm font-medium ${selectedModel === model.key && !isCustomMode ? 'text-accent-primary' : 'text-fg-primary'}`}>
+                        {model.name}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-fg-tertiary">
+                          {model.contextWindow}
+                        </span>
+                        <span className="text-[10px] text-fg-tertiary">•</span>
+                        <span className="text-[10px] text-fg-tertiary">
+                          {model.inputCost} in / {model.outputCost} out
+                        </span>
                       </div>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                    {selectedModel === model.key && !isCustomMode && (
+                      <svg className="w-4 h-4 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
               ))}
-            </div>
 
-            <div className="p-3 border-t border-border-primary bg-bg-tertiary">
-              <p className="text-[10px] text-fg-tertiary">
-                Model changes take effect on the next message
-              </p>
+              {/* Divider */}
+              <div className="border-t border-border-primary my-2" />
+
+              {/* Custom Model Input */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-medium text-fg-secondary uppercase tracking-wider">
+                  Custom OpenRouter Model
+                </label>
+                <input
+                  type="text"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleCustomModelSubmit();
+                    }
+                  }}
+                  placeholder="e.g., deepseek/deepseek-r1:free"
+                  className={`w-full px-3 py-2 text-xs bg-bg-tertiary border rounded-lg focus:outline-none focus:border-accent-primary transition-colors ${
+                    isCustomMode ? 'border-accent-primary/50' : 'border-border-primary'
+                  }`}
+                />
+                <button
+                  onClick={handleCustomModelSubmit}
+                  disabled={!customModel.trim()}
+                  className="w-full px-3 py-2 text-xs font-medium bg-bg-tertiary text-fg-primary border border-border-primary rounded-lg hover:bg-bg-elevated hover:border-accent-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Use Custom Model
+                </button>
+              </div>
             </div>
           </div>
         </>,

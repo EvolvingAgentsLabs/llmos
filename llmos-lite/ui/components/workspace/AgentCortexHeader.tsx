@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useWorkspace, AgentState } from '@/contexts/WorkspaceContext';
 import { Pause, Play, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { AVAILABLE_MODELS, LLMStorage, type ModelId } from '@/lib/llm-client';
+import { AVAILABLE_MODELS, LLMStorage } from '@/lib/llm-client';
 
 // ============================================================================
 // AGENT CORTEX HEADER - The "HAL 9000 Eye" status indicator with controls
@@ -54,8 +54,10 @@ export default function AgentCortexHeader() {
   const { state } = useWorkspace();
   const [pulsePhase, setPulsePhase] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelId | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [customModel, setCustomModel] = useState('');
+  const [isCustomMode, setIsCustomMode] = useState(false);
 
   const isActive = state.agentState !== 'idle' && state.agentState !== 'success';
   const colors = stateColors[state.agentState];
@@ -65,6 +67,14 @@ export default function AgentCortexHeader() {
     const currentModel = LLMStorage.getModel();
     if (currentModel) {
       setSelectedModel(currentModel);
+      if (!AVAILABLE_MODELS[currentModel]) {
+        setIsCustomMode(true);
+        setCustomModel(currentModel);
+      }
+    }
+    const savedCustomModel = LLMStorage.getCustomModel();
+    if (savedCustomModel && !customModel) {
+      setCustomModel(savedCustomModel);
     }
   }, []);
 
@@ -91,11 +101,23 @@ export default function AgentCortexHeader() {
   }, [isPaused]);
 
   // Handle model selection
-  const handleModelSelect = useCallback((modelId: ModelId) => {
+  const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModel(modelId);
     LLMStorage.saveModel(modelId);
     setIsModelMenuOpen(false);
+    setIsCustomMode(false);
   }, []);
+
+  // Handle custom model
+  const handleCustomModelSubmit = useCallback(() => {
+    if (!customModel.trim()) return;
+    const customModelId = customModel.trim();
+    setSelectedModel(customModelId);
+    LLMStorage.saveModel(customModelId);
+    LLMStorage.saveCustomModel(customModelId);
+    setIsModelMenuOpen(false);
+    setIsCustomMode(true);
+  }, [customModel]);
 
   // Calculate dynamic scale based on pulse
   const pulseScale = isActive && !isPaused ? 1 + Math.sin(pulsePhase * 0.15) * 0.15 : 1;
@@ -103,17 +125,10 @@ export default function AgentCortexHeader() {
 
   // Get current model display name
   const currentModelInfo = selectedModel ? AVAILABLE_MODELS[selectedModel] : null;
-  const modelDisplayName = currentModelInfo?.name || selectedModel?.split('/').pop() || 'Select Model';
+  const modelDisplayName = currentModelInfo?.name || (isCustomMode ? selectedModel?.split('/').pop() : 'Select Model');
 
-  // Group models by provider
-  const modelsByProvider = Object.entries(AVAILABLE_MODELS).reduce((acc, [key, model]) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push({ key: key as ModelId, ...model });
-    return acc;
-  }, {} as Record<string, Array<{ key: ModelId; id: string; name: string; provider: string; inputCost: string; outputCost: string; contextWindow: string }>>);
+  // Get models as array
+  const models = Object.entries(AVAILABLE_MODELS).map(([key, model]) => ({ key, ...model }));
 
   return (
     <div className="flex items-center gap-4">
@@ -227,7 +242,7 @@ export default function AgentCortexHeader() {
 
             {/* Menu */}
             <div
-              className="fixed w-80 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl max-h-[60vh] overflow-y-auto"
+              className="fixed w-80 bg-bg-secondary border border-border-primary rounded-lg shadow-2xl"
               style={{
                 zIndex: 9999,
                 top: '60px',
@@ -239,39 +254,72 @@ export default function AgentCortexHeader() {
                 <h3 className="text-xs font-semibold text-fg-primary">Select AI Model</h3>
               </div>
 
-              <div className="p-2 space-y-2">
-                {Object.entries(modelsByProvider).map(([provider, models]) => (
-                  <div key={provider} className="space-y-1">
-                    <div className="px-2 py-1">
-                      <h4 className="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">{provider}</h4>
-                    </div>
-                    {models.map((model) => (
-                      <button
-                        key={model.key}
-                        onClick={() => handleModelSelect(model.key)}
-                        className={`w-full text-left px-3 py-2 rounded-lg transition-all duration-200 ${
-                          selectedModel === model.key
-                            ? 'bg-accent-primary/20 border border-accent-primary/50'
-                            : 'bg-bg-tertiary border border-transparent hover:border-border-primary hover:bg-bg-elevated'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-medium ${selectedModel === model.key ? 'text-accent-primary' : 'text-fg-primary'}`}>
-                            {model.name}
-                          </span>
-                          {selectedModel === model.key && (
-                            <svg className="w-3.5 h-3.5 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-fg-tertiary">
-                          {model.contextWindow} • {model.inputCost}/{model.outputCost}
+              <div className="p-3 space-y-2">
+                {/* Preset Models */}
+                {models.map((model) => (
+                  <button
+                    key={model.key}
+                    onClick={() => handleModelSelect(model.key)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                      selectedModel === model.key && !isCustomMode
+                        ? 'bg-accent-primary/20 border border-accent-primary/50'
+                        : 'bg-bg-tertiary border border-transparent hover:border-border-primary hover:bg-bg-elevated'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className={`text-sm font-medium ${selectedModel === model.key && !isCustomMode ? 'text-accent-primary' : 'text-fg-primary'}`}>
+                          {model.name}
                         </span>
-                      </button>
-                    ))}
-                  </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-fg-tertiary">
+                            {model.contextWindow}
+                          </span>
+                          <span className="text-[10px] text-fg-tertiary">•</span>
+                          <span className="text-[10px] text-fg-tertiary">
+                            {model.inputCost} in / {model.outputCost} out
+                          </span>
+                        </div>
+                      </div>
+                      {selectedModel === model.key && !isCustomMode && (
+                        <svg className="w-4 h-4 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
                 ))}
+
+                {/* Divider */}
+                <div className="border-t border-border-primary my-2" />
+
+                {/* Custom Model Input */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-medium text-fg-secondary uppercase tracking-wider">
+                    Custom OpenRouter Model
+                  </label>
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCustomModelSubmit();
+                      }
+                    }}
+                    placeholder="e.g., deepseek/deepseek-r1:free"
+                    className={`w-full px-3 py-2 text-xs bg-bg-tertiary border rounded-lg focus:outline-none focus:border-accent-primary transition-colors ${
+                      isCustomMode ? 'border-accent-primary/50' : 'border-border-primary'
+                    }`}
+                  />
+                  <button
+                    onClick={handleCustomModelSubmit}
+                    disabled={!customModel.trim()}
+                    className="w-full px-3 py-2 text-xs font-medium bg-bg-tertiary text-fg-primary border border-border-primary rounded-lg hover:bg-bg-elevated hover:border-accent-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Use Custom Model
+                  </button>
+                </div>
               </div>
             </div>
           </>,

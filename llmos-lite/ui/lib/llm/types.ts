@@ -69,16 +69,16 @@ export interface StreamChunk {
   toolResult?: ToolResult;
 }
 
-export const AVAILABLE_MODELS = {
-  // Anthropic Claude 4.5
-  'claude-opus-4.5': {
-    id: 'anthropic/claude-opus-4.5',
-    name: 'Claude Opus 4.5',
-    provider: 'Anthropic',
-    inputCost: '$15/M tokens',
-    outputCost: '$75/M tokens',
-    contextWindow: '200K tokens',
-  },
+export interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  inputCost: string;
+  outputCost: string;
+  contextWindow: string;
+}
+
+export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
   'claude-sonnet-4.5': {
     id: 'anthropic/claude-sonnet-4.5',
     name: 'Claude Sonnet 4.5',
@@ -87,6 +87,18 @@ export const AVAILABLE_MODELS = {
     outputCost: '$15/M tokens',
     contextWindow: '200K tokens',
   },
-} as const;
+  'claude-opus-4.5': {
+    id: 'anthropic/claude-opus-4.5',
+    name: 'Claude Opus 4.5',
+    provider: 'Anthropic',
+    inputCost: '$15/M tokens',
+    outputCost: '$75/M tokens',
+    contextWindow: '200K tokens',
+  },
+};
 
-export type ModelId = keyof typeof AVAILABLE_MODELS;
+// Type for preset model keys
+export type PresetModelId = keyof typeof AVAILABLE_MODELS;
+
+// Type that allows both preset and custom model IDs
+export type ModelId = string;

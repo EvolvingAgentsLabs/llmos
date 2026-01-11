@@ -17,4 +17,6 @@ export type {
   ChatResponse,
   LLMConfig,
   ModelId,
+  ModelInfo,
+  PresetModelId,
 } from './llm';
