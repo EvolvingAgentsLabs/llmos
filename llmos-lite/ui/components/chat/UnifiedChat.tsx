@@ -607,7 +607,7 @@ export default function UnifiedChat({
             );
           })()}
 
-          <div ref={messagesEndRef} className="h-4" />
+          <div ref={messagesEndRef} className="h-20" />
         </div>
       </div>
 
