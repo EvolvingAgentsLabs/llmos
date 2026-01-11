@@ -591,82 +591,156 @@ export class MultiAgentChatOrchestrator extends EventEmitter {
     }
   }
 
+  // Track current plan and sub-agents
+  private currentPlan: {
+    phases: Array<{ id: string; name: string; description: string; status: 'pending' | 'in_progress' | 'completed' }>;
+    subAgents: Array<{ name: string; role: string; origin: 'copied' | 'evolved' | 'created'; status: 'pending' | 'created' | 'executed' }>;
+    currentPhase: number;
+    totalPhases: number;
+  } | null = null;
+
   /**
-   * Build a planning prompt that forces the LLM to provide options
+   * Build a planning prompt that creates actual plans with sub-agents
+   * This leverages the SystemAgent.md's detailed workflow
    */
   private buildPlanningPrompt(goal: string): string {
-    return `PLANNING PHASE - You MUST provide options before executing.
+    return `PLANNING PHASE - Create a CONCRETE execution plan.
 
 USER GOAL: ${goal}
 
-INSTRUCTIONS:
-1. Analyze the user's goal
-2. Present 2-3 different approaches to achieve it
-3. DO NOT execute any tools yet - just present the options
+## YOUR TASK
 
-You MUST respond with a decision point in this EXACT format:
+You MUST create a DETAILED EXECUTION PLAN that includes:
 
-🗳️ DECISION POINT: Choose Approach
+1. **TASK ANALYSIS** - What is the core problem? What are the deliverables?
 
-**OPTION A: [First Approach Name]**
+2. **PHASE BREAKDOWN** - Create 3-5 specific phases with concrete actions:
+   - Phase 1: [Name] - [Specific actions]
+   - Phase 2: [Name] - [Specific actions]
+   - Phase 3: [Name] - [Specific actions]
+   - etc.
+
+3. **SUB-AGENT PLANNING** (MANDATORY: Plan at least 3 agents)
+   For EACH agent, specify:
+   - Agent Name
+   - Role/Purpose
+   - Origin: COPIED (from system/agents), EVOLVED (modified from existing), or CREATED (new)
+   - Capabilities needed
+   - Which phase(s) this agent handles
+
+4. **TOOLS & APPROACH** - What tools will be used?
+
+## OUTPUT FORMAT
+
+You MUST respond with BOTH a plan AND decision options:
+
+📋 **EXECUTION PLAN**
+
+**Goal:** ${goal}
+
+**Phases:**
+1. **[Phase Name]**: [Description of what will be done]
+2. **[Phase Name]**: [Description of what will be done]
+3. **[Phase Name]**: [Description of what will be done]
+
+**Sub-Agents (Minimum 3):**
+- **[AgentName1]** ([copied/evolved/created]): [role and capabilities]
+- **[AgentName2]** ([copied/evolved/created]): [role and capabilities]
+- **[AgentName3]** ([copied/evolved/created]): [role and capabilities]
+
+**Tools:** [list of tools to use]
+
+---
+
+🗳️ DECISION POINT: Choose Execution Approach
+
+**OPTION A: [Specific Approach Name based on goal]**
 - Confidence: [0.0-1.0]
-- Description: [What this approach does]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
+- Description: [Concrete description of how this achieves the goal]
+- Sub-agents: [Which 3+ agents this uses]
+- Estimated phases: [number]
 
-**OPTION B: [Second Approach Name]**
+**OPTION B: [Alternative Approach Name]**
 - Confidence: [0.0-1.0]
-- Description: [What this approach does]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
+- Description: [Different way to achieve the goal]
+- Sub-agents: [Which 3+ agents this uses]
+- Estimated phases: [number]
 
-**OPTION C: [Third Approach Name]** (optional)
+**OPTION C: [Minimal/Quick Approach]** (optional)
 - Confidence: [0.0-1.0]
-- Description: [What this approach does]
+- Description: [Simplest path to achieve the goal]
+- Sub-agents: [Which 3 agents minimum]
+- Estimated phases: [number]
 
-⏰ Voting time: 60 seconds
-
-Present these options NOW. Do not execute any tools.`;
+Present this plan and options NOW. Include concrete details specific to "${goal}".`;
   }
 
   /**
    * Generate forced options when LLM doesn't provide them
+   * Creates task-specific options based on the goal and planning response
    */
   private async generateForcedOptions(
     orchestrator: SystemAgentOrchestrator,
     goal: string,
     planningResponse: string
   ): Promise<AgentProposal[]> {
-    // Generate synthetic options based on the planning response
     const options: AgentProposal[] = [];
+    const goalLower = goal.toLowerCase();
 
-    // Option A: Standard approach (what the LLM planned)
+    // Parse any plan details from the planning response
+    const hasPhases = planningResponse.includes('Phase') || planningResponse.includes('phase');
+    const hasAgents = planningResponse.includes('Agent') || planningResponse.includes('agent');
+
+    // Extract potential sub-agents from planning response
+    const agentMatches = planningResponse.match(/\*\*(\w+Agent)\*\*/g) || [];
+    const extractedAgents = agentMatches.map(m => m.replace(/\*/g, '')).slice(0, 3);
+    const agentList = extractedAgents.length >= 3
+      ? extractedAgents.join(', ')
+      : 'GameDesignAgent, CodeGeneratorAgent, UIRenderAgent';
+
+    // Determine task type for more specific options
+    const isGame = goalLower.includes('game') || goalLower.includes('play');
+    const isApp = goalLower.includes('app') || goalLower.includes('tool') || goalLower.includes('dashboard');
+    const isAnalysis = goalLower.includes('analyze') || goalLower.includes('analysis') || goalLower.includes('chart');
+    const isInteractive = goalLower.includes('interactive') || goalLower.includes('slider') || goalLower.includes('real-time');
+
+    // Option A: Full implementation with all sub-agents
     options.push({
       id: `opt-${Date.now()}-a`,
       agentId: 'system-agent',
-      agentName: 'Option A: Standard Execution',
-      content: `Execute the planned approach: ${planningResponse.substring(0, 200)}...`,
-      confidence: 0.8,
+      agentName: `Option A: Full Implementation`,
+      content: isGame
+        ? `Create complete ${goal} with all game mechanics, graphics, and controls. Uses 3+ sub-agents (${agentList}) to design, code, and render the game. Includes game loop, collision detection, scoring, and visual feedback.`
+        : isApp
+        ? `Build complete ${goal} with full UI, interactions, and features. Uses 3+ sub-agents (${agentList}) to architect, implement, and deploy the application.`
+        : isAnalysis
+        ? `Perform comprehensive ${goal} with visualizations, metrics, and insights. Uses 3+ sub-agents to collect data, process, analyze, and visualize results.`
+        : `Execute full implementation of "${goal}" using 3+ specialized sub-agents (${agentList}). Covers all requirements with proper planning, execution, and validation.`,
+      confidence: 0.85,
       votes: 0,
     });
 
-    // Option B: Step-by-step with checkpoints
+    // Option B: Quick/simplified version
     options.push({
       id: `opt-${Date.now()}-b`,
       agentId: 'system-agent',
-      agentName: 'Option B: Step-by-Step with Checkpoints',
-      content: `Execute step-by-step, pausing for confirmation at each major milestone. This gives you more control over the process.`,
-      confidence: 0.7,
+      agentName: `Option B: Quick ${isGame ? 'Prototype' : isInteractive ? 'Interactive Version' : 'Implementation'}`,
+      content: isGame
+        ? `Create a playable prototype with core mechanics. Basic graphics but fully functional gameplay. Uses 3 agents focused on essential features.`
+        : isInteractive
+        ? `Create an interactive applet with essential controls and real-time feedback. Uses generate-applet for immediate UI with React components.`
+        : `Implement core functionality first with 3 essential agents. Focus on working solution, can enhance later.`,
+      confidence: 0.75,
       votes: 0,
     });
 
-    // Option C: Minimal approach
+    // Option C: Step-by-step with checkpoints
     options.push({
       id: `opt-${Date.now()}-c`,
       agentId: 'system-agent',
-      agentName: 'Option C: Minimal MVP',
-      content: `Create a minimal working version first, then iterate. Focus on core functionality only.`,
-      confidence: 0.6,
+      agentName: 'Option C: Step-by-Step with Approval',
+      content: `Execute the plan phase-by-phase, pausing after each major step for your approval. You'll see progress and can guide the direction. Each sub-agent reports before and after its work.`,
+      confidence: 0.65,
       votes: 0,
     });
 
@@ -674,7 +748,7 @@ Present these options NOW. Do not execute any tools.`;
     options.push({
       id: `opt-${Date.now()}-stop`,
       agentId: 'system-agent',
-      agentName: 'Option STOP: Cancel Process',
+      agentName: 'Option STOP: Cancel/Rephrase',
       content: `Stop the current process. Use this if you want to cancel the operation, rephrase your request, or need more time to think about the approach.`,
       confidence: 0.1,
       votes: 0,
@@ -817,6 +891,7 @@ Present these options NOW. Do not execute any tools.`;
 
   /**
    * Continue execution after user selects an option
+   * This is the main execution driver - it MUST complete the goal, not loop back to options
    */
   async continueWithSelectedOption(selectedOption: AgentProposal): Promise<void> {
     this.executionPhase = 'executing';
@@ -829,48 +904,98 @@ Present these options NOW. Do not execute any tools.`;
     // Add message about selection
     this.addSystemMessage(`✓ Selected: **${selectedOption.agentName}**\n\nProceeding with execution...`);
 
+    // Check if this is step-by-step mode
+    const isStepByStep = selectedOption.agentName.toLowerCase().includes('step') ||
+                         selectedOption.content.toLowerCase().includes('checkpoint') ||
+                         selectedOption.content.toLowerCase().includes('approval');
+
     try {
       const orchestrator = await this.initializeOrchestrator();
 
-      // Build continuation prompt with selected approach and planning context
-      // This prompt must be explicit about EXECUTION mode to prevent re-analysis
-      const continuationPrompt = `EXECUTION PHASE - ACTION REQUIRED
+      // Build an execution prompt that will ACTUALLY EXECUTE the plan
+      // CRITICAL: Do NOT ask for options after every step - only at true completion
+      const continuationPrompt = `EXECUTION PHASE - ACHIEVE THE GOAL NOW
 
-You are now in EXECUTION MODE. The planning phase is COMPLETE. A decision has been made.
+## STATUS
+- GOAL: ${this.pendingGoal}
+- SELECTED APPROACH: ${selectedOption.agentName}
+- APPROACH DETAILS: ${selectedOption.content}
+${isStepByStep ? '- MODE: Step-by-step with checkpoints' : '- MODE: Full execution until completion'}
 
-ORIGINAL GOAL: ${this.pendingGoal}
+## PLANNING CONTEXT
+${this.planningContext ? this.planningContext.substring(0, 3000) : 'Execute the goal directly.'}
 
-SELECTED APPROACH: ${selectedOption.agentName}
-${selectedOption.content}
+## EXECUTION INSTRUCTIONS
 
-PLANNING CONTEXT (from analysis phase):
-${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
+**YOU MUST NOW EXECUTE THE PLAN AND ACHIEVE THE GOAL.**
 
-CRITICAL INSTRUCTIONS:
-1. DO NOT re-analyze or re-plan - proceed directly to ACTION
-2. YOU MUST USE TOOLS to accomplish the goal
-3. Execute the selected approach step by step
-4. Show progress using sub-agent dialog format: 🤖 [AgentName] → [Target]: "message"
+### MANDATORY WORKFLOW:
 
-START EXECUTING NOW. Call the necessary tools to accomplish the goal.
+**STEP 1: CREATE SUB-AGENTS (REQUIRED - minimum 3 agents)**
 
-AFTER EXECUTION: Once you have completed the current step or achieved part of the goal, you MUST present options for next steps in this EXACT format:
+Before doing anything else, create the sub-agent markdown files:
 
-🗳️ DECISION POINT: Next Steps
+For EACH of the 3+ planned sub-agents, use write-file to create:
+\`\`\`tool
+{
+  "tool": "write-file",
+  "inputs": {
+    "path": "user/components/agents/[AgentName].md",
+    "content": "---\\nname: [AgentName]\\ntype: specialist\\ncapabilities:\\n  - [capability1]\\n  - [capability2]\\n---\\n\\n# [AgentName]\\n\\n[Agent instructions...]"
+  }
+}
+\`\`\`
 
-**OPTION A: [Continue with Next Step Name]**
-- Confidence: [0.0-1.0]
-- Description: [What to do next to continue toward the goal]
+**STEP 2: EXECUTE EACH PHASE**
 
-**OPTION B: [Alternative Next Step]**
-- Confidence: [0.0-1.0]
-- Description: [An alternative approach for the next step]
+For each phase in the plan:
+1. Show which sub-agent is working: 🤖 [AgentName] → User: "Starting [task]..."
+2. Call the necessary tools (write-file, execute-python, generate-applet, etc.)
+3. Show progress: 🤖 [AgentName] → User: "Completed [task]. Result: [summary]"
 
-**OPTION STOP: Complete/Stop**
-- Confidence: [appropriate value]
-- Description: [If goal is complete, describe what was achieved. If stopping early, explain current state.]
+**STEP 3: PRODUCE DELIVERABLES**
 
-Always provide these options after execution so the user can decide how to proceed.`;
+- Write all code files to user/output/code/
+- Generate applets if interactive UI is needed
+- Create visualizations if applicable
+- Write documentation to user/README.md
+
+**STEP 4: REPORT COMPLETION**
+
+When the goal is FULLY ACHIEVED, provide a completion summary:
+
+✅ **GOAL ACHIEVED: ${this.pendingGoal}**
+
+**Deliverables Created:**
+- [List each file/output created]
+
+**Sub-Agents Used:**
+- [AgentName1]: [what they did]
+- [AgentName2]: [what they did]
+- [AgentName3]: [what they did]
+
+**Result:**
+[Describe what was accomplished]
+
+${isStepByStep ? `
+---
+🗳️ DECISION POINT: Continue or Complete?
+
+**OPTION A: Continue to Next Phase**
+- Description: Proceed to the next phase of execution
+
+**OPTION STOP: Complete Here**
+- Description: Current progress is sufficient, stop here
+` : `
+## IMPORTANT: DO NOT present decision options unless:
+1. You encounter an error that requires user input
+2. There's a genuine choice point (multiple valid paths)
+3. The ENTIRE goal is complete
+
+Execute until the goal "${this.pendingGoal}" is FULLY ACHIEVED.
+`}
+
+**START EXECUTING NOW.**`;
 
       const result = await orchestrator.execute(continuationPrompt);
       await this.handleExecutionResult(result, timestamp);
@@ -1050,10 +1175,50 @@ Always provide these options after execution so the user can decide how to proce
       }
     }
 
-    // Final response - check for decision points (options)
-    // Always parse options from response - the LLM is expected to provide next step options
-    // after execution so the user can decide how to proceed
-    const options = this.parseOptionsFromResponse(result.response);
+    // Check if this response indicates goal completion
+    const responseLower = result.response.toLowerCase();
+    const isGoalAchieved = responseLower.includes('goal achieved') ||
+                           responseLower.includes('✅ **goal achieved') ||
+                           responseLower.includes('completed successfully') ||
+                           responseLower.includes('execution complete') ||
+                           (result.filesCreated && result.filesCreated.length > 0 && !responseLower.includes('decision point'));
+
+    // Track sub-agents created during execution
+    const createdAgentPaths = result.filesCreated?.filter(f =>
+      f.includes('agents/') && f.endsWith('.md')
+    ) || [];
+
+    if (createdAgentPaths.length > 0) {
+      logger.info('agent', `Sub-agents created: ${createdAgentPaths.length}`, { paths: createdAgentPaths });
+
+      // Register each created agent as a participant
+      for (const agentPath of createdAgentPaths) {
+        const agentName = agentPath.split('/').pop()?.replace('.md', '') || 'SubAgent';
+        const agentId = agentName.toLowerCase().replace(/\s+/g, '-');
+
+        if (!this.participants.has(agentId)) {
+          const participant: ChatParticipant = {
+            id: agentId,
+            name: agentName,
+            type: 'sub-agent',
+            color: getAgentColor(agentName),
+            role: 'specialist',
+            status: 'done',
+            capabilities: ['task execution'],
+          };
+          this.participants.set(agentId, participant);
+          this.emit('participant:added', participant);
+        }
+      }
+    }
+
+    // Only parse options if the goal is NOT achieved and there's a genuine decision point
+    // This prevents the infinite loop of presenting options after every execution
+    const hasExplicitDecisionPoint = result.response.includes('🗳️ DECISION POINT') ||
+                                      result.response.includes('DECISION POINT:');
+    const options = (hasExplicitDecisionPoint && !isGoalAchieved)
+      ? this.parseOptionsFromResponse(result.response)
+      : [];
 
     // Generate predictions for next steps
     const predictions = this.generatePredictions(this.currentPhase, options);
@@ -1072,9 +1237,33 @@ Always provide these options after execution so the user can decide how to proce
     this.messages.push(finalMessage);
     this.emit('message:added', finalMessage);
 
-    // If there are options, set phase to coordinating (waiting for vote)
-    // Only create new decision points if not already in execution phase
-    if (options.length > 0) {
+    // If goal is achieved, show completion and don't loop back to options
+    if (isGoalAchieved || (result.filesCreated && result.filesCreated.length >= 2)) {
+      // Show agent summary if we have participants
+      const subAgentCount = Array.from(this.participants.values())
+        .filter(p => p.type === 'sub-agent').length;
+
+      if (subAgentCount > 0) {
+        this.addSystemMessage(`**Multi-Agent Summary:**\n- Sub-agents used: ${subAgentCount}\n- Files created: ${result.filesCreated?.length || 0}`);
+      }
+
+      // Show evolution info if available
+      if (result.evolution) {
+        const evo = result.evolution;
+        if (evo.learnings.length > 0) {
+          this.addSystemMessage(`**Evolution:**\n- Memory Updated: ${evo.memoryUpdated}\n- Learnings: ${evo.learnings.join(', ')}`);
+        }
+      }
+
+      // Mark execution as completed
+      this.executionPhase = 'completed';
+      this.setPhase('completed');
+      this.updateParticipantStatus('system-agent', 'done');
+      return;
+    }
+
+    // Only present options if there's a genuine decision point during execution
+    if (options.length > 0 && hasExplicitDecisionPoint) {
       this.setPhase('coordinating');
       this.updateParticipantStatus('system-agent', 'idle');
       logger.info('agent', `Decision point detected with ${options.length} options`);
@@ -1722,8 +1911,28 @@ Always provide these options after execution so the user can decide how to proce
 
       this.addSystemMessage(`Continuing with your selection: "${selection.substring(0, 50)}${selection.length > 50 ? '...' : ''}"`);
 
-      // Execute with the user's selection as context
-      const result = await orchestrator.execute(`Continue with the user's choice: ${selection}`);
+      // Execute with the user's selection - instruct to achieve the goal, not loop
+      const executionPrompt = `CONTINUE EXECUTION - User provided additional input.
+
+ORIGINAL GOAL: ${this.pendingGoal || 'Continue the task'}
+
+USER INPUT: ${selection}
+
+PLANNING CONTEXT:
+${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
+
+INSTRUCTIONS:
+1. Use the user's input to continue toward achieving the goal
+2. Create and use sub-agents (minimum 3) if not already created
+3. Execute the necessary tool calls to produce deliverables
+4. When complete, provide a summary of what was achieved
+
+FORMAT FOR SUB-AGENT WORK:
+🤖 [AgentName] → User: "Working on [task]..."
+
+EXECUTE NOW and achieve the goal: ${this.pendingGoal || selection}`;
+
+      const result = await orchestrator.execute(executionPrompt);
 
       // Handle the result
       await this.handleExecutionResult(result, timestamp);
@@ -1852,6 +2061,13 @@ Always provide these options after execution so the user can decide how to proce
     this.messages = [];
     this.currentPhase = 'planning';
     this.pendingToolCalls.clear();
+    this.executionPhase = 'planning';
+    this.pendingGoal = '';
+    this.selectedApproach = '';
+    this.planningContext = '';
+    this.currentPlan = null;
+    this.agentDialogs = [];
+    this.cancelVotingTimeout();
     this.initializeSystemAgent();
     this.emit('phase:changed', { phase: 'planning' });
   }
