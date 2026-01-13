@@ -304,7 +304,7 @@ export default function OrganizedDesktop({ onLaunchApplet, onOpenApplet }: Organ
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* JARVIS Avatar - Compact */}
+      {/* AI Avatar - Compact */}
       <div className="flex-shrink-0 h-[140px] relative">
         <JarvisAvatar showLabel={false} />
       </div>

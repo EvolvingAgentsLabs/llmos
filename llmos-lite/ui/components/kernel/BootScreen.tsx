@@ -8,8 +8,8 @@ interface BootScreenProps {
   onComplete?: () => void;
 }
 
-// JARVIS Boot Avatar - Simple CSS animated orb
-function JarvisBootOrb({ progress }: { progress: number }) {
+// Boot Avatar - Simple CSS animated orb
+function BootOrb({ progress }: { progress: number }) {
   const isActive = progress < 100;
 
   return (
@@ -90,16 +90,16 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
       }`}
     >
       <div className="w-full max-w-2xl px-8">
-        {/* JARVIS Avatar - Boot animation */}
-        <JarvisBootOrb progress={progress.percent} />
+        {/* Boot Avatar animation */}
+        <BootOrb progress={progress.percent} />
 
         {/* Logo/Title */}
         <div className="text-center mb-8 animate-fade-in">
           <div className="text-4xl font-bold mb-2 text-accent-primary">
-            J.A.R.V.I.S.
+            LLMos
           </div>
           <div className="text-lg text-fg-secondary font-light tracking-wider">
-            LLMos Autonomous Runtime
+            Autonomous AI Runtime
           </div>
           <div className="text-xs text-fg-tertiary mt-1">v0.1.0</div>
         </div>

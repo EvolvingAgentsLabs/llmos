@@ -26,7 +26,7 @@ const SimpleLayout = dynamic(() => import('@/components/layout/SimpleLayout'), {
   ),
 });
 
-// New Fluid Desktop Layout (J.A.R.V.I.S. style)
+// Fluid Desktop Layout (main layout)
 const FluidLayout = dynamic(() => import('@/components/workspace/FluidLayout'), {
   ssr: false,
   loading: () => (
@@ -67,7 +67,7 @@ export default function Home() {
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('fluid'); // Default to J.A.R.V.I.S. Fluid layout
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('fluid'); // Default to Fluid layout
   const [bootProgress, setBootProgress] = useState<BootProgress>({
     stage: {
       name: 'init',

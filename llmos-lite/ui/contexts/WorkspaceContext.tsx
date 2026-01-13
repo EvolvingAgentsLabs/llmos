@@ -40,7 +40,7 @@ export type AgentState =
   | 'error'
   | 'success';
 
-/** Activity log entry for detailed Jarvis feedback */
+/** Activity log entry for detailed AI feedback */
 export interface ActivityLogEntry {
   id: string;
   timestamp: Date;
@@ -91,7 +91,7 @@ export interface WorkspaceState {
   activeArtifactId: string | null;
   activeAppletId: string | null;
 
-  // Activity log for detailed Jarvis feedback (like Claude Code)
+  // Activity log for detailed AI feedback (like Claude Code)
   activityLog: ActivityLogEntry[];
   currentActivity: string | null;  // Current action being performed
   currentDetail: string | null;    // Detailed info about current action
@@ -110,7 +110,7 @@ const defaultPanelSizes: PanelSizes = {
 const defaultPreferences: WorkspacePreferences = {
   panelSizes: defaultPanelSizes,
   collapsedPanels: { sidebar: false, context: false }, // Both panels open for Desktop experience
-  defaultContextView: 'applets', // Desktop with JARVIS as default
+  defaultContextView: 'applets', // Desktop with AI Avatar as default
   showAgentVisualization: true,
   enableKeyboardShortcuts: true,
   autoSwitchContext: true,
@@ -119,7 +119,7 @@ const defaultPreferences: WorkspacePreferences = {
 const defaultWorkspaceState: WorkspaceState = {
   taskType: 'idle',
   focusedPanel: 'chat',
-  contextViewMode: 'applets', // Desktop with JARVIS as default view
+  contextViewMode: 'applets', // Desktop with AI Avatar as default view
   agentState: 'idle',
   isCommandPaletteOpen: false,
   preferences: defaultPreferences,
