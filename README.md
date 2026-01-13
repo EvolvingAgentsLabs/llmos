@@ -263,8 +263,8 @@ The OS will host specialized agent hierarchies. A "Gardener Agent" overseeing mo
 **Swarm Intelligence**
 Define a high-level swarm goal (e.g., "Map this room"), and the OS generates distinct firmware for multiple robots that communicate via a simulated mesh network. Emergent behavior from simple agents.
 
-**Quantum-Classical Hybrid Agents**
-Integration of `microqiskit` directly into the browser OS. Agents will write and simulate Quantum Circuits (QASM) alongside classical C code—imagine a robot using quantum algorithms for decision-making, simulated entirely in the browser before deployment.
+**Complete Physical AI Agents Support**
+Full end-to-end pipeline for physical AI agents: natural language → agent creation → firmware generation → simulation → hardware deployment → telemetry monitoring → autonomous evolution. The browser becomes the complete IDE for embodied AI.
 
 ### Near Future
 - **Hardware Feedback Loop**: Deploy → Monitor telemetry → Evolve firmware → OTA update
