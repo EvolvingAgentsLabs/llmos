@@ -130,6 +130,17 @@ export interface OrchestratorConfig {
   contextConfig?: Partial<ContextManagerConfig>;
 }
 
+export interface ExecuteOptions {
+  /** Continue from existing context instead of reinitializing */
+  continueFromContext?: boolean;
+  /** Prior context to inject (planning phase results) */
+  priorContext?: string;
+  /** Force at least one tool execution before allowing text-only responses */
+  requireToolExecution?: boolean;
+  /** Minimum iterations before allowing exit (for execution phase) */
+  minIterations?: number;
+}
+
 export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
   maxIterations: 10,
   strategy: 'balanced',
@@ -284,8 +295,10 @@ export class SystemAgentOrchestrator {
 
   /**
    * Execute the SystemAgent with a user goal
+   * @param userGoal The user's goal or continuation prompt
+   * @param options Optional execution options for continuation scenarios
    */
-  async execute(userGoal: string): Promise<SystemAgentResult> {
+  async execute(userGoal: string, options?: ExecuteOptions): Promise<SystemAgentResult> {
     const startTime = performance.now();
     const toolCalls: ToolCallResult[] = [];
     const filesCreated: string[] = [];
@@ -294,6 +307,12 @@ export class SystemAgentOrchestrator {
       ? this.workspaceContext?.workspacePath
       : undefined;
     let lastContextResult: { wasSummarized: boolean; summarizationSteps?: number; tokenEstimate: number } | null = null;
+
+    // Track if we've executed any tools (for requireToolExecution option)
+    let hasExecutedTools = false;
+    const requireToolExecution = options?.requireToolExecution ?? false;
+    const minIterations = options?.minIterations ?? 1;
+    const continueFromContext = options?.continueFromContext ?? false;
 
     try {
       // Emit initializing event
@@ -316,9 +335,22 @@ export class SystemAgentOrchestrator {
         details: 'Preparing agent instructions and tool definitions',
       });
 
-      // Initialize context manager with system prompt and user goal
+      // Initialize or continue context manager
       const systemPromptWithTools = this.buildSystemPromptWithTools();
-      this.contextManager.initialize(systemPromptWithTools, userGoal);
+
+      if (continueFromContext && options?.priorContext) {
+        // Continue from existing context - add prior context as a note
+        // Don't reinitialize, just add the continuation as a new entry
+        this.contextManager.addEntry({
+          role: 'user',
+          content: `CONTINUATION FROM PLANNING PHASE:\n${options.priorContext}\n\nNEW INSTRUCTION:\n${userGoal}`,
+          type: 'context-note',
+        });
+        console.log('[SystemAgent] Continuing from prior context, preserving workflow history');
+      } else {
+        // Fresh initialization
+        this.contextManager.initialize(systemPromptWithTools, userGoal);
+      }
 
       let iterations = 0;
       let finalResponse = '';
@@ -396,7 +428,36 @@ export class SystemAgentOrchestrator {
         const toolCallsInResponse = this.parseToolCalls(llmResponse);
 
         if (toolCallsInResponse.length === 0) {
-          // No tool calls, agent is done
+          // No tool calls in this response
+          // Check if we should continue anyway (requireToolExecution or minIterations)
+          const shouldContinue = (requireToolExecution && !hasExecutedTools) ||
+                                  (iterations < minIterations);
+
+          if (shouldContinue) {
+            // Don't exit yet - we need to execute at least one tool
+            this.emitProgress({
+              type: 'thinking',
+              agent: 'SystemAgent',
+              action: 'Requesting tool execution',
+              details: `No tools called yet (iteration ${iterations}/${minIterations}). Prompting for action.`,
+            });
+
+            // Add a follow-up prompt to encourage tool usage
+            this.contextManager.addLLMResponse(llmResponse, iterations);
+            this.contextManager.addEntry({
+              role: 'user',
+              content: `You provided analysis but no tool calls. Please execute the required actions now using tool calls. Remember to:
+1. Create sub-agent markdown files using write-file
+2. Execute code using invoke-subagent or execute-python
+3. Generate applets using generate-applet if interactive UI is needed
+
+Start with your first tool call NOW.`,
+              type: 'context-note',
+            });
+            continue; // Continue the loop
+          }
+
+          // Normal exit - no more tools needed
           this.emitProgress({
             type: 'thinking',
             agent: 'SystemAgent',
@@ -406,6 +467,9 @@ export class SystemAgentOrchestrator {
           finalResponse = llmResponse;
           break;
         }
+
+        // Mark that we've executed tools
+        hasExecutedTools = true;
 
         // Emit event about found tool calls
         this.emitProgress({
