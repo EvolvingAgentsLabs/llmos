@@ -10,7 +10,7 @@ interface MediaViewerProps {
   volume: 'system' | 'team' | 'user';
 }
 
-// JARVIS-style header for media viewer
+// LLMos-style header for media viewer
 function MediaViewerHeader({ fileName, fileType, onClose }: { fileName: string; fileType: string; onClose: () => void }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-bg-secondary/80 backdrop-blur border-b border-border-primary">

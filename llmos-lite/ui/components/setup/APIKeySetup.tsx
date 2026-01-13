@@ -8,14 +8,13 @@ interface APIKeySetupProps {
   onComplete: () => void;
 }
 
-type SetupStep = 'welcome' | 'profile' | 'api-key' | 'model';
+type SetupStep = 'welcome' | 'api-key' | 'model';
 
-// JARVIS Setup Orb - Simple CSS animated orb for setup screens
-function JarvisSetupOrb({ step }: { step: SetupStep }) {
+// Setup Orb - Simple CSS animated orb for setup screens
+function SetupOrb({ step }: { step: SetupStep }) {
   const stepProgress = {
     'welcome': 0,
-    'profile': 33,
-    'api-key': 66,
+    'api-key': 50,
     'model': 100,
   };
   const progress = stepProgress[step];
@@ -51,11 +50,6 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   const [apiKey, setApiKey] = useState('');
   const [modelName, setModelName] = useState('anthropic/claude-sonnet-4.5');
 
-  // User/team state
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [teamName, setTeamName] = useState('');
-
   // UI state
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
   const [error, setError] = useState('');
@@ -66,23 +60,6 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     setError('');
     // OpenRouter key validation
     setIsValid(value.startsWith('sk-or-v1-') && value.length > 20);
-  };
-
-  const handleProfileNext = () => {
-    if (!email.trim() || !email.includes('@')) {
-      setError('Please enter a valid email address');
-      return;
-    }
-    if (!name.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-    if (!teamName.trim()) {
-      setError('Please enter a team name');
-      return;
-    }
-    setError('');
-    setCurrentStep('api-key');
   };
 
   const handleApiKeyNext = () => {
@@ -113,17 +90,17 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
     console.log('[APIKeySetup] Configuration saved to localStorage');
 
-    // Save user/team to localStorage
+    // Save default user/team to localStorage
     const user: User = {
       id: `user_${Date.now()}`,
-      email: email.trim(),
-      name: name.trim(),
+      email: 'user@llmos.local',
+      name: 'User',
       created_at: new Date().toISOString(),
     };
 
     const team: Team = {
-      id: teamName.toLowerCase().replace(/\s+/g, '-'),
-      name: teamName.trim(),
+      id: 'default',
+      name: 'default',
       created_at: new Date().toISOString(),
     };
 
@@ -137,13 +114,13 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // Render different steps
   const renderWelcome = () => (
     <div className="text-center max-w-md mx-auto">
-      <JarvisSetupOrb step="welcome" />
-      <h1 className="text-2xl font-medium mb-2 text-fg-primary">Hello, I'm J.A.R.V.I.S.</h1>
-      <p className="text-lg text-accent-primary mb-1">Welcome to LLMos</p>
+      <SetupOrb step="welcome" />
+      <h1 className="text-2xl font-medium mb-2 text-fg-primary">Welcome to LLMos</h1>
+      <p className="text-lg text-accent-primary mb-1">Autonomous AI Runtime</p>
       <p className="text-fg-secondary text-sm mb-8">
-        Let's get you set up in 3 quick steps
+        Let's get you set up in 2 quick steps
       </p>
-      <button onClick={() => setCurrentStep('profile')} className="btn-primary w-full py-3">
+      <button onClick={() => setCurrentStep('api-key')} className="btn-primary w-full py-3">
         Get Started
       </button>
       <div className="mt-6 p-3 bg-bg-tertiary border border-border-primary rounded">
@@ -154,80 +131,13 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     </div>
   );
 
-  const renderProfile = () => (
-    <>
-      <JarvisSetupOrb step="profile" />
-      <div className="mb-6">
-        <h1 className="text-lg font-medium mb-2 text-fg-primary">Your Profile</h1>
-        <p className="text-fg-secondary text-sm">
-          Step 1 of 3
-        </p>
-      </div>
-
-      <div className="space-y-4 mb-6">
-        <div>
-          <label className="block text-xs text-fg-secondary mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setError(''); }}
-            placeholder="you@example.com"
-            className="input w-full"
-            autoFocus
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs text-fg-secondary mb-1">
-            Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => { setName(e.target.value); setError(''); }}
-            placeholder="Your Name"
-            className="input w-full"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs text-fg-secondary mb-1">
-            Team Name
-          </label>
-          <input
-            type="text"
-            value={teamName}
-            onChange={(e) => { setTeamName(e.target.value); setError(''); }}
-            placeholder="engineering, research, personal, etc."
-            className="input w-full"
-          />
-          <p className="mt-1 text-xs text-fg-tertiary">
-            Helps organize your work
-          </p>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-accent-error/10 border border-accent-error rounded">
-          <p className="text-xs text-accent-error">{error}</p>
-        </div>
-      )}
-
-      <button onClick={handleProfileNext} className="btn-primary w-full py-2">
-        Continue
-      </button>
-    </>
-  );
-
   const renderApiKey = () => (
     <>
-      <JarvisSetupOrb step="api-key" />
+      <SetupOrb step="api-key" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">API Key</h1>
         <p className="text-fg-secondary text-sm">
-          Step 2 of 3
+          Step 1 of 2
         </p>
       </div>
 
@@ -267,7 +177,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => setCurrentStep('profile')} className="btn-secondary flex-1 py-2">
+        <button onClick={() => setCurrentStep('welcome')} className="btn-secondary flex-1 py-2">
           Back
         </button>
         <button onClick={handleApiKeyNext} className="btn-primary flex-1 py-2">
@@ -279,11 +189,11 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
   const renderModel = () => (
     <>
-      <JarvisSetupOrb step="model" />
+      <SetupOrb step="model" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">Choose Model</h1>
         <p className="text-fg-secondary text-sm">
-          Step 3 of 3 - Almost ready!
+          Step 2 of 2 - Almost ready!
         </p>
       </div>
 
@@ -338,7 +248,6 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     <div className="min-h-screen flex items-center justify-center bg-bg-primary p-4">
       <div className="card max-w-md w-full p-8">
         {currentStep === 'welcome' && renderWelcome()}
-        {currentStep === 'profile' && renderProfile()}
         {currentStep === 'api-key' && renderApiKey()}
         {currentStep === 'model' && renderModel()}
       </div>

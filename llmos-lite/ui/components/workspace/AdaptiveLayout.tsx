@@ -470,7 +470,7 @@ export default function AdaptiveLayout() {
         />
       )}
 
-      {/* Floating JARVIS Avatar - Always visible like Siri */}
+      {/* Floating AI Avatar - Always visible like Siri */}
       <FloatingJarvis position="bottom-right" />
     </div>
   );

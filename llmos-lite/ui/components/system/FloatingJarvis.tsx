@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * FloatingJarvis - Persistent AI avatar like Siri on macOS
+ * FloatingAssistant - Persistent AI avatar like Siri on macOS
  *
  * A floating avatar that:
  * - Shows in a corner of the screen
@@ -93,7 +93,7 @@ function CSSOrb({ config, size = 'md' }: { config: StateConfig; size?: 'sm' | 'm
 }
 
 // ============================================================================
-// FLOATING JARVIS COMPONENT
+// FLOATING AI ASSISTANT COMPONENT
 // ============================================================================
 
 interface FloatingJarvisProps {
@@ -221,7 +221,7 @@ export default function FloatingJarvis({
                   className="w-2 h-2 rounded-full animate-pulse"
                   style={{ backgroundColor: config.color }}
                 />
-                <span className="text-xs font-medium text-fg-primary">JARVIS</span>
+                <span className="text-xs font-medium text-fg-primary">AI</span>
               </div>
               <div className="flex items-center gap-1">
                 <button

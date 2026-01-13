@@ -38,7 +38,7 @@ const JarvisAvatar = dynamic(
 );
 
 // ============================================================================
-// EMPTY STATE - Desktop with JARVIS
+// EMPTY STATE - Desktop with AI Assistant
 // ============================================================================
 
 interface EmptyDesktopProps {
@@ -109,7 +109,7 @@ function EmptyDesktop({ customMessage, onLaunchApplet, recentApplets = [], onOpe
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* JARVIS Avatar - Main presence */}
+      {/* AI Avatar - Main presence */}
       <div className="flex-1 min-h-[180px] relative">
         <JarvisAvatar showLabel={false} />
 
@@ -254,7 +254,7 @@ function DesktopGrid({ applets, currentAppletId, onAppletClick, onAppletClose }:
       {/* Hint */}
       <div className="p-4 border-t border-white/10 bg-[#161b22]/30">
         <p className="text-[10px] text-[#6e7681] text-center">
-          Click an applet to open - Ask JARVIS to create more
+          Click an applet to open - Ask AI to create more
         </p>
       </div>
     </div>
