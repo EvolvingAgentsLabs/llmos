@@ -912,93 +912,63 @@ Present this plan and options NOW. Include concrete details specific to "${goal}
     try {
       const orchestrator = await this.initializeOrchestrator();
 
-      // Build an execution prompt that will ACTUALLY EXECUTE the plan
-      // CRITICAL: Do NOT ask for options after every step - only at true completion
-      const continuationPrompt = `EXECUTION PHASE - ACHIEVE THE GOAL NOW
+      // Build a SIMPLIFIED execution prompt that forces immediate action
+      // CRITICAL: Be direct and require tool calls, not more analysis
+      const continuationPrompt = `EXECUTE NOW - NO MORE PLANNING
 
-## STATUS
-- GOAL: ${this.pendingGoal}
-- SELECTED APPROACH: ${selectedOption.agentName}
-- APPROACH DETAILS: ${selectedOption.content}
-${isStepByStep ? '- MODE: Step-by-step with checkpoints' : '- MODE: Full execution until completion'}
+GOAL: ${this.pendingGoal}
+APPROACH: ${selectedOption.agentName} - ${selectedOption.content}
 
-## PLANNING CONTEXT
-${this.planningContext ? this.planningContext.substring(0, 3000) : 'Execute the goal directly.'}
+YOU MUST START EXECUTING IMMEDIATELY. Your FIRST response must contain tool calls.
 
-## EXECUTION INSTRUCTIONS
+## REQUIRED FIRST ACTIONS (DO ALL OF THESE NOW):
 
-**YOU MUST NOW EXECUTE THE PLAN AND ACHIEVE THE GOAL.**
-
-### MANDATORY WORKFLOW:
-
-**STEP 1: CREATE SUB-AGENTS (REQUIRED - minimum 3 agents)**
-
-Before doing anything else, create the sub-agent markdown files:
-
-For EACH of the 3+ planned sub-agents, use write-file to create:
+1. **CREATE FIRST SUB-AGENT** - Use write-file to create:
 \`\`\`tool
 {
   "tool": "write-file",
   "inputs": {
-    "path": "user/components/agents/[AgentName].md",
-    "content": "---\\nname: [AgentName]\\ntype: specialist\\ncapabilities:\\n  - [capability1]\\n  - [capability2]\\n---\\n\\n# [AgentName]\\n\\n[Agent instructions...]"
+    "path": "user/components/agents/PlanningAgent.md",
+    "content": "---\\nname: PlanningAgent\\ntype: specialist\\norigin: created\\ncapabilities:\\n  - task planning\\n  - goal decomposition\\n---\\n\\n# PlanningAgent\\n\\nYou plan and coordinate task execution."
   }
 }
 \`\`\`
 
-**STEP 2: EXECUTE EACH PHASE**
+2. **CREATE SECOND SUB-AGENT** - Use write-file to create a task-specific agent
 
-For each phase in the plan:
-1. Show which sub-agent is working: 🤖 [AgentName] → User: "Starting [task]..."
-2. Call the necessary tools (write-file, execute-python, generate-applet, etc.)
-3. Show progress: 🤖 [AgentName] → User: "Completed [task]. Result: [summary]"
+3. **CREATE THIRD SUB-AGENT** - Use write-file to create an output/visualization agent
 
-**STEP 3: PRODUCE DELIVERABLES**
+4. **GENERATE APPLET OR EXECUTE CODE** - If the goal requires interactive UI:
+\`\`\`tool
+{
+  "tool": "generate-applet",
+  "inputs": {
+    "name": "[Applet Name]",
+    "description": "[What it does]",
+    "code": "function Applet() { ... }"
+  }
+}
+\`\`\`
 
-- Write all code files to user/output/code/
-- Generate applets if interactive UI is needed
-- Create visualizations if applicable
-- Write documentation to user/README.md
+${isStepByStep ? `After completing these steps, report what you did and ask if user wants to continue.` : `Continue executing until the goal "${this.pendingGoal}" is FULLY achieved. Do NOT stop to ask for permission.`}
 
-**STEP 4: REPORT COMPLETION**
+**IMPORTANT**:
+- Do NOT respond with analysis or planning text first
+- Your response MUST contain \`\`\`tool blocks
+- Create all 3 agents and produce the deliverable in this execution
 
-When the goal is FULLY ACHIEVED, provide a completion summary:
+START WITH YOUR FIRST TOOL CALL NOW:`;
 
-✅ **GOAL ACHIEVED: ${this.pendingGoal}**
+      // Use the new execution options to ensure tool execution happens
+      const result = await orchestrator.execute(continuationPrompt, {
+        continueFromContext: true,
+        priorContext: this.planningContext?.substring(0, 2000) || '',
+        requireToolExecution: true,
+        minIterations: 2, // At least 2 iterations to allow for agent creation + execution
+      });
 
-**Deliverables Created:**
-- [List each file/output created]
-
-**Sub-Agents Used:**
-- [AgentName1]: [what they did]
-- [AgentName2]: [what they did]
-- [AgentName3]: [what they did]
-
-**Result:**
-[Describe what was accomplished]
-
-${isStepByStep ? `
----
-🗳️ DECISION POINT: Continue or Complete?
-
-**OPTION A: Continue to Next Phase**
-- Description: Proceed to the next phase of execution
-
-**OPTION STOP: Complete Here**
-- Description: Current progress is sufficient, stop here
-` : `
-## IMPORTANT: DO NOT present decision options unless:
-1. You encounter an error that requires user input
-2. There's a genuine choice point (multiple valid paths)
-3. The ENTIRE goal is complete
-
-Execute until the goal "${this.pendingGoal}" is FULLY ACHIEVED.
-`}
-
-**START EXECUTING NOW.**`;
-
-      const result = await orchestrator.execute(continuationPrompt);
-      await this.handleExecutionResult(result, timestamp);
+      // Handle result but PREVENT re-entering decision point loop unless truly complete
+      await this.handleExecutionResultNoLoop(result, timestamp, isStepByStep);
 
     } catch (error) {
       logger.error('agent', 'Failed to continue execution', { error });
@@ -1006,6 +976,123 @@ Execute until the goal "${this.pendingGoal}" is FULLY ACHIEVED.
       this.setPhase('completed');
       this.updateParticipantStatus('system-agent', 'idle');
     }
+  }
+
+  /**
+   * Handle execution result without triggering decision point loops
+   * This prevents the infinite option loop after selecting an approach
+   */
+  private async handleExecutionResultNoLoop(
+    result: SystemAgentResult,
+    timestamp: string,
+    allowStepByStepCheckpoint: boolean = false
+  ): Promise<void> {
+    // Add files created to the chat
+    if (result.filesCreated && result.filesCreated.length > 0) {
+      const fileRefs: FileReference[] = result.filesCreated.map(path => ({
+        path,
+        name: path.split('/').pop() || path,
+        type: path.includes('agent') ? 'agent' : path.endsWith('.md') ? 'plan' : 'code' as FileReference['type'],
+      }));
+
+      const filesMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `Created ${result.filesCreated.length} file(s):`,
+        timestamp,
+        participantId: 'system-agent',
+        isSystemMessage: true,
+        fileReferences: fileRefs,
+      };
+      this.messages.push(filesMessage);
+      this.emit('message:added', filesMessage);
+
+      for (const ref of fileRefs) {
+        this.emit('file:created', ref);
+      }
+
+      // Register created agents as participants
+      for (const path of result.filesCreated) {
+        if (path.includes('agents/') && path.endsWith('.md')) {
+          const agentName = path.split('/').pop()?.replace('.md', '') || 'SubAgent';
+          const agentId = agentName.toLowerCase().replace(/\s+/g, '-');
+          if (!this.participants.has(agentId)) {
+            const participant: ChatParticipant = {
+              id: agentId,
+              name: agentName,
+              type: 'sub-agent',
+              color: getAgentColor(agentName),
+              role: 'specialist',
+              status: 'done',
+            };
+            this.participants.set(agentId, participant);
+            this.emit('participant:added', participant);
+          }
+        }
+      }
+    }
+
+    // Show multi-agent validation results
+    if (result.multiAgentValidation) {
+      const validation = result.multiAgentValidation;
+      const validationMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `**Multi-Agent Validation:**\n- Agents: ${validation.agentCount}/${validation.minimumRequired} required\n- Status: ${validation.isValid ? '✓ Valid' : '✗ Invalid'}\n- ${validation.message}`,
+        timestamp,
+        participantId: 'system-agent',
+        isSystemMessage: true,
+      };
+      this.messages.push(validationMessage);
+      this.emit('message:added', validationMessage);
+    }
+
+    // Parse sub-agent dialogs from response
+    const dialogs = this.parseAgentDialogs(result.response);
+    if (dialogs.length > 0) {
+      this.agentDialogs.push(...dialogs);
+    }
+
+    // Create the final message - but DO NOT parse for decision options
+    // This prevents looping back to options after execution
+    const finalMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: result.response,
+      timestamp,
+      participantId: 'system-agent',
+      isDecisionPoint: false, // Explicitly false to prevent option parsing in UI
+      agentDialogs: dialogs.length > 0 ? dialogs : undefined,
+    };
+    this.messages.push(finalMessage);
+    this.emit('message:added', finalMessage);
+
+    // Only check for step-by-step checkpoint if explicitly in that mode
+    if (allowStepByStepCheckpoint && result.response.includes('Continue to Next Phase')) {
+      // This is a legitimate step-by-step checkpoint
+      const options = this.parseOptionsFromResponse(result.response);
+      if (options.length > 0) {
+        // Update the message to be a decision point
+        finalMessage.isDecisionPoint = true;
+        finalMessage.alternatives = options;
+        this.emit('message:updated', finalMessage);
+        this.setPhase('coordinating');
+        return;
+      }
+    }
+
+    // Show completion summary
+    const filesCount = result.filesCreated?.length || 0;
+    const agentCount = Array.from(this.participants.values()).filter(p => p.type === 'sub-agent').length;
+
+    if (filesCount > 0 || agentCount > 0) {
+      this.addSystemMessage(`**Execution Summary:**\n- Files created: ${filesCount}\n- Sub-agents used: ${agentCount}\n- Execution time: ${(result.executionTime / 1000).toFixed(2)}s`);
+    }
+
+    // Mark as completed
+    this.executionPhase = 'completed';
+    this.setPhase('completed');
+    this.updateParticipantStatus('system-agent', 'done');
   }
 
   /**
@@ -1911,31 +1998,45 @@ Execute until the goal "${this.pendingGoal}" is FULLY ACHIEVED.
 
       this.addSystemMessage(`Continuing with your selection: "${selection.substring(0, 50)}${selection.length > 50 ? '...' : ''}"`);
 
-      // Execute with the user's selection - instruct to achieve the goal, not loop
-      const executionPrompt = `CONTINUE EXECUTION - User provided additional input.
+      // Execute with the user's selection - direct and action-oriented
+      const executionPrompt = `EXECUTE NOW - User selected an approach.
 
-ORIGINAL GOAL: ${this.pendingGoal || 'Continue the task'}
+GOAL: ${this.pendingGoal || 'Continue the task'}
+USER SELECTION: ${selection}
 
-USER INPUT: ${selection}
+YOU MUST START EXECUTING IMMEDIATELY. Your FIRST response must contain tool calls.
 
-PLANNING CONTEXT:
-${this.planningContext ? this.planningContext.substring(0, 2000) : 'No prior context'}
+## REQUIRED ACTIONS:
 
-INSTRUCTIONS:
-1. Use the user's input to continue toward achieving the goal
-2. Create and use sub-agents (minimum 3) if not already created
-3. Execute the necessary tool calls to produce deliverables
-4. When complete, provide a summary of what was achieved
+1. **CREATE SUB-AGENTS** (minimum 3) - Use write-file to create agent markdown files:
+\`\`\`tool
+{
+  "tool": "write-file",
+  "inputs": {
+    "path": "user/components/agents/[AgentName].md",
+    "content": "---\\nname: [AgentName]\\ntype: specialist\\n---\\n\\n# [AgentName]\\n\\n[instructions]"
+  }
+}
+\`\`\`
 
-FORMAT FOR SUB-AGENT WORK:
-🤖 [AgentName] → User: "Working on [task]..."
+2. **EXECUTE CODE OR GENERATE APPLET** - Produce the deliverable
 
-EXECUTE NOW and achieve the goal: ${this.pendingGoal || selection}`;
+3. **REPORT COMPLETION** - Summarize what was achieved
 
-      const result = await orchestrator.execute(executionPrompt);
+**IMPORTANT**: Start with tool calls. Do NOT respond with just text/analysis.
 
-      // Handle the result
-      await this.handleExecutionResult(result, timestamp);
+START WITH YOUR FIRST TOOL CALL NOW:`;
+
+      // Use execution options to ensure actual work happens
+      const result = await orchestrator.execute(executionPrompt, {
+        continueFromContext: true,
+        priorContext: this.planningContext?.substring(0, 2000) || '',
+        requireToolExecution: true,
+        minIterations: 2,
+      });
+
+      // Handle the result without decision point loop
+      await this.handleExecutionResultNoLoop(result, timestamp, false);
 
     } catch (error) {
       logger.error('agent', 'Failed to continue with selection', { error });
