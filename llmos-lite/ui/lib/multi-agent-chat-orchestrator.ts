@@ -1421,8 +1421,13 @@ START WITH YOUR FIRST TOOL CALL NOW:`;
             this.emit('message:updated', message);
           }
 
-          // Continue with the auto-selected option
-          await this.continueWithSelection(`Auto-selected ${recommendedOption.agentName}: ${recommendedOption.content}`);
+          // CRITICAL: Use continueWithSelectedOption for proper execution flow
+          // This ensures context preservation and tool execution requirements
+          if (this.executionPhase === 'awaiting_vote') {
+            await this.continueWithSelectedOption(recommendedOption);
+          } else {
+            await this.continueWithSelection(`Auto-selected ${recommendedOption.agentName}: ${recommendedOption.content}`);
+          }
         }
       }
     }, VOTING_TIMEOUT_MS);

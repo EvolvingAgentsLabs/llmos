@@ -338,15 +338,15 @@ export class SystemAgentOrchestrator {
       // Initialize or continue context manager
       const systemPromptWithTools = this.buildSystemPromptWithTools();
 
-      if (continueFromContext && options?.priorContext) {
-        // Continue from existing context - add prior context as a note
-        // Don't reinitialize, just add the continuation as a new entry
-        this.contextManager.addEntry({
-          role: 'user',
-          content: `CONTINUATION FROM PLANNING PHASE:\n${options.priorContext}\n\nNEW INSTRUCTION:\n${userGoal}`,
-          type: 'context-note',
-        });
-        console.log('[SystemAgent] Continuing from prior context, preserving workflow history');
+      if (continueFromContext) {
+        // Continue from existing context - inject prior context into the prompt
+        // Always reinitialize to ensure clean state, but include prior context
+        const priorContext = options?.priorContext || '';
+        const fullGoal = priorContext
+          ? `## PRIOR PLANNING CONTEXT (from previous phase)\n${priorContext}\n\n---\n\n## CURRENT EXECUTION INSTRUCTION\n${userGoal}`
+          : userGoal;
+        this.contextManager.initialize(systemPromptWithTools, fullGoal);
+        console.log('[SystemAgent] Continuing execution with prior context injected');
       } else {
         // Fresh initialization
         this.contextManager.initialize(systemPromptWithTools, userGoal);
@@ -385,19 +385,31 @@ export class SystemAgentOrchestrator {
         // Build context with iterative summarization if needed
         const currentStep = `Step ${iterations}/${this.maxIterations}: ${iterations === 1 ? 'Initial planning' : 'Continuing workflow'}`;
 
-        const contextResult = await this.contextManager.buildContext(
-          currentStep,
-          summarizer,
-          (step, details) => {
-            // Emit context management progress
-            this.emitProgress({
-              type: 'context-management',
-              agent: 'SystemAgent',
-              action: this.formatContextAction(step),
-              details,
-            });
-          }
-        );
+        let contextResult;
+        try {
+          contextResult = await this.contextManager.buildContext(
+            currentStep,
+            summarizer,
+            (step, details) => {
+              // Emit context management progress
+              this.emitProgress({
+                type: 'context-management',
+                agent: 'SystemAgent',
+                action: this.formatContextAction(step),
+                details,
+              });
+            }
+          );
+        } catch (contextError) {
+          console.error('[SystemAgent] Failed to build context:', contextError);
+          this.emitProgress({
+            type: 'thinking',
+            agent: 'SystemAgent',
+            action: 'Context building failed',
+            details: `Error: ${contextError instanceof Error ? contextError.message : String(contextError)}`,
+          });
+          throw contextError;
+        }
 
         lastContextResult = contextResult;
 
@@ -410,11 +422,23 @@ export class SystemAgentOrchestrator {
           type: 'api-call',
           agent: 'SystemAgent',
           action: `Making LLM API call (iteration ${iterations})`,
-          details: `Context: ~${Math.round(contextResult.tokenEstimate / 1000)}K tokens`,
+          details: `Context: ~${Math.round(contextResult.tokenEstimate / 1000)}K tokens, ${contextResult.messages.length} messages`,
         });
 
         // Call LLM with the managed context
-        const llmResponse = await llmClient.chatDirect(contextResult.messages);
+        let llmResponse: string;
+        try {
+          llmResponse = await llmClient.chatDirect(contextResult.messages);
+        } catch (llmError) {
+          console.error('[SystemAgent] LLM call failed:', llmError);
+          this.emitProgress({
+            type: 'thinking',
+            agent: 'SystemAgent',
+            action: 'LLM call failed',
+            details: `Error: ${llmError instanceof Error ? llmError.message : String(llmError)}`,
+          });
+          throw llmError;
+        }
 
         // Emit parsing event
         this.emitProgress({
