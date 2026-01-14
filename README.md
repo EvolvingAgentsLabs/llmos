@@ -211,80 +211,12 @@ Full end-to-end pipeline for physical AI agents: natural language → agent crea
 
 ---
 
-## 🏗️ Architecture Highlights
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         LLMos Desktop                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐  ┌────────────────────────────────────────┐  │
-│  │   JARVIS     │  │           Desktop View                 │  │
-│  │   Avatar     │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐      │  │
-│  │  ┌───────┐   │  │  │Calc │ │Timer│ │Color│ │Notes│      │  │
-│  │  │  ◉◉◉  │   │  │  └─────┘ └─────┘ └─────┘ └─────┘      │  │
-│  │  │ ╱   ╲ │   │  │  ┌─────┐ ┌─────┐ ┌─────┐              │  │
-│  │  └───────┘   │  │  │Quant│ │ 3D  │ │Work │              │  │
-│  │  Thinking... │  │  │ um  │ │Scene│ │flow │              │  │
-│  └──────────────┘  │  └─────┘ └─────┘ └─────┘              │  │
-│                    └────────────────────────────────────────┘  │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                        SystemAgent                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ Memory System│  │  VFS Storage │  │ Applet Store │          │
-│  │ Short + Long │  │ localStorage │  │ Active/Recent│          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │Python Runtime│  │Applet Runtime│  │  View Manager│          │
-│  │   Pyodide    │  │ Babel + React│  │Desktop/Canvas│          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ WASM Compiler│  │ Serial/Device│  │ ESP32 Runtime│          │
-│  │Browser Clang │  │  Web Serial  │  │ WASMachine   │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Core Components:**
-- **JARVIS Avatar** - Floating AI assistant showing agent state (idle/thinking/executing/success/error)
-- **Desktop View** - macOS-style app grid with system applets and user-generated applets
-- **Applet Store** - Manages active, recent, and system applets with state persistence
-- **View Manager** - Handles Desktop, Canvas, Chat, and Media view modes
-- **WASM Compiler** - Browser-based C to WebAssembly compilation using Wasmer SDK and Clang
-- **ESP32 Runtime** - Deploy compiled WASM apps to ESP32 devices via Web Serial API
-
-**Every execution creates:**
-```
-projects/[name]/
-├── applets/              # React applet source files (.tsx)
-├── components/
-│   └── agents/           # Sub-agent definitions (.md)
-├── tools/                # Custom tool definitions
-├── skills/               # Skill nodes
-├── output/
-│   ├── code/             # Generated Python files
-│   └── visualizations/   # Matplotlib plots
-└── memory/
-    ├── short_term/       # Execution traces
-    └── long_term/        # Consolidated learnings
-```
-
----
-
 ## 📚 Documentation
 
 - **README.md** (this file) - Overview and quick start
-- **llmos-lite/README.md** - Detailed feature documentation
-- **llmos-lite/ARCHITECTURE.md** - Technical architecture
-- **llmos-lite/LLMUNIX_COMPLETE.md** - Complete implementation guide
-- **llmos-lite/docs/BROWSER_COMPILATION.md** - Browser-based WASM compilation guide
-- **ESP32_COMPLETE_TUTORIAL.md** - ESP32 hardware integration tutorial
+- **llmos-lite/ui/README.md** - UI development guide
+- **llmos-lite/ui/ARCHITECTURE.md** - Technical architecture
+- **llmos-lite/ui/docs/** - Detailed feature documentation
 
 ---
 
