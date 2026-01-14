@@ -95,6 +95,14 @@ export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
     outputCost: '$75/M tokens',
     contextWindow: '200K tokens',
   },
+  'mimo-v2-flash': {
+    id: 'xiaomi/mimo-v2-flash:free',
+    name: 'MiMo v2 Flash',
+    provider: 'Xiaomi',
+    inputCost: 'Free',
+    outputCost: 'Free',
+    contextWindow: '128K tokens',
+  },
 };
 
 // Type for preset model keys

@@ -281,6 +281,21 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     supportsStreaming: true,
     supportsImages: false,
   },
+
+  // Xiaomi Models
+  'xiaomi/mimo-v2-flash:free': {
+    markdownInstructionFollowing: 'good',
+    structuredOutputReliability: 'good',
+    toolUseAccuracy: 'good',
+    contextWindowSize: 128000,
+    multiStepReasoning: 'good',
+    agentDelegation: 'moderate',
+    selfCorrection: 'good',
+    recommendedStrategy: 'compiled',
+    provider: 'xiaomi',
+    supportsStreaming: true,
+    supportsImages: true,
+  },
 };
 
 // Default capabilities for unknown models
@@ -341,6 +356,10 @@ export function getModelCapabilities(modelId: string): ModelCapabilities {
 
   if (normalizedId.includes('qwen')) {
     return MODEL_CAPABILITIES['qwen/qwen-2.5-72b'];
+  }
+
+  if (normalizedId.includes('xiaomi') || normalizedId.includes('mimo')) {
+    return MODEL_CAPABILITIES['xiaomi/mimo-v2-flash:free'];
   }
 
   return DEFAULT_CAPABILITIES;
