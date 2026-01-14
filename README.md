@@ -6,9 +6,7 @@ LLMos-Lite is an experimental "Operating System in the Browser" that bridges the
 
 Built for scientific computing, robotics, and edge AI—all running entirely in your browser with zero backend required.
 
-<video src="https://github.com/user-attachments/assets/e7574fa5-a8be-4386-994a-232bd3224cb7" width="600" controls></video>
-
-*JARVIS-powered Desktop experience with floating AI avatar, system applets, and intelligent task orchestration.*
+<video src="https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07" width="600" controls></video>
 
 ---
 
