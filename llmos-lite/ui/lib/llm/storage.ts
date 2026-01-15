@@ -5,7 +5,7 @@
  */
 
 const STORAGE_KEYS = {
-  API_KEY: 'llmos_openrouter_api_key',
+  API_KEY: 'llmos_google_api_key',
   MODEL: 'llmos_selected_model',
   PROVIDER: 'llmos_provider',
   CUSTOM_MODEL: 'llmos_custom_model',
@@ -53,7 +53,7 @@ export const LLMStorage = {
     return null;
   },
 
-  saveProvider(provider: 'openrouter' | 'anthropic' | 'openai'): void {
+  saveProvider(provider: 'google' | 'anthropic' | 'openai'): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
     }

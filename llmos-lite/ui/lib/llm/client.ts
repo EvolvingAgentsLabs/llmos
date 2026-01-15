@@ -1,9 +1,10 @@
 /**
  * Unified LLM Client
  *
- * Combines base LLM client with file tool support
+ * Uses Google AI Studio (Gemini) API via @google/genai SDK
  */
 
+import { GoogleGenAI } from '@google/genai';
 import { logger } from '@/lib/debug/logger';
 import { llmMetrics } from '@/lib/debug/llm-metrics-store';
 import { getFileTools } from '@/lib/llm-tools/file-tools';
@@ -18,23 +19,21 @@ import {
 } from './types';
 import { LLMStorage } from './storage';
 
-const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
-
 export class LLMClient {
   private config: LLMConfig;
   private fileTools = getFileTools();
-  private baseURL: string;
+  private client: GoogleGenAI;
 
   constructor(config: LLMConfig) {
     this.config = config;
-    this.baseURL = config.baseURL || DEFAULT_BASE_URL;
+    this.client = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
   /**
-   * Direct client-side OpenRouter call (RECOMMENDED)
+   * Direct Google AI Studio call (RECOMMENDED)
    *
-   * This method calls OpenRouter directly from the browser.
-   * Your API key never leaves the client - it goes straight to OpenRouter.
+   * This method calls Google AI directly from the browser.
+   * Your API key never leaves the client - it goes straight to Google.
    */
   async chatDirect(
     messages: Message[],
@@ -43,7 +42,7 @@ export class LLMClient {
       volume?: 'user' | 'team' | 'system';
     }
   ): Promise<string> {
-    logger.time('llm-request', 'llm', 'OpenRouter API call', {
+    logger.time('llm-request', 'llm', 'Google AI API call', {
       model: this.config.model,
       messageCount: messages.length,
     });
@@ -67,11 +66,7 @@ export class LLMClient {
     }
 
     // Calculate request payload size for metrics
-    const requestPayload = JSON.stringify({
-      model: this.config.model,
-      messages: finalMessages,
-    });
-    const requestChars = requestPayload.length;
+    const requestChars = finalMessages.reduce((acc, m) => acc + m.content.length, 0);
 
     // Start tracking this request
     const metricsId = llmMetrics.startRequest(
@@ -81,57 +76,31 @@ export class LLMClient {
     );
 
     try {
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'HTTP-Referer': this.config.siteUrl || (typeof window !== 'undefined' ? window.location.origin : ''),
-          'X-Title': 'LLMos-Lite',
-          'Content-Type': 'application/json',
-        },
-        body: requestPayload,
+      // Convert messages to Gemini format
+      const contents = this.convertToGeminiFormat(finalMessages);
+
+      const response = await this.client.models.generateContent({
+        model: this.config.model,
+        contents: contents,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('llm', `OpenRouter API error (${response.status})`, { errorText });
-        logger.timeEnd('llm-request', false);
-        llmMetrics.failRequest(metricsId, `API error: ${response.status}`);
+      const content = response.text || '';
+      const responseChars = content.length;
 
-        try {
-          const errorJson = JSON.parse(errorText);
-          throw new Error(`OpenRouter API error (${response.status}): ${errorJson.error?.message || errorText}`);
-        } catch {
-          throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
-        }
-      }
-
-      const data = await response.json();
-
-      if (!data.choices?.[0]?.message) {
-        logger.error('llm', 'Unexpected response structure', { data });
-        logger.timeEnd('llm-request', false);
-        llmMetrics.failRequest(metricsId, 'Invalid response structure');
-        throw new Error('Invalid response structure from OpenRouter API');
-      }
-
-      const content = data.choices[0].message.content;
-      const responseChars = content?.length || 0;
-
-      // Complete metrics tracking with actual token usage if available
+      // Complete metrics tracking
       llmMetrics.completeRequest(
         metricsId,
         responseChars,
-        data.usage ? {
-          prompt: data.usage.prompt_tokens || 0,
-          completion: data.usage.completion_tokens || 0,
-          total: data.usage.total_tokens || 0,
+        response.usageMetadata ? {
+          prompt: response.usageMetadata.promptTokenCount || 0,
+          completion: response.usageMetadata.candidatesTokenCount || 0,
+          total: response.usageMetadata.totalTokenCount || 0,
         } : undefined
       );
 
       logger.timeEnd('llm-request', true, {
-        tokensUsed: data.usage?.total_tokens,
-        model: data.model,
+        tokensUsed: response.usageMetadata?.totalTokenCount,
+        model: this.config.model,
         requestChars,
         responseChars,
       });
@@ -144,6 +113,48 @@ export class LLMClient {
   }
 
   /**
+   * Convert messages array to Gemini format
+   */
+  private convertToGeminiFormat(messages: Message[]): string | Array<{ role: string; parts: Array<{ text: string }> }> {
+    // Handle system messages by prepending to first user message
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const otherMessages = messages.filter(m => m.role !== 'system');
+
+    // If we only have simple messages, convert to content array
+    if (otherMessages.length === 0 && systemMessages.length > 0) {
+      return systemMessages.map(m => m.content).join('\n\n');
+    }
+
+    // Build conversation history
+    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    // Add system context to the first user message
+    const systemContext = systemMessages.map(m => m.content).join('\n\n');
+
+    for (let i = 0; i < otherMessages.length; i++) {
+      const msg = otherMessages[i];
+      let content = msg.content;
+
+      // Prepend system context to first user message
+      if (i === 0 && msg.role === 'user' && systemContext) {
+        content = `${systemContext}\n\n${content}`;
+      }
+
+      contents.push({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: content }]
+      });
+    }
+
+    // If no messages, return empty string
+    if (contents.length === 0) {
+      return systemContext || '';
+    }
+
+    return contents;
+  }
+
+  /**
    * Send a chat message with file tool support
    */
   async sendMessageWithTools(
@@ -152,49 +163,22 @@ export class LLMClient {
   ): Promise<Message> {
     const tools = this.fileTools.getToolDefinitions();
 
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : '',
-        'X-Title': 'LLMos-Lite'
-      },
-      body: JSON.stringify({
+    // For now, use simple chat without tools - Gemini tool calling requires different format
+    const contents = this.convertToGeminiFormat(messages);
+
+    try {
+      const response = await this.client.models.generateContent({
         model: this.config.model,
-        messages: this.formatMessages(messages),
-        tools: tools.map(t => ({
-          type: 'function',
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters
-          }
-        })),
-        tool_choice: 'auto',
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096
-      })
-    });
+        contents: contents,
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`LLM API error: ${response.status} - ${error}`);
+      return {
+        role: 'assistant',
+        content: response.text || ''
+      };
+    } catch (error) {
+      throw new Error(`Google AI API error: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    const data = await response.json();
-    const choice = data.choices[0];
-    const message = choice.message;
-
-    // Check if the model wants to use tools
-    if (message.tool_calls?.length > 0) {
-      return await this.handleToolCalls(messages, message.tool_calls);
-    }
-
-    return {
-      role: 'assistant',
-      content: message.content || ''
-    };
   }
 
   /**
@@ -204,26 +188,7 @@ export class LLMClient {
     messages: Message[],
     options?: ChatCompletionOptions
   ): AsyncGenerator<StreamChunk> {
-    const tools = this.fileTools.getToolDefinitions();
-
-    // Calculate request payload size for metrics
-    const requestPayload = JSON.stringify({
-      model: this.config.model,
-      messages: this.formatMessages(messages),
-      tools: tools.map(t => ({
-        type: 'function',
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters
-        }
-      })),
-      tool_choice: 'auto',
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      stream: true
-    });
-    const requestChars = requestPayload.length;
+    const requestChars = messages.reduce((acc, m) => acc + m.content.length, 0);
 
     // Start tracking this streaming request
     const metricsId = llmMetrics.startRequest(
@@ -232,108 +197,34 @@ export class LLMClient {
       messages.length
     );
 
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : '',
-        'X-Title': 'LLMos-Lite'
-      },
-      body: requestPayload
-    });
-
-    if (!response.ok) {
-      llmMetrics.failRequest(metricsId, `LLM API error: ${response.status}`);
-      throw new Error(`LLM API error: ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      llmMetrics.failRequest(metricsId, 'No response body');
-      throw new Error('No response body');
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    const toolCalls: ToolCall[] = [];
-    let totalResponseChars = 0;
-
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const contents = this.convertToGeminiFormat(messages);
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      // Use streaming API
+      const response = await this.client.models.generateContentStream({
+        model: this.config.model,
+        contents: contents,
+      });
 
-        for (const line of lines) {
-          if (!line.trim() || line.trim() === 'data: [DONE]') continue;
-          if (!line.startsWith('data: ')) continue;
+      let totalResponseChars = 0;
 
-          const json = JSON.parse(line.slice(6));
-          const delta = json.choices[0]?.delta;
-
-          if (!delta) continue;
-
-          if (delta.content) {
-            const chunkChars = delta.content.length;
-            totalResponseChars += chunkChars;
-            // Track streaming chunk
-            llmMetrics.updateStreamingChunk(metricsId, chunkChars);
-            yield { type: 'text', content: delta.content };
-          }
-
-          if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              if (!toolCalls[tc.index]) {
-                toolCalls[tc.index] = {
-                  id: tc.id || `tool_${tc.index}`,
-                  name: tc.function?.name || '',
-                  parameters: {}
-                };
-              }
-
-              if (tc.function?.arguments) {
-                const currentArgs = JSON.stringify(toolCalls[tc.index].parameters);
-                const newArgs = currentArgs === '{}'
-                  ? tc.function.arguments
-                  : currentArgs.slice(0, -1) + tc.function.arguments;
-                try {
-                  toolCalls[tc.index].parameters = JSON.parse(newArgs);
-                } catch {
-                  // Arguments still incomplete
-                }
-              }
-            }
-          }
+      for await (const chunk of response) {
+        const text = chunk.text;
+        if (text) {
+          const chunkChars = text.length;
+          totalResponseChars += chunkChars;
+          llmMetrics.updateStreamingChunk(metricsId, chunkChars);
+          yield { type: 'text', content: text };
         }
       }
 
       // Complete the metrics tracking
       llmMetrics.completeRequest(metricsId, totalResponseChars);
 
-      // Execute tool calls if any
-      if (toolCalls.length > 0) {
-        for (const toolCall of toolCalls) {
-          yield { type: 'tool_call', toolCall };
-
-          const result = await this.fileTools.executeTool(
-            toolCall.name,
-            toolCall.parameters
-          );
-
-          yield { type: 'tool_result', toolResult: result };
-        }
-      }
-
       yield { type: 'done' };
     } catch (error) {
       llmMetrics.failRequest(metricsId, error instanceof Error ? error.message : String(error));
       throw error;
-    } finally {
-      reader.releaseLock();
     }
   }
 
@@ -354,41 +245,25 @@ export class LLMClient {
       toolResults.push(result);
     }
 
+    // Continue conversation with tool results
     const messagesWithTools: Message[] = [
       ...previousMessages,
       {
         role: 'assistant',
-        content: '',
-        toolCalls: toolCalls.map(tc => ({
-          id: tc.id,
-          name: tc.function.name,
-          parameters: JSON.parse(tc.function.arguments)
-        }))
-      },
-      ...toolResults.map((result, idx) => ({
-        role: 'tool' as const,
-        tool_call_id: toolCalls[idx].id,
-        content: result.output || result.error || 'No output'
-      }))
+        content: `Tool results: ${toolResults.map(r => r.output || r.error).join('\n')}`
+      }
     ];
 
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: messagesWithTools
-      })
-    });
+    const contents = this.convertToGeminiFormat(messagesWithTools);
 
-    const data = await response.json();
+    const response = await this.client.models.generateContent({
+      model: this.config.model,
+      contents: contents,
+    });
 
     return {
       role: 'assistant',
-      content: data.choices[0].message.content,
+      content: response.text || '',
       toolCalls: toolCalls.map(tc => ({
         id: tc.id,
         name: tc.function.name,
@@ -439,6 +314,7 @@ Use these skills to provide better, more context-aware responses.`;
 
   setApiKey(apiKey: string): void {
     this.config.apiKey = apiKey;
+    this.client = new GoogleGenAI({ apiKey });
   }
 
   setModel(model: string): void {

@@ -145,7 +145,7 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
               {/* Custom Model Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-medium text-fg-secondary uppercase tracking-wider">
-                  Custom OpenRouter Model
+                  Custom Gemini Model
                 </label>
                 <input
                   type="text"
@@ -156,7 +156,7 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
                       handleCustomModelSubmit();
                     }
                   }}
-                  placeholder="e.g., deepseek/deepseek-r1:free"
+                  placeholder="e.g., gemini-2.5-pro-preview"
                   className={`w-full px-3 py-2 text-xs bg-bg-tertiary border rounded-lg focus:outline-none focus:border-accent-primary transition-colors ${
                     isCustomMode ? 'border-accent-primary/50' : 'border-border-primary'
                   }`}
