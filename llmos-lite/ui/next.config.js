@@ -1,8 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Enable standalone output for Electron
+  output: process.env.ELECTRON_BUILD === 'true' ? 'standalone' : undefined,
   // Transpile Three.js packages for proper ESM support
   transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
+  // Disable image optimization for Electron (uses local files)
+  images: {
+    unoptimized: process.env.ELECTRON_BUILD === 'true',
+  },
   webpack: (config, { isServer }) => {
     // Exclude Wasmer SDK from ALL bundles (will load from CDN instead)
     config.externals = config.externals || [];
