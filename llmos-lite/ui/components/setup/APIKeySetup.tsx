@@ -48,7 +48,7 @@ function SetupOrb({ step }: { step: SetupStep }) {
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('anthropic/claude-sonnet-4.5');
+  const [modelName, setModelName] = useState('gemini-3-flash-preview');
 
   // UI state
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
@@ -58,13 +58,13 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     setError('');
-    // OpenRouter key validation
-    setIsValid(value.startsWith('sk-or-v1-') && value.length > 20);
+    // Google AI Studio API key validation (basic length check)
+    setIsValid(value.length > 20);
   };
 
   const handleApiKeyNext = () => {
     if (!isValid) {
-      setError('Invalid OpenRouter API key format. Key should start with "sk-or-v1-"');
+      setError('Please enter a valid Google AI Studio API key');
       return;
     }
     setError('');
@@ -80,10 +80,10 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     console.log('[APIKeySetup] Saving configuration:');
     console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
     console.log('  - Model:', modelName);
-    console.log('  - Provider: openrouter');
+    console.log('  - Provider: google');
 
     // Save LLM config to localStorage
-    LLMStorage.saveProvider('openrouter');
+    LLMStorage.saveProvider('google');
     LLMStorage.saveApiKey(apiKey);
     // Save the model name directly - it will be validated in createLLMClient
     LLMStorage.saveModel(modelName as any);
@@ -143,28 +143,28 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
       <div className="mb-6">
         <label className="block text-xs text-fg-secondary mb-1">
-          OpenRouter API Key
+          Google AI Studio API Key
         </label>
         <input
           type="password"
           value={apiKey}
           onChange={(e) => handleApiKeyChange(e.target.value)}
-          placeholder="sk-or-v1-..."
+          placeholder="AIza..."
           className="input w-full"
           autoFocus
         />
         <div className="mt-2 flex items-center justify-between">
           <a
-            href="https://openrouter.ai/keys"
+            href="https://aistudio.google.com/app/apikey"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-accent-primary hover:underline"
           >
-            Get your free API key
+            Get your free API key from Google AI Studio
           </a>
           {isValid && (
             <span className="text-xs text-accent-success">
-              ✓ Valid
+              Valid
             </span>
           )}
         </div>
@@ -203,26 +203,15 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
         </label>
         <div className="space-y-2">
           <button
-            onClick={() => setModelName('anthropic/claude-sonnet-4.5')}
+            onClick={() => setModelName('gemini-3-flash-preview')}
             className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'anthropic/claude-sonnet-4.5'
+              modelName === 'gemini-3-flash-preview'
                 ? 'border-accent-primary bg-accent-primary/10'
                 : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
             }`}
           >
-            <code className="text-sm text-accent-info">anthropic/claude-sonnet-4.5</code>
-            <p className="text-xs text-fg-tertiary mt-1">Recommended</p>
-          </button>
-          <button
-            onClick={() => setModelName('anthropic/claude-opus-4.5')}
-            className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'anthropic/claude-opus-4.5'
-                ? 'border-accent-primary bg-accent-primary/10'
-                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-            }`}
-          >
-            <code className="text-sm text-accent-info">anthropic/claude-opus-4.5</code>
-            <p className="text-xs text-fg-tertiary mt-1">Premium quality</p>
+            <code className="text-sm text-accent-info">gemini-3-flash-preview</code>
+            <p className="text-xs text-fg-tertiary mt-1">Fast and capable - Recommended</p>
           </button>
         </div>
       </div>

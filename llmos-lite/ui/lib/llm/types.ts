@@ -79,29 +79,13 @@ export interface ModelInfo {
 }
 
 export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
-  'claude-sonnet-4.5': {
-    id: 'anthropic/claude-sonnet-4.5',
-    name: 'Claude Sonnet 4.5',
-    provider: 'Anthropic',
-    inputCost: '$3/M tokens',
-    outputCost: '$15/M tokens',
-    contextWindow: '200K tokens',
-  },
-  'claude-opus-4.5': {
-    id: 'anthropic/claude-opus-4.5',
-    name: 'Claude Opus 4.5',
-    provider: 'Anthropic',
-    inputCost: '$15/M tokens',
-    outputCost: '$75/M tokens',
-    contextWindow: '200K tokens',
-  },
-  'mimo-v2-flash': {
-    id: 'xiaomi/mimo-v2-flash:free',
-    name: 'MiMo v2 Flash',
-    provider: 'Xiaomi',
-    inputCost: 'Free',
-    outputCost: 'Free',
-    contextWindow: '128K tokens',
+  'gemini-3-flash-preview': {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
+    provider: 'Google',
+    inputCost: 'Free tier available',
+    outputCost: 'Free tier available',
+    contextWindow: '1M tokens',
   },
 };
 
