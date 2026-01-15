@@ -2,7 +2,7 @@
  * AssemblyScript Tools for LLM Agents
  *
  * Provides tools that allow LLM agents to compile AssemblyScript (TypeScript-like)
- * code to WebAssembly. Works in both browser (via API) and desktop (via Electron).
+ * code to WebAssembly. Works in both browser and desktop (via Electron).
  *
  * AssemblyScript is ideal for:
  * - Web developers familiar with TypeScript
@@ -13,6 +13,17 @@
 
 import { ToolDefinition, ToolResult } from './file-tools';
 import type { ElectronASCAPI, ASCCompileResult, ASCCompileOptions } from '../../electron/types';
+import {
+  getBrowserASCCompiler,
+  BrowserASCCompileResult,
+} from '../runtime/assemblyscript-compiler';
+import {
+  ROBOT4_EXAMPLES,
+  getExampleById,
+  getExamplesByCategory,
+  searchExamples,
+  type Robot4Example,
+} from '../runtime/robot4-examples';
 
 /**
  * Check if running in Electron desktop environment
@@ -32,120 +43,11 @@ function getElectronASC(): ElectronASCAPI | null {
 }
 
 /**
- * AssemblyScript example for Robot4 behavior
- */
-const ROBOT4_EXAMPLE = `
-// Example: Collision avoidance robot behavior in AssemblyScript
-// This code compiles to WebAssembly and runs on ESP32
-
-import { drive, distance, led, millis, getState, setState, clamp } from "./robot4";
-
-// Constants
-const SAFE_DISTANCE: i32 = 30;
-const TURN_TIME: i32 = 500;
-const BASE_SPEED: i32 = 60;
-
-// Main update loop - called at 60Hz by the firmware
-export function update(): void {
-  // Read front distance sensor
-  const frontDist = distance(0);
-
-  // State machine for behavior
-  const state = getState("state", 0);
-  const turnStart = getState("turnStart", 0);
-
-  if (state == 0) {
-    // State 0: Moving forward
-    if (frontDist < SAFE_DISTANCE) {
-      // Obstacle detected - start turning
-      setState("state", 1);
-      setState("turnStart", millis());
-      led(255, 100, 0); // Orange: obstacle detected
-    } else {
-      // Clear path - drive forward
-      drive(BASE_SPEED, BASE_SPEED);
-      led(0, 255, 0); // Green: moving
-    }
-  } else {
-    // State 1: Turning
-    const elapsed = millis() - turnStart;
-
-    if (elapsed > TURN_TIME) {
-      // Done turning - return to forward
-      setState("state", 0);
-    } else {
-      // Turn right
-      drive(BASE_SPEED, -BASE_SPEED);
-      led(0, 100, 255); // Blue: turning
-    }
-  }
-}
-`;
-
-/**
- * Browser-based AssemblyScript compiler fallback
- * Uses WebAssembly to run asc in the browser
- */
-class BrowserASCCompiler {
-  private static instance: BrowserASCCompiler;
-  private isReady = false;
-  private asc: any = null;
-
-  static getInstance(): BrowserASCCompiler {
-    if (!BrowserASCCompiler.instance) {
-      BrowserASCCompiler.instance = new BrowserASCCompiler();
-    }
-    return BrowserASCCompiler.instance;
-  }
-
-  async initialize(): Promise<void> {
-    if (this.isReady) return;
-
-    try {
-      // Try to load AssemblyScript compiler
-      // Note: This may not be available in browser without bundling
-      console.log('[ASC-Browser] AssemblyScript compiler not available in browser mode');
-      console.log('[ASC-Browser] Use LLMos Desktop for native AssemblyScript compilation');
-    } catch (error) {
-      console.warn('[ASC-Browser] Could not initialize browser compiler:', error);
-    }
-  }
-
-  async compile(source: string, options: ASCCompileOptions = {}): Promise<ASCCompileResult> {
-    // Browser fallback - return helpful error
-    return {
-      success: false,
-      error: 'AssemblyScript compilation requires LLMos Desktop',
-      stderr: `
-AssemblyScript compilation is not available in browser mode.
-
-To compile AssemblyScript code:
-1. Download LLMos Desktop from https://github.com/EvolvingAgentsLabs/llmos
-2. Run the desktop app with: npm run electron:dev
-3. AssemblyScript will be automatically available
-
-Alternatively, use the C compiler (compile_wasm) which works in browser.
-      `.trim(),
-    };
-  }
-
-  getStatus(): { ready: boolean; version: string; installed: boolean } {
-    return {
-      ready: false,
-      version: 'N/A (browser mode)',
-      installed: false,
-    };
-  }
-}
-
-/**
  * AssemblyScript Tools for LLM Agents
  */
 export class AssemblyScriptTools {
-  private browserCompiler: BrowserASCCompiler;
-
   constructor() {
-    this.browserCompiler = BrowserASCCompiler.getInstance();
+    // Browser compiler is singleton, no need to store reference
   }
 
   /**
@@ -197,14 +99,29 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
       },
       {
         name: 'assemblyscript_example',
-        description: 'Get an example AssemblyScript Robot4 behavior to use as a starting point',
+        description: `Get Robot4 behavior examples in AssemblyScript. Available examples:
+- Beginner: blink-led, drive-forward, button-control
+- Intermediate: collision-avoidance, line-follower, wall-follower, patrol-behavior
+- Advanced: maze-solver, light-seeker, dance-routine`,
         parameters: {
           type: 'object',
           properties: {
-            type: {
+            id: {
               type: 'string',
-              enum: ['robot4', 'basic', 'dataprocessing'],
-              description: 'Type of example to generate',
+              description: 'Example ID (e.g., "collision-avoidance", "line-follower", "maze-solver")',
+            },
+            category: {
+              type: 'string',
+              enum: ['beginner', 'intermediate', 'advanced'],
+              description: 'Filter examples by difficulty category',
+            },
+            search: {
+              type: 'string',
+              description: 'Search query to find examples',
+            },
+            list: {
+              type: 'boolean',
+              description: 'If true, list all available examples instead of getting a specific one',
             },
           },
           required: [],
@@ -258,10 +175,10 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
 
     console.log(`[ASC] Compiling ${name} (robot4Mode: ${robot4Mode})...`);
 
-    // Try Electron first
+    // Try Electron first for native compilation
     const electronASC = getElectronASC();
 
-    let result: ASCCompileResult;
+    let result: ASCCompileResult | BrowserASCCompileResult;
 
     if (electronASC) {
       // Desktop mode - use native compiler
@@ -275,12 +192,14 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
         exportMemory: true,
       });
     } else {
-      // Browser fallback
-      result = await this.browserCompiler.compile(source, {
+      // Browser mode - use browser-based compiler
+      const browserCompiler = getBrowserASCCompiler();
+      result = await browserCompiler.compile(source, {
         name,
         robot4Mode,
         optimize,
         debug,
+        runtime: 'stub',
       });
     }
 
@@ -294,9 +213,11 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
     }
 
     // Format success output
+    const mode = electronASC ? 'native (Electron)' : 'browser (WASM)';
     const output = [
       `AssemblyScript compilation successful!`,
       ``,
+      `Mode: ${mode}`,
       `Module: ${name}.wasm`,
       `Size: ${result.size} bytes`,
       `Compilation time: ${result.compilationTime}ms`,
@@ -326,16 +247,18 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
    */
   private async getStatus(): Promise<ToolResult> {
     const electronASC = getElectronASC();
+    const browserCompiler = getBrowserASCCompiler();
 
     let status: { ready: boolean; version: string; installed: boolean };
+    let mode: string;
 
     if (electronASC) {
       status = await electronASC.getStatus();
+      mode = 'Desktop (native asc)';
     } else {
-      status = this.browserCompiler.getStatus();
+      status = browserCompiler.getStatus();
+      mode = 'Browser (WASM-based)';
     }
-
-    const mode = electronASC ? 'Desktop (native)' : 'Browser (limited)';
 
     const output = [
       `AssemblyScript Compiler Status`,
@@ -345,9 +268,12 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
       `Version: ${status.version}`,
       `Installed: ${status.installed ? 'Yes' : 'No'}`,
       ``,
-      electronASC
-        ? 'Full AssemblyScript compilation available.'
-        : 'Limited mode - use LLMos Desktop for full AssemblyScript support.',
+      `Available Examples: ${ROBOT4_EXAMPLES.length} Robot4 behaviors`,
+      `Categories: beginner (${getExamplesByCategory('beginner').length}), intermediate (${getExamplesByCategory('intermediate').length}), advanced (${getExamplesByCategory('advanced').length})`,
+      ``,
+      status.ready
+        ? 'AssemblyScript compilation is available. Use compile_assemblyscript to compile code.'
+        : 'Initializing compiler... First compilation may take a few seconds.',
     ].join('\n');
 
     return {
@@ -358,97 +284,91 @@ For Robot4 firmware, use robot4Mode: true to include the standard library.`,
   }
 
   /**
-   * Get example code
+   * Get example code from the examples library
    */
-  private getExample(params: { type?: string }): ToolResult {
-    const { type = 'robot4' } = params;
+  private getExample(params: {
+    id?: string;
+    category?: 'beginner' | 'intermediate' | 'advanced';
+    search?: string;
+    list?: boolean;
+  }): ToolResult {
+    const { id, category, search, list } = params;
 
-    let example: string;
-    let description: string;
+    // List all examples
+    if (list) {
+      const output = this.formatExamplesList(ROBOT4_EXAMPLES);
+      return {
+        tool: 'assemblyscript_example',
+        success: true,
+        output,
+      };
+    }
 
-    switch (type) {
-      case 'robot4':
-        example = ROBOT4_EXAMPLE;
-        description = 'Robot4 collision avoidance behavior using state machine pattern';
-        break;
-
-      case 'basic':
-        example = `
-// Basic AssemblyScript example
-// Exports a simple function that can be called from JavaScript
-
-export function add(a: i32, b: i32): i32 {
-  return a + b;
-}
-
-export function multiply(a: i32, b: i32): i32 {
-  return a * b;
-}
-
-export function factorial(n: i32): i32 {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-}
-`;
-        description = 'Basic math functions demonstrating AssemblyScript syntax';
-        break;
-
-      case 'dataprocessing':
-        example = `
-// Data processing example
-// Process arrays efficiently in WebAssembly
-
-// Memory layout: input array at 0, output at 1024
-const INPUT_OFFSET: i32 = 0;
-const OUTPUT_OFFSET: i32 = 1024;
-
-export function processArray(length: i32): void {
-  for (let i: i32 = 0; i < length; i++) {
-    const value = load<i32>(INPUT_OFFSET + i * 4);
-    // Apply transformation (example: square each value)
-    const result = value * value;
-    store<i32>(OUTPUT_OFFSET + i * 4, result);
-  }
-}
-
-export function sumArray(length: i32): i32 {
-  let sum: i32 = 0;
-  for (let i: i32 = 0; i < length; i++) {
-    sum += load<i32>(INPUT_OFFSET + i * 4);
-  }
-  return sum;
-}
-
-export function findMax(length: i32): i32 {
-  let max: i32 = load<i32>(INPUT_OFFSET);
-  for (let i: i32 = 1; i < length; i++) {
-    const value = load<i32>(INPUT_OFFSET + i * 4);
-    if (value > max) max = value;
-  }
-  return max;
-}
-`;
-        description = 'Data processing with direct memory access for high performance';
-        break;
-
-      default:
+    // Search examples
+    if (search) {
+      const results = searchExamples(search);
+      if (results.length === 0) {
         return {
           tool: 'assemblyscript_example',
           success: false,
-          error: `Unknown example type: ${type}. Available: robot4, basic, dataprocessing`,
+          error: `No examples found matching "${search}"`,
         };
+      }
+      const output = this.formatExamplesList(results);
+      return {
+        tool: 'assemblyscript_example',
+        success: true,
+        output,
+      };
+    }
+
+    // Filter by category
+    if (category && !id) {
+      const examples = getExamplesByCategory(category);
+      const output = this.formatExamplesList(examples);
+      return {
+        tool: 'assemblyscript_example',
+        success: true,
+        output,
+      };
+    }
+
+    // Get specific example by ID
+    const exampleId = id || 'collision-avoidance'; // Default to collision avoidance
+    const example = getExampleById(exampleId);
+
+    if (!example) {
+      const availableIds = ROBOT4_EXAMPLES.map(e => e.id).join(', ');
+      return {
+        tool: 'assemblyscript_example',
+        success: false,
+        error: `Example "${exampleId}" not found. Available: ${availableIds}`,
+      };
     }
 
     const output = [
-      `AssemblyScript Example: ${type}`,
+      `# ${example.name}`,
       ``,
-      `Description: ${description}`,
+      `**Category:** ${example.category}`,
+      `**Tags:** ${example.tags.join(', ')}`,
+      ``,
+      `**Description:**`,
+      example.description,
+      ``,
+      `## Source Code`,
       ``,
       '```typescript',
-      example.trim(),
+      example.source.trim(),
       '```',
       ``,
-      `To compile this code, use the compile_assemblyscript tool with robot4Mode: ${type === 'robot4'}.`,
+      `## Usage`,
+      ``,
+      `To compile this example:`,
+      '```',
+      `compile_assemblyscript(source, { name: "${example.id}", robot4Mode: true })`,
+      '```',
+      ``,
+      `The compiled WASM can be tested in the Robot4 simulator or deployed to ESP32 hardware.`,
     ].join('\n');
 
     return {
@@ -456,6 +376,52 @@ export function findMax(length: i32): i32 {
       success: true,
       output,
     };
+  }
+
+  /**
+   * Format a list of examples for display
+   */
+  private formatExamplesList(examples: Robot4Example[]): string {
+    const grouped = {
+      beginner: examples.filter(e => e.category === 'beginner'),
+      intermediate: examples.filter(e => e.category === 'intermediate'),
+      advanced: examples.filter(e => e.category === 'advanced'),
+    };
+
+    const lines = [
+      `# Robot4 AssemblyScript Examples`,
+      ``,
+      `Total: ${examples.length} examples`,
+      ``,
+    ];
+
+    if (grouped.beginner.length > 0) {
+      lines.push(`## Beginner (${grouped.beginner.length})`);
+      for (const ex of grouped.beginner) {
+        lines.push(`- **${ex.id}**: ${ex.name} - ${ex.description}`);
+      }
+      lines.push('');
+    }
+
+    if (grouped.intermediate.length > 0) {
+      lines.push(`## Intermediate (${grouped.intermediate.length})`);
+      for (const ex of grouped.intermediate) {
+        lines.push(`- **${ex.id}**: ${ex.name} - ${ex.description}`);
+      }
+      lines.push('');
+    }
+
+    if (grouped.advanced.length > 0) {
+      lines.push(`## Advanced (${grouped.advanced.length})`);
+      for (const ex of grouped.advanced) {
+        lines.push(`- **${ex.id}**: ${ex.name} - ${ex.description}`);
+      }
+      lines.push('');
+    }
+
+    lines.push(`Use \`assemblyscript_example({ id: "example-id" })\` to get the full source code.`);
+
+    return lines.join('\n');
   }
 }
 
