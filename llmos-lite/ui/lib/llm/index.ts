@@ -1,7 +1,8 @@
 /**
  * LLM Client Module
  *
- * Unified LLM client with OpenRouter support and file tools
+ * Unified LLM client using OpenAI-compatible API.
+ * Supports Gemini (default), OpenAI, OpenRouter, Together, Groq, and other providers.
  */
 
 // Types
@@ -22,7 +23,7 @@ export type {
 export { AVAILABLE_MODELS } from './types';
 
 // Storage
-export { LLMStorage } from './storage';
+export { LLMStorage, DEFAULT_BASE_URL, PROVIDER_BASE_URLS } from './storage';
 
 // Client
 export { LLMClient, createLLMClient } from './client';

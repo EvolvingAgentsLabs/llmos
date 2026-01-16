@@ -52,8 +52,8 @@ export interface ChatResponse {
 export interface LLMConfig {
   apiKey: string;
   model: string;
+  baseURL: string;  // Required: OpenAI-compatible API base URL
   siteUrl?: string;
-  baseURL?: string;
 }
 
 export interface ChatCompletionOptions {
