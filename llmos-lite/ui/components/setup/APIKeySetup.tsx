@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { LLMStorage, AVAILABLE_MODELS, type ModelId } from '@/lib/llm-client';
+import { LLMStorage, AVAILABLE_MODELS, PROVIDER_BASE_URLS, type ModelId } from '@/lib/llm-client';
 import { UserStorage, User, Team } from '@/lib/user-storage';
 
 interface APIKeySetupProps {
@@ -80,11 +80,13 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     console.log('[APIKeySetup] Saving configuration:');
     console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
     console.log('  - Model:', modelName);
-    console.log('  - Provider: google');
+    console.log('  - Provider: gemini (OpenAI-compatible API)');
+    console.log('  - Base URL:', PROVIDER_BASE_URLS.gemini);
 
-    // Save LLM config to localStorage
-    LLMStorage.saveProvider('google');
+    // Save LLM config to localStorage (using OpenAI-compatible endpoint)
+    LLMStorage.saveProvider('gemini');
     LLMStorage.saveApiKey(apiKey);
+    LLMStorage.saveBaseUrl(PROVIDER_BASE_URLS.gemini);
     // Save the model name directly - it will be validated in createLLMClient
     LLMStorage.saveModel(modelName as any);
 

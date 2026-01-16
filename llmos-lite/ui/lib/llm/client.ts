@@ -1,10 +1,11 @@
 /**
  * Unified LLM Client
  *
- * Uses Google AI Studio (Gemini) API via @google/genai SDK
+ * Uses OpenAI-compatible API (works with Gemini, OpenAI, OpenRouter, etc.)
+ * Default configuration uses Google AI Studio's OpenAI-compatible endpoint.
  */
 
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { logger } from '@/lib/debug/logger';
 import { llmMetrics } from '@/lib/debug/llm-metrics-store';
 import { getFileTools } from '@/lib/llm-tools/file-tools';
@@ -17,23 +18,28 @@ import {
   StreamChunk,
   AVAILABLE_MODELS,
 } from './types';
-import { LLMStorage } from './storage';
+import { LLMStorage, DEFAULT_BASE_URL } from './storage';
 
 export class LLMClient {
   private config: LLMConfig;
   private fileTools = getFileTools();
-  private client: GoogleGenAI;
+  private client: OpenAI;
 
   constructor(config: LLMConfig) {
     this.config = config;
-    this.client = new GoogleGenAI({ apiKey: config.apiKey });
+    this.client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+      dangerouslyAllowBrowser: true, // Required for client-side usage
+    });
   }
 
   /**
-   * Direct Google AI Studio call (RECOMMENDED)
+   * Direct API call using OpenAI-compatible endpoint
    *
-   * This method calls Google AI directly from the browser.
-   * Your API key never leaves the client - it goes straight to Google.
+   * This method calls the configured API directly from the browser.
+   * By default, it uses Google AI Studio's OpenAI-compatible endpoint.
+   * Your API key never leaves the client - it goes straight to the provider.
    */
   async chatDirect(
     messages: Message[],
@@ -42,9 +48,10 @@ export class LLMClient {
       volume?: 'user' | 'team' | 'system';
     }
   ): Promise<string> {
-    logger.time('llm-request', 'llm', 'Google AI API call', {
+    logger.time('llm-request', 'llm', 'OpenAI-compatible API call', {
       model: this.config.model,
       messageCount: messages.length,
+      baseURL: this.config.baseURL,
     });
 
     let finalMessages = [...messages];
@@ -76,30 +83,30 @@ export class LLMClient {
     );
 
     try {
-      // Convert messages to Gemini format
-      const contents = this.convertToGeminiFormat(finalMessages);
+      // Convert to OpenAI message format
+      const openaiMessages = this.formatMessages(finalMessages);
 
-      const response = await this.client.models.generateContent({
+      const response = await this.client.chat.completions.create({
         model: this.config.model,
-        contents: contents,
+        messages: openaiMessages,
       });
 
-      const content = response.text || '';
+      const content = response.choices[0]?.message?.content || '';
       const responseChars = content.length;
 
       // Complete metrics tracking
       llmMetrics.completeRequest(
         metricsId,
         responseChars,
-        response.usageMetadata ? {
-          prompt: response.usageMetadata.promptTokenCount || 0,
-          completion: response.usageMetadata.candidatesTokenCount || 0,
-          total: response.usageMetadata.totalTokenCount || 0,
+        response.usage ? {
+          prompt: response.usage.prompt_tokens || 0,
+          completion: response.usage.completion_tokens || 0,
+          total: response.usage.total_tokens || 0,
         } : undefined
       );
 
       logger.timeEnd('llm-request', true, {
-        tokensUsed: response.usageMetadata?.totalTokenCount,
+        tokensUsed: response.usage?.total_tokens,
         model: this.config.model,
         requestChars,
         responseChars,
@@ -113,48 +120,6 @@ export class LLMClient {
   }
 
   /**
-   * Convert messages array to Gemini format
-   */
-  private convertToGeminiFormat(messages: Message[]): string | Array<{ role: string; parts: Array<{ text: string }> }> {
-    // Handle system messages by prepending to first user message
-    const systemMessages = messages.filter(m => m.role === 'system');
-    const otherMessages = messages.filter(m => m.role !== 'system');
-
-    // If we only have simple messages, convert to content array
-    if (otherMessages.length === 0 && systemMessages.length > 0) {
-      return systemMessages.map(m => m.content).join('\n\n');
-    }
-
-    // Build conversation history
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
-
-    // Add system context to the first user message
-    const systemContext = systemMessages.map(m => m.content).join('\n\n');
-
-    for (let i = 0; i < otherMessages.length; i++) {
-      const msg = otherMessages[i];
-      let content = msg.content;
-
-      // Prepend system context to first user message
-      if (i === 0 && msg.role === 'user' && systemContext) {
-        content = `${systemContext}\n\n${content}`;
-      }
-
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: content }]
-      });
-    }
-
-    // If no messages, return empty string
-    if (contents.length === 0) {
-      return systemContext || '';
-    }
-
-    return contents;
-  }
-
-  /**
    * Send a chat message with file tool support
    */
   async sendMessageWithTools(
@@ -162,22 +127,22 @@ export class LLMClient {
     options?: ChatCompletionOptions
   ): Promise<Message> {
     const tools = this.fileTools.getToolDefinitions();
-
-    // For now, use simple chat without tools - Gemini tool calling requires different format
-    const contents = this.convertToGeminiFormat(messages);
+    const openaiMessages = this.formatMessages(messages);
 
     try {
-      const response = await this.client.models.generateContent({
+      const response = await this.client.chat.completions.create({
         model: this.config.model,
-        contents: contents,
+        messages: openaiMessages,
+        // Tool support can be added here when needed
+        // tools: tools.map(t => ({ type: 'function', function: t })),
       });
 
       return {
         role: 'assistant',
-        content: response.text || ''
+        content: response.choices[0]?.message?.content || ''
       };
     } catch (error) {
-      throw new Error(`Google AI API error: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`OpenAI-compatible API error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -198,18 +163,19 @@ export class LLMClient {
     );
 
     try {
-      const contents = this.convertToGeminiFormat(messages);
+      const openaiMessages = this.formatMessages(messages);
 
       // Use streaming API
-      const response = await this.client.models.generateContentStream({
+      const stream = await this.client.chat.completions.create({
         model: this.config.model,
-        contents: contents,
+        messages: openaiMessages,
+        stream: true,
       });
 
       let totalResponseChars = 0;
 
-      for await (const chunk of response) {
-        const text = chunk.text;
+      for await (const chunk of stream) {
+        const text = chunk.choices[0]?.delta?.content;
         if (text) {
           const chunkChars = text.length;
           totalResponseChars += chunkChars;
@@ -246,24 +212,22 @@ export class LLMClient {
     }
 
     // Continue conversation with tool results
-    const messagesWithTools: Message[] = [
+    const openaiMessages = this.formatMessages([
       ...previousMessages,
       {
         role: 'assistant',
         content: `Tool results: ${toolResults.map(r => r.output || r.error).join('\n')}`
       }
-    ];
+    ]);
 
-    const contents = this.convertToGeminiFormat(messagesWithTools);
-
-    const response = await this.client.models.generateContent({
+    const response = await this.client.chat.completions.create({
       model: this.config.model,
-      contents: contents,
+      messages: openaiMessages,
     });
 
     return {
       role: 'assistant',
-      content: response.text || '',
+      content: response.choices[0]?.message?.content || '',
       toolCalls: toolCalls.map(tc => ({
         id: tc.id,
         name: tc.function.name,
@@ -305,20 +269,36 @@ Use these skills to provide better, more context-aware responses.`;
     }
   }
 
-  private formatMessages(messages: Message[]): Array<{ role: string; content: string }> {
+  /**
+   * Format messages for OpenAI-compatible API
+   */
+  private formatMessages(messages: Message[]): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
     return messages.map(msg => ({
-      role: msg.role,
+      role: msg.role === 'tool' ? 'assistant' : msg.role as 'user' | 'assistant' | 'system',
       content: msg.content
     }));
   }
 
   setApiKey(apiKey: string): void {
     this.config.apiKey = apiKey;
-    this.client = new GoogleGenAI({ apiKey });
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: this.config.baseURL,
+      dangerouslyAllowBrowser: true,
+    });
   }
 
   setModel(model: string): void {
     this.config.model = model;
+  }
+
+  setBaseURL(baseURL: string): void {
+    this.config.baseURL = baseURL;
+    this.client = new OpenAI({
+      apiKey: this.config.apiKey,
+      baseURL,
+      dangerouslyAllowBrowser: true,
+    });
   }
 
   getConfig(): LLMConfig {
@@ -332,6 +312,7 @@ Use these skills to provide better, more context-aware responses.`;
 export function createLLMClient(): LLMClient | null {
   const apiKey = LLMStorage.getApiKey();
   const modelId = LLMStorage.getModel();
+  const baseURL = LLMStorage.getBaseUrl();
 
   if (!apiKey || !modelId) {
     logger.warn('llm', 'Missing configuration', { hasApiKey: !!apiKey, hasModelId: !!modelId });
@@ -344,8 +325,9 @@ export function createLLMClient(): LLMClient | null {
   const client = new LLMClient({
     apiKey,
     model: actualModelId,
+    baseURL,
   });
 
-  logger.success('llm', 'LLM client initialized', { model: actualModelId });
+  logger.success('llm', 'LLM client initialized', { model: actualModelId, baseURL });
   return client;
 }

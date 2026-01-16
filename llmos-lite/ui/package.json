@@ -22,7 +22,6 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "@google/genai": "^1.36.0",
     "@isomorphic-git/lightning-fs": "^4.6.0",
     "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -41,6 +40,7 @@
     "lucide-react": "^0.309.0",
     "next": "14.1.0",
     "node-fetch": "^3.3.2",
+    "openai": "^4.104.0",
     "postcss": "^8.4.33",
     "pyodide": "^0.29.0",
     "quickjs-emscripten": "^0.29.2",
