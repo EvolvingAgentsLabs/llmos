@@ -1,46 +1,65 @@
 # LLM Operating System Architecture Comparison
 
+**Last Updated:** January 2026
+
 ## Executive Summary
 
 This document provides a comprehensive comparison between two fundamentally different approaches to building LLM-powered operating systems:
 
-1. **llmos-lite**: A **Web-Based, Full-Stack OS Simulation** with structured agents, Pyodide runtime, and React UI
+1. **LLMos**: A **Web-Based, Full-Stack OS Simulation** with structured agents, Pyodide runtime, and React UI
 2. **llmunix**: A **Text-Based, Self-Modifying Kernel** operating on a "Pure Markdown" philosophy
 
-**Recommendation**: Adopt llmunix's dynamic, text-first philosophy while retaining llmos-lite's infrastructure advantages (UI, hardware integration, WASM runtime, Vercel deployment).
+**Recommendation**: Adopt llmunix's dynamic, text-first philosophy while retaining LLMos's infrastructure advantages (UI, hardware integration, WASM runtime, deployment flexibility).
 
 ---
 
 ## Architectural Philosophy
 
-### llmos-lite: Structured Agent Architecture
+### LLMos: Structured Agent Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        React UI (Next.js)                       │
-├─────────────────────────────────────────────────────────────────┤
-│                   TypeScript Orchestrators                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐    │
-│  │   Agent     │  │   Model     │  │   MCP Tool           │    │
-│  │   Loader    │  │   Aware     │  │   Definitions        │    │
-│  └─────────────┘  └─────────────┘  └──────────────────────┘    │
-├─────────────────────────────────────────────────────────────────┤
-│                    FastAPI Backend (Python)                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐    │
-│  │   Skills    │  │  Evolution  │  │    Workflow          │    │
-│  │   Manager   │  │   Cron      │  │    Engine            │    │
-│  └─────────────┘  └─────────────┘  └──────────────────────┘    │
-├─────────────────────────────────────────────────────────────────┤
-│                  Git-Backed Volumes (Storage)                    │
-│              System → Team → User (Layered Inheritance)          │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Browser Frontend"
+        UI[React UI - Next.js 14]
+        Orch[TypeScript Orchestrators]
+        Agent[Agent Loader]
+        Model[Model-Aware Execution]
+        MCP[MCP Tool Definitions]
+    end
+
+    subgraph "Optional Backend"
+        Backend[FastAPI - Python]
+        Skills[Skills Manager]
+        Evol[Evolution Cron]
+        Workflow[Workflow Engine]
+    end
+
+    subgraph "Storage Layer"
+        Volumes[Git-Backed Volumes]
+        System[System Volume]
+        Team[Team Volume]
+        User[User Volume]
+    end
+
+    UI --> Orch
+    Orch --> Agent
+    Orch --> Model
+    Orch --> MCP
+    Orch -.Optional.-> Backend
+    Backend --> Skills
+    Backend --> Evol
+    Backend --> Workflow
+    Orch --> Volumes
+    Volumes --> System
+    Volumes --> Team
+    Volumes --> User
 ```
 
 **Key Characteristics:**
-- Agents are **Python classes** that orchestrate tool calls
-- Evolution is **hardcoded logic** in `core/evolution.py`
-- Skills are loaded/filtered by **programmatic managers**
-- Creating an agent requires **writing code + deployment**
+- Agents are **Markdown files** interpreted by LLM orchestrator
+- Evolution is **LLM-driven** using pattern matching
+- Skills are loaded/filtered by **semantic search**
+- Creating an agent requires **writing markdown + deployment**
 
 ### llmunix: Self-Modifying Kernel Architecture
 
@@ -72,48 +91,49 @@ This document provides a comprehensive comparison between two fundamentally diff
 
 ## Feature Comparison Matrix
 
-| Feature | llmos-lite | llmunix | Winner | Notes |
+| Feature | LLMos | llmunix | Winner | Notes |
 |---------|-----------|---------|--------|-------|
-| **Agent Definition** | Python/TS + Markdown hybrid | Pure Markdown | llmunix | Lower friction for AI self-modification |
-| **Agent Count** | 11 specialized agents | 3 core agents | llmos-lite | More capability out-of-box |
-| **Orchestration** | Multi-layer (TS + Python) | Single prompt | llmunix | Simpler, more transparent |
+| **Agent Definition** | Markdown interpreted by LLM | Pure Markdown | Tie | Both use markdown |
+| **Agent Count** | 11+ specialized agents | 3 core agents | LLMos | More capability out-of-box |
+| **Orchestration** | TypeScript + LLM interpreter | Single prompt | LLMos | More flexible execution |
 | **Memory System** | Structured traces + Git | Markdown logs | Tie | Both work, different tradeoffs |
-| **UI Capabilities** | Rich React GUI + Applets | Terminal only | llmos-lite | Visual tools matter for end users |
-| **Hardware Integration** | ESP32, Quantum, Serial | None | llmos-lite | IoT/edge computing support |
-| **Code Execution** | Pyodide (browser WASM) | Claude Code Bash | llmos-lite | Sandboxed browser execution |
-| **Self-Modification** | Hard (rewrite Python) | Easy (edit markdown) | llmunix | True autonomy requires easy self-edit |
-| **Deployment** | Vercel/Docker | Claude Code extension | llmos-lite | Production-ready infrastructure |
-| **Evolution Speed** | Hours (cron-based) | Instant (text edit) | llmunix | Real-time learning |
-| **Trace Linking** | Not implemented | Explicit parent_id | llmunix | Better execution flow tracking |
-| **Tool Mapping** | Implicit in code | Explicit documentation | llmunix | Self-documenting system |
-| **Query Interface** | Ad-hoc Python | Formal specification | llmunix | Predictable memory queries |
+| **UI Capabilities** | Rich React GUI + Applets | Terminal only | LLMos | Visual tools matter for end users |
+| **Hardware Integration** | ESP32, WASM robots, Serial | None | LLMos | IoT/edge computing support |
+| **Code Execution** | Pyodide (browser WASM) | Claude Code Bash | LLMos | Sandboxed browser execution |
+| **Self-Modification** | LLM edits markdown | LLM edits markdown | Tie | Both support self-modification |
+| **Deployment** | Static hosting (Vercel, etc.) | Claude Code extension | LLMos | Production-ready infrastructure |
+| **API Flexibility** | OpenAI-compatible (multi-provider) | Claude only | LLMos | Works with OpenRouter/Gemini/OpenAI |
+| **Evolution Speed** | LLM-driven real-time | Instant (text edit) | Tie | Both support real-time learning |
+| **Trace Linking** | Implemented | Explicit parent_id | Tie | Both track execution flow |
+| **Tool Mapping** | MCP-compatible | Explicit documentation | LLMos | Industry standard protocol |
 
 ---
 
 ## The Autonomy Gap
 
-### Why llmos-lite Inhibits Autonomy
+### Why Early LLMos Versions Inhibited Autonomy
 
-In llmos-lite, creating a new capability requires:
+In early versions, creating a new capability required:
 
 ```
-1. Write Python class in core/*.py
-2. Register in API endpoints (main.py)
-3. Update TypeScript types (ui/lib/*.ts)
+1. Write Python class in backend/*.py
+2. Register in API endpoints
+3. Update TypeScript types (lib/*.ts)
 4. Rebuild frontend (npm run build)
-5. Redeploy (Vercel/Docker)
+5. Redeploy
 6. Hope nothing breaks
 ```
 
 **Time to new capability: Hours to days**
 
-### Why llmunix Enables Autonomy
+### Why Current LLMos Enables Autonomy
 
-In llmunix, creating a new capability requires:
+In current LLMos, creating a new capability requires:
 
 ```
-1. Write a markdown file describing the agent
-   Write("agents/NewAgent.md", content="...")
+1. LLM writes a markdown file describing the agent
+   Write("/public/system/agents/NewAgent.md", content="...")
+2. LLM interpreter loads and executes the agent
 ```
 
 **Time to new capability: Seconds**
@@ -152,25 +172,26 @@ When given data, perform the following steps:
 
 ## The Hybrid Recommendation
 
-### Keep from llmos-lite (Infrastructure)
+### Keep from LLMos (Infrastructure)
 
 1. **React UI** - Visual interface for non-technical users
 2. **Pyodide Runtime** - Sandboxed Python in browser
 3. **Generative Applets** - Interactive React components
 4. **Git-Backed Volumes** - Version control for everything
-5. **Hardware Integration** - ESP32, quantum, serial
-6. **Vercel Deployment** - Production infrastructure
-7. **Model-Aware Execution** - Adapt to different LLMs
+5. **Hardware Integration** - ESP32, WASM robots, serial
+6. **Flexible Deployment** - Static hosting, Vercel, Netlify, etc.
+7. **Model-Aware Execution** - Adapt to different LLMs via OpenAI-compatible API
+8. **MCP Tool Support** - Industry-standard tool protocol
 
 ### Adopt from llmunix (Architecture)
 
-1. **Pure Markdown Agents** - Text files as agents
-2. **Dynamic Agent Discovery** - Glob filesystem, not registries
-3. **Instant Evolution** - Edit markdown = change behavior
-4. **Formalized Interfaces** - QueryMemory, ToolMap specs
-5. **Trace Linking** - Parent-child execution relationships
-6. **Single Entry Point** - `/llmos` slash command
-7. **Self-Documenting System** - Concept-to-tool mapping
+1. **Pure Markdown Agents** ✅ - Already implemented
+2. **Dynamic Agent Discovery** ✅ - Already implemented
+3. **Instant Evolution** ✅ - Already implemented via LLM-driven pattern matching
+4. **Formalized Interfaces** - QueryMemory, ToolMap specs (in progress)
+5. **Trace Linking** ✅ - Already implemented
+6. **Single Entry Point** ✅ - `/llmos` slash command available
+7. **Self-Documenting System** - Concept-to-tool mapping (partially implemented)
 
 ---
 

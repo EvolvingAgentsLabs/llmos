@@ -31,6 +31,25 @@ This document tracks the comprehensive documentation review and update to reflec
 - ✅ Fixed pattern matching references to show current implementation
 - ✅ Updated skill creation date examples
 
+### ✅ docs/architecture/llmunix-feature-gap-analysis.md
+**Changes:**
+- ✅ Added "Last Updated: January 2026" header
+- ✅ Updated all "llmos-lite" references to "LLMos"
+- ✅ Updated path references `/system/` to `/public/system/`
+- ✅ Updated API provider to show OpenAI-compatible flexibility
+- ✅ Updated hardware integration section (WASM robots, etc.)
+- ✅ Lines updated: 1-7, 68, 122-138, 275-307, 383
+
+### ✅ docs/architecture/os-architecture-comparison.md
+**Changes:**
+- ✅ Added "Last Updated: January 2026" header
+- ✅ Updated all "llmos-lite" references to "LLMos"
+- ✅ Added mermaid diagram for LLMos architecture
+- ✅ Updated feature comparison matrix with current capabilities
+- ✅ Updated autonomy gap section (early vs current LLMos)
+- ✅ Updated hybrid recommendation with ✅ marks for implemented features
+- ✅ Lines updated: 1-12, 18-62, 94-108, 114-139, 175-194
+
 ## Pending Updates
 
 ### 📋 Architecture Documents (6 remaining)

@@ -1,8 +1,10 @@
 # LLMunix Feature Gap Analysis
 
+**Last Updated:** January 2026
+
 ## Executive Summary
 
-This document analyzes the llmunix Claude Code plugin to identify features that could enhance llmos-lite. While llmos-lite already has a richer feature set overall (more agents, hardware integration, GUI), llmunix has several elegant design patterns worth adopting.
+This document analyzes the llmunix Claude Code plugin to identify features that could enhance LLMos. While LLMos already has a richer feature set overall (more agents, hardware integration, GUI), llmunix has several elegant design patterns worth adopting.
 
 **Bottom Line:** llmunix excels at **simplicity and self-documentation**. Its key innovations are formalized memory query interfaces, trace lifecycle management, and explicit tool mappings. llmos-lite should adopt these patterns while keeping its infrastructure advantages.
 
@@ -63,7 +65,7 @@ QueryMemory(
 - No standardized query interface
 - Ad-hoc implementation in Python code
 
-**Recommendation:** Create `/system/kernel/query-memory-spec.md` with:
+**Recommendation:** Create `/public/system/kernel/query-memory-spec.md` with:
 - Formal function signature
 - Parameter types and options
 - Return format specification
@@ -117,7 +119,7 @@ lifecycle_state: "active" | "consolidated" | "archived"
 - No "how to implement X using Y" documentation
 - Developers must infer patterns
 
-**Recommendation:** Create `/system/kernel/concept-to-tool-map.md`:
+**Recommendation:** Create `/public/system/kernel/concept-to-tool-map.md`:
 ```markdown
 # Concept-to-Tool Mapping
 
@@ -270,38 +272,39 @@ evolution_history:
 ## Features llmos-lite Has That llmunix Lacks
 
 ### 1. Generative UI (Applets)
-llmunix produces markdown and code files. llmos-lite can generate **live interactive React components** that run in the browser.
+llmunix produces markdown and code files. LLMos can generate **live interactive React components** that run in the browser.
 
 ### 2. Model-Aware Execution
-llmos-lite adapts its strategy based on the LLM model:
+LLMos adapts its strategy based on the LLM model using OpenAI-compatible APIs:
 - Claude: Native markdown agents
-- GPT-4o: Compiled agents
+- GPT-4: Compiled agents
+- Gemini: Optimized prompts
 - Smaller models: Simplified prompts
 
 llmunix assumes Claude Code only.
 
 ### 3. Hardware Integration
-llmos-lite has:
+LLMos has:
 - ESP32 microcontroller support
-- Quantum backend integration
+- WASM-based robot firmware
 - Web Serial API for device communication
 
 llmunix has no hardware concepts.
 
 ### 4. 3-Agent Minimum Requirement
-llmos-lite enforces that every project must have at least 3 agents (copied, evolved, or created). This ensures complexity is properly decomposed.
+LLMos enforces that every project must have at least 3 agents (copied, evolved, or created). This ensures complexity is properly decomposed.
 
 ### 5. WASM/Pyodide Runtime
-llmos-lite can execute Python in the browser via Pyodide. llmunix relies on Claude Code's Bash tool.
+LLMos can execute Python in the browser via Pyodide. llmunix relies on Claude Code's Bash tool.
 
 ### 6. Git-Backed Volumes
-llmos-lite has version control built into the storage layer:
+LLMos has version control built into the storage layer:
 - Automatic commits on skill creation
 - Branch-based collaboration
 - Skill promotion across volumes
 
 ### 7. Self-Healing Applets
-llmos-lite validates applet code before deployment and retries up to 3 times with fixes.
+LLMos validates applet code before deployment and retries up to 3 times with fixes.
 
 ---
 
@@ -377,4 +380,4 @@ llmos-lite already surpasses llmunix in:
 - Model flexibility
 - Execution runtime (Pyodide)
 
-The recommended approach: **Adopt llmunix's documentation patterns while keeping llmos-lite's infrastructure advantages.**
+The recommended approach: **Adopt llmunix's documentation patterns while keeping LLMos's infrastructure advantages.**
