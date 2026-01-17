@@ -42,7 +42,9 @@ export function getPlatformType(): PlatformType {
 export interface PlatformCapabilities {
   nativeFileSystem: boolean;
   assemblyScript: boolean;
+  nativeAssemblyScript: boolean; // Faster native compilation
   serialPorts: boolean;
+  fullSerialPorts: boolean; // Full serial port access (vs Web Serial API)
   nativeMenus: boolean;
   systemDialogs: boolean;
   offlineMode: boolean;
@@ -56,8 +58,10 @@ export function getPlatformCapabilities(): PlatformCapabilities {
 
   return {
     nativeFileSystem: isDesktop,
-    assemblyScript: isDesktop,
-    serialPorts: isDesktop,
+    assemblyScript: true, // Available in both browser (CDN) and desktop (native)
+    nativeAssemblyScript: isDesktop, // Native compilation is faster
+    serialPorts: isDesktop || ('serial' in navigator), // Web Serial or native
+    fullSerialPorts: isDesktop, // Full access in desktop mode
     nativeMenus: isDesktop,
     systemDialogs: isDesktop,
     offlineMode: isDesktop,
@@ -148,36 +152,68 @@ export const PlatformFS = {
  */
 export const PlatformASC = {
   async compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult> {
+    // Prefer Electron native compiler (faster, more features)
     if (isElectron() && window.electronASC) {
       return window.electronASC.compile(source, options);
     }
-    // Browser: return error suggesting desktop
-    return {
-      success: false,
-      error: 'AssemblyScript compilation requires LLMos Desktop',
-      stderr: 'Use npm run electron:dev to launch the desktop app with AssemblyScript support.',
-    };
+
+    // Fallback to browser-based compiler
+    try {
+      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
+      const browserCompiler = getBrowserASCCompiler();
+      return await browserCompiler.compile(source, options);
+    } catch (error: any) {
+      return {
+        success: false,
+        error: 'AssemblyScript compilation failed',
+        stderr: error.message || 'Unknown error',
+      };
+    }
   },
 
   async getStatus(): Promise<{ ready: boolean; version: string; installed: boolean }> {
+    // Check Electron compiler first
     if (isElectron() && window.electronASC) {
       return window.electronASC.getStatus();
     }
-    return {
-      ready: false,
-      version: 'N/A (browser mode)',
-      installed: false,
-    };
+
+    // Check browser compiler
+    try {
+      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
+      const browserCompiler = getBrowserASCCompiler();
+      return browserCompiler.getStatus();
+    } catch {
+      return {
+        ready: false,
+        version: 'N/A',
+        installed: false,
+      };
+    }
   },
 
   async getVersion(): Promise<string> {
     if (isElectron() && window.electronASC) {
       return window.electronASC.getVersion();
     }
-    return 'N/A (browser mode)';
+
+    try {
+      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
+      const browserCompiler = getBrowserASCCompiler();
+      return browserCompiler.getVersion();
+    } catch {
+      return 'N/A';
+    }
   },
 
   isAvailable(): boolean {
+    // Available in both Electron (native) and browser (browser compiler)
+    return true;
+  },
+
+  /**
+   * Check if running native Electron compiler (recommended for best performance)
+   */
+  isNative(): boolean {
     return isElectron() && window.electronASC !== undefined;
   },
 };
@@ -307,15 +343,17 @@ export function getPlatformInfo(): {
     features: isDesktop
       ? [
           'Native file system access',
-          'AssemblyScript compilation',
-          'Serial port communication',
+          'Native AssemblyScript compilation (faster)',
+          'Full serial port communication',
           'Offline operation',
           'System menus',
+          'Native dialogs',
         ]
       : [
-          'Browser-based VFS',
-          'C to WASM compilation',
-          'Web Serial API (limited)',
+          'Browser-based virtual filesystem',
+          'AssemblyScript compilation (browser CDN)',
+          'C to WASM compilation (browser)',
+          'Web Serial API (with user gesture)',
           'Online operation',
         ],
   };

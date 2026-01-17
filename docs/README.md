@@ -1,92 +1,114 @@
-# LLMos Documentation
+# LLMos Documentation for Makers
 
-**Last Updated:** January 2026
+Welcome! This is your guide to building AI robots and smart devices.
 
-Welcome to the LLMos documentation. This directory contains comprehensive technical documentation for the LLMos project.
+## Start Here
 
-## 📖 Documentation Structure
+New to LLMos? Start with these guides in order:
 
-### 🏗️ Architecture Documentation
-Technical architecture, design patterns, and system design documents.
+1. **[Getting Started](architecture/HELLO_WORLD_TUTORIAL.md)** - Your first 10 minutes with LLMos
+2. **[ESP32 Setup](hardware/ESP32_GUIDE.md)** - Connect your hardware
+3. **[Robot Programming](architecture/ROBOT4_GUIDE.md)** - Make your robot move
 
-- **[ARCHITECTURE.md](architecture/ARCHITECTURE.md)** - Complete system architecture overview
-- **[architecture-comparison.md](architecture/architecture-comparison.md)** - Comparison with llmunix philosophy
-- **[client-side-architecture.md](architecture/client-side-architecture.md)** - Browser-first architecture details
-- **[hybrid-architecture-implementation.md](architecture/hybrid-architecture-implementation.md)** - Hybrid OS implementation guide
-- **[llmunix-feature-gap-analysis.md](architecture/llmunix-feature-gap-analysis.md)** - Feature gap analysis
-- **[os-architecture-comparison.md](architecture/os-architecture-comparison.md)** - OS architecture comparisons
-- **[wasm-git-client-analysis.md](architecture/wasm-git-client-analysis.md)** - WASM git client analysis
-- **[WASM4-ROBOT-ARCHITECTURE.md](architecture/WASM4-ROBOT-ARCHITECTURE.md)** - Robot4 firmware architecture
-- **[HELLO_WORLD_TEST_CASE.md](architecture/HELLO_WORLD_TEST_CASE.md)** - Hello World test case
-- **[TECHNOLOGY_IMPROVEMENT_ANALYSIS.md](architecture/TECHNOLOGY_IMPROVEMENT_ANALYSIS.md)** - Technology improvements
+## What's a "Guide"?
 
-### 📘 Guides
-Step-by-step guides and tutorials.
+Think of these as recipes for building cool stuff:
 
-- **[BROWSER_COMPILATION.md](guides/BROWSER_COMPILATION.md)** - Browser-based WASM compilation guide
-- **[DESKTOP.md](guides/DESKTOP.md)** - Electron desktop app guide
+### For Beginners
+- **Getting Started** - Try LLMos in 10 minutes (no hardware needed!)
+- **ESP32 Setup** - Connect a tiny computer to make things move
+- **Desktop App** - Install LLMos on your computer for faster builds
 
-### 🤖 Hardware Documentation
-Physical AI and ESP32 integration guides.
+### For Building Robots
+- **Robot Programming** - Make robots move, sense, and think
+- **ESP32 Guide** - Deep dive into robot hardware
 
-- **[ESP32_GUIDE.md](hardware/ESP32_GUIDE.md)** - Comprehensive ESP32 integration guide (quick start, complete tutorial, and integration testing)
+### Understanding How It Works
+- **Project Structure** - Where everything lives
+- **LLM Configuration** - Set up your AI assistant
 
-### 🔧 Project Documentation
-Project structure, configuration, and development documentation.
+## What You Can Do
 
-- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Current project structure overview
-- **[LLM_CONFIGURATION.md](LLM_CONFIGURATION.md)** - LLM API configuration guide
-- **[REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)** - Recent refactoring summary
-- **[REFACTORING_ANALYSIS.md](REFACTORING_ANALYSIS.md)** - Detailed refactoring analysis
-- **[DOCUMENTATION_UPDATE_SUMMARY.md](DOCUMENTATION_UPDATE_SUMMARY.md)** - Documentation update tracker
+### Without Any Hardware
+- Create virtual robots in your browser
+- Test obstacle avoidance
+- Try line following
+- Build maze solvers
+- Make interactive apps
 
-## 🚀 Quick Links
+### With an ESP32 Board ($10)
+- Blink LEDs
+- Read sensors
+- Control motors
+- Make sounds
+- Build actual robots!
 
-### Getting Started
-1. Start with the main [README.md](../README.md) in the project root
-2. Review [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase
-3. Configure your LLM API using [LLM_CONFIGURATION.md](LLM_CONFIGURATION.md)
-4. For hardware: [ESP32_GUIDE.md](hardware/ESP32_GUIDE.md)
+## Quick Links
 
-### Development
-- **Architecture**: [ARCHITECTURE.md](architecture/ARCHITECTURE.md)
-- **Browser Compilation**: [BROWSER_COMPILATION.md](guides/BROWSER_COMPILATION.md)
-- **Desktop App**: [DESKTOP.md](guides/DESKTOP.md)
+**Just want to build?**
+- [Getting Started](architecture/HELLO_WORLD_TUTORIAL.md) - Start here!
+- [ESP32 Setup](hardware/ESP32_GUIDE.md) - Hardware guide
 
-### Hardware Integration
-- **ESP32 Guide**: [ESP32_GUIDE.md](hardware/ESP32_GUIDE.md) - Comprehensive guide from quick start to integration testing
-- **Robot4 API**: [ROBOT4_GUIDE.md](architecture/ROBOT4_GUIDE.md) - Robot4 firmware development
+**Want to understand how it works?**
+- [Robot Programming](architecture/ROBOT4_GUIDE.md) - How robots think
+- [Desktop App Guide](guides/DESKTOP.md) - About the desktop version
 
-## 📝 Documentation Standards
+**Having trouble?**
+- Check [ESP32 Guide troubleshooting](hardware/ESP32_GUIDE.md#troubleshooting)
+- Ask on [GitHub Discussions](https://github.com/EvolvingAgentsLabs/llmos/discussions)
 
-All documentation follows these standards:
-- **Mermaid diagrams** for architecture visualization
-- **Code examples** with correct import paths
-- **"Last Updated"** date header
-- **Consistent formatting** using markdown best practices
-- **Cross-references** using relative links
+## The Basic Idea
 
-## 🔄 Recent Updates
+1. You describe what you want in plain English
+2. LLMos writes the code for you
+3. Test it in a virtual robot first
+4. Upload to your real ESP32 (if you have one)
+5. Watch it work in the real world!
 
-All documentation was recently updated (January 2026) to reflect:
-- Flattened directory structure (moved from `llmos-lite/ui/*` to root)
-- OpenAI-compatible API provider flexibility
-- Current architecture and capabilities
-- Enhanced mermaid diagrams throughout
+## File Guide
 
-See [DOCUMENTATION_UPDATE_SUMMARY.md](DOCUMENTATION_UPDATE_SUMMARY.md) for details.
+```
+docs/
+├── architecture/
+│   ├── HELLO_WORLD_TUTORIAL.md    ← Start here!
+│   └── ROBOT4_GUIDE.md             ← Robot programming
+├── hardware/
+│   └── ESP32_GUIDE.md              ← Hardware setup
+├── guides/
+│   ├── DESKTOP.md                  ← Desktop app
+│   └── BROWSER_COMPILATION.md      ← How compilation works
+└── LLM_CONFIGURATION.md            ← AI setup
+```
 
-## 🤝 Contributing to Documentation
+## Tips for Success
 
-When updating documentation:
-1. Add "Last Updated: [Month Year]" header
-2. Use mermaid diagrams for complex visualizations
-3. Update cross-references when moving files
-4. Keep code examples current with the codebase
-5. Follow the existing structure and formatting
+1. **Read "Getting Started" first** - It's quick and easy
+2. **Try virtual robots** - No hardware needed to learn
+3. **Start simple** - Blink an LED before building a maze solver
+4. **Ask for help** - The community is friendly!
 
-## 📧 Questions?
+## Common Questions
 
-For questions or suggestions about the documentation:
-- Open an issue on [GitHub](https://github.com/EvolvingAgentsLabs/llmos/issues)
-- Join discussions on [GitHub Discussions](https://github.com/EvolvingAgentsLabs/llmos/discussions)
+**Do I need to be a programmer?**
+Nope! LLMos writes code for you. But you'll learn as you go.
+
+**Do I need to buy stuff?**
+Not to start! Try virtual robots first. An ESP32 is $10 if you want real hardware later.
+
+**What if I get stuck?**
+Check the troubleshooting sections in each guide, or ask on GitHub.
+
+**Can kids use this?**
+Yes! Great for ages 10+ with some adult help.
+
+## Next Steps
+
+1. Read [Getting Started](architecture/HELLO_WORLD_TUTORIAL.md)
+2. Try creating a virtual robot
+3. If you like it, get an ESP32 board
+4. Build something cool!
+5. Share what you made!
+
+---
+
+**Ready to build robots? Let's go!**

@@ -6,17 +6,20 @@ LLMos Desktop is the native desktop application version of LLMos, built with Ele
 
 ## Features
 
-### Desktop-Only Capabilities
+### Platform Comparison
 
 | Feature | Web | Desktop |
 |---------|-----|---------|
 | C to WASM compilation | ✅ (via CDN) | ✅ (local) |
-| AssemblyScript compilation | ❌ | ✅ |
-| Native file system | ❌ | ✅ |
-| Serial ports | Limited (Web Serial) | ✅ (full) |
-| Offline operation | Limited | ✅ |
+| AssemblyScript compilation | ✅ (browser CDN) | ✅ (native, faster) |
+| Native file system | ❌ (virtual FS) | ✅ |
+| Serial ports | Limited (Web Serial) | ✅ (full access) |
+| Offline operation | ❌ | ✅ |
 | System menus | ❌ | ✅ |
 | File dialogs | Browser-based | Native |
+| Compilation speed | ~3-5s | ~1-3s |
+
+**New in v1.0**: AssemblyScript compilation is now available in both web and desktop modes! The web version uses a browser-based compiler loaded from CDN, while desktop uses native Node.js compilation for better performance.
 
 ### AssemblyScript Support
 
@@ -125,6 +128,48 @@ The preload script exposes these APIs to the renderer:
 - `window.electronSerial` - Serial port communication
 - `window.electronSystem` - System utilities
 
+## Platform Detection
+
+### Runtime Mode Indicator
+
+LLMos includes a platform indicator component that shows the current runtime mode (Desktop vs Web) and available capabilities:
+
+```tsx
+import { PlatformIndicator, PlatformBadge } from '@/components/system/PlatformIndicator';
+
+// Full expandable indicator (bottom-right corner)
+<PlatformIndicator />
+
+// Compact badge (for headers/toolbars)
+<PlatformBadge />
+```
+
+The platform indicator displays:
+- Current runtime mode (Desktop or Web)
+- Available capabilities (filesystem, compilation, serial ports, etc.)
+- Feature comparison between modes
+- Link to download desktop app (when in web mode)
+
+### Platform Abstraction Layer
+
+All platform-specific APIs are abstracted through `/lib/platform/index.ts`:
+
+```tsx
+import { PlatformFS, PlatformASC, PlatformSerial, getPlatformCapabilities } from '@/lib/platform';
+
+// File operations work in both web and desktop
+const content = await PlatformFS.read('user', 'myfile.txt');
+
+// AssemblyScript compilation automatically uses best available compiler
+const result = await PlatformASC.compile(source, { robot4Mode: true });
+
+// Check capabilities at runtime
+const caps = getPlatformCapabilities();
+if (caps.nativeAssemblyScript) {
+  console.log('Using native compiler for faster builds');
+}
+```
+
 ## Development
 
 ### Project Structure
@@ -136,10 +181,16 @@ electron/
 ├── tsconfig.json        # TypeScript config
 ├── types.d.ts           # Type declarations
 └── services/
-    ├── assemblyscript-compiler.ts
-    ├── native-fs.ts
-    ├── serial-manager.ts
+    ├── assemblyscript-compiler.ts  # Native ASC compiler
+    ├── native-fs.ts                # Native filesystem
+    ├── serial-manager.ts           # Serial port manager
     └── index.ts
+
+lib/platform/
+└── index.ts             # Platform abstraction layer
+
+components/system/
+└── PlatformIndicator.tsx  # Runtime mode indicator
 ```
 
 ### Adding New IPC Handlers
