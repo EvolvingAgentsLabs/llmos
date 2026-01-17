@@ -27,7 +27,12 @@
       "Bash(test:*)",
       "Bash(awk:*)",
       "Bash(mv:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git mv:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
