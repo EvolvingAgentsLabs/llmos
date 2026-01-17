@@ -1,19 +1,25 @@
 # Browser-Based WASM Compilation
 
+**Last Updated:** January 2026
+
 ## Overview
 
 LLMos compiles C code to WebAssembly **entirely in the browser** using Wasmer SDK and clang.wasm. This aligns with the "OS in the Browser" philosophy - no backend compilation server needed.
 
 ## Architecture
 
-```
-User writes C code
-     ↓
-Browser loads Clang (WASM)
-     ↓
-Compile C → WASM (in browser)
-     ↓
-Deploy to ESP32 via TCP
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant Clang
+    participant ESP32
+
+    User->>Browser: Write C code
+    Browser->>Clang: Load WASM compiler
+    Clang->>Browser: Compile C → WASM
+    Browser->>ESP32: Deploy via TCP :8080
+    ESP32->>Browser: Confirmation
 ```
 
 **Key Benefit**: Zero backend infrastructure. Everything runs client-side.
@@ -22,7 +28,7 @@ Deploy to ESP32 via TCP
 
 ### 1. WasmCompiler Service
 
-Located: `llmos-lite/ui/lib/runtime/wasm-compiler.ts`
+Located: `/lib/runtime/wasm-compiler.ts`
 
 **Features**:
 - Singleton pattern (loads Clang once per session)
@@ -48,7 +54,7 @@ if (result.success) {
 
 ### 2. SDK Headers
 
-Located: `llmos-lite/public/sdk/wasi-headers/`
+Located: `/public/sdk/wasi-headers/`
 
 **Provided Headers**:
 - `wm_ext_wasm_native.h` - GPIO, WiFi, HTTP
@@ -266,6 +272,5 @@ Browser-based compilation is the **perfect fit** for LLMos:
 
 ---
 
-**Generated**: 2026-01-02
-**Author**: Claude Code (Sonnet 4.5)
-**Status**: Implemented ✅
+**Last Updated:** January 2026
+**Status:** Implemented ✅

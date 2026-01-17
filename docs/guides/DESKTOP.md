@@ -1,5 +1,7 @@
 # LLMos Desktop
 
+**Last Updated:** January 2026
+
 LLMos Desktop is the native desktop application version of LLMos, built with Electron. It provides enhanced capabilities over the web version, including native file system access, AssemblyScript compilation, and direct serial port communication with ESP32 devices.
 
 ## Features
@@ -54,7 +56,7 @@ export function update(): void {
 ```bash
 # Clone the repository
 git clone https://github.com/EvolvingAgentsLabs/llmos.git
-cd llmos/llmos-lite/ui
+cd llmos
 
 # Install dependencies
 npm install

@@ -1,6 +1,8 @@
-# LLMos-Lite: Hello World End-to-End Test Case
+# LLMos: Hello World End-to-End Test Case
 
-This document provides a comprehensive "Hello World" test suite to verify that all components of the LLMos-Lite system are working correctly. Execute these tests in sequence to validate the entire system.
+**Last Updated:** January 2026
+
+This document provides a comprehensive "Hello World" test suite to verify that all components of the LLMos system are working correctly. Execute these tests in sequence to validate the entire system.
 
 ---
 
@@ -28,7 +30,7 @@ Before running these tests, ensure the following are configured:
 
 | Component | Requirement | How to Verify |
 |-----------|-------------|---------------|
-| **OpenRouter API Key** | Valid API key | Settings panel shows "API Connected" |
+| **LLM API Key** | Valid OpenAI-compatible API key | Settings panel shows "API Connected" |
 | **GitHub Token** | Personal access token with repo scope | Can browse volumes in VolumeExplorer |
 | **Team Volume** | GitHub repo configured | `NEXT_PUBLIC_TEAM_VOLUME_REPO` is set |
 | **User Volume** | GitHub repo configured | `NEXT_PUBLIC_USER_VOLUME_REPO` is set |
@@ -39,7 +41,7 @@ Before running these tests, ensure the following are configured:
 
 ```bash
 # From the project root
-cd llmos-lite/ui
+cd llmos
 npm install
 npm run dev
 ```
@@ -785,6 +787,6 @@ By completing all tests successfully, you can confirm that LLMos-Lite is fully o
 
 ---
 
-*Document Version: 1.6*
-*Last Updated: 2026-01-01*
-*For LLMos-Lite v1.x*
+*Document Version: 1.7*
+*Last Updated: January 2026*
+*For LLMos v2.x*

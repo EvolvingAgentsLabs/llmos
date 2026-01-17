@@ -1,5 +1,7 @@
 # WASM4-Style Robot Firmware Architecture
 
+**Last Updated:** January 2026
+
 ## Vision: "Hall of Fame" Physical Robot Gaming
 
 Imagine a physical play area (like a living room floor or dedicated arena) where **real ESP32-S3 robots** play retro games - navigating mazes, collecting items, following lines, and competing against each other. The robot firmware runs as **WebAssembly**, just like WASM4 fantasy console games, enabling:
@@ -11,38 +13,28 @@ Imagine a physical play area (like a living room floor or dedicated arena) where
 
 ## System Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DEVELOPMENT ENVIRONMENT                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐          │
-│  │   C/Rust/Zig    │───>│  Wasmer clang   │───>│   .wasm file    │          │
-│  │   Source Code   │    │  (in browser)   │    │   (firmware)    │          │
-│  └─────────────────┘    └─────────────────┘    └────────┬────────┘          │
-│                                                          │                   │
-│                    ┌─────────────────────────────────────┼─────────────────┐ │
-│                    │                                     │                 │ │
-│                    ▼                                     ▼                 │ │
-│  ┌─────────────────────────────┐      ┌─────────────────────────────┐     │ │
-│  │   BROWSER SIMULATION        │      │    REAL HARDWARE DEPLOY     │     │ │
-│  │                             │      │                             │     │ │
-│  │  ┌───────────────────┐     │      │  ┌───────────────────┐     │     │ │
-│  │  │ WAMR/QuickJS      │     │      │  │ TCP Deployer      │     │     │ │
-│  │  │ Runtime           │     │      │  │ (port 8080)       │     │     │ │
-│  │  └─────────┬─────────┘     │      │  └─────────┬─────────┘     │     │ │
-│  │            │               │      │            │               │     │ │
-│  │  ┌─────────▼─────────┐     │      │  ┌─────────▼─────────┐     │     │ │
-│  │  │ VirtualESP32      │     │      │  │ ESP32-S3 WAMR     │     │     │ │
-│  │  │ (Physics Engine)  │     │      │  │ (WASMachine)      │     │     │ │
-│  │  └─────────┬─────────┘     │      │  └─────────┬─────────┘     │     │ │
-│  │            │               │      │            │               │     │ │
-│  │  ┌─────────▼─────────┐     │      │  ┌─────────▼─────────┐     │     │ │
-│  │  │ React Visualization│    │      │  │ Physical Robot    │     │     │ │
-│  │  │ (Canvas/WebGL)    │     │      │  │ (2 wheels+camera) │     │     │ │
-│  │  └───────────────────┘     │      │  └───────────────────┘     │     │ │
-│  └─────────────────────────────┘      └─────────────────────────────┘     │ │
-│                                                                            │ │
-└────────────────────────────────────────────────────────────────────────────┘ │
+```mermaid
+graph TB
+    subgraph "Development Environment"
+        A[C/Rust/Zig Source] --> B[Wasmer Clang<br/>Browser]
+        B --> C[.wasm Firmware]
+    end
+
+    subgraph "Browser Simulation"
+        C --> D[WAMR Runtime]
+        D --> E[VirtualESP32<br/>Physics Engine]
+        E --> F[React Viz<br/>Canvas/WebGL]
+    end
+
+    subgraph "Real Hardware"
+        C --> G[TCP Deploy :8080]
+        G --> H[ESP32-S3 WAMR<br/>WASMachine]
+        H --> I[Physical Robot<br/>2 wheels + camera]
+    end
+
+    style C fill:#4CAF50
+    style E fill:#2196F3
+    style I fill:#FF9800
 ```
 
 ## WASM4 Paradigm Applied to Robotics
@@ -572,34 +564,33 @@ int motor_set_native(wasm_exec_env_t exec_env, int motor_id, int pwm_value) {
 
 ## Deployment Flow: Simulator → Real Robot
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Write C Code   │────>│  Test in        │────>│  Deploy to      │
-│  (robot4.h API) │     │  Browser Sim    │     │  Real ESP32     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        │                       │                       │
-        ▼                       ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ • Same code     │     │ • Physics sim   │     │ • TCP upload    │
-│ • WASM4-style   │     │ • 2D top-down   │     │ • Hot reload    │
-│ • 160 chars/fn  │     │ • Virtual cam   │     │ • Real sensors  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+```mermaid
+graph LR
+    A[Write C Code<br/>robot4.h API] --> B[Test in Browser Sim<br/>Physics + 2D View]
+    B --> C[Deploy to Real ESP32<br/>TCP + Hot Reload]
+
+    A -.Same Code.-> A2[WASM4-style]
+    B -.Virtual.-> B2[Simulated Sensors]
+    C -.Physical.-> C2[Real Hardware]
+
+    style A fill:#4CAF50
+    style B fill:#2196F3
+    style C fill:#FF9800
 ```
 
 ### LLMos Integration Points
 
-1. **Browser WASM Compiler** (`wasm-compiler.ts`):
+1. **Browser WASM Compiler** (`/lib/runtime/wasm-compiler.ts`):
    - Compiles C → WASM using Wasmer SDK
    - Includes robot4.h headers
    - Outputs .wasm binary
 
-2. **TCP Deployer** (`wasm-deployer.ts`):
+2. **TCP Deployer** (`/lib/hardware/wasm-deployer.ts`):
    - Connects to ESP32 on port 8080
    - Uploads WASM binary with metadata
    - Queries/uninstalls apps
 
-3. **Virtual ESP32** (`virtual-esp32.ts`):
+3. **Virtual ESP32** (`/lib/hardware/virtual-esp32.ts`):
    - Differential drive physics
    - Sensor simulation
    - Camera frame buffer (to be added)

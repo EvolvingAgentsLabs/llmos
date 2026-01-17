@@ -1,4 +1,6 @@
-# LLMos-Lite: Technology & Architecture Improvement Analysis
+# LLMos: Technology & Architecture Improvement Analysis
+
+**Last Updated:** January 2026
 
 > Comprehensive analysis of improvement opportunities to achieve system goals more powerfully
 
@@ -12,7 +14,7 @@ After analyzing the LLMos-Lite codebase, architecture, and stated goals, I've id
 
 | Area | Current State | Improvement Potential |
 |------|--------------|----------------------|
-| **LLM Integration** | OpenRouter API only | +++ Local models, MCP protocol |
+| **LLM Integration** | OpenAI-compatible API | +++ Local models, MCP protocol |
 | **Memory/Learning** | Pattern-based evolution | +++ Vector RAG, semantic memory |
 | **Code Execution** | Pyodide Python only | ++ Multi-language, WebGPU acceleration |
 | **Agent Architecture** | Custom orchestration | +++ MCP-based agentic patterns |
@@ -24,7 +26,7 @@ After analyzing the LLMos-Lite codebase, architecture, and stated goals, I've id
 ## 1. LLM Integration: Next-Generation Capabilities
 
 ### Current State
-- Uses OpenRouter API for all LLM calls
+- Uses OpenAI-compatible API for all LLM calls
 - Single model configuration per session
 - No local/offline inference capability
 - API key stored in localStorage

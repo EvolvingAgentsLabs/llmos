@@ -1,7 +1,7 @@
 # ESP32 Hardware Integration - Complete Tutorial
 
+**Last Updated:** January 2026
 **Branch:** main
-**Date:** 2026-01-14
 **Audience:** Developers and End Users
 
 ---
@@ -63,7 +63,7 @@ LLMos treats **physical hardware as a first-class citizen**. The ESP32-S3 integr
 ### 1. Start LLMos
 
 ```bash
-cd llmos-lite/ui
+cd llmos
 npm install
 npm run dev
 ```
@@ -428,6 +428,20 @@ idf.py build flash monitor
 ## Browser-Based WASM Compilation
 
 **LLMos compiles C code to WebAssembly entirely in your browser** - no backend required!
+
+### Browser→ESP32 Deployment Flow
+
+```mermaid
+graph TD
+    A[User writes C code] --> B[Browser: Wasmer SDK]
+    B --> C[Compile C → WASM]
+    C --> D{Deployment Target?}
+    D -->|Virtual| E[VirtualESP32 Simulator]
+    D -->|Physical| F[TCP Deploy to ESP32:8080]
+    E --> G[Physics Simulation + Visualization]
+    F --> H[WAMR Runtime on ESP32-S3]
+    H --> I[Robot Hardware Control]
+```
 
 ### How It Works
 
@@ -1023,21 +1037,21 @@ manager.on('device:checkpoint', ({ deviceId, checkpointIndex }) => {
 
 ### Architecture Files
 
-- **ARCHITECTURE.md** - Full system architecture with mermaid diagrams
-- **docs/WASM4-ROBOT-ARCHITECTURE.md** - Robot4 API specification
-- **docs/ESP32-S3-INTEGRATION-TEST-GUIDE.md** - End-to-end testing guide
-- **llmos-lite/volumes/system/skills/** - ESP32 skill definitions
+- **docs/architecture/ARCHITECTURE.md** - Full system architecture with mermaid diagrams
+- **docs/architecture/WASM4-ROBOT-ARCHITECTURE.md** - Robot4 API specification
+- **docs/hardware/ESP32-S3-INTEGRATION-TEST-GUIDE.md** - End-to-end testing guide
+- **volumes/system/skills/** - ESP32 skill definitions
 
 ### Source Code
 
-- `lib/hardware/virtual-esp32.ts` - Virtual device emulator
-- `lib/hardware/esp32-device-manager.ts` - Fleet management
-- `lib/hardware/esp32-wasm4-vm.ts` - WASM4 runtime + robot simulator
-- `lib/llm-tools/esp32-wasm4-tools.ts` - LLM tool definitions
+- `/lib/hardware/virtual-esp32.ts` - Virtual device emulator
+- `/lib/hardware/esp32-device-manager.ts` - Fleet management
+- `/lib/hardware/esp32-wasm4-vm.ts` - WASM4 runtime + robot simulator
+- `/lib/llm-tools/esp32-wasm4-tools.ts` - LLM tool definitions
 
 ---
 
 **Status:** Complete and ready for use
-**Document Version:** 3.0.0 (Robot4 Architecture + Fleet Management)
-**Date:** 2026-01-14
+**Document Version:** 3.1.0 (Robot4 Architecture + Fleet Management)
+**Last Updated:** January 2026
 **Branch:** main

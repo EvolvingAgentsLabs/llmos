@@ -1,5 +1,7 @@
 # Recursive Language Models (RLM) Architecture Analysis for LLMos
 
+**Last Updated:** January 2026
+
 ## Executive Summary
 
 This document analyzes the Recursive Language Models (RLM) paper and its implications for LLMos architecture. The RLM paradigm offers significant advantages for handling long-context tasks by treating prompts as external environment objects rather than direct neural network inputs.
@@ -253,5 +255,5 @@ The next step is implementing the full REPL-based context management system.
 ## References
 
 - Zhang, A.L., Kraska, T., & Khattab, O. (2025). Recursive Language Models. MIT CSAIL.
-- LLMos System Architecture: `/home/user/llmos/llmos-lite/ui/lib/system-agent-orchestrator.ts`
-- Context Management: `/home/user/llmos/llmos-lite/ui/lib/workflow-context-manager.ts`
+- LLMos System Architecture: `/lib/system-agent-orchestrator.ts`
+- Context Management: `/lib/workflow-context-manager.ts`

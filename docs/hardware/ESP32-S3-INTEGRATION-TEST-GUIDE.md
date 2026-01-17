@@ -1,5 +1,7 @@
 # LLMos ESP32-S3 Integration Test Guide
 
+**Last Updated:** January 2026
+
 ## The Ultimate Demo: The OS Building Itself
 
 This guide demonstrates LLMos's self-building capability. **You don't write code** - you prompt LLMos to generate everything. LLMos acts as the "Senior Engineer" while you play the "Architect."
@@ -45,7 +47,7 @@ For 3D graphics, @react-three/fiber and @react-three/drei are available.
 I need to design a virtual hardware interface for a drone project.
 
 Create a TypeScript singleton class named `VirtualFlightController` in
-lib/hardware/virtual-flight-controller.ts.
+/lib/hardware/virtual-flight-controller.ts.
 
 Requirements:
 1. Store state of 4 motors (0.0 to 1.0) and sensor data (orientation: x, y, z; altitude)
@@ -122,7 +124,7 @@ Now let's test this with the virtual ESP32. Show me how to:
 3. Read IMU and barometer data
 4. Integrate the device with the flight simulator
 
-Use the SerialManager from lib/hardware/serial-manager.ts
+Use the SerialManager from /lib/hardware/serial-manager.ts
 ```
 
 ### Expected Integration Code:
@@ -313,6 +315,6 @@ firmware/
 
 ---
 
-*Guide Version: 2.0.0 - Prompt-Based Approach*
-*Last Updated: 2026-01-06*
-*Compatible with: LLMos-Lite v2.x*
+*Guide Version: 2.1.0 - Prompt-Based Approach*
+*Last Updated: January 2026*
+*Compatible with: LLMos v2.x*

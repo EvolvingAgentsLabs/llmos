@@ -1,5 +1,7 @@
 # Plan de Mejora del Chat y Workflow de LLMOS
 
+**Last Updated:** January 2026
+
 ## Vision General
 
 Transformar el chat actual de LLMOS de una interacción lineal usuario-agente a un **sistema colaborativo multiagente con visualización de decisiones tipo Git**, inspirado en la forma en que los desarrolladores visualizan ramas y merges en VSCode.
@@ -365,7 +367,7 @@ interface ParticipantRelationship {
 **Archivos a crear/modificar:**
 
 ```
-lib/chat/
+/lib/chat/
 ├── multi-agent-chat.ts          # Core del chat multiagente
 ├── voting-session.ts            # Sistema de votación
 ├── participant-manager.ts       # Gestión de participantes

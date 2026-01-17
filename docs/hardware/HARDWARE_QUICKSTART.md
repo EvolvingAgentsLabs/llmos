@@ -1,11 +1,13 @@
 # ESP32 Hardware Quick Start
 
+**Last Updated:** January 2026
+
 ## For Developers - Testing the Implementation
 
 ### 1. Start the Dev Server
 
 ```bash
-cd llmos-lite/ui
+cd llmos
 npm install
 npm run dev
 ```
@@ -135,7 +137,7 @@ Expected responses:
 
 ## Complete Documentation
 
-- **ESP32_HARDWARE_INTEGRATION.md** - Complete implementation guide
-- **IMPLEMENTATION_SUMMARY.md** - Summary of all changes
-- **llmos-lite/volumes/system/** - System artifacts (tools, agents, skills)
+- **docs/hardware/ESP32_COMPLETE_TUTORIAL.md** - Complete implementation guide
+- **docs/architecture/WASM4-ROBOT-ARCHITECTURE.md** - Robot4 API specification
+- **/volumes/system/** - System artifacts (tools, agents, skills)
 
