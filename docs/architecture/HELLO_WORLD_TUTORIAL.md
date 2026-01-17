@@ -1,792 +1,226 @@
-# LLMos: Hello World Tutorial
+# Getting Started with LLMos
 
-**Last Updated:** January 2026
+**Your first robot in 10 minutes!**
 
-This tutorial provides a comprehensive "Hello World" walkthrough to get started with LLMos and verify that all components are working correctly. Follow these steps in sequence to learn the core functionality and validate your setup.
+This guide will help you create your first AI-powered robot. No hardware needed to start!
 
----
+## What You'll Do
 
-## Table of Contents
+1. Install LLMos
+2. Create a virtual robot
+3. Make it move and avoid walls
+4. Celebrate!
 
-1. [Prerequisites](#1-prerequisites)
-2. [Step 1: System Boot Sequence](#step-1-system-boot-sequence)
-3. [Step 2: Basic Chat Interaction](#step-2-basic-chat-interaction)
-4. [Step 3: File System Operations](#step-3-file-system-operations)
-5. [Step 4: Applet Generation & Execution](#step-4-applet-generation--execution)
-6. [Step 5: Python Code Execution](#step-5-python-code-execution)
-7. [Step 6: Multi-Agent Orchestration](#step-6-multi-agent-orchestration)
-8. [Step 7: Git Integration](#step-7-git-integration)
-9. [Step 8: Context & Memory System](#step-8-context--memory-system)
-10. [Quick Validation Checklist](#quick-validation-checklist)
-11. [Troubleshooting](#troubleshooting)
+## Before You Start
 
----
+You'll need:
+- A computer (Mac, Windows, or Linux)
+- Internet connection
+- 15 minutes of time
 
-## 1. Prerequisites
+That's it! No robot parts required.
 
-Before running these tests, ensure the following are configured:
+## Step 1: Install LLMos (5 minutes)
 
-### Required Configuration
-
-| Component | Requirement | How to Verify |
-|-----------|-------------|---------------|
-| **LLM API Key** | Valid OpenAI-compatible API key | Settings panel shows "API Connected" |
-| **GitHub Token** | Personal access token with repo scope | Can browse volumes in VolumeExplorer |
-| **Team Volume** | GitHub repo configured | `NEXT_PUBLIC_TEAM_VOLUME_REPO` is set |
-| **User Volume** | GitHub repo configured | `NEXT_PUBLIC_USER_VOLUME_REPO` is set |
-| **Node.js** | v18+ | `node --version` |
-| **Browser** | Chrome/Firefox/Safari | Modern ES2020+ support |
-
-### Starting the Application
+Open your terminal (Command Prompt on Windows) and type:
 
 ```bash
-# From the project root
+# Download LLMos
+git clone https://github.com/EvolvingAgentsLabs/llmos
 cd llmos
+
+# Install it (this takes a few minutes)
 npm install
+
+# Start LLMos
 npm run dev
 ```
 
-The application should be available at `http://localhost:3000`
-
----
-
-## Step 1: System Boot Sequence
-
-**Objective**: Verify the kernel boots correctly and initializes all subsystems.
-
-### Steps
-
-1. Open the application in a fresh browser tab
-2. Observe the boot screen with progress indicators
-3. Wait for the system to reach "Ready" state
-
-### Expected Boot Stages
-
-| Stage | Duration | What It Does | Success Indicator |
-|-------|----------|--------------|-------------------|
-| `init` | ~500ms | Initialize system state | "Initializing..." displayed |
-| `auth` | ~1000ms | Verify API keys | No auth errors |
-| `vfs` | ~1500ms | Initialize virtual file system | Volume icons appear |
-| `kernel` | ~3000ms | Load Pyodide/Babel runtimes | "Loading runtimes..." |
-| `ready` | ~500ms | System ready | Main UI displayed |
-
-### Validation Criteria
-
-- [ ] Boot screen appears with logo
-- [ ] Progress bar advances through all stages
-- [ ] No JavaScript console errors
-- [ ] Main chat interface loads
-- [ ] Avatar/JARVIS element visible (if using FluidLayout)
-
-### Console Check
-
-Open browser DevTools (F12) and verify:
-```javascript
-// No red errors
-// Look for: "[Kernel] Boot complete"
-// Look for: "[VFS] Volumes initialized"
+You should see something like:
+```
+Ready! Open http://localhost:3000
 ```
 
----
+## Step 2: Open LLMos
 
-## Step 2: Basic Chat Interaction
+1. Open your web browser
+2. Go to: http://localhost:3000
+3. You should see a chat interface
 
-**Objective**: Verify the core chat functionality and LLM integration.
+## Step 3: Create Your First Robot
 
-### Test 2.1: Simple Greeting
+In the chat, type:
 
-**Input**:
 ```
-Hello! Can you tell me what you are?
-```
-
-**Expected Output**:
-- Agent responds within 5-10 seconds
-- Response describes LLMos capabilities
-- Message appears in chat history
-- Loading indicator shows during processing
-
-### Test 2.2: Simple Calculation
-
-**Input**:
-```
-What is 42 * 17 + 123?
+Create a virtual robot that avoids walls
 ```
 
-**Expected Output**:
-- Correct answer: **837**
-- Response formatted clearly
-- No tool calls required
+Press Enter and watch the magic! LLMos will:
+- Create a virtual robot in a 3D world
+- Write the code to make it avoid obstacles
+- Show you the robot moving around
 
-### Test 2.3: Tool Discovery
+## What Just Happened?
 
-**Input**:
+LLMos did several things:
+1. Created a "virtual ESP32" (a simulated robot)
+2. Wrote a program in C language
+3. Started the robot in a virtual arena
+4. Made it smart enough to avoid walls!
+
+## Step 4: Talk to Your Robot
+
+Try these commands:
+
+### Make it move
 ```
-What tools do you have available?
-```
-
-**Expected Output**:
-Agent should list available tools including:
-
-| Tool | Description |
-|------|-------------|
-| `write-file` | Write content to files in the virtual file system |
-| `read-file` | Read content from files |
-| `list-directory` | List files and subdirectories |
-| `execute-python` | Execute Python code in browser (Pyodide) |
-| `invoke-subagent` | Execute code via a markdown sub-agent (tracks usage) |
-| `discover-subagents` | Discover available agent definitions |
-| `validate-project-agents` | Validate minimum 3-agent requirement |
-| `generate-applet` | Generate interactive React applets |
-
-**Note**: Tool names use kebab-case (e.g., `write-file` not `write_file`).
-
-### Validation Criteria
-
-- [ ] Chat input field accepts text
-- [ ] Send button triggers request
-- [ ] Loading spinner appears
-- [ ] Response renders properly
-- [ ] Markdown formatting works
-- [ ] Code blocks render with syntax highlighting
-
----
-
-## Step 3: File System Operations
-
-**Objective**: Verify the Git-backed volume file system works correctly.
-
-### Understanding the File System Structure
-
-> **IMPORTANT**: The LLMos file system has a structured layout:
-> ```
-> /                        ← Root (contains only directories)
-> ├── system/              ← System files (read-only for users)
-> │   ├── agents/          ← System agent definitions
-> │   ├── memory_log.md    ← System memory
-> │   └── workflow_history/← Execution logs
-> └── projects/            ← USER FILES GO HERE
->     └── [your files]     ← All user-created files
-> ```
->
-> When you create files in the "user volume", they are stored in `/projects/`, not the literal root.
-
-### Test 3.1: Read File
-
-**Input**:
-```
-Read the file at /system/memory_log.md and show me its contents.
+Drive the robot forward at speed 150
 ```
 
-**Expected Behavior**:
-1. Agent calls `read-file` tool
-2. Tool execution shown in chat
-3. File content displayed (system memory log)
-
-**Alternative** (if memory_log.md doesn't exist):
+### Turn left
 ```
-List the files in /system/ and read any available file.
+Spin the robot left
 ```
 
-**Note**: On a fresh installation, some files may not exist yet. The test passes if the `read-file` tool executes correctly, even if the file is not found.
-
-### Test 3.2: Write File (Hello World)
-
-**Input**:
+### Change the LED color
 ```
-Create a new file called "hello-world-test.txt" in the user volume with the content:
-"Hello, World! This is a test file created at [current timestamp]."
+Set the robot LED to blue
 ```
 
-**Expected Behavior**:
-1. Agent calls `write-file` tool
-2. Confirmation message displayed with path, size, and content
-3. File created at `/projects/hello-world-test.txt`
-
-**Verification**:
-```bash
-# File will be created at: /projects/hello-world-test.txt
-# Check GitHub repo for user volume under the projects/ directory
+### Check its location
+```
+Where is my robot?
 ```
 
-### Test 3.3: List Files
+## Step 5: Try Different Environments
 
-**Input**:
+Change the world your robot lives in:
+
 ```
-List all files in the /projects/ directory.
-```
-
-**Expected Behavior**:
-1. Agent calls `list-directory` tool
-2. File listing displayed
-3. Shows the `hello-world-test.txt` we just created
-
-**Note**: Listing `/` (root) will only show directories (`/system/`, `/projects/`). To see user files, always list `/projects/`.
-
-### Test 3.4: Edit File
-
-**Input**:
-```
-Edit the file at /projects/hello-world-test.txt. Find "Hello, World!" and replace it with "Hello, LLMos!"
+Set the floor map to maze
 ```
 
-**Expected Behavior**:
-1. Agent reads the file, modifies content, and writes it back
-2. Confirmation shown with updated content
-3. File updated in GitHub
+Now your robot is in a maze! Watch how it navigates.
 
-**Note**: The system may use `read-file` + `write-file` instead of a dedicated `edit-file` tool.
+Other maps to try:
+- `ovalTrack` - A racing track with a black line
+- `obstacleArena` - A room full of obstacles
+- `figure8` - A figure-8 shaped track
 
-### Test 3.5: Delete File
+## Step 6: Load Pre-Made Games
 
-**Input**:
+LLMos comes with ready-to-go robot programs:
+
+### Line Follower
 ```
-Delete the file at /projects/hello-world-test.txt from the user volume.
+Load the line follower game on my robot
 ```
+Your robot will now follow the black line on the track!
 
-**Expected Behavior**:
-1. Agent removes the file (or overwrites with empty content)
-2. Confirmation shown
-3. File removed/emptied in GitHub
-
-**Known Limitations**:
-- No native `delete-file` tool exists - the agent uses `write-file` with empty content as a workaround
-- File entry may remain in VFS with 0 bytes rather than being truly deleted
-
-**Note**: If delete is not available, you can verify by listing `/projects/` to confirm file operations work.
-
-### Validation Criteria
-
-- [ ] Read operations return correct content
-- [ ] Write operations create files in `/projects/`
-- [ ] Edit operations modify files correctly
-- [ ] List operations show files in correct directories
-- [ ] VolumeExplorer reflects changes
-- [ ] GitHub commits have proper messages
-
----
-
-## Step 4: Applet Generation & Execution
-
-**Objective**: Verify the generative UI system can create and run React applets.
-
-### Test 4.1: Simple Button Applet
-
-**Input**:
+### Maze Solver
 ```
-Create a simple applet with a blue button that says "Click Me!" and shows an alert with "Hello, World!" when clicked.
+Set the floor map to maze
+Load the maze runner game
+```
+Watch your robot find its way out!
+
+## Understanding the Code
+
+Want to see what the robot is actually doing? Ask:
+
+```
+Show me the code for the wall avoider
 ```
 
-**Expected Behavior**:
-1. Agent generates TSX code
-2. Applet compiles via Babel
-3. Preview renders in UI
-4. Button is clickable
-5. Alert appears on click
+You'll see something like:
+```c
+void update() {
+    int front = distance(0);  // How far to the wall ahead?
 
-### Test 4.2: Counter Applet with State
-
-**Input**:
-```
-Create an applet with a counter. It should have:
-- A number display starting at 0
-- A "+" button to increment
-- A "-" button to decrement
-- A "Reset" button to go back to 0
-Style it nicely with Tailwind CSS.
+    if (front < 60) {
+        // Too close! Turn left
+        drive(-80, 80);
+    } else {
+        // Path clear, go forward
+        drive(120, 120);
+    }
+}
 ```
 
-**Expected Behavior**:
-1. Applet renders with three buttons
-2. Counter increments/decrements correctly
-3. Reset works
-4. Styling applied
-
-### Test 4.3: Data Display Applet
-
-**Input**:
-```
-Create an applet that displays a table with 3 columns: Name, Role, Status.
-Include sample data for 3 team members.
-Make it look professional with alternating row colors.
-```
-
-**Expected Behavior**:
-1. Table renders correctly
-2. Data displayed in rows
-3. Alternating colors visible
-4. Responsive layout
-
-### Validation Criteria
-
-- [ ] TSX code generated correctly
-- [ ] Babel compilation succeeds
-- [ ] Applet renders in preview/modal
-- [ ] State management works (React hooks)
-- [ ] Tailwind classes applied
-- [ ] No console errors during execution
-- [ ] Applet appears in recent applets
-
----
-
-## Step 5: Python Code Execution
-
-**Objective**: Verify the Pyodide runtime executes Python code correctly.
-
-### Test 5.1: Basic Python
-
-**Input**:
-```
-Run this Python code and show the output:
-
-```python
-def greet(name):
-    return f"Hello, {name}! Welcome to LLMos."
-
-print(greet("World"))
-print(greet("Developer"))
-```
-```
-
-**Expected Output**:
-```
-Hello, World! Welcome to LLMos.
-Hello, Developer! Welcome to LLMos.
-```
-
-### Test 5.2: Mathematical Computation
-
-**Input**:
-```
-Run Python code to:
-1. Calculate the first 10 Fibonacci numbers
-2. Calculate the factorial of 10
-3. Print both results
-```
-
-**Expected Output**:
-```
-Fibonacci: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
-Factorial of 10: 3628800
-```
-
-### Test 5.3: Data Visualization (Matplotlib)
-
-**Input**:
-```
-Run Python code to create a simple bar chart showing:
-- Categories: A, B, C, D, E
-- Values: 23, 45, 56, 78, 32
-Use matplotlib and show the chart.
-```
-
-**Expected Behavior**:
-1. Pyodide loads matplotlib
-2. Chart generated
-3. Base64 image displayed in output
-4. Chart visible to user
-
-### Test 5.4: Package Installation
-
-**Input**:
-```
-Run Python code that uses numpy to create a 3x3 random matrix and calculate its determinant.
-```
-
-**Expected Behavior**:
-1. numpy auto-installed via micropip
-2. Matrix created
-3. Determinant calculated and displayed
-
-### Validation Criteria
-
-- [ ] Pyodide runtime initializes
-- [ ] Basic Python executes correctly
-- [ ] Packages auto-install
-- [ ] stdout/stderr captured
-- [ ] Matplotlib plots render as images
-- [ ] Execution time reasonable (<10s for simple code)
-
----
-
-## Step 6: Multi-Agent Orchestration
-
-**Objective**: Verify multi-agent coordination and minimum agent requirements.
-
-### Test 6.1: Create Multi-Agent Project
-
-**Input**:
-```
-Create a new project called "hello-world-project" that requires coordination between multiple agents.
-The project should have at least 3 agents:
-1. A Planner agent that designs the architecture
-2. A Developer agent that writes code
-3. A Reviewer agent that validates the output
-
-Just create the agent definitions, don't execute them yet.
-```
-
-**Expected Behavior**:
-1. Agent creates project structure
-2. Three agent definition files created
-3. Multi-agent validator confirms 3+ agents
-4. Files saved to user volume
-
-### Test 6.2: Agent Definition Verification
-
-**Input**:
-```
-List the agents in the hello-world-project and verify their configurations.
-```
-
-**Expected Behavior**:
-1. Lists all three agents
-2. Shows each agent's tools and capabilities
-3. Confirms valid configuration
-
-### Test 6.3: Agent Execution
-
-**Input**:
-```
-Using the hello-world-project agents, have them collaborate to create a simple "Hello World" Python script with:
-- Planner designs the approach
-- Developer writes the code
-- Reviewer validates it
-Show me the conversation between agents.
-```
-
-**Expected Behavior**:
-1. Agents execute in sequence
-2. Inter-agent communication visible
-3. Final output produced
-4. Execution trace logged
-
-### Validation Criteria
-
-- [ ] Minimum 3-agent requirement enforced
-- [ ] Agent definitions follow markdown format
-- [ ] Tools correctly assigned to agents
-- [ ] Agent communication works
-- [ ] Execution traces captured
-- [ ] Results aggregated properly
-
----
-
-## Step 7: Git Integration
-
-**Objective**: Verify Git operations work with GitHub repositories.
-
-### Test 7.1: View Git Status
-
-**Input**:
-```
-Show me the current git status of the user volume - any uncommitted changes?
-```
-
-**Expected Behavior**:
-1. Agent queries git status
-2. Status displayed (clean or with changes)
-
-### Test 7.2: Create and Commit Changes
-
-**Input**:
-```
-1. Create a file called "git-test.md" with "# Git Integration Test" in the user volume
-2. Commit it with message "test: Add git integration test file"
-3. Show me the commit SHA
-```
-
-**Expected Behavior**:
-1. File created
-2. Git commit made
-3. Commit SHA returned
-4. Change visible in GitHub
-
-### Test 7.3: View Commit History
-
-**Input**:
-```
-Show me the last 5 commits in the user volume.
-```
-
-**Expected Behavior**:
-1. Recent commits listed
-2. Shows SHA, message, author, date
-3. Our test commit visible
-
-### Validation Criteria
-
-- [ ] Git status accurately reflects state
-- [ ] Commits created with proper messages
-- [ ] Commit SHAs returned
-- [ ] GitHub repo updated
-- [ ] Commit history accessible
-
----
-
-## Step 8: Context & Memory System
-
-**Objective**: Verify context management and evolution system.
-
-### Test 8.1: Context Retention
-
-**Input (Message 1)**:
-```
-Remember this: My favorite number is 42 and my favorite color is blue.
-```
-
-**Input (Message 2 - same session)**:
-```
-What is my favorite number and color?
-```
-
-**Expected Behavior**:
-1. Agent remembers from earlier in conversation
-2. Correctly states: 42 and blue
-3. Context maintained across messages
-
-### Test 8.2: Long Conversation Handling
-
-**Input**:
-```
-Tell me a very detailed story about a robot learning to code. Make it at least 5 paragraphs.
-```
-
-Then continue with 5-10 more messages to test context window management.
-
-**Expected Behavior**:
-1. Long responses handled correctly
-2. Context summarized if needed
-3. No truncation errors
-4. Earlier context still accessible
-
-### Test 8.3: System Memory Query
-
-**Input**:
-```
-What have you learned from our conversation today? Any patterns or preferences?
-```
-
-**Expected Behavior**:
-1. Agent summarizes conversation
-2. May reference evolution/memory system
-3. Shows awareness of interaction patterns
-
-### Validation Criteria
-
-- [ ] Context retained within session
-- [ ] Long conversations don't crash
-- [ ] Summarization triggers when needed
-- [ ] Memory system captures patterns
-- [ ] Evolution trace created
-
----
-
-## Quick Validation Checklist
-
-Use this for rapid system validation:
-
-### Core Functionality
-- [ ] App loads without errors
-- [ ] Chat accepts input and returns responses
-- [ ] Files can be created in user volume
-- [ ] Applets compile and render
-- [ ] Python code executes in Pyodide
-
-### Infrastructure
-- [ ] OpenRouter API connected
-- [ ] GitHub API connected
-- [ ] localStorage persists data
-- [ ] Volumes accessible
-- [ ] Runtimes load (Babel, Pyodide)
-
-### Agent System
-- [ ] SystemAgentOrchestrator processes messages
-- [ ] Tools execute correctly
-- [ ] Multi-agent validation works
-- [ ] Execution traces logged
-
-### UI Components
-- [ ] ChatPanel renders
-- [ ] VolumeExplorer shows files
-- [ ] Canvas/Editor works
-- [ ] Applet modals appear
-- [ ] Settings accessible
-
----
+Don't worry if you don't understand it all yet. The important part:
+- `distance(0)` checks how far ahead the wall is
+- If close, the robot turns
+- If far, the robot goes forward
+
+## Next Steps
+
+### Experiment!
+Try asking LLMos:
+- "Make the robot go faster"
+- "Change the LED to purple when turning"
+- "Make the robot beep when it sees a wall"
+
+### Learn More
+- **[ESP32 Guide](../hardware/ESP32_GUIDE.md)** - Connect real hardware
+- **[Robot Programming](ROBOT4_GUIDE.md)** - Understand how robots think
+
+### Build Something Cool
+Ideas for your next project:
+- A robot that draws patterns
+- A robot that finds objects
+- A robot race against the clock
 
 ## Troubleshooting
 
-### Common Issues
+### LLMos Won't Start
+**Problem**: Error when running `npm run dev`
+**Fix**: Make sure you have Node.js installed. Download from nodejs.org
 
-#### Boot Fails at "auth" stage
-**Cause**: Invalid API keys
-**Fix**: Check OpenRouter and GitHub tokens in settings
+### Can't See the Robot
+**Problem**: Robot created but not visible
+**Fix**: Refresh the browser page and try again
 
-#### Files not persisting
-**Cause**: GitHub token lacks repo scope
-**Fix**: Generate new token with `repo` scope
+### Robot Doesn't Move
+**Problem**: Commands sent but robot stays still
+**Fix**: Make sure you started the robot with "start the robot device"
 
-#### Applets don't render
-**Cause**: Babel compilation error
-**Fix**: Check console for TSX syntax errors
+### Something Else Wrong?
+Ask on our [GitHub Discussions](https://github.com/EvolvingAgentsLabs/llmos/discussions) - we're here to help!
 
-#### Python code times out
-**Cause**: Pyodide not loaded
-**Fix**: Wait for kernel to fully initialize, check network
+## What You Learned
 
-#### "Multi-agent validation failed"
-**Cause**: Project has fewer than 3 agents
-**Fix**: Ensure project includes at least 3 agent definitions
+In just 10 minutes, you:
+- ✅ Installed LLMos
+- ✅ Created a virtual robot
+- ✅ Made it avoid walls
+- ✅ Tried different environments
+- ✅ Loaded pre-made games
 
-#### Multi-agent validation triggers on file operations (FIXED in v1.2)
-**Cause**: Previously, any file write to `/projects/` would trigger multi-agent validation, even for simple file operations like creating or deleting a single file.
-**Fix**: Fixed in `system-agent-orchestrator.ts` - validation now only triggers when creating proper project structures (directories with `components/`, `agents/`, `output/`, etc.)
+## Ready for Real Hardware?
 
-#### Applets generated but not displayed (FIXED in v1.4)
-**Cause**: The `generate-applet` tool completed successfully but applets didn't appear in the Applets panel. Two issues:
-1. The applet callback was only registered in `SimpleLayout`, not in `FluidLayout` (JARVIS) or `AdaptiveLayout`
-2. Applets were added to `AppletStore` but not to `DesktopAppletManager` (which populates the UI regions)
+Want to build an actual robot you can hold? Check out the [ESP32 Guide](../hardware/ESP32_GUIDE.md).
 
-**Fix**:
-- Added `setAppletGeneratedCallback` registration to `FluidLayout.tsx` and `AdaptiveLayout.tsx`
-- Also added `DesktopAppletManager.addApplet()` call so applets appear in the "Personal Applets" region
+For about $30, you can build a real robot that:
+- Drives around your room
+- Avoids furniture
+- Follows lines on the floor
+- Responds to commands
 
-#### Applets displayed but not launching on click (FIXED in v1.5)
-**Cause**: After v1.4 fix, applets appeared in the "Personal Applets" region but clicking on them had no effect. The issue was a mismatch between how applets were stored:
-1. `createApplet()` was called WITHOUT a `filePath` parameter
-2. `DesktopAppletManager.addApplet()` was called WITH `filePath: 'generated/${applet.id}'`
-3. When clicking an applet, `handleOpenDesktopApplet` tried to match by `filePath` or `metadata.id`, but the AppletStore entry had no `filePath`
+## Tips for Success
 
-**Fix**:
-- In `FluidLayout.tsx` and `AdaptiveLayout.tsx`: Pass consistent `filePath` to both `createApplet()` and `DesktopAppletManager.addApplet()`
-- In `AppletGrid.tsx`: Improved matching logic to also check `a.id === desktopApplet.id`
-- Added debug logging to trace applet opening flow
+1. **Start simple** - Master one thing before adding complexity
+2. **Ask questions** - LLMos can explain anything
+3. **Experiment** - Try changing things and see what happens
+4. **Share** - Show others what you built!
 
-#### Applets still not launching (race condition) (FIXED in v1.6)
-**Cause**: Even after v1.5 fix, applets sometimes didn't launch when clicked immediately after creation. This was a React state timing issue where:
-1. `activeApplets` from React context was stale (still empty)
-2. The condition `activeApplets.length === 0` would render `OrganizedDesktop`
-3. But the applet existed in `AppletStore` (synchronous)
+## The Magic of LLMos
 
-**Fix**:
-- In `AppletGrid.tsx`: Check `AppletStore` directly instead of relying on React state
-- Use `AppletStore.getActiveCount()` to determine if applets exist
-- Use `AppletStore.getApplet()` as fallback for fullViewApplet
-- Use `AppletStore.getActiveApplets()` as fallback for DesktopGrid
+The cool part? You didn't write any code. You just described what you wanted, and LLMos made it happen.
 
-#### Session dropdown hidden and session list not visible (FIXED in v1.6)
-**Cause**: Two related issues in `FluidLayout`:
-1. TreePanel had `overflow-hidden` which clipped the session dropdown
-2. TreePanel height (`calc(50vh - 48px)`) was too small on some screens
-
-**Fix**:
-- Changed session dropdown from `absolute` to `fixed` positioning with dynamically calculated position
-- Increased TreePanel height from 50vh to 60vh
-- Added `overflow-y-auto` to inner container for proper scrolling
-
-### Debug Commands
-
-Open browser console and run:
-
-```javascript
-// Check kernel status
-window.__LLMOS_DEBUG?.kernelStatus
-
-// Check storage
-localStorage.getItem('llmos_lvm_config')
-
-// Check volumes
-window.__LLMOS_DEBUG?.volumes
-
-// Force reload runtimes
-window.__LLMOS_DEBUG?.reloadRuntimes()
-```
-
-### Log Locations
-
-| Log Type | Location |
-|----------|----------|
-| Browser Console | F12 → Console tab |
-| Network Requests | F12 → Network tab |
-| React State | React DevTools extension |
-| API Calls | Network tab, filter by `openrouter.ai` |
+That's the power of AI-assisted robotics!
 
 ---
 
-## Automated Test Script (Future)
+**Ready to build more? Try the ESP32 hardware guide next!**
 
-For automated testing, the following Playwright script could be used:
-
-```typescript
-// tests/e2e/hello-world.spec.ts
-import { test, expect } from '@playwright/test';
-
-test.describe('Hello World E2E Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:3000');
-    // Wait for boot complete
-    await page.waitForSelector('[data-testid="chat-input"]', { timeout: 30000 });
-  });
-
-  test('should boot successfully', async ({ page }) => {
-    await expect(page.locator('[data-testid="chat-panel"]')).toBeVisible();
-  });
-
-  test('should respond to hello world', async ({ page }) => {
-    await page.fill('[data-testid="chat-input"]', 'Hello World!');
-    await page.click('[data-testid="send-button"]');
-    await expect(page.locator('.chat-message.assistant')).toBeVisible({ timeout: 15000 });
-  });
-
-  test('should create file', async ({ page }) => {
-    await page.fill('[data-testid="chat-input"]',
-      'Create a file called test.txt with content "Hello" in user volume');
-    await page.click('[data-testid="send-button"]');
-    await expect(page.getByText('File created')).toBeVisible({ timeout: 15000 });
-  });
-});
-```
-
----
-
-## Summary
-
-This Hello World test suite covers the essential functionality of LLMos-Lite:
-
-| Component | Tests | Criticality |
-|-----------|-------|-------------|
-| Boot Sequence | 1 | Critical |
-| Chat/LLM | 3 | Critical |
-| File System | 5 | Critical |
-| Applets | 3 | High |
-| Python Runtime | 4 | High |
-| Multi-Agent | 3 | Medium |
-| Git Integration | 3 | Medium |
-| Context/Memory | 3 | Medium |
-
-**Total Tests**: 25+
-
-**Estimated Time**: 30-45 minutes for full manual execution
-
-By completing all tests successfully, you can confirm that LLMos-Lite is fully operational and ready for use.
-
----
-
-## Revision History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2026-01-01 | Initial document |
-| 1.1 | 2026-01-01 | Updated file system tests with correct paths (`/projects/`), corrected tool names to kebab-case, added file system structure documentation |
-| 1.2 | 2026-01-01 | Added Test 3.5 known limitations (no delete-file tool), documented and fixed multi-agent validation bug that incorrectly triggered on simple file operations |
-| 1.3 | 2026-01-01 | Fixed applet callback registration for FluidLayout and AdaptiveLayout |
-| 1.4 | 2026-01-01 | Complete applet fix - also add to DesktopAppletManager so applets appear in Personal Applets region |
-| 1.5 | 2026-01-01 | Fixed applet click/launch - ensure filePath is passed to createApplet() and improve matching in handleOpenDesktopApplet |
-| 1.6 | 2026-01-01 | Fixed applet race condition (use AppletStore directly), fixed session dropdown visibility (fixed positioning), fixed TreePanel height |
-
----
-
-*Document Version: 1.7*
-*Last Updated: January 2026*
-*For LLMos v2.x*
+[➡️ ESP32 Hardware Guide](../hardware/ESP32_GUIDE.md)

@@ -1,324 +1,256 @@
-# LLMos 🚀
+# LLMos - Build AI Robots with Your Voice
 
-**The Evolutionary Operating System for Physical AI Agents**
+**Turn your words into working robots.**
 
-LLMos is an experimental AI operating system that bridges the gap between generative AI and the physical world. It's a self-evolving platform where agents, sub-agents, and hardware artifacts live, interact, and **evolve**—moving beyond simple chatbots to create a persistent environment for autonomous physical computing.
+LLMos lets you create AI-powered robots just by describing what you want them to do. No coding required (but you can if you want!). Build robots that avoid walls, follow lines, navigate mazes, and more.
 
-Built for scientific computing, robotics, and edge AI—**run it in your browser OR as a native desktop app**.
+https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07
 
-### 🌐 Two Modes, One Platform
+## What Can You Build?
 
-- **Web Mode**: Zero-install, runs entirely in browser with zero backend required
-- **Desktop Mode**: Native Electron app with faster compilation and full hardware access
+- **Smart Robots**: Robots that avoid obstacles, follow lines, and navigate mazes
+- **ESP32 Devices**: Program tiny computers to control motors, LEDs, and sensors
+- **Custom Tools**: Create your own apps and interfaces
+- **Interactive Dashboards**: Build control panels for your robots
 
-Both modes share the same codebase and features, with automatic platform detection and seamless fallbacks.
+## Two Ways to Use LLMos
 
-<video src="https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07" width="600" controls></video>
+1. **In Your Browser**: Just open a website - no installation needed
+2. **Desktop App**: Download for faster performance and more features
 
-## ✨ Key Features
+Both work the same way. Your choice!
 
-- 🧬 **Evolutionary AI** - Agents that persist, evolve, and learn from failures
-- 🤖 **Physical Computing** - Browser-to-hardware pipeline for ESP32 robots
-- 💻 **Dual Runtime** - Run in browser OR native desktop app
-- 🔧 **Multi-Language** - Write robot firmware in C or AssemblyScript
-- 📁 **File-First** - Everything is real files, not chat artifacts
-- ⚡ **Zero Backend** - All compilation happens client-side
-- 🔒 **Privacy First** - Your code never leaves your machine
-- 🎯 **60Hz Real-Time** - WASM firmware runs at full speed in browser and hardware
+## How It Works (The Magic)
 
----
+1. **You describe what you want**: "Make a robot that avoids walls"
+2. **LLMos creates the code**: AI generates the program
+3. **Test in simulation**: See your robot run in a virtual world
+4. **Deploy to real hardware**: Upload to your ESP32 robot
 
-## 🤖 Autonomous Robotics: From Chat to Firmware
+Everything happens in your browser or on your computer. Your code never leaves your machine.
 
-LLMos treats **physical hardware as a first-class citizen**. Using the **Robot4 API**—think "Gameboy for Robots"—even lightweight LLMs can architect, code, compile, and deploy firmware for autonomous robots.
+## Quick Start (5 Minutes)
 
-**Write in C or AssemblyScript** - Your choice of language, same powerful API. Both compile to WebAssembly and run identically on virtual and physical robots.
+### Try Without Any Hardware
 
-### The Wall-Avoiding Robot Demo
-
-In a recent test, a free LLM (`mimo-v2-flash`) autonomously created a wall-avoiding robot:
-
-```
-You: "Program a wall-avoiding robot using the Robot4 API"
-
-SystemAgent:
-📝 Planning: Selected full implementation (confidence 85%)
-🤖 Creating wallAvoider.c using robot4.h API
-⚙️ Compiling in browser via WASM-Clang...
-❌ Compilation error detected
-🔧 Auto-fixing: Generated wallAvoider_fixed.c
-✅ Compilation successful
-🎮 Spawning Virtual Cube Robot in Obstacle Arena
-🚀 Running at 60Hz - robot navigating autonomously!
-```
-
-### The Robot4 API
-
-A clean, well-documented API that abstracts complex hardware into simple functions. **Available in C and AssemblyScript**:
-
-**C API:**
-```c
-void update() {
-    int front = distance(0);  // Read front sensor
-
-    if (front < 60) {
-        stop();
-        led(255, 0, 0);  // Red LED - obstacle detected
-
-        // Simple decision logic
-        if (distance(6) > distance(1)) {
-            drive(-80, 80);  // Turn Left
-        } else {
-            drive(80, -80);  // Turn Right
-        }
-    } else {
-        drive(120, 120);     // Clear path - go forward
-        led(0, 255, 0);      // Green LED
-    }
-}
-```
-
-**AssemblyScript (TypeScript-like):**
-```typescript
-export function update(): void {
-    const front = distance(0);  // Read front sensor
-
-    if (front < 60) {
-        stop();
-        ledColor("red");  // Red LED - obstacle detected
-
-        // Simple decision logic
-        if (distance(6) > distance(1)) {
-            drive(-80, 80);  // Turn Left
-        } else {
-            drive(80, -80);  // Turn Right
-        }
-    } else {
-        drive(120, 120);     // Clear path - go forward
-        ledColor("green");   // Green LED
-    }
-}
-```
-
-**Both compile to the same WebAssembly** and run at 60Hz on virtual or physical robots.
-
-### The Evolution Loop
-
-This isn't just code generation—it's **evolution in the micro-scale**:
-
-1. **Write** → Agent generates firmware
-2. **Test** → Simulation runs in browser
-3. **Fail** → Compilation or behavior errors detected
-4. **Mutate** → Agent analyzes errors and fixes code
-5. **Succeed** → Deploy to virtual or physical device
-
-The same WASM binary running in the browser can be deployed to physical **ESP32-S3** devices running the WASMachine firmware.
-
----
-
-## 🎯 Main Goals
-
-### 🧬 **Evolutionary Intelligence**
-Unlike traditional AI that generates static outputs, LLMos-Lite creates **living artifacts**:
-- **Agents persist and evolve** - Not just prompts, but stored entities with memory and tools
-- **Write → Test → Fail → Mutate → Succeed** - Evolutionary loops at micro-scale
-- **Pattern recognition** - System identifies what works and breeds successful variations
-- **Compound intelligence** - Each generation makes the next one smarter
-
-### 🤖 **Physical AI First-Class**
-Hardware isn't an afterthought—it's a core primitive:
-- **Browser-to-hardware pipeline** - Compile C, simulate, deploy to ESP32
-- **Closed feedback loops** - Telemetry flows back to drive firmware evolution
-- **Robot4 abstraction** - Clean APIs that lightweight LLMs can master
-- **Zero-backend deployment** - Everything happens in your browser
-
-### 📁 **File-First Architecture**
-Everything is **real files in persistent storage**, not chat artifacts:
-- All outputs saved to organized project structures
-- Complete file tree showing every file and folder
-- Virtual file system with browser localStorage persistence
-- Read-only system volume with immutable artifacts
-
----
-
-## 🔮 What's Coming Next
-
-### Evolutionary Agents (Work in Progress)
-
-**Mutation Engine**
-If a physical task fails (e.g., a robot arm drops an object), the Mutation Engine forks the agent's logic, generates multiple variations, simulates them all, and deploys the fittest version back to hardware. Evolution at scale.
-
-**Persistent Sub-Agent Hierarchies**
-The OS will host specialized agent hierarchies. A "Gardener Agent" overseeing moisture sensors and water valves creates sub-agents for each device, monitoring health and rewriting sleep cycles to optimize battery life based on real-world usage patterns.
-
-**Swarm Intelligence**
-Define a high-level swarm goal (e.g., "Map this room"), and the OS generates distinct firmware for multiple robots that communicate via a simulated mesh network. Emergent behavior from simple agents.
-
-**Complete Physical AI Agents Support**
-Full end-to-end pipeline for physical AI agents: natural language → agent creation → firmware generation → simulation → hardware deployment → telemetry monitoring → autonomous evolution. The browser becomes the complete IDE for embodied AI.
-
-### Near Future
-- **Hardware Feedback Loop**: Deploy → Monitor telemetry → Evolve firmware → OTA update
-- **Applet Library**: Save and reuse generated applets across sessions
-- **Three.js Runtime**: Interactive 3D graphics and animations in applets
-- **Cross-Project Learning**: Share learnings between different projects
-- **Session Replay**: Replay and analyze past executions
-
-### Long-Term Vision
-- **Self-Breeding Firmware**: Thousands of simulation cycles in WASM, mutating robot `update()` loops to optimize for speed or battery life
-- **Team Volumes**: Multiple users collaborate on the same physical device—one agent optimizes motor drivers while another optimizes vision
-- **Research Accelerator**: Transform papers into physical implementations
-- **Edge AI Marketplace**: Community-shared agents, skills, and robot behaviors
-
----
-
-## 💻 Platform Capabilities
-
-LLMos adapts to your environment, providing the best experience in both web and desktop modes:
-
-| Feature | Web Mode | Desktop Mode |
-|---------|----------|--------------|
-| **Compilation** | Browser-based (CDN) | Native (faster) |
-| **C to WASM** | ✅ Clang via Wasmer | ✅ Clang via Wasmer |
-| **AssemblyScript** | ✅ Browser compiler (~3-5s) | ✅ Native compiler (~1-2s) |
-| **File System** | Virtual (localStorage/IndexedDB) | Native filesystem |
-| **Serial Ports** | Web Serial API (limited) | Full serial port access |
-| **Offline Mode** | Requires internet | ✅ Full offline support |
-| **System Integration** | Browser sandboxed | Native menus & dialogs |
-
-### Platform Detection
-
-LLMos automatically detects your runtime environment and adapts:
-- **Visual Indicator**: Bottom-right widget shows current mode and capabilities
-- **Automatic Fallback**: Uses best available compiler for your platform
-- **Seamless API**: Same code works in both web and desktop modes
-
-```typescript
-import { getPlatformCapabilities } from '@/lib/platform';
-
-const caps = getPlatformCapabilities();
-if (caps.nativeAssemblyScript) {
-  console.log('Using fast native compiler!');
-}
-```
-
----
-
-## 📚 Documentation
-
-Comprehensive documentation organized by topic:
-
-### 📖 User Guides (`docs/guides/`)
-- **[DESKTOP.md](docs/guides/DESKTOP.md)** - Desktop app guide with platform comparison
-- **[BROWSER_COMPILATION.md](docs/guides/BROWSER_COMPILATION.md)** - Browser-based compilation guide
-
-### 🔧 Hardware (`docs/hardware/`)
-- **[ESP32_GUIDE.md](docs/hardware/ESP32_GUIDE.md)** - Complete ESP32 integration guide
-  - Quick start, complete tutorial, and integration testing
-
-### 🏗️ Architecture (`docs/architecture/`)
-- **[ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)** - System architecture overview
-- **[ROBOT4_GUIDE.md](docs/architecture/ROBOT4_GUIDE.md)** - Robot4 firmware development
-- **[HELLO_WORLD_TUTORIAL.md](docs/architecture/HELLO_WORLD_TUTORIAL.md)** - Getting started tutorial
-
-### 📝 Project Documentation
-- **[ELECTRON_100_IMPROVEMENTS.md](docs/ELECTRON_100_IMPROVEMENTS.md)** - Latest platform enhancements
-- **[LLM_CONFIGURATION.md](docs/LLM_CONFIGURATION.md)** - LLM provider setup
-- **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** - Codebase organization
-- **[REFACTORING.md](docs/REFACTORING.md)** - Recent refactoring changes
-
----
-
-## 🤝 Contributing
-
-LLMos-Lite is open source and actively developed. Contributions welcome!
-
-**Areas for Contribution:**
-- Domain packs for new fields (robotics, bioinformatics, finance)
-- Memory algorithms and pattern recognition improvements
-- New system tools and runtime capabilities
-- UI/UX enhancements
-
-Contributions welcome! Check our issues or submit a PR.
-
----
-
-## 📖 Philosophy
-
-**An OS That "Grows"**
-Most AI tools have amnesia—they forget what they built yesterday. LLMos-Lite is a **living repository of Artifacts**. Agents aren't just prompts; they're stored entities with memory, tools, and specific jobs that persist and evolve.
-
-**Darwinian Software Development**
-We're moving beyond "write once" to **breed software**. The Mutation Engine generates variations, simulates them, and deploys the fittest version. Code isn't written—it's grown through evolutionary pressure.
-
-**Physical World First-Class Citizen**
-The browser isn't just a UI—it's a full development environment for the physical world. Compile C to WASM, deploy to ESP32 hardware, and close the feedback loop with real-world telemetry.
-
-**Infinite App Store**
-Don't download apps—describe what you need and the OS builds it. Every tool is generated on demand, compiled in real-time, and persisted for reuse.
-
-**Text-In, Reality-Out**
-Your words compile to code, UI, firmware, and physical robot behavior. Input is natural language; output is working software running in the real world.
-
-**File-First, Browser-Native**
-Inspired by Claude Code—files are the source of truth, everything is persistent, operations are transparent.
-
-**Zero Backend, Maximum Privacy**
-Everything runs client-side—Python via Pyodide, React applets via Babel, C via Clang in WebAssembly, AssemblyScript via browser or native compiler. In web mode, your code never leaves your browser. In desktop mode, everything stays on your machine.
-
----
-
-## 💬 Community
-
-- **GitHub**: https://github.com/EvolvingAgentsLabs/llmos
-- **Issues**: https://github.com/EvolvingAgentsLabs/llmos/issues
-- **Discussions**: https://github.com/EvolvingAgentsLabs/llmos/discussions
-
----
-
-## 📝 License
-
-Apache 2.0 License - See LICENSE file for details
-
----
-
-**Ready to build AI that evolves?** 🧬
-**Ready to program robots from natural language?** 🤖
-**Ready for software that breeds itself?** 🔄
-
-## 🚀 Quick Start
+You don't need a robot to get started! Try it with a virtual robot first:
 
 ```bash
-# Install dependencies
+# 1. Download the code
+git clone https://github.com/EvolvingAgentsLabs/llmos
+cd llmos
+
+# 2. Install (one time only)
 npm install
 
-# Choose your mode:
-
-# 🌐 Web Mode (zero-install, browser-based)
+# 3. Start LLMos
 npm run dev
-# Open http://localhost:3000
 
-# 💻 Desktop Mode (native app, faster compilation)
-npm run electron:dev
-# Desktop app opens automatically
+# 4. Open your browser
+# Go to http://localhost:3000
 ```
 
-### Building for Production
+Now type in the chat: **"Create a virtual robot that avoids walls"**
+
+LLMos will:
+- Create a robot in a virtual world
+- Write the code to make it avoid obstacles
+- Show you the robot running
+
+### Ready for Real Hardware?
+
+Want to build a physical robot? You'll need:
+
+- **ESP32 board** (about $10 online)
+- **Some motors and sensors** (optional)
+- **USB cable** to connect to your computer
+
+See the [ESP32 Guide](docs/hardware/ESP32_GUIDE.md) for step-by-step instructions.
+
+## What Makes LLMos Special?
+
+### Talk to Your Robot
+Instead of writing code, just describe what you want:
+- "Make the LED turn red when it sees an obstacle"
+- "Follow the black line on the floor"
+- "Spin left if the front sensor sees something close"
+
+### Test Before Building
+See your robot work in a virtual world before you build the physical version. No wasted parts!
+
+### Same Code, Anywhere
+The code that runs in simulation works on your real ESP32 robot. No changes needed!
+
+### Build and Improve
+LLMos remembers what worked and learns from mistakes. Your robots get smarter over time.
+
+## Example: Wall-Avoiding Robot
+
+Here's what happens when you say: "Create a wall-avoiding robot"
+
+```
+You: "Make a robot that drives forward and turns away from walls"
+
+LLMos:
+✓ Creates virtual robot
+✓ Writes the program
+✓ Tests in simulation
+✓ Shows you the result
+
+Your robot now:
+- Drives forward when path is clear
+- Detects walls with sensors
+- Turns away from obstacles
+- Never crashes!
+```
+
+The program is simple:
+```c
+void update() {
+    int front = distance(0);  // Check front sensor
+
+    if (front < 60) {
+        // Wall detected - turn!
+        drive(-80, 80);  // Spin left
+        led(255, 0, 0);  // Red light
+    } else {
+        // Path clear - go forward
+        drive(120, 120);
+        led(0, 255, 0);  // Green light
+    }
+}
+```
+
+## Cool Things You Can Build
+
+### Beginner Projects
+- **Blink Bot**: Make an LED blink in patterns
+- **Distance Detector**: Measure how far away objects are
+- **Light Show**: Create color patterns with RGB LEDs
+
+### Intermediate Projects
+- **Line Follower**: Robot follows a black line on the floor
+- **Wall Avoider**: Robot navigates around obstacles
+- **Maze Solver**: Robot finds its way out of a maze
+
+### Advanced Projects
+- **Swarm Robots**: Multiple robots working together
+- **Camera Vision**: Robot recognizes and follows objects
+- **Remote Control**: Control your robot from anywhere
+
+## Getting Help
+
+### Documentation for Makers
+- **[Getting Started Guide](docs/architecture/HELLO_WORLD_TUTORIAL.md)** - Your first robot
+- **[ESP32 Setup](docs/hardware/ESP32_GUIDE.md)** - Connect your hardware
+- **[Robot Programming](docs/architecture/ROBOT4_GUIDE.md)** - Make your robot do cool stuff
+
+### Need Help?
+- **GitHub Issues**: https://github.com/EvolvingAgentsLabs/llmos/issues
+- **Discussions**: https://github.com/EvolvingAgentsLabs/llmos/discussions
+
+## How to Get Your Own ESP32
+
+Don't have an ESP32 yet? Here's what to look for:
+
+**Recommended Board**: ESP32-S3 DevKit
+- **Where**: Amazon, eBay, AliExpress, local electronics store
+- **Price**: $8-$15
+- **What to search**: "ESP32-S3 development board"
+
+**What Else You Might Want**:
+- Breadboard and jumper wires ($5)
+- LED lights ($2)
+- Motors and motor driver ($10)
+- Distance sensors ($5)
+
+**Total starter kit**: About $30-$40
+
+## The Simple Version
+
+```
+1. Install LLMos on your computer
+2. Say what you want your robot to do
+3. Watch it work in simulation
+4. Upload to your ESP32 (if you have one)
+5. Watch your robot come to life!
+```
+
+## Why Makers Love LLMos
+
+- **No coding required** (but you can code if you want)
+- **Test without hardware** (virtual robots are free!)
+- **Learn by doing** (see how robots work)
+- **Share your creations** (help other makers)
+- **Keep improving** (robots get smarter over time)
+
+## Tips for Success
+
+1. **Start Small**: Begin with simple projects like blinking LEDs
+2. **Test in Simulation**: Make sure it works virtually first
+3. **Ask Questions**: LLMos can explain what the code does
+4. **Experiment**: Try changing things and see what happens
+5. **Share**: Show other makers what you built!
+
+## What's Inside
+
+### For Virtual Robots
+Everything works in your browser - no hardware needed:
+- Create robots in different environments
+- Test obstacle avoidance
+- Try line following
+- Build maze solvers
+
+### For Real Robots
+Connect to ESP32 hardware:
+- Control motors
+- Read sensors
+- Flash LEDs
+- Make sounds
+- Take pictures (with camera module)
+
+## Next Steps
+
+1. **Install LLMos** (see Quick Start above)
+2. **Try a Virtual Robot** (no hardware needed!)
+3. **Read the Getting Started Guide** (link above)
+4. **Order an ESP32** (if you want real hardware)
+5. **Build Your First Robot** (follow the tutorials)
+
+## Questions?
+
+**Q: Do I need to know how to code?**
+A: Nope! Just describe what you want.
+
+**Q: Do I need to buy anything?**
+A: Not to start! Try virtual robots first. ESP32 boards are cheap if you want hardware later.
+
+**Q: What if something doesn't work?**
+A: Ask LLMos to fix it! Or check our GitHub issues for help.
+
+**Q: Can I build my own robot design?**
+A: Yes! LLMos works with any ESP32-based robot.
+
+**Q: Is this for kids?**
+A: Great for anyone interested in robotics - kids, students, hobbyists, makers!
+
+## License
+
+Free to use and modify (Apache 2.0 License).
+
+## Ready to Build?
 
 ```bash
-# Build web version
-npm run build
-npm start
-
-# Build desktop app
-npm run electron:build        # Current platform
-npm run electron:build:mac    # macOS .dmg
-npm run electron:build:win    # Windows .exe
-npm run electron:build:linux  # Linux .AppImage
+npm install
+npm run dev
 ```
 
-**Watch the future compile.** 🚀
+Then type: **"Create a robot that avoids walls"**
+
+Watch the magic happen!
 
 ---
 
-*This project explores the convergence of AI, hardware, and evolutionary computing. The browser is more than a UI—it's the perfect sandbox for the next generation of physical AI agents.*
+**Build something amazing. Share it with the world.**
+
+Made with love by makers, for makers.
