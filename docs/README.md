@@ -29,15 +29,7 @@ Step-by-step guides and tutorials.
 ### 🤖 Hardware Documentation
 Physical AI and ESP32 integration guides.
 
-- **[ESP32_COMPLETE_TUTORIAL.md](hardware/ESP32_COMPLETE_TUTORIAL.md)** - Complete ESP32 integration tutorial
-- **[ESP32-S3-INTEGRATION-TEST-GUIDE.md](hardware/ESP32-S3-INTEGRATION-TEST-GUIDE.md)** - Integration testing guide
-- **[HARDWARE_QUICKSTART.md](hardware/HARDWARE_QUICKSTART.md)** - Quick start guide for hardware
-
-### 🎨 UI Documentation
-User interface and UX documentation.
-
-- **[CHAT_WORKFLOW_IMPROVEMENT_PLAN.md](ui/CHAT_WORKFLOW_IMPROVEMENT_PLAN.md)** - Chat workflow improvements
-- **[RLM_ARCHITECTURE_ANALYSIS.md](ui/RLM_ARCHITECTURE_ANALYSIS.md)** - RLM architecture analysis
+- **[ESP32_GUIDE.md](hardware/ESP32_GUIDE.md)** - Comprehensive ESP32 integration guide (quick start, complete tutorial, and integration testing)
 
 ### 🔧 Project Documentation
 Project structure, configuration, and development documentation.
@@ -54,7 +46,7 @@ Project structure, configuration, and development documentation.
 1. Start with the main [README.md](../README.md) in the project root
 2. Review [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase
 3. Configure your LLM API using [LLM_CONFIGURATION.md](LLM_CONFIGURATION.md)
-4. For hardware: [HARDWARE_QUICKSTART.md](hardware/HARDWARE_QUICKSTART.md)
+4. For hardware: [ESP32_GUIDE.md](hardware/ESP32_GUIDE.md)
 
 ### Development
 - **Architecture**: [ARCHITECTURE.md](architecture/ARCHITECTURE.md)
@@ -62,8 +54,8 @@ Project structure, configuration, and development documentation.
 - **Desktop App**: [DESKTOP.md](guides/DESKTOP.md)
 
 ### Hardware Integration
-- **Complete Tutorial**: [ESP32_COMPLETE_TUTORIAL.md](hardware/ESP32_COMPLETE_TUTORIAL.md)
-- **Robot4 API**: [WASM4-ROBOT-ARCHITECTURE.md](architecture/WASM4-ROBOT-ARCHITECTURE.md)
+- **ESP32 Guide**: [ESP32_GUIDE.md](hardware/ESP32_GUIDE.md) - Comprehensive guide from quick start to integration testing
+- **Robot4 API**: [ROBOT4_GUIDE.md](architecture/ROBOT4_GUIDE.md) - Robot4 firmware development
 
 ## 📝 Documentation Standards
 

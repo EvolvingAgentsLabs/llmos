@@ -1231,7 +1231,7 @@ graph TB
 - **README.md** - Project overview and quick start
 - **docs/architecture/HELLO_WORLD_TUTORIAL.md** - Getting started guide
 - **docs/architecture/ROBOT4_GUIDE.md** - Robot4 firmware development
-- **docs/hardware/ESP32_COMPLETE_TUTORIAL.md** - Hardware integration guide
+- **docs/hardware/ESP32_GUIDE.md** - Comprehensive ESP32 hardware integration guide
 - **docs/guides/** - User guides and tutorials
 - **docs/ui/** - UI-specific documentation
 - **volumes/system/skills/** - Learned skill definitions
