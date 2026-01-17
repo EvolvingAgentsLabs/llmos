@@ -48,7 +48,8 @@ function SetupOrb({ step }: { step: SetupStep }) {
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('gemini-3-flash-preview');
+  const [modelName, setModelName] = useState('xiaomi/mimo-v2-flash:free');
+  const [customModelName, setCustomModelName] = useState('');
 
   // UI state
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
@@ -58,13 +59,13 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     setError('');
-    // Google AI Studio API key validation (basic length check)
+    // OpenRouter API key validation (basic check for sk- prefix)
     setIsValid(value.length > 20);
   };
 
   const handleApiKeyNext = () => {
     if (!isValid) {
-      setError('Please enter a valid Google AI Studio API key');
+      setError('Please enter a valid OpenRouter API key');
       return;
     }
     setError('');
@@ -72,23 +73,28 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   };
 
   const handleComplete = () => {
-    if (!modelName.trim()) {
+    const finalModel = modelName === 'custom' ? customModelName : modelName;
+
+    if (!finalModel.trim()) {
       setError('Please enter a model name');
       return;
     }
 
     console.log('[APIKeySetup] Saving configuration:');
     console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
-    console.log('  - Model:', modelName);
-    console.log('  - Provider: gemini (OpenAI-compatible API)');
-    console.log('  - Base URL:', PROVIDER_BASE_URLS.gemini);
+    console.log('  - Model:', finalModel);
+    console.log('  - Provider: openrouter (OpenAI-compatible API)');
+    console.log('  - Base URL:', PROVIDER_BASE_URLS.openrouter);
 
-    // Save LLM config to localStorage (using OpenAI-compatible endpoint)
-    LLMStorage.saveProvider('gemini');
+    // Save LLM config to localStorage (using OpenRouter's OpenAI-compatible endpoint)
+    LLMStorage.saveProvider('openrouter');
     LLMStorage.saveApiKey(apiKey);
-    LLMStorage.saveBaseUrl(PROVIDER_BASE_URLS.gemini);
+    LLMStorage.saveBaseUrl(PROVIDER_BASE_URLS.openrouter);
     // Save the model name directly - it will be validated in createLLMClient
-    LLMStorage.saveModel(modelName as any);
+    LLMStorage.saveModel(finalModel as any);
+    if (modelName === 'custom') {
+      LLMStorage.saveCustomModel(customModelName);
+    }
 
     console.log('[APIKeySetup] Configuration saved to localStorage');
 
@@ -145,24 +151,24 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
 
       <div className="mb-6">
         <label className="block text-xs text-fg-secondary mb-1">
-          Google AI Studio API Key
+          OpenRouter API Key
         </label>
         <input
           type="password"
           value={apiKey}
           onChange={(e) => handleApiKeyChange(e.target.value)}
-          placeholder="AIza..."
+          placeholder="sk-or-..."
           className="input w-full"
           autoFocus
         />
         <div className="mt-2 flex items-center justify-between">
           <a
-            href="https://aistudio.google.com/app/apikey"
+            href="https://openrouter.ai/keys"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-accent-primary hover:underline"
           >
-            Get your free API key from Google AI Studio
+            Get your API key from OpenRouter
           </a>
           {isValid && (
             <span className="text-xs text-accent-success">
@@ -205,16 +211,68 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
         </label>
         <div className="space-y-2">
           <button
-            onClick={() => setModelName('gemini-3-flash-preview')}
+            onClick={() => setModelName('xiaomi/mimo-v2-flash:free')}
             className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'gemini-3-flash-preview'
+              modelName === 'xiaomi/mimo-v2-flash:free'
                 ? 'border-accent-primary bg-accent-primary/10'
                 : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
             }`}
           >
-            <code className="text-sm text-accent-info">gemini-3-flash-preview</code>
-            <p className="text-xs text-fg-tertiary mt-1">Fast and capable - Recommended</p>
+            <code className="text-sm text-accent-info">xiaomi/mimo-v2-flash:free</code>
+            <p className="text-xs text-fg-tertiary mt-1">Free • Fast • Recommended</p>
           </button>
+
+          <button
+            onClick={() => setModelName('google/gemini-3-flash-preview')}
+            className={`w-full text-left p-3 rounded border transition-colors ${
+              modelName === 'google/gemini-3-flash-preview'
+                ? 'border-accent-primary bg-accent-primary/10'
+                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
+            }`}
+          >
+            <code className="text-sm text-accent-info">google/gemini-3-flash-preview</code>
+            <p className="text-xs text-fg-tertiary mt-1">Google • 1M context window</p>
+          </button>
+
+          <button
+            onClick={() => setModelName('anthropic/claude-haiku-4.5')}
+            className={`w-full text-left p-3 rounded border transition-colors ${
+              modelName === 'anthropic/claude-haiku-4.5'
+                ? 'border-accent-primary bg-accent-primary/10'
+                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
+            }`}
+          >
+            <code className="text-sm text-accent-info">anthropic/claude-haiku-4.5</code>
+            <p className="text-xs text-fg-tertiary mt-1">Anthropic • High quality</p>
+          </button>
+
+          <button
+            onClick={() => setModelName('custom')}
+            className={`w-full text-left p-3 rounded border transition-colors ${
+              modelName === 'custom'
+                ? 'border-accent-primary bg-accent-primary/10'
+                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
+            }`}
+          >
+            <code className="text-sm text-accent-info">Custom Model</code>
+            <p className="text-xs text-fg-tertiary mt-1">Enter your own model ID</p>
+          </button>
+
+          {modelName === 'custom' && (
+            <div className="mt-2 pl-3">
+              <input
+                type="text"
+                value={customModelName}
+                onChange={(e) => setCustomModelName(e.target.value)}
+                placeholder="e.g., meta-llama/llama-3.1-8b-instruct:free"
+                className="input w-full text-sm"
+                autoFocus
+              />
+              <p className="text-xs text-fg-tertiary mt-1">
+                Find models at <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">openrouter.ai/models</a>
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

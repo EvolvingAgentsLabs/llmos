@@ -15,6 +15,7 @@ import {
 } from '@/lib/multi-agent-chat-orchestrator';
 import UnifiedChat from './UnifiedChat';
 import ModelSelector from './ModelSelector';
+import LLMSettings from '../settings/LLMSettings';
 
 // Re-export types for UnifiedChat compatibility
 interface Participant {
@@ -71,6 +72,7 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<EnhancedMessage[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [currentPhase, setCurrentPhase] = useState<string>('idle');
+  const [showLLMSettings, setShowLLMSettings] = useState(false);
 
   // Reference to orchestrator
   const orchestratorRef = useRef<ReturnType<typeof getMultiAgentOrchestrator> | null>(null);
@@ -104,13 +106,20 @@ export default function ChatPanel({
     };
 
     const handleParticipantStatus = ({ participantId, status }: { participantId: string; status: string }) => {
-      // Update loading status based on agent activity
+      // Update loading status and agent state based on agent activity
+      const p = orchestrator.getParticipants().find(p => p.id === participantId);
+
       if (status === 'thinking') {
-        const p = orchestrator.getParticipants().find(p => p.id === participantId);
         setLoadingStatus(`${p?.name || participantId} is thinking...`);
+        setAgentState?.('thinking');
+        setIsLoading(true);
       } else if (status === 'executing') {
-        const p = orchestrator.getParticipants().find(p => p.id === participantId);
         setLoadingStatus(`${p?.name || participantId} is executing...`);
+        setAgentState?.('executing');
+        setIsLoading(true);
+      } else if (status === 'idle' && currentPhase !== 'completed') {
+        // Don't reset to idle unless the entire process is completed
+        // Keep showing the phase-appropriate state
       }
     };
 
@@ -162,11 +171,19 @@ export default function ChatPanel({
 
     const handlePhaseChanged = ({ phase }: { phase: string }) => {
       setCurrentPhase(phase);
+
+      // Update agent state based on current phase
       if (phase === 'completed') {
         setIsLoading(false);
         setLoadingStatus('');
         setAgentState?.('success');
         setTimeout(() => setAgentState?.('idle'), 2000);
+      } else if (phase === 'executing' || phase === 'sub-agent-execution') {
+        setIsLoading(true);
+        setAgentState?.('executing');
+      } else if (phase === 'planning' || phase === 'analyzing' || phase === 'voting') {
+        setIsLoading(true);
+        setAgentState?.('thinking');
       }
     };
 
@@ -324,8 +341,19 @@ export default function ChatPanel({
               ))}
             </div>
 
-            <div className="pt-4">
+            <div className="pt-4 flex items-center justify-center gap-2">
               <ModelSelector onModelChange={(id) => console.log('Model:', id)} />
+              <button
+                onClick={() => setShowLLMSettings(true)}
+                className="px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 hover:border-blue-500/50 transition-all duration-200 text-xs flex items-center gap-1.5"
+                title="LLM Settings - Change API Key & Model"
+              >
+                <svg className="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-blue-400 font-medium">Settings</span>
+              </button>
             </div>
           </div>
         </div>
@@ -358,6 +386,11 @@ export default function ChatPanel({
             </button>
           </div>
         </div>
+
+        {/* LLM Settings Modal */}
+        {showLLMSettings && (
+          <LLMSettings onClose={() => setShowLLMSettings(false)} />
+        )}
       </div>
     );
   }
@@ -400,6 +433,11 @@ export default function ChatPanel({
             Start New Goal
           </button>
         </div>
+      )}
+
+      {/* LLM Settings Modal */}
+      {showLLMSettings && (
+        <LLMSettings onClose={() => setShowLLMSettings(false)} />
       )}
     </div>
   );

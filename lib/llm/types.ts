@@ -79,13 +79,37 @@ export interface ModelInfo {
 }
 
 export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
-  'gemini-3-flash-preview': {
-    id: 'gemini-3-flash-preview',
+  'xiaomi/mimo-v2-flash:free': {
+    id: 'xiaomi/mimo-v2-flash:free',
+    name: 'Xiaomi Mimo v2 Flash',
+    provider: 'OpenRouter (Xiaomi)',
+    inputCost: 'Free',
+    outputCost: 'Free',
+    contextWindow: '128k tokens',
+  },
+  'google/gemini-3-flash-preview': {
+    id: 'google/gemini-3-flash-preview',
     name: 'Gemini 3 Flash Preview',
-    provider: 'Google',
-    inputCost: 'Free tier available',
-    outputCost: 'Free tier available',
+    provider: 'OpenRouter (Google)',
+    inputCost: 'Varies',
+    outputCost: 'Varies',
     contextWindow: '1M tokens',
+  },
+  'anthropic/claude-haiku-4.5': {
+    id: 'anthropic/claude-haiku-4.5',
+    name: 'Claude Haiku 4.5',
+    provider: 'OpenRouter (Anthropic)',
+    inputCost: 'Varies',
+    outputCost: 'Varies',
+    contextWindow: '200k tokens',
+  },
+  'custom': {
+    id: 'custom',
+    name: 'Custom Model',
+    provider: 'Custom',
+    inputCost: 'Varies',
+    outputCost: 'Varies',
+    contextWindow: 'Varies',
   },
 };
 

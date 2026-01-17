@@ -17,7 +17,8 @@ import { useArtifactStore } from '@/lib/artifacts/store';
 import { getVFS } from '@/lib/virtual-fs';
 import CommandPalette from './CommandPalette';
 import AgentCortexHeader from './AgentCortexHeader';
-import { Maximize2, Minimize2, X } from 'lucide-react';
+import LLMSettings from '../settings/LLMSettings';
+import { Maximize2, Minimize2, X, Settings } from 'lucide-react';
 
 // Lazy load panels
 const SidebarPanel = lazy(() => import('../sidebar/SidebarPanel'));
@@ -160,6 +161,7 @@ export default function FluidLayout() {
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState<'left' | 'right' | null>(null);
+  const [showLLMSettings, setShowLLMSettings] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle resize
@@ -330,8 +332,17 @@ export default function FluidLayout() {
           <AgentCortexHeader />
         </div>
 
-        {/* Right: Close Session Button Only */}
-        <div className="flex items-center">
+        {/* Right: Settings and Close Session Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLLMSettings(true)}
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200
+                       bg-blue-500/10 hover:bg-blue-500/20
+                       border border-blue-500/30 hover:border-blue-500/50"
+            title="LLM Settings"
+          >
+            <Settings className="w-4 h-4 text-blue-400" />
+          </button>
           <button
             onClick={() => {
               if (confirm('Close this session? This will clear your current chat history.')) {
@@ -425,6 +436,11 @@ export default function FluidLayout() {
           </div>
         </div>
       </div>
+
+      {/* LLM Settings Modal */}
+      {showLLMSettings && (
+        <LLMSettings onClose={() => setShowLLMSettings(false)} />
+      )}
     </div>
   );
 }
