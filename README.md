@@ -130,9 +130,15 @@ Full end-to-end pipeline for physical AI agents: natural language → agent crea
 ## 📚 Documentation
 
 - **README.md** (this file) - Overview and quick start
-- **llmos-lite/ui/README.md** - UI development guide
-- **llmos-lite/ui/ARCHITECTURE.md** - Technical architecture
-- **llmos-lite/ui/docs/** - Detailed feature documentation
+- **docs/guides/** - User guides and tutorials
+  - Desktop app (Electron) documentation
+  - Browser compilation guide
+- **docs/hardware/** - Hardware integration guides
+  - ESP32 complete tutorial
+  - Hardware quickstart
+  - ESP32-S3 integration test guide
+- **docs/architecture/** - Technical architecture documentation
+- **docs/ui/** - UI-specific documentation
 
 ---
 
@@ -146,7 +152,7 @@ LLMos-Lite is open source and actively developed. Contributions welcome!
 - New system tools and runtime capabilities
 - UI/UX enhancements
 
-See **llmos-lite/CONTRIBUTING.md** for guidelines.
+Contributions welcome! Check our issues or submit a PR.
 
 ---
 
@@ -194,8 +200,14 @@ Apache 2.0 License - See LICENSE file for details
 **Ready for software that breeds itself?** 🔄
 
 ```bash
-cd llmos-lite/ui
+# Install dependencies
+npm install
+
+# Run in browser mode
 npm run dev
+
+# Run in desktop mode (Electron)
+npm run electron:dev
 ```
 
 **Watch the future compile.** 🚀
