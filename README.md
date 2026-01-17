@@ -1,18 +1,38 @@
-# LLMos-Lite 🚀
+# LLMos 🚀
 
 **The Evolutionary Operating System for Physical AI Agents**
 
-LLMos-Lite is an experimental "Operating System in the Browser" that bridges the gap between generative AI and the physical world. It's a self-evolving AI operating system where agents, sub-agents, and hardware artifacts live, interact, and **evolve**—moving beyond simple chatbots to create a persistent environment for autonomous physical computing.
+LLMos is an experimental AI operating system that bridges the gap between generative AI and the physical world. It's a self-evolving platform where agents, sub-agents, and hardware artifacts live, interact, and **evolve**—moving beyond simple chatbots to create a persistent environment for autonomous physical computing.
 
-Built for scientific computing, robotics, and edge AI—all running entirely in your browser with zero backend required.
+Built for scientific computing, robotics, and edge AI—**run it in your browser OR as a native desktop app**.
+
+### 🌐 Two Modes, One Platform
+
+- **Web Mode**: Zero-install, runs entirely in browser with zero backend required
+- **Desktop Mode**: Native Electron app with faster compilation and full hardware access
+
+Both modes share the same codebase and features, with automatic platform detection and seamless fallbacks.
 
 <video src="https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07" width="600" controls></video>
+
+## ✨ Key Features
+
+- 🧬 **Evolutionary AI** - Agents that persist, evolve, and learn from failures
+- 🤖 **Physical Computing** - Browser-to-hardware pipeline for ESP32 robots
+- 💻 **Dual Runtime** - Run in browser OR native desktop app
+- 🔧 **Multi-Language** - Write robot firmware in C or AssemblyScript
+- 📁 **File-First** - Everything is real files, not chat artifacts
+- ⚡ **Zero Backend** - All compilation happens client-side
+- 🔒 **Privacy First** - Your code never leaves your machine
+- 🎯 **60Hz Real-Time** - WASM firmware runs at full speed in browser and hardware
 
 ---
 
 ## 🤖 Autonomous Robotics: From Chat to Firmware
 
-LLMos-Lite treats **physical hardware as a first-class citizen**. Using the **Robot4 API**—think "Gameboy for Robots"—even lightweight LLMs can architect, code, compile, and deploy firmware for autonomous robots.
+LLMos treats **physical hardware as a first-class citizen**. Using the **Robot4 API**—think "Gameboy for Robots"—even lightweight LLMs can architect, code, compile, and deploy firmware for autonomous robots.
+
+**Write in C or AssemblyScript** - Your choice of language, same powerful API. Both compile to WebAssembly and run identically on virtual and physical robots.
 
 ### The Wall-Avoiding Robot Demo
 
@@ -34,8 +54,9 @@ SystemAgent:
 
 ### The Robot4 API
 
-A clean, well-documented C API that abstracts complex hardware into simple functions:
+A clean, well-documented API that abstracts complex hardware into simple functions. **Available in C and AssemblyScript**:
 
+**C API:**
 ```c
 void update() {
     int front = distance(0);  // Read front sensor
@@ -56,6 +77,30 @@ void update() {
     }
 }
 ```
+
+**AssemblyScript (TypeScript-like):**
+```typescript
+export function update(): void {
+    const front = distance(0);  // Read front sensor
+
+    if (front < 60) {
+        stop();
+        ledColor("red");  // Red LED - obstacle detected
+
+        // Simple decision logic
+        if (distance(6) > distance(1)) {
+            drive(-80, 80);  // Turn Left
+        } else {
+            drive(80, -80);  // Turn Right
+        }
+    } else {
+        drive(120, 120);     // Clear path - go forward
+        ledColor("green");   // Green LED
+    }
+}
+```
+
+**Both compile to the same WebAssembly** and run at 60Hz on virtual or physical robots.
 
 ### The Evolution Loop
 
@@ -127,18 +172,60 @@ Full end-to-end pipeline for physical AI agents: natural language → agent crea
 
 ---
 
+## 💻 Platform Capabilities
+
+LLMos adapts to your environment, providing the best experience in both web and desktop modes:
+
+| Feature | Web Mode | Desktop Mode |
+|---------|----------|--------------|
+| **Compilation** | Browser-based (CDN) | Native (faster) |
+| **C to WASM** | ✅ Clang via Wasmer | ✅ Clang via Wasmer |
+| **AssemblyScript** | ✅ Browser compiler (~3-5s) | ✅ Native compiler (~1-2s) |
+| **File System** | Virtual (localStorage/IndexedDB) | Native filesystem |
+| **Serial Ports** | Web Serial API (limited) | Full serial port access |
+| **Offline Mode** | Requires internet | ✅ Full offline support |
+| **System Integration** | Browser sandboxed | Native menus & dialogs |
+
+### Platform Detection
+
+LLMos automatically detects your runtime environment and adapts:
+- **Visual Indicator**: Bottom-right widget shows current mode and capabilities
+- **Automatic Fallback**: Uses best available compiler for your platform
+- **Seamless API**: Same code works in both web and desktop modes
+
+```typescript
+import { getPlatformCapabilities } from '@/lib/platform';
+
+const caps = getPlatformCapabilities();
+if (caps.nativeAssemblyScript) {
+  console.log('Using fast native compiler!');
+}
+```
+
+---
+
 ## 📚 Documentation
 
-- **README.md** (this file) - Overview and quick start
-- **docs/guides/** - User guides and tutorials
-  - Desktop app (Electron) documentation
-  - Browser compilation guide
-- **docs/hardware/** - Hardware integration guides
-  - ESP32 complete tutorial
-  - Hardware quickstart
-  - ESP32-S3 integration test guide
-- **docs/architecture/** - Technical architecture documentation
-- **docs/ui/** - UI-specific documentation
+Comprehensive documentation organized by topic:
+
+### 📖 User Guides (`docs/guides/`)
+- **[DESKTOP.md](docs/guides/DESKTOP.md)** - Desktop app guide with platform comparison
+- **[BROWSER_COMPILATION.md](docs/guides/BROWSER_COMPILATION.md)** - Browser-based compilation guide
+
+### 🔧 Hardware (`docs/hardware/`)
+- **[ESP32_GUIDE.md](docs/hardware/ESP32_GUIDE.md)** - Complete ESP32 integration guide
+  - Quick start, complete tutorial, and integration testing
+
+### 🏗️ Architecture (`docs/architecture/`)
+- **[ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)** - System architecture overview
+- **[ROBOT4_GUIDE.md](docs/architecture/ROBOT4_GUIDE.md)** - Robot4 firmware development
+- **[HELLO_WORLD_TUTORIAL.md](docs/architecture/HELLO_WORLD_TUTORIAL.md)** - Getting started tutorial
+
+### 📝 Project Documentation
+- **[ELECTRON_100_IMPROVEMENTS.md](docs/ELECTRON_100_IMPROVEMENTS.md)** - Latest platform enhancements
+- **[LLM_CONFIGURATION.md](docs/LLM_CONFIGURATION.md)** - LLM provider setup
+- **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** - Codebase organization
+- **[REFACTORING.md](docs/REFACTORING.md)** - Recent refactoring changes
 
 ---
 
@@ -177,7 +264,7 @@ Your words compile to code, UI, firmware, and physical robot behavior. Input is 
 Inspired by Claude Code—files are the source of truth, everything is persistent, operations are transparent.
 
 **Zero Backend, Maximum Privacy**
-Everything runs client-side—Python via Pyodide, React applets via Babel, C via Clang in WebAssembly. Your code never leaves your browser.
+Everything runs client-side—Python via Pyodide, React applets via Babel, C via Clang in WebAssembly, AssemblyScript via browser or native compiler. In web mode, your code never leaves your browser. In desktop mode, everything stays on your machine.
 
 ---
 
@@ -199,15 +286,35 @@ Apache 2.0 License - See LICENSE file for details
 **Ready to program robots from natural language?** 🤖
 **Ready for software that breeds itself?** 🔄
 
+## 🚀 Quick Start
+
 ```bash
 # Install dependencies
 npm install
 
-# Run in browser mode
-npm run dev
+# Choose your mode:
 
-# Run in desktop mode (Electron)
+# 🌐 Web Mode (zero-install, browser-based)
+npm run dev
+# Open http://localhost:3000
+
+# 💻 Desktop Mode (native app, faster compilation)
 npm run electron:dev
+# Desktop app opens automatically
+```
+
+### Building for Production
+
+```bash
+# Build web version
+npm run build
+npm start
+
+# Build desktop app
+npm run electron:build        # Current platform
+npm run electron:build:mac    # macOS .dmg
+npm run electron:build:win    # Windows .exe
+npm run electron:build:linux  # Linux .AppImage
 ```
 
 **Watch the future compile.** 🚀
