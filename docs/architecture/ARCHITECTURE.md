@@ -1050,12 +1050,189 @@ graph TB
 
 ---
 
+## Client-Side Architecture
+
+LLMos runs entirely in the browser with optional backend services. The core principle is zero-backend operation for maximum scalability and privacy.
+
+### Execution Isolation
+
+```mermaid
+graph TB
+    subgraph "Browser Sandbox"
+        subgraph "WASM Isolation"
+            PY[Pyodide<br/>No network access]
+            QJS[QuickJS<br/>Limited APIs]
+            CLANG[Clang<br/>Virtual filesystem only]
+        end
+
+        subgraph "Storage Isolation"
+            LS[localStorage<br/>Origin-bound]
+            IDB[IndexedDB<br/>Origin-bound]
+        end
+    end
+
+    PY --> LS
+    QJS --> LS
+```
+
+### Storage Strategy
+
+```mermaid
+graph LR
+    subgraph "Hybrid Storage"
+        LOCAL[Local First<br/>IndexedDB]
+        REMOTE[Cloud Backup<br/>GitHub/Vercel Blob]
+        SYNC[Background Sync]
+    end
+
+    LOCAL --> SYNC
+    SYNC --> REMOTE
+    REMOTE --> |Recovery| LOCAL
+```
+
+**Key Features:**
+- Files written locally first (instant)
+- Background sync to GitHub (eventual consistency)
+- Offline-capable with full Git functionality
+- 50%+ disk quota in modern browsers
+
+---
+
+## Architecture Comparison
+
+### LLMos vs Traditional Backends
+
+| Aspect | With Backend | Full Client-Side |
+|--------|--------------|------------------|
+| **Latency** | +100-500ms | Near-zero |
+| **Scaling** | Server limits | Infinite (CDN) |
+| **Cost** | Server + DB | CDN only |
+| **Privacy** | Data transmitted | Data stays local |
+| **Offline** | No | Yes |
+| **Deployment** | Complex | Static files |
+
+### Feature Status
+
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| **Markdown Agents** | Complete | 11+ specialized agents in `/public/system/agents/` |
+| **Git-backed Volumes** | Complete | Volume management with isomorphic-git support |
+| **Skill Evolution** | Complete | LLM-driven pattern matching generates markdown skills |
+| **Dynamic Projects** | Complete | Project scaffolding with 3-agent minimum |
+| **Self-healing Applets** | Complete | Validation and retry in SystemAgent.md |
+| **Vector Memory** | Planned | Semantic search with Transformers.js embeddings |
+| **Local LLM** | Planned | WebGPU inference with WebLLM |
+| **WASM Git Client** | Planned | isomorphic-git + LightningFS integration |
+
+---
+
+## Technology Stack
+
+### Core Technologies
+
+**Frontend:**
+- Next.js 14 (React 18.2) - Application framework
+- TypeScript - Type safety
+- Tailwind CSS - Styling
+- Monaco Editor - Code editing
+- Three.js / React Three Fiber - 3D visualization
+
+**Runtimes:**
+- Pyodide 0.29+ - Python in browser (WASM)
+- QuickJS - Sandboxed JavaScript execution
+- Wasmer SDK 0.10+ - C to WASM compilation
+- Robot4 Runtime - Firmware simulation
+
+**Storage:**
+- IndexedDB - Large artifacts and binary data
+- localStorage - Configuration and cache
+- isomorphic-git - Git operations in browser
+- LightningFS - POSIX filesystem abstraction
+
+**LLM Integration:**
+- OpenAI-compatible API support (configurable)
+- Model Context Protocol (MCP) compatibility
+- Direct browser-to-API calls (no proxy required)
+
+### Future Enhancements
+
+**Planned Improvements:**
+
+1. **Vector-Based Semantic Memory**
+   - Local embeddings with Transformers.js
+   - Browser-native vector database
+   - Semantic similarity search for skills
+
+2. **WebGPU Local LLM**
+   - 3-8B parameter models in browser
+   - 10-40 tokens/second inference
+   - Zero API costs for common operations
+
+3. **Hybrid LLM Routing**
+   - Route tasks by complexity
+   - Local models for quick operations
+   - Cloud models for complex reasoning
+
+4. **Git Client Implementation**
+   - Full clone/pull/push/merge support
+   - IndexedDB-backed repository storage
+   - Offline Git operations
+
+---
+
+## Git Client Architecture
+
+### Current vs Planned
+
+**Current (REST API):**
+- 5 API calls per commit
+- No clone/pull capability
+- Rate-limited by GitHub
+- Requires network
+
+**Planned (WASM Git):**
+- Native Git protocol support
+- Clone repositories locally
+- Offline operations
+- Branch management
+- Diff algorithms
+
+### Implementation Strategy
+
+```mermaid
+graph TB
+    subgraph "Browser"
+        ISO[isomorphic-git<br/>Pure JS Git]
+        LFS[LightningFS<br/>POSIX FS]
+        IDB[IndexedDB<br/>Persistence]
+    end
+
+    subgraph "Remote"
+        GH[GitHub<br/>Repository]
+        CORS[CORS Proxy<br/>Vercel API]
+    end
+
+    ISO --> LFS
+    LFS --> IDB
+    ISO --> CORS
+    CORS --> GH
+```
+
+**Key Features:**
+- ~100KB bundle size
+- Full Git compatibility (95%)
+- Streaming support for large repos
+- Pluggable filesystem abstraction
+
+---
+
 ## Related Documentation
 
 - **README.md** - Project overview and quick start
+- **docs/architecture/HELLO_WORLD_TUTORIAL.md** - Getting started guide
+- **docs/architecture/ROBOT4_GUIDE.md** - Robot4 firmware development
 - **docs/hardware/ESP32_COMPLETE_TUTORIAL.md** - Hardware integration guide
 - **docs/guides/** - User guides and tutorials
-- **docs/architecture/** - Technical architecture documentation
 - **docs/ui/** - UI-specific documentation
 - **volumes/system/skills/** - Learned skill definitions
 

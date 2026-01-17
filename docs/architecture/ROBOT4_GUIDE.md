@@ -1,10 +1,12 @@
-# WASM4-Style Robot Firmware Architecture
+# Robot4 Firmware Development Guide
 
 **Last Updated:** January 2026
 
-## Vision: "Hall of Fame" Physical Robot Gaming
+## Overview: WASM4-Style Robot Programming
 
-Imagine a physical play area (like a living room floor or dedicated arena) where **real ESP32-S3 robots** play retro games - navigating mazes, collecting items, following lines, and competing against each other. The robot firmware runs as **WebAssembly**, just like WASM4 fantasy console games, enabling:
+Robot4 is a firmware development framework for creating WebAssembly-based robot behaviors inspired by the WASM4 fantasy console. This guide shows you how to program **real ESP32-S3 robots** using the same code that runs in browser simulations.
+
+Imagine a physical play area where robots play retro games - navigating mazes, collecting items, following lines, and competing against each other. Robot4 enables:
 
 - **Same code runs in browser simulation AND on real hardware**
 - **60 FPS game loop** with deterministic physics

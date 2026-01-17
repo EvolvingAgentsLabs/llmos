@@ -1,22 +1,22 @@
-# LLMos: Hello World End-to-End Test Case
+# LLMos: Hello World Tutorial
 
 **Last Updated:** January 2026
 
-This document provides a comprehensive "Hello World" test suite to verify that all components of the LLMos system are working correctly. Execute these tests in sequence to validate the entire system.
+This tutorial provides a comprehensive "Hello World" walkthrough to get started with LLMos and verify that all components are working correctly. Follow these steps in sequence to learn the core functionality and validate your setup.
 
 ---
 
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Test 1: System Boot Sequence](#test-1-system-boot-sequence)
-3. [Test 2: Basic Chat Interaction](#test-2-basic-chat-interaction)
-4. [Test 3: File System Operations](#test-3-file-system-operations)
-5. [Test 4: Applet Generation & Execution](#test-4-applet-generation--execution)
-6. [Test 5: Python Code Execution](#test-5-python-code-execution)
-7. [Test 6: Multi-Agent Orchestration](#test-6-multi-agent-orchestration)
-8. [Test 7: Git Integration](#test-7-git-integration)
-9. [Test 8: Context & Memory System](#test-8-context--memory-system)
+2. [Step 1: System Boot Sequence](#step-1-system-boot-sequence)
+3. [Step 2: Basic Chat Interaction](#step-2-basic-chat-interaction)
+4. [Step 3: File System Operations](#step-3-file-system-operations)
+5. [Step 4: Applet Generation & Execution](#step-4-applet-generation--execution)
+6. [Step 5: Python Code Execution](#step-5-python-code-execution)
+7. [Step 6: Multi-Agent Orchestration](#step-6-multi-agent-orchestration)
+8. [Step 7: Git Integration](#step-7-git-integration)
+9. [Step 8: Context & Memory System](#step-8-context--memory-system)
 10. [Quick Validation Checklist](#quick-validation-checklist)
 11. [Troubleshooting](#troubleshooting)
 
@@ -50,7 +50,7 @@ The application should be available at `http://localhost:3000`
 
 ---
 
-## Test 1: System Boot Sequence
+## Step 1: System Boot Sequence
 
 **Objective**: Verify the kernel boots correctly and initializes all subsystems.
 
@@ -89,7 +89,7 @@ Open browser DevTools (F12) and verify:
 
 ---
 
-## Test 2: Basic Chat Interaction
+## Step 2: Basic Chat Interaction
 
 **Objective**: Verify the core chat functionality and LLM integration.
 
@@ -152,7 +152,7 @@ Agent should list available tools including:
 
 ---
 
-## Test 3: File System Operations
+## Step 3: File System Operations
 
 **Objective**: Verify the Git-backed volume file system works correctly.
 
@@ -266,7 +266,7 @@ Delete the file at /projects/hello-world-test.txt from the user volume.
 
 ---
 
-## Test 4: Applet Generation & Execution
+## Step 4: Applet Generation & Execution
 
 **Objective**: Verify the generative UI system can create and run React applets.
 
@@ -329,7 +329,7 @@ Make it look professional with alternating row colors.
 
 ---
 
-## Test 5: Python Code Execution
+## Step 5: Python Code Execution
 
 **Objective**: Verify the Pyodide runtime executes Python code correctly.
 
@@ -409,7 +409,7 @@ Run Python code that uses numpy to create a 3x3 random matrix and calculate its 
 
 ---
 
-## Test 6: Multi-Agent Orchestration
+## Step 6: Multi-Agent Orchestration
 
 **Objective**: Verify multi-agent coordination and minimum agent requirements.
 
@@ -472,7 +472,7 @@ Show me the conversation between agents.
 
 ---
 
-## Test 7: Git Integration
+## Step 7: Git Integration
 
 **Objective**: Verify Git operations work with GitHub repositories.
 
@@ -524,7 +524,7 @@ Show me the last 5 commits in the user volume.
 
 ---
 
-## Test 8: Context & Memory System
+## Step 8: Context & Memory System
 
 **Objective**: Verify context management and evolution system.
 
