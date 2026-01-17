@@ -17,22 +17,22 @@ This document compares two AI operating system architectures:
 
 | Feature | llmos-lite Implementation | Status |
 |---------|---------------------------|--------|
-| **Markdown Agents** | `/ui/public/system/agents/*.md` (11+ agents) | ✅ Complete |
+| **Markdown Agents** | `/public/system/agents/*.md` (11+ agents) | ✅ Complete |
 | **Master Orchestrator** | `SystemAgent.md` (1400+ lines of markdown) | ✅ Complete |
-| **Git-backed Volumes** | `core/volumes.py` - GitVolume class | ✅ Complete |
-| **Skill Evolution** | `core/evolution.py` - generates markdown skills | ✅ Complete |
-| **Memory as Files** | `/system/memory_log.md`, execution traces | ✅ Complete |
-| **Dynamic Projects** | `projects/*/components/agents/` structure | ✅ Complete |
+| **Git-backed Volumes** | `lib/volumes/` - Volume management | ✅ Complete |
+| **Skill Evolution** | `lib/evolution/` - generates markdown skills | ✅ Complete |
+| **Memory as Files** | `/public/system/memory_log.md`, execution traces | ✅ Complete |
+| **Dynamic Projects** | `volumes/*/` structure | ✅ Complete |
 | **Self-healing Applets** | Applet validation and retry in SystemAgent.md | ✅ Complete |
 
 ### Where llmos-lite Differs (Requires Code Changes)
 
 | Feature | Current Implementation | llmunix Philosophy |
 |---------|------------------------|-------------------|
-| **Evolution Logic** | Python classes (`PatternDetector`, `SkillGenerator`) | Markdown rules that AI can edit |
-| **Tool Registry** | TypeScript MCP registry (`mcp-tools.ts`) | Markdown tool definitions |
-| **Orchestration Rules** | TypeScript `AgenticOrchestrator` class | Kernel prompt (editable text) |
-| **Pattern Matching** | Python `_compute_signature()` function | LLM-driven similarity |
+| **Evolution Logic** | TypeScript classes (`lib/evolution/`) | Markdown rules that AI can edit |
+| **Tool Registry** | TypeScript MCP registry (`lib/agents/mcp-tools.ts`) | Markdown tool definitions |
+| **Orchestration Rules** | TypeScript `lib/agents/agentic-orchestrator.ts` | Kernel prompt (editable text) |
+| **Pattern Matching** | LLM-driven similarity in `lib/agents/llm-pattern-matcher.ts` | ✅ Already LLM-driven |
 
 ---
 
@@ -42,7 +42,7 @@ This document compares two AI operating system architectures:
 
 **Current State (llmos-lite):**
 ```
-/ui/public/system/agents/
+/public/system/agents/
 ├── SystemAgent.md           (1400+ lines - master orchestrator)
 ├── PlanningAgent.md         (task decomposition)
 ├── PatternMatcherAgent.md   (semantic pattern detection)
@@ -53,21 +53,22 @@ This document compares two AI operating system architectures:
 ├── MemoryAnalysisAgent.md
 ├── AppletDebuggerAgent.md
 ├── ExecutionStrategyAgent.md
-└── HardwareControlAgent.md  (ESP32 integration)
+└── ProjectAgentPlanner.md   (project planning)
 ```
 
 **Verdict:** llmos-lite already treats agents as markdown files. Creating a new agent IS a text writing event, not a coding event.
 
 ### 2. Skill System: ✅ Already Markdown-Based
 
-**From `core/skills.py`:**
-```python
-# Skills are markdown with YAML frontmatter
+**From `lib/skills/` and `volumes/system/skills/`:**
+```markdown
 ---
 name: skill-name
 category: coding
 description: What this skill helps with
 keywords: [python, testing, pytest]
+confidence: 0.85
+created_at: 2026-01-17T00:00:00
 ---
 
 # Skill Content
@@ -78,20 +79,19 @@ keywords: [python, testing, pytest]
 
 **Verdict:** Skills are already text files that the AI can create and modify.
 
-### 3. Evolution Engine: ⚠️ Partially Hardcoded
+### 3. Evolution Engine: ✅ LLM-Driven
 
-**Current Implementation (`core/evolution.py`):**
-```python
-class PatternDetector:
-    def _compute_signature(self, text: str) -> str:
-        # Hardcoded heuristic: hash-based normalization
-        normalized = re.sub(r'[^\w\s]', '', text.lower())
-        return hashlib.sha256(normalized.encode()).hexdigest()[:16]
-
-    def _calculate_success_rate(self, traces: List[tuple]) -> float:
-        # Hardcoded pattern matching for success indicators
-        if 'success_rating: 0.9' in content:
-            successes += 1
+**Current Implementation (`lib/agents/llm-pattern-matcher.ts`):**
+```typescript
+// Pattern matching is now LLM-driven
+export class LLMPatternMatcher {
+  async findSimilarPatterns(query: string, threshold: number = 0.3) {
+    // Uses LLM embeddings or similarity for semantic matching
+    // No hardcoded regex or hashing
+    const similarities = await this.computeSimilarities(query);
+    return similarities.filter(s => s.score >= threshold);
+  }
+}
 ```
 
 **llmunix Approach:** These rules would be in a markdown file like:
@@ -125,7 +125,7 @@ The TypeScript orchestrator calls the markdown agents but contains hardcoded:
 
 ### 5. Tool Definitions: ⚠️ Code-Defined
 
-**Current (`mcp-tools.ts`):**
+**Current (`lib/agents/mcp-tools.ts`):**
 ```typescript
 const EXECUTE_PYTHON_TOOL: MCPToolDefinition = {
   name: 'execute_python',
@@ -135,14 +135,15 @@ const EXECUTE_PYTHON_TOOL: MCPToolDefinition = {
     properties: {
       code: { type: 'string', description: '...' },
       projectPath: { type: 'string', description: '...' }
-    }
+    },
+    required: ['code']
   }
 };
 ```
 
-**llmunix Approach:**
+**Markdown-Based Approach (Hybrid):**
 ```markdown
-# execute_python.md
+# /public/system/tools/execute-python.md
 ---
 name: execute_python
 type: tool
@@ -156,9 +157,13 @@ Execute Python code in browser via Pyodide
 - **code** (required): Python code to execute
 - **projectPath** (optional): Project path for saving images
 
+## Available Libraries
+- numpy, scipy, matplotlib, pandas, scikit-learn, sympy
+- microqiskit (quantum computing)
+
 ## Constraints
-- Available libraries: numpy, scipy, matplotlib, pandas, scikit-learn
-- NOT available: tensorflow, pytorch, opencv
+- 30-second execution timeout
+- Memory limited to browser constraints
 ```
 
 ---
@@ -199,21 +204,26 @@ Create `/system/kernel/` directory with markdown files:
 
 These files document the current behavior. The AI reads them for context.
 
-### Phase 2: Make Evolution Rules Editable (Medium Risk)
+### Phase 2: Enhance LLM-Driven Evolution (Low Risk)
 
-Replace hardcoded Python logic with markdown-loaded rules:
+Evolution is already using LLM pattern matching. Enhance with explicit rules:
 
-```python
-# evolution.py
+```typescript
+// lib/evolution/client-evolution.ts
 
-class PatternDetector:
-    def __init__(self, rules_path: str = "/system/kernel/evolution-rules.md"):
-        self.rules = self._load_rules(rules_path)
+class PatternMatcher {
+  async loadEvolutionRules() {
+    // Load rules from /public/system/kernel/evolution-rules.md
+    const rules = await this.vfs.readFile('/public/system/kernel/evolution-rules.md');
+    return this.parseEvolutionRules(rules);
+  }
 
-    def _compute_signature(self, text: str) -> str:
-        # Use rules from markdown instead of hardcoded logic
-        normalization = self.rules.get('normalization', 'lowercase')
-        # Apply dynamically loaded rules
+  async findSimilarPatterns(query: string) {
+    // Use LLM + loaded rules for pattern matching
+    const rules = await this.loadEvolutionRules();
+    return await this.llmMatcher.find(query, rules);
+  }
+}
 ```
 
 ### Phase 3: Tool Discovery from Markdown (Medium Risk)

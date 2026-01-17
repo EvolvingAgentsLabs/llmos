@@ -50,7 +50,7 @@ graph TB
     end
 
     subgraph "External APIs"
-        OR[OpenRouter<br/>LLM API]
+        LLM[OpenAI-compatible API<br/>OpenRouter/Gemini/OpenAI]
         GH[GitHub API<br/>Git Operations]
     end
 
@@ -65,7 +65,7 @@ graph TB
     UI --> VFS
     UI --> IDB
     UI --> SA
-    SA --> OR
+    SA --> LLM
     SA --> HA
     SA --> MA
     UI --> GH
@@ -81,7 +81,7 @@ graph TB
 Everything runs in the browser:
 - **No server-side compilation** - Clang runs in WASM
 - **No backend database** - localStorage + IndexedDB
-- **No proxy servers** - Direct API calls to OpenRouter
+- **No proxy servers** - Direct API calls to OpenAI-compatible providers
 - **No file servers** - Virtual File System in browser
 
 ### File-First
@@ -114,51 +114,76 @@ Hardware is a core primitive:
 
 ```
 llmos/
-├── ARCHITECTURE.md                 # This file
 ├── README.md                       # Project overview
-├── ESP32_COMPLETE_TUTORIAL.md      # Hardware tutorial
+├── package.json                    # Project configuration
 │
-├── llmos-lite/
-│   ├── ui/                         # Main application
-│   │   ├── app/                    # Next.js App Router
-│   │   │   └── page.tsx            # Main entry point
-│   │   │
-│   │   ├── components/             # React components
-│   │   │   ├── workspace/          # Layout orchestration
-│   │   │   ├── panels/             # UI panels
-│   │   │   │   ├── session/        # Chat interface
-│   │   │   │   ├── artifacts/      # Artifact viewers
-│   │   │   │   └── volumes/        # File explorer
-│   │   │   ├── applets/            # Interactive applets
-│   │   │   └── common/             # Shared components
-│   │   │
-│   │   ├── lib/                    # Core libraries
-│   │   │   ├── llm/                # LLM client
-│   │   │   ├── agents/             # Agent system
-│   │   │   ├── runtime/            # Execution runtimes
-│   │   │   ├── hardware/           # Hardware integration
-│   │   │   ├── kernel/             # OS kernel
-│   │   │   ├── llm-tools/          # Tool definitions
-│   │   │   └── artifacts/          # Artifact management
-│   │   │
-│   │   ├── contexts/               # React contexts
-│   │   ├── hooks/                  # Custom hooks
-│   │   └── public/                 # Static assets
-│   │       └── sdk/wasi-headers/   # ESP32 SDK headers
-│   │
-│   ├── volumes/                    # Persistent storage
-│   │   └── system/                 # System volume
-│   │       ├── agents/             # Agent definitions
-│   │       ├── skills/             # Learned skills
-│   │       ├── tools/              # Tool specs
-│   │       └── project-templates/  # Scaffolding
-│   │
-│   └── api/                        # Optional API endpoints
-│       └── webhooks/               # Git webhooks
+├── app/                            # Next.js App Router
+│   ├── page.tsx                    # Main entry point
+│   └── api/                        # API routes
+│       ├── auth/github/            # GitHub OAuth
+│       └── git-proxy/              # Git operations
 │
-├── tests/                          # Test files
-├── workspace/                      # User workspace
-└── firmware/                       # ESP32 firmware
+├── components/                     # React components
+│   ├── workspace/                  # Layout orchestration
+│   ├── panels/                     # UI panels
+│   │   ├── session/                # Chat interface
+│   │   ├── artifacts/              # Artifact viewers
+│   │   └── volumes/                # File explorer
+│   ├── applets/                    # Interactive applets
+│   ├── chat/                       # Chat components
+│   ├── settings/                   # Settings UI
+│   └── common/                     # Shared components
+│
+├── lib/                            # Core libraries
+│   ├── llm/                        # LLM client (OpenAI-compatible)
+│   ├── agents/                     # Agent system
+│   ├── runtime/                    # Execution runtimes
+│   ├── hardware/                   # Hardware integration
+│   ├── kernel/                     # OS kernel
+│   ├── llm-tools/                  # Tool definitions
+│   └── artifacts/                  # Artifact management
+│
+├── contexts/                       # React contexts
+├── hooks/                          # Custom hooks
+│
+├── public/                         # Static assets
+│   ├── sdk/wasi-headers/           # ESP32 SDK headers
+│   └── system/                     # System files
+│       ├── agents/                 # Agent definitions
+│       ├── applets/                # System applets
+│       ├── domains/                # Domain knowledge
+│       ├── kernel/                 # Kernel configuration
+│       └── tools/                  # Tool specifications
+│
+├── volumes/                        # Persistent storage
+│   └── system/                     # System volume
+│       ├── agents/                 # Agent definitions
+│       ├── skills/                 # Learned skills
+│       ├── tools/                  # Tool specs
+│       └── project-templates/      # Scaffolding
+│
+├── backend/                        # Optional backend services
+│   ├── chat.py                     # Chat API
+│   ├── collaboration-server.py    # Collaboration
+│   └── webhooks/                   # Git webhooks
+│
+├── electron/                       # Desktop app
+│   ├── main.ts                     # Electron main process
+│   ├── preload.ts                  # Preload scripts
+│   └── services/                   # Native services
+│
+├── docs/                           # Documentation
+│   ├── architecture/               # Architecture docs
+│   ├── guides/                     # User guides
+│   ├── hardware/                   # Hardware guides
+│   └── ui/                         # UI documentation
+│
+├── __tests__/                      # Test files
+│   ├── lib/                        # Library tests
+│   └── integration/                # Integration tests
+│
+├── scripts/                        # Build scripts
+└── styles/                         # Global styles
 ```
 
 ---
@@ -309,7 +334,7 @@ graph TB
 sequenceDiagram
     participant User
     participant SAO as System Agent Orchestrator
-    participant LLM as OpenRouter API
+    participant LLM as OpenAI-compatible API
     participant Tools as Tool System
     participant Runtime as Runtime Environment
 
@@ -818,7 +843,7 @@ sequenceDiagram
     participant User
     participant ChatUI
     participant SAO as System Agent Orchestrator
-    participant LLM as OpenRouter API
+    participant LLM as OpenAI-compatible API
     participant Tools as Tool System
     participant Runtime as Runtimes
     participant VFS as Virtual FS
@@ -916,13 +941,13 @@ graph TB
 
     subgraph "API Security"
         KEY[API Keys<br/>Encrypted in storage]
-        OR[OpenRouter<br/>HTTPS only]
+        LLMAPI[LLM API<br/>HTTPS only]
         GH[GitHub<br/>OAuth tokens]
     end
 
     PY --> LS
     QJS --> LS
-    KEY --> OR
+    KEY --> LLMAPI
     KEY --> GH
 ```
 
@@ -1028,10 +1053,12 @@ graph TB
 ## Related Documentation
 
 - **README.md** - Project overview and quick start
-- **ESP32_COMPLETE_TUTORIAL.md** - Hardware integration guide
-- **llmos-lite/ui/docs/** - Feature-specific documentation
+- **docs/hardware/ESP32_COMPLETE_TUTORIAL.md** - Hardware integration guide
+- **docs/guides/** - User guides and tutorials
+- **docs/architecture/** - Technical architecture documentation
+- **docs/ui/** - UI-specific documentation
 - **volumes/system/skills/** - Learned skill definitions
 
 ---
 
-*Last Updated: January 2025*
+*Last Updated: January 2026*

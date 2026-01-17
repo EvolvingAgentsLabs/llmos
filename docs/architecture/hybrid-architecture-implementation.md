@@ -1,10 +1,14 @@
 # Hybrid Architecture Implementation Guide
 
+**Last Updated:** January 2026
+
 ## Overview
 
-This guide provides actionable steps to transform llmos-lite into a hybrid OS that combines:
-- **llmos-lite infrastructure**: React UI, Pyodide, hardware integration, Vercel deployment
+This guide provides actionable steps to transform LLMos into a hybrid OS that combines:
+- **LLMos infrastructure**: React UI, Pyodide, hardware integration, Vercel deployment
 - **llmunix philosophy**: Pure markdown agents, dynamic creation, self-modifying kernel
+
+**Note**: LLM integration now supports OpenAI-compatible APIs (OpenRouter, Gemini, OpenAI) configurable via settings for maximum flexibility.
 
 ---
 
@@ -12,7 +16,7 @@ This guide provides actionable steps to transform llmos-lite into a hybrid OS th
 
 ### Before: Code-Defined Agents
 ```python
-# core/agents.py
+# backend/agents.py
 class DataAnalyzerAgent:
     def __init__(self):
         self.tools = ['execute-python', 'write-file']
@@ -67,7 +71,7 @@ That's it. The change is instant.
 Replace complex orchestration logic with a simple "dumb executor":
 
 ```python
-# core/executor.py
+# backend/executor.py
 
 import yaml
 import re

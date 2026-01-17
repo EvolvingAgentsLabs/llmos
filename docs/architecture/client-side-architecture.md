@@ -1,5 +1,7 @@
 # Full Client-Side Architecture
 
+**Last Updated:** January 2026
+
 ## Philosophy
 
 > **"The browser IS the operating system. No backend required."**
@@ -14,7 +16,7 @@ LLMos should run entirely in the browser, scaling infinitely without server cost
 
 **Current (Python Backend):**
 ```python
-# core/skills.py
+# backend/skills.py
 class SkillsManager:
     def load_skills_for_user(self, user_id, team_id):
         # Loads from Vercel Blob via backend
@@ -66,7 +68,7 @@ class ClientSkillsManager {
 
 **Current (Python Backend):**
 ```python
-# core/evolution.py
+# backend/evolution.py
 class EvolutionCron:
     async def run_user_evolution(self, user_id, team_id):
         # Server-side pattern detection
@@ -143,7 +145,7 @@ class ClientEvolution {
 
 **Current (Python Backend):**
 ```python
-# core/workflow.py
+# backend/workflow.py
 class WorkflowEngine:
     async def execute_skill(self, skill, inputs):
         # Server execution
@@ -224,12 +226,12 @@ The Workflow Engine can be entirely client-side because Pyodide already runs Pyt
 
 | Component | Lines of Python | Replacement |
 |-----------|-----------------|-------------|
-| `core/skills.py` | ~150 | TypeScript ClientSkillsManager |
-| `core/evolution.py` | ~300 | TypeScript ClientEvolution |
-| `core/workflow.py` | ~400 | Already have Pyodide runtime |
-| `core/volumes.py` | ~200 | Browser storage abstraction |
-| `api/main.py` | ~500 | Eliminated entirely |
-| `api/chat.py` | ~100 | Direct LLM calls from browser |
+| `backend/skills.py` | ~150 | TypeScript ClientSkillsManager |
+| `backend/evolution.py` | ~300 | TypeScript ClientEvolution |
+| `backend/workflow.py` | ~400 | Already have Pyodide runtime |
+| `backend/volumes.py` | ~200 | Browser storage abstraction |
+| `backend/main.py` | ~500 | Eliminated entirely |
+| `backend/chat.py` | ~100 | Direct LLM calls from browser |
 
 **Total: ~1,650 lines of Python → 0**
 
@@ -341,9 +343,9 @@ class BrowserLLMClient {
 
 ### Phase 1: Create TypeScript Equivalents
 ```
-core/skills.py     → lib/skills/client-skills-manager.ts
-core/evolution.py  → lib/evolution/client-evolution.ts
-core/volumes.py    → lib/storage/browser-storage.ts
+backend/skills.py     → lib/skills/client-skills-manager.ts
+backend/evolution.py  → lib/evolution/client-evolution.ts
+backend/volumes.py    → lib/storage/browser-storage.ts
 ```
 
 ### Phase 2: Add Storage Abstraction
@@ -373,9 +375,9 @@ export class DirectLLMClient {
 
 ### Phase 4: Remove Python Backend
 ```
-DELETE: api/main.py
-DELETE: api/chat.py
-DELETE: core/*.py
+DELETE: backend/main.py
+DELETE: backend/chat.py
+DELETE: backend/*.py
 DELETE: requirements.txt
 ```
 
