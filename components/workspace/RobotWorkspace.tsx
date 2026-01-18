@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen } from 'lucide-react';
 
 /**
  * RobotWorkspace - The new primary workspace layout
@@ -48,8 +48,10 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   // File viewer state
   const [viewMode, setViewMode] = useState<'agents' | 'files'>('agents');
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string; volume: string } | null>(null);
-  const [fileTree, setFileTree] = useState<any>(null);
+  const [fileTree, setFileTree] = useState<any[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set());
 
   // Extract agent activity from workspace state
   // Map the simple agentState string to the AgentActivity interface expected by RobotWorldPanel
@@ -97,14 +99,17 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
         const entries = await (window as any).electronFS.list(volume, '');
         console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${volume} volume`);
 
-        // Convert FileInfo[] to the format expected by FileExplorerItem
+        // Convert FileInfo[] to tree node format
         const formattedEntries = entries.map((entry: any) => ({
           name: entry.name,
           path: entry.path,
           type: entry.isDirectory ? 'directory' : 'file',
+          children: entry.isDirectory ? [] : undefined,
+          loaded: false,
         }));
 
         setFileTree(formattedEntries);
+        setExpandedFolders(new Set());
       } else {
         console.warn('[RobotWorkspace] Electron FS API not available');
         setFileTree([]);
@@ -116,6 +121,66 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
       setIsLoadingFiles(false);
     }
   }, []);
+
+  // Toggle folder expansion and load children if needed
+  const toggleFolder = useCallback(async (folderPath: string, volume: 'user' | 'team' | 'system') => {
+    const isExpanded = expandedFolders.has(folderPath);
+
+    if (isExpanded) {
+      // Collapse folder
+      const newExpanded = new Set(expandedFolders);
+      newExpanded.delete(folderPath);
+      setExpandedFolders(newExpanded);
+    } else {
+      // Expand folder and load children if not loaded
+      const newExpanded = new Set(expandedFolders);
+      newExpanded.add(folderPath);
+      setExpandedFolders(newExpanded);
+
+      // Find the folder in the tree and load children if needed
+      const loadChildren = async (nodes: any[]): Promise<any[]> => {
+        const result = [];
+        for (const node of nodes) {
+          if (node.path === folderPath && node.type === 'directory' && !node.loaded) {
+            // Load children
+            setLoadingFolders(prev => new Set(prev).add(folderPath));
+            try {
+              if (typeof window !== 'undefined' && (window as any).electronFS) {
+                const entries = await (window as any).electronFS.list(volume, folderPath);
+                console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${folderPath}`);
+
+                const children = entries.map((entry: any) => ({
+                  name: entry.name,
+                  path: entry.path,
+                  type: entry.isDirectory ? 'directory' : 'file',
+                  children: entry.isDirectory ? [] : undefined,
+                  loaded: false,
+                }));
+
+                result.push({ ...node, children, loaded: true });
+              }
+            } catch (error) {
+              console.error(`[RobotWorkspace] Failed to load folder ${folderPath}:`, error);
+              result.push(node);
+            } finally {
+              setLoadingFolders(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(folderPath);
+                return newSet;
+              });
+            }
+          } else if (node.children) {
+            result.push({ ...node, children: await loadChildren(node.children) });
+          } else {
+            result.push(node);
+          }
+        }
+        return result;
+      };
+
+      setFileTree(await loadChildren(fileTree));
+    }
+  }, [expandedFolders, fileTree]);
 
   // Load file content
   const loadFileContent = useCallback(async (path: string, volume: 'user' | 'team' | 'system') => {
@@ -352,19 +417,21 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                       {activeVolume} Volume
                     </div>
                     {fileTree.map((entry: any, index: number) => (
-                      <FileExplorerItem
+                      <TreeNode
                         key={index}
-                        name={entry.name}
-                        path={entry.path}
-                        type={entry.type}
+                        node={entry}
                         volume={activeVolume}
+                        depth={0}
+                        expandedFolders={expandedFolders}
+                        loadingFolders={loadingFolders}
+                        onToggleFolder={toggleFolder}
                         onFileClick={loadFileContent}
                       />
                     ))}
                   </>
                 ) : (
                   <div className="text-xs text-[#8b949e] px-2 py-4 text-center">
-                    {fileTree === null ? 'Click "Files" to browse' : 'No files in this volume'}
+                    No files in this volume
                   </div>
                 )}
               </div>
@@ -545,27 +612,31 @@ function FileTreeItem({ name, type, icon, isActive, onClick }: FileTreeItemProps
   );
 }
 
-// File explorer item component
-interface FileExplorerItemProps {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
+// Tree node component for hierarchical file browsing
+interface TreeNodeProps {
+  node: any;
   volume: 'user' | 'team' | 'system';
+  depth: number;
+  expandedFolders: Set<string>;
+  loadingFolders: Set<string>;
+  onToggleFolder: (path: string, volume: 'user' | 'team' | 'system') => void;
   onFileClick: (path: string, volume: 'user' | 'team' | 'system') => void;
 }
 
-function FileExplorerItem({ name, path, type, volume, onFileClick }: FileExplorerItemProps) {
+function TreeNode({ node, volume, depth, expandedFolders, loadingFolders, onToggleFolder, onFileClick }: TreeNodeProps) {
+  const isExpanded = expandedFolders.has(node.path);
+  const isLoading = loadingFolders.has(node.path);
   const handleClick = () => {
-    if (type === 'file') {
-      onFileClick(path, volume);
+    if (node.type === 'directory') {
+      onToggleFolder(node.path, volume);
+    } else {
+      onFileClick(node.path, volume);
     }
   };
 
   // Determine file extension for icon
   const getFileIcon = () => {
-    if (type === 'directory') return '📁';
-
-    const ext = name.split('.').pop()?.toLowerCase();
+    const ext = node.name.split('.').pop()?.toLowerCase();
     switch (ext) {
       case 'ts':
       case 'tsx':
@@ -581,25 +652,72 @@ function FileExplorerItem({ name, path, type, volume, onFileClick }: FileExplore
         return '⚙️';
       case 'as':
         return '🔧';
+      case 'txt':
+        return '📄';
       default:
         return '📄';
     }
   };
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={type === 'directory'}
-      className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${
-        type === 'file'
-          ? 'text-[#e6edf3] hover:bg-[#21262d] cursor-pointer'
-          : 'text-[#8b949e] cursor-default'
-      }`}
-    >
-      <span className="text-sm">{getFileIcon()}</span>
-      <span className="flex-1 truncate">{name}</span>
-      {type === 'file' && <FileCode className="w-3 h-3 text-[#8b949e]" />}
-      {type === 'directory' && <FolderTree className="w-3 h-3 text-[#8b949e]" />}
-    </button>
+    <>
+      <button
+        onClick={handleClick}
+        className={`w-full text-left px-2 py-1 rounded-md text-xs flex items-center gap-1.5 transition-colors ${
+          node.type === 'file'
+            ? 'text-[#e6edf3] hover:bg-[#21262d]'
+            : 'text-[#e6edf3] hover:bg-[#21262d]'
+        }`}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        {/* Expand/collapse icon for folders */}
+        {node.type === 'directory' && (
+          <span className="flex-shrink-0">
+            {isLoading ? (
+              <div className="w-3 h-3 border border-[#8b949e] border-t-transparent rounded-full animate-spin" />
+            ) : isExpanded ? (
+              <ChevronDown className="w-3 h-3 text-[#8b949e]" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-[#8b949e]" />
+            )}
+          </span>
+        )}
+
+        {/* Icon */}
+        {node.type === 'directory' ? (
+          isExpanded ? (
+            <FolderOpen className="w-3.5 h-3.5 text-[#8b949e] flex-shrink-0" />
+          ) : (
+            <Folder className="w-3.5 h-3.5 text-[#8b949e] flex-shrink-0" />
+          )
+        ) : (
+          <span className="text-sm flex-shrink-0">{getFileIcon()}</span>
+        )}
+
+        {/* Name */}
+        <span className="flex-1 truncate">{node.name}</span>
+
+        {/* File indicator */}
+        {node.type === 'file' && <FileCode className="w-3 h-3 text-[#8b949e] flex-shrink-0" />}
+      </button>
+
+      {/* Children (if expanded) */}
+      {node.type === 'directory' && isExpanded && node.children && node.children.length > 0 && (
+        <>
+          {node.children.map((child: any, index: number) => (
+            <TreeNode
+              key={index}
+              node={child}
+              volume={volume}
+              depth={depth + 1}
+              expandedFolders={expandedFolders}
+              loadingFolders={loadingFolders}
+              onToggleFolder={onToggleFolder}
+              onFileClick={onFileClick}
+            />
+          ))}
+        </>
+      )}
+    </>
   );
 }
