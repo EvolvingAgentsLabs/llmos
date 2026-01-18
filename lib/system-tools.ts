@@ -309,6 +309,206 @@ function Applet({ onSubmit }) {
 };
 
 /**
+ * Generate Robot Agent Tool - Creates LLM-powered robot agents
+ */
+export const GenerateRobotAgentTool: ToolDefinition = {
+  id: 'generate-robot-agent',
+  name: 'Generate Robot Agent',
+  description: `Generate an AI robot agent that autonomously controls a robot using LLM decision-making.
+
+Use this tool when the user wants to create an autonomous robot behavior that:
+- Makes decisions based on sensor readings
+- Adapts to changing environments
+- Uses LLM reasoning for navigation/control
+- Continuously monitors and reacts to robot state
+
+The agent will:
+- Run in a control loop (every 2 seconds by default)
+- Read robot sensors (distance, line, battery)
+- Call LLM to decide next action
+- Execute actions via robot control tools (motors, LED)
+
+Available robot tools the LLM can call:
+- drive_motors(left, right): Control motor power (-255 to 255)
+- stop_motors(): Stop all motors
+- set_led(r, g, b): Set RGB LED color (0-255)
+- get_sensors(): Read all sensor data
+
+The agent continues until stopped by the user or reaches max iterations.`,
+  inputs: [
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Name of the robot agent (e.g., "Wall Avoider", "Maze Solver")',
+      required: true,
+    },
+    {
+      name: 'description',
+      type: 'string',
+      description: 'Brief description of what the agent does',
+      required: true,
+    },
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Robot device ID to control',
+      required: true,
+    },
+    {
+      name: 'systemPrompt',
+      type: 'string',
+      description: `System prompt that defines the agent's behavior and goals.
+
+Example for wall avoidance:
+"You are controlling a 2-wheeled robot in a 5m × 5m arena. Your goal is to explore the arena while avoiding walls and obstacles. Use distance sensors to detect obstacles and motors to navigate. Keep the robot moving and turn away when obstacles are detected within 30cm. Use LED colors to indicate status: green=exploring, yellow=turning, red=obstacle detected."`,
+      required: true,
+    },
+    {
+      name: 'loopInterval',
+      type: 'number',
+      description: 'Milliseconds between LLM decision cycles (default: 2000, min: 1000)',
+      required: false,
+    },
+    {
+      name: 'maxIterations',
+      type: 'number',
+      description: 'Maximum number of control loop iterations (default: unlimited). Use this to limit execution time.',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { name, description, deviceId, systemPrompt, loopInterval = 2000, maxIterations } = inputs;
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('Invalid name parameter');
+    }
+
+    if (!deviceId || typeof deviceId !== 'string') {
+      throw new Error('Invalid deviceId parameter');
+    }
+
+    if (!systemPrompt || typeof systemPrompt !== 'string') {
+      throw new Error('Invalid systemPrompt parameter');
+    }
+
+    // Validate device exists
+    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
+    const manager = getDeviceManager();
+    const device = manager.getDevice(deviceId);
+
+    if (!device) {
+      return {
+        success: false,
+        error: `Device not found: ${deviceId}. Use create-virtual-device first.`,
+        hint: 'Create a virtual device with: create-virtual-device',
+      };
+    }
+
+    // Create robot agent
+    const { createRobotAgent } = await import('./runtime/robot-agent-runtime');
+    const agentId = `agent-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+    try {
+      const agent = createRobotAgent({
+        id: agentId,
+        name,
+        description: description || '',
+        deviceId,
+        systemPrompt,
+        loopInterval: Math.max(1000, loopInterval || 2000), // Min 1 second
+        maxIterations,
+      });
+
+      // Start the agent
+      agent.start();
+
+      console.log(`[RobotAgentTool] Created and started agent: ${name} (${agentId})`);
+
+      return {
+        success: true,
+        agentId,
+        name,
+        description,
+        deviceId,
+        deviceName: device.name,
+        loopInterval: agent.getState().running ? (loopInterval || 2000) : 0,
+        maxIterations: maxIterations || 'unlimited',
+        message: `AI Robot Agent "${name}" is now running on device "${device.name}". The agent will continuously monitor sensors and make decisions using LLM reasoning.`,
+        hint: 'The agent runs autonomously. You can watch it in the 3D view. To stop it, use: stop-robot-agent',
+        _isRobotAgent: true,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to create robot agent',
+        hint: 'Check that LLM API key is configured in Settings',
+      };
+    }
+  },
+};
+
+/**
+ * Stop Robot Agent Tool
+ */
+export const StopRobotAgentTool: ToolDefinition = {
+  id: 'stop-robot-agent',
+  name: 'Stop Robot Agent',
+  description: 'Stop a running AI robot agent and halt robot motors.',
+  inputs: [
+    {
+      name: 'agentId',
+      type: 'string',
+      description: 'Agent ID from generate-robot-agent',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { agentId } = inputs;
+
+    if (!agentId || typeof agentId !== 'string') {
+      throw new Error('Invalid agentId parameter');
+    }
+
+    const { stopRobotAgent } = await import('./runtime/robot-agent-runtime');
+    const stopped = stopRobotAgent(agentId);
+
+    if (!stopped) {
+      return {
+        success: false,
+        error: `Agent not found: ${agentId}`,
+      };
+    }
+
+    return {
+      success: true,
+      agentId,
+      message: `Robot agent ${agentId} stopped. Motors halted.`,
+    };
+  },
+};
+
+/**
+ * List Robot Agents Tool
+ */
+export const ListRobotAgentsTool: ToolDefinition = {
+  id: 'list-robot-agents',
+  name: 'List Robot Agents',
+  description: 'List all active AI robot agents.',
+  inputs: [],
+  execute: async () => {
+    const { listActiveAgents } = await import('./runtime/robot-agent-runtime');
+    const agents = listActiveAgents();
+
+    return {
+      success: true,
+      agents,
+      count: agents.length,
+      message: `Found ${agents.length} active robot agent(s)`,
+    };
+  },
+};
+
+/**
  * Write File Tool
  */
 export const WriteFileTool: ToolDefinition = {
@@ -1696,6 +1896,10 @@ export function getSystemTools(): ToolDefinition[] {
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
     GenerateAppletTool,
+    // Robot Agent Tools
+    GenerateRobotAgentTool,
+    StopRobotAgentTool,
+    ListRobotAgentsTool,
     ValidateProjectAgentsTool,
     ConnectDeviceTool,
     SendDeviceCommandTool,
