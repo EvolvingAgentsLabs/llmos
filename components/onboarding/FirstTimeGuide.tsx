@@ -12,8 +12,8 @@ export default function FirstTimeGuide({ onDismiss, onSendPrompt }: FirstTimeGui
 
   const steps = [
     {
-      title: 'Welcome to LLMos-Lite!',
-      description: 'Let\'s take a quick tour of the interface and see what you can build.',
+      title: 'Welcome to LLMos Desktop!',
+      description: 'Let\'s take a quick tour of the interface and see what you can build with AI-powered robotics.',
       highlight: null,
       samplePrompts: null,
     },

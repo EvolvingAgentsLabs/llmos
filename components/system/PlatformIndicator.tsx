@@ -1,15 +1,18 @@
 /**
- * Platform Indicator Component
+ * Platform Indicator Component - Desktop-Only (Phase 1)
  *
- * Displays the current runtime platform (Desktop vs Web) and available capabilities.
+ * Displays LLMos Desktop status and available capabilities.
  * Shows a subtle indicator that can be expanded to see detailed feature information.
+ *
+ * Simplified for desktop-only builds. For Phase 2 browser support,
+ * restore web vs desktop detection from git history.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Monitor, Globe, ChevronDown, ChevronUp, Cpu, HardDrive, Usb, Wifi } from 'lucide-react';
-import { getPlatformInfo, getPlatformCapabilities, isElectron } from '@/lib/platform';
+import { Monitor, ChevronDown, ChevronUp, Cpu, HardDrive, Usb, Wifi } from 'lucide-react';
+import { getPlatformInfo, getPlatformCapabilities } from '@/lib/platform';
 
 export function PlatformIndicator() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -25,8 +28,6 @@ export function PlatformIndicator() {
     return null;
   }
 
-  const isDesktop = isElectron();
-
   return (
     <div className="fixed bottom-4 right-4 z-50">
       <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg shadow-lg overflow-hidden">
@@ -35,11 +36,7 @@ export function PlatformIndicator() {
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 px-4 py-2 w-full text-left hover:bg-gray-800/50 transition-colors"
         >
-          {isDesktop ? (
-            <Monitor className="w-4 h-4 text-blue-400" />
-          ) : (
-            <Globe className="w-4 h-4 text-green-400" />
-          )}
+          <Monitor className="w-4 h-4 text-blue-400" />
           <span className="text-sm font-medium text-gray-100">
             {platformInfo.displayName}
           </span>
@@ -62,49 +59,31 @@ export function PlatformIndicator() {
                 icon={<HardDrive className="w-3 h-3" />}
                 label="File System"
                 enabled={capabilities.nativeFileSystem}
-                tooltip={
-                  capabilities.nativeFileSystem
-                    ? 'Native filesystem access'
-                    : 'Browser virtual filesystem'
-                }
+                tooltip="Native filesystem access"
               />
               <CapabilityBadge
                 icon={<Cpu className="w-3 h-3" />}
-                label={capabilities.nativeAssemblyScript ? 'Native ASC' : 'Browser ASC'}
+                label="Native ASC"
                 enabled={capabilities.assemblyScript}
-                tooltip={
-                  capabilities.nativeAssemblyScript
-                    ? 'Native AssemblyScript compiler (faster)'
-                    : 'Browser-based AssemblyScript (CDN)'
-                }
+                tooltip="Native AssemblyScript compiler (faster)"
               />
               <CapabilityBadge
                 icon={<Usb className="w-3 h-3" />}
                 label="Serial Ports"
                 enabled={capabilities.serialPorts}
-                tooltip={
-                  capabilities.fullSerialPorts
-                    ? 'Full serial port access'
-                    : capabilities.serialPorts
-                    ? 'Web Serial API (limited)'
-                    : 'Serial ports not available'
-                }
+                tooltip="Full serial port access"
               />
               <CapabilityBadge
                 icon={<Wifi className="w-3 h-3" />}
                 label="Offline Mode"
                 enabled={capabilities.offlineMode}
-                tooltip={
-                  capabilities.offlineMode
-                    ? 'Full offline operation'
-                    : 'Requires internet connection'
-                }
+                tooltip="Full offline operation"
               />
             </div>
 
             {/* Features List */}
             <div>
-              <h4 className="text-xs font-semibold text-gray-400 mb-2">Available Features</h4>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2">Desktop Features</h4>
               <ul className="space-y-1">
                 {platformInfo.features.map((feature, idx) => (
                   <li key={idx} className="text-xs text-gray-300 flex items-start gap-2">
@@ -114,23 +93,6 @@ export function PlatformIndicator() {
                 ))}
               </ul>
             </div>
-
-            {/* Desktop App Prompt (only shown in browser mode) */}
-            {!isDesktop && (
-              <div className="pt-3 border-t border-gray-700">
-                <p className="text-xs text-gray-400 mb-2">
-                  Want faster compilation and full hardware access?
-                </p>
-                <a
-                  href="https://github.com/EvolvingAgentsLabs/llmos#desktop-app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:text-blue-300 underline"
-                >
-                  Download LLMos Desktop →
-                </a>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -166,6 +128,7 @@ function CapabilityBadge({ icon, label, enabled, tooltip }: CapabilityBadgeProps
 
 /**
  * Compact Platform Badge (for use in headers/toolbars)
+ * Desktop-only version
  */
 export function PlatformBadge() {
   const [platformInfo, setPlatformInfo] = useState<ReturnType<typeof getPlatformInfo> | null>(null);
@@ -176,26 +139,13 @@ export function PlatformBadge() {
 
   if (!platformInfo) return null;
 
-  const isDesktop = isElectron();
-
   return (
     <div
-      className={`
-        inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium
-        ${
-          isDesktop
-            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-            : 'bg-green-500/10 text-green-400 border border-green-500/20'
-        }
-      `}
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"
       title={platformInfo.displayName}
     >
-      {isDesktop ? (
-        <Monitor className="w-3 h-3" />
-      ) : (
-        <Globe className="w-3 h-3" />
-      )}
-      <span>{platformInfo.type === 'electron' ? 'Desktop' : 'Web'}</span>
+      <Monitor className="w-3 h-3" />
+      <span>Desktop</span>
     </div>
   );
 }
