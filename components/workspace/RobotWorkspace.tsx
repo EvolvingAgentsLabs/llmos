@@ -5,6 +5,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen } from 'lucide-react';
+import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 
 /**
  * RobotWorkspace - The new primary workspace layout
@@ -290,21 +291,21 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 <AgentTreeItem
                   name="Wall Avoider"
                   description="Navigate without collisions"
-                  icon="🤖"
+                  agentId="user-wall-avoider"
                   capabilities={['distance-sensors', 'reactive-control', 'led-feedback']}
                   onClick={() => handleProgramSelect('user/agents/wall-avoider')}
                 />
                 <AgentTreeItem
                   name="Maze Solver"
                   description="Path planning & navigation"
-                  icon="🧩"
+                  agentId="user-maze-solver"
                   capabilities={['mapping', 'path-finding', 'llm-reasoning']}
                   onClick={() => handleProgramSelect('user/agents/maze-solver')}
                 />
                 <AgentTreeItem
                   name="Line Follower"
                   description="PID control with LLM tuning"
-                  icon="➡️"
+                  agentId="user-line-follower"
                   capabilities={['line-sensors', 'pid-control', 'adaptive-tuning']}
                   onClick={() => handleProgramSelect('user/agents/line-follower')}
                 />
@@ -329,14 +330,14 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 <AgentTreeItem
                   name="Competition Winner"
                   description="Multi-agent challenge solver"
-                  icon="🏆"
+                  agentId="team-challenge-winner"
                   capabilities={['multi-agent', 'llm-coordination', 'advanced-planning']}
                   onClick={() => handleProgramSelect('team/agents/challenge-winner')}
                 />
                 <AgentTreeItem
                   name="Swarm Coordinator"
                   description="Multi-robot coordination"
-                  icon="🤝"
+                  agentId="team-swarm-coordinator"
                   capabilities={['swarm-intelligence', 'communication', 'distributed-ai']}
                   onClick={() => handleProgramSelect('team/agents/swarm-coordinator')}
                 />
@@ -352,21 +353,21 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 <AgentTreeItem
                   name="Basic Navigator"
                   description="Simple movement control"
-                  icon="📘"
+                  agentId="system-basic-navigator"
                   capabilities={['motor-control', 'basic-sensors']}
                   onClick={() => handleProgramSelect('system/templates/basic-navigator')}
                 />
                 <AgentTreeItem
                   name="Reactive Agent"
                   description="Sensor-based reactive behavior"
-                  icon="⚡"
+                  agentId="system-reactive-agent"
                   capabilities={['distance-sensors', 'reactive-control']}
                   onClick={() => handleProgramSelect('system/templates/reactive-agent')}
                 />
                 <AgentTreeItem
                   name="LLM-Powered Agent"
                   description="Claude-driven decision making"
-                  icon="🧠"
+                  agentId="system-llm-agent"
                   capabilities={['llm-reasoning', 'tool-calling', 'adaptive-behavior']}
                   onClick={() => handleProgramSelect('system/templates/llm-agent')}
                 />
@@ -546,13 +547,18 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 interface AgentTreeItemProps {
   name: string;
   description: string;
-  icon?: string;
+  agentId?: string; // For deterministic icon generation
   capabilities: string[];
   isActive?: boolean;
   onClick?: () => void;
 }
 
-function AgentTreeItem({ name, description, icon, capabilities, isActive, onClick }: AgentTreeItemProps) {
+function AgentTreeItem({ name, description, agentId, capabilities, isActive, onClick }: AgentTreeItemProps) {
+  // Generate unique robot icon based on agent ID (or name if no ID provided)
+  const iconId = agentId || name.toLowerCase().replace(/\s+/g, '-');
+  const robotConfig = generateRobotConfig(iconId);
+  const iconDataUrl = robotIconToDataURL(robotConfig, 24);
+
   return (
     <button
       onClick={onClick}
@@ -563,7 +569,12 @@ function AgentTreeItem({ name, description, icon, capabilities, isActive, onClic
       }`}
     >
       <div className="flex items-center gap-2">
-        {icon && <span className="text-base">{icon}</span>}
+        <img
+          src={iconDataUrl}
+          alt={name}
+          className="w-5 h-5 flex-shrink-0"
+          style={{ imageRendering: 'pixelated' }}
+        />
         <span className={`font-medium flex-1 ${isActive ? 'text-[#58a6ff]' : 'text-[#e6edf3]'}`}>{name}</span>
         <span className="text-[10px] text-[#8b949e] px-1.5 py-0.5 rounded bg-[#21262d]">AI</span>
       </div>

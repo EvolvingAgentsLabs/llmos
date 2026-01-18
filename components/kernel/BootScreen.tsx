@@ -2,61 +2,213 @@
 
 import { useEffect, useState } from 'react';
 import { BootProgress } from '@/lib/kernel/boot';
+import { generateRobotConfig, robotIconToDataURL, llmosLogoToDataURL } from '@/lib/agents/robot-icon-generator';
 
 interface BootScreenProps {
   progress: BootProgress;
   onComplete?: () => void;
 }
 
-// Boot Avatar - Simple CSS animated orb
-function BootOrb({ progress }: { progress: number }) {
-  const isActive = progress < 100;
+interface Position {
+  x: number;
+  y: number;
+}
+
+interface Agent {
+  id: string;
+  position: Position;
+  direction: 'up' | 'down' | 'left' | 'right';
+  iconUrl: string;
+  isPacman: boolean;
+}
+
+const GRID_SIZE = 5;
+const CELL_SIZE = 48;
+const ANIMATION_SPEED = 400;
+
+// Pacman-style Agent Animation
+function AgentAnimation({ progress }: { progress: number }) {
+  const [agents, setAgents] = useState<Agent[]>([]);
+
+  // Initialize agents
+  useEffect(() => {
+    const initialAgents: Agent[] = [
+      {
+        id: 'pacman-agent',
+        position: { x: 2, y: 2 },
+        direction: 'right',
+        iconUrl: robotIconToDataURL(generateRobotConfig('pacman-agent'), 40),
+        isPacman: true,
+      },
+      {
+        id: 'ghost-1',
+        position: { x: 0, y: 0 },
+        direction: 'right',
+        iconUrl: robotIconToDataURL(generateRobotConfig('ghost-agent-1'), 40),
+        isPacman: false,
+      },
+      {
+        id: 'ghost-2',
+        position: { x: 4, y: 0 },
+        direction: 'down',
+        iconUrl: robotIconToDataURL(generateRobotConfig('ghost-agent-2'), 40),
+        isPacman: false,
+      },
+      {
+        id: 'ghost-3',
+        position: { x: 0, y: 4 },
+        direction: 'up',
+        iconUrl: robotIconToDataURL(generateRobotConfig('ghost-agent-3'), 40),
+        isPacman: false,
+      },
+      {
+        id: 'ghost-4',
+        position: { x: 4, y: 4 },
+        direction: 'left',
+        iconUrl: robotIconToDataURL(generateRobotConfig('ghost-agent-4'), 40),
+        isPacman: false,
+      },
+    ];
+    setAgents(initialAgents);
+  }, []);
+
+  // Animation loop
+  useEffect(() => {
+    if (agents.length === 0 || progress === 100) return;
+
+    const interval = setInterval(() => {
+      setAgents((prevAgents) => {
+        return prevAgents.map((agent) => {
+          const newAgent = { ...agent };
+
+          if (agent.isPacman) {
+            newAgent.direction = getEscapeDirection(agent, prevAgents);
+          } else {
+            const pacman = prevAgents.find((a) => a.isPacman);
+            if (pacman) {
+              newAgent.direction = getChaseDirection(agent, pacman);
+            }
+          }
+
+          newAgent.position = getNextPosition(agent.position, newAgent.direction);
+          return newAgent;
+        });
+      });
+    }, ANIMATION_SPEED);
+
+    return () => clearInterval(interval);
+  }, [agents, progress]);
 
   return (
-    <div className="relative w-32 h-32 mx-auto mb-8">
-      {/* Outer glow ring */}
-      <div
-        className={`absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 opacity-20 blur-xl ${isActive ? 'animate-pulse' : ''}`}
-        style={{ animationDuration: '2s' }}
-      />
+    <div className="relative mx-auto mb-8" style={{ width: GRID_SIZE * CELL_SIZE, height: GRID_SIZE * CELL_SIZE }}>
+      {/* Grid background */}
+      <div className="absolute inset-0 rounded-lg bg-[#161b22] border-2 border-[#30363d]">
+        {/* Grid lines */}
+        {Array.from({ length: GRID_SIZE + 1 }).map((_, i) => (
+          <div key={`grid-${i}`}>
+            <div
+              className="absolute bg-[#21262d]"
+              style={{ left: 0, top: i * CELL_SIZE, width: '100%', height: 1 }}
+            />
+            <div
+              className="absolute bg-[#21262d]"
+              style={{ left: i * CELL_SIZE, top: 0, width: 1, height: '100%' }}
+            />
+          </div>
+        ))}
+      </div>
 
-      {/* Orbital ring 1 */}
-      <div
-        className="absolute inset-2 rounded-full border-2 border-blue-400/30"
-        style={{
-          animation: isActive ? 'spin 8s linear infinite' : 'none',
-        }}
-      />
-
-      {/* Orbital ring 2 */}
-      <div
-        className="absolute inset-4 rounded-full border border-blue-300/20"
-        style={{
-          animation: isActive ? 'spin 12s linear infinite reverse' : 'none',
-        }}
-      />
-
-      {/* Core orb */}
-      <div className="absolute inset-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/50">
-        {/* Progress fill */}
+      {/* Agents */}
+      {agents.map((agent) => (
         <div
-          className="absolute inset-0 rounded-full bg-gradient-to-t from-blue-300 to-transparent transition-all duration-500"
+          key={agent.id}
+          className="absolute transition-all duration-300 ease-in-out"
           style={{
-            clipPath: `inset(${100 - progress}% 0 0 0)`,
+            left: agent.position.x * CELL_SIZE + CELL_SIZE / 2 - 20,
+            top: agent.position.y * CELL_SIZE + CELL_SIZE / 2 - 20,
+            transform: `rotate(${getRotation(agent.direction)}deg)`,
           }}
-        />
-        {/* Highlight */}
-        <div className="absolute inset-2 rounded-full bg-white/20" />
-      </div>
-
-      {/* Progress percentage */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-white/80 text-sm font-mono font-bold">
-          {Math.round(progress)}%
-        </span>
-      </div>
+        >
+          <img
+            src={agent.iconUrl}
+            alt={agent.id}
+            className="w-10 h-10"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          {agent.isPacman && (
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#ffd43b] rounded-full animate-pulse" />
+          )}
+        </div>
+      ))}
     </div>
   );
+}
+
+function getNextPosition(pos: Position, direction: 'up' | 'down' | 'left' | 'right'): Position {
+  let newPos = { ...pos };
+  switch (direction) {
+    case 'up':
+      newPos.y = (pos.y - 1 + GRID_SIZE) % GRID_SIZE;
+      break;
+    case 'down':
+      newPos.y = (pos.y + 1) % GRID_SIZE;
+      break;
+    case 'left':
+      newPos.x = (pos.x - 1 + GRID_SIZE) % GRID_SIZE;
+      break;
+    case 'right':
+      newPos.x = (pos.x + 1) % GRID_SIZE;
+      break;
+  }
+  return newPos;
+}
+
+function getChaseDirection(ghost: Agent, pacman: Agent): 'up' | 'down' | 'left' | 'right' {
+  const dx = pacman.position.x - ghost.position.x;
+  const dy = pacman.position.y - ghost.position.y;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? 'right' : 'left';
+  } else {
+    return dy > 0 ? 'down' : 'up';
+  }
+}
+
+function getEscapeDirection(pacman: Agent, agents: Agent[]): 'up' | 'down' | 'left' | 'right' {
+  const ghosts = agents.filter((a) => !a.isPacman);
+  let closestGhost: Agent | null = null;
+  let minDistance = Infinity;
+
+  for (const ghost of ghosts) {
+    const distance = Math.abs(ghost.position.x - pacman.position.x) + Math.abs(ghost.position.y - pacman.position.y);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestGhost = ghost;
+    }
+  }
+
+  if (!closestGhost) return pacman.direction;
+
+  const dx = closestGhost.position.x - pacman.position.x;
+  const dy = closestGhost.position.y - pacman.position.y;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? 'left' : 'right';
+  } else {
+    return dy > 0 ? 'up' : 'down';
+  }
+}
+
+function getRotation(direction: 'up' | 'down' | 'left' | 'right'): number {
+  switch (direction) {
+    case 'up':
+      return -90;
+    case 'down':
+      return 90;
+    case 'left':
+      return 180;
+    case 'right':
+      return 0;
+  }
 }
 
 export default function BootScreen({ progress, onComplete }: BootScreenProps) {
@@ -90,19 +242,26 @@ export default function BootScreen({ progress, onComplete }: BootScreenProps) {
       }`}
     >
       <div className="w-full max-w-2xl px-8">
-        {/* Boot Avatar animation */}
-        <BootOrb progress={progress.percent} />
-
         {/* Logo/Title */}
-        <div className="text-center mb-8 animate-fade-in">
-          <div className="text-4xl font-bold mb-2 text-accent-primary">
-            LLMos
+        <div className="text-center mb-6 animate-fade-in flex items-center justify-center gap-4">
+          <img
+            src={llmosLogoToDataURL(64)}
+            alt="LLMos"
+            className="w-16 h-16"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          <div>
+            <div className="text-4xl font-bold text-accent-primary">
+              LLMos
+            </div>
+            <div className="text-sm text-fg-secondary font-light tracking-wider">
+              Autonomous AI Runtime
+            </div>
           </div>
-          <div className="text-lg text-fg-secondary font-light tracking-wider">
-            Autonomous AI Runtime
-          </div>
-          <div className="text-xs text-fg-tertiary mt-1">v0.1.0</div>
         </div>
+
+        {/* Agent Animation */}
+        <AgentAnimation progress={progress.percent} />
 
         {/* Progress Bar */}
         <div className="mb-8">
