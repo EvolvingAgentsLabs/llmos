@@ -92,18 +92,23 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const loadFileTree = useCallback(async (volume: 'user' | 'team' | 'system') => {
     setIsLoadingFiles(true);
     try {
-      const response = await fetch('/api/filesystem/list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '', volume }),
-      });
+      // Use Electron FS API to list files
+      if (typeof window !== 'undefined' && (window as any).electronFS) {
+        const entries = await (window as any).electronFS.list(volume, '');
+        console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${volume} volume`);
 
-      if (!response.ok) {
-        throw new Error('Failed to load file tree');
+        // Convert FileInfo[] to the format expected by FileExplorerItem
+        const formattedEntries = entries.map((entry: any) => ({
+          name: entry.name,
+          path: entry.path,
+          type: entry.isDirectory ? 'directory' : 'file',
+        }));
+
+        setFileTree(formattedEntries);
+      } else {
+        console.warn('[RobotWorkspace] Electron FS API not available');
+        setFileTree([]);
       }
-
-      const data = await response.json();
-      setFileTree(data.entries || []);
     } catch (error) {
       console.error('[RobotWorkspace] Failed to load file tree:', error);
       setFileTree([]);
@@ -115,22 +120,19 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   // Load file content
   const loadFileContent = useCallback(async (path: string, volume: 'user' | 'team' | 'system') => {
     try {
-      const response = await fetch('/api/filesystem/read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, volume }),
-      });
+      // Use Electron FS API to read file
+      if (typeof window !== 'undefined' && (window as any).electronFS) {
+        const content = await (window as any).electronFS.read(volume, path);
+        console.log(`[RobotWorkspace] Loaded file: ${volume}/${path}`);
 
-      if (!response.ok) {
-        throw new Error('Failed to read file');
+        setSelectedFile({
+          path,
+          content,
+          volume,
+        });
+      } else {
+        console.warn('[RobotWorkspace] Electron FS API not available');
       }
-
-      const data = await response.json();
-      setSelectedFile({
-        path,
-        content: data.content || '',
-        volume,
-      });
     } catch (error) {
       console.error('[RobotWorkspace] Failed to load file content:', error);
     }
