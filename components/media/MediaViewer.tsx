@@ -239,7 +239,7 @@ export default function MediaViewer({ filePath, volume }: MediaViewerProps) {
             <p className="text-lg font-medium text-fg-primary mb-1">{fileName}</p>
             <p className="text-sm text-red-400 mb-4">Failed to load {isVideo ? 'video' : 'image'}</p>
             <p className="text-xs text-fg-muted">
-              The file may not exist in the Virtual File System or may be corrupted.
+              The file may not exist or may be corrupted.
             </p>
             <button
               onClick={handleClose}

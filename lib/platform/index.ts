@@ -1,9 +1,53 @@
 /**
- * Platform Detection and Abstraction Layer
+ * Platform API - Desktop-First (Phase 1)
  *
- * Provides a unified API that works in both browser and Electron desktop modes.
- * Automatically detects the runtime environment and routes calls appropriately.
+ * Simplified for desktop-only builds.
+ * Browser support code is preserved below for Phase 2 if needed.
+ *
+ * For Phase 1: All exports point to desktop-only implementations.
  */
+
+// Desktop-only exports (Phase 1)
+export {
+  isElectron,
+  DesktopFS as PlatformFS,
+  DesktopASC as PlatformASC,
+  DesktopSerial as PlatformSerial,
+  DesktopSystem as PlatformSystem,
+  getDesktopCapabilities as getPlatformCapabilities,
+  getDesktopInfo as getPlatformInfo,
+} from './desktop';
+
+// Re-export types for compatibility
+export type { DesktopCapabilities as PlatformCapabilities } from './desktop';
+
+/**
+ * Platform type (always 'electron' in Phase 1)
+ */
+export type PlatformType = 'electron';
+
+/**
+ * Get current platform type
+ * Always returns 'electron' in desktop builds
+ */
+export function getPlatformType(): PlatformType {
+  return 'electron';
+}
+
+/* ============================================================================
+ * BROWSER SUPPORT CODE (Phase 2)
+ * ============================================================================
+ *
+ * The code below is preserved for potential Phase 2 browser support.
+ * It is commented out for Phase 1 desktop-only builds.
+ *
+ * To re-enable browser support in Phase 2:
+ * 1. Uncomment the code below
+ * 2. Update exports above to check platform type
+ * 3. Create lib/platform/browser.ts with browser implementations
+ * 4. Update build configuration
+ *
+ * ============================================================================
 
 import type {
   ElectronFSAPI,
@@ -17,66 +61,54 @@ import type {
   SerialPortOptions,
 } from '../../electron/types';
 
-/**
- * Platform type
- */
+// Platform type (browser or electron)
 export type PlatformType = 'browser' | 'electron';
 
-/**
- * Check if running in Electron
- */
+// Check if running in Electron
 export function isElectron(): boolean {
   return typeof window !== 'undefined' && window.electronSystem !== undefined;
 }
 
-/**
- * Get current platform type
- */
+// Get current platform type
 export function getPlatformType(): PlatformType {
   return isElectron() ? 'electron' : 'browser';
 }
 
-/**
- * Platform capabilities
- */
+// Platform capabilities
 export interface PlatformCapabilities {
   nativeFileSystem: boolean;
   assemblyScript: boolean;
-  nativeAssemblyScript: boolean; // Faster native compilation
+  nativeAssemblyScript: boolean;
   serialPorts: boolean;
-  fullSerialPorts: boolean; // Full serial port access (vs Web Serial API)
+  fullSerialPorts: boolean;
   nativeMenus: boolean;
   systemDialogs: boolean;
   offlineMode: boolean;
 }
 
-/**
- * Get platform capabilities
- */
+// Get platform capabilities
 export function getPlatformCapabilities(): PlatformCapabilities {
   const isDesktop = isElectron();
 
   return {
     nativeFileSystem: isDesktop,
-    assemblyScript: true, // Available in both browser (CDN) and desktop (native)
-    nativeAssemblyScript: isDesktop, // Native compilation is faster
-    serialPorts: isDesktop || ('serial' in navigator), // Web Serial or native
-    fullSerialPorts: isDesktop, // Full access in desktop mode
+    assemblyScript: true,
+    nativeAssemblyScript: isDesktop,
+    serialPorts: isDesktop || ('serial' in navigator),
+    fullSerialPorts: isDesktop,
     nativeMenus: isDesktop,
     systemDialogs: isDesktop,
     offlineMode: isDesktop,
   };
 }
 
-/**
- * Platform-agnostic File System API
- */
+// Platform-agnostic File System API
 export const PlatformFS = {
   async read(volumeType: string, filePath: string): Promise<string> {
     if (isElectron() && window.electronFS) {
       return window.electronFS.read(volumeType, filePath);
     }
-    // Fallback to VFS in browser mode
+    // Browser fallback: Virtual File System
     const { getVolumeFileSystem } = await import('../volumes/file-operations');
     const vfs = getVolumeFileSystem();
     return vfs.readFile(volumeType as any, filePath);
@@ -147,9 +179,7 @@ export const PlatformFS = {
   },
 };
 
-/**
- * Platform-agnostic AssemblyScript Compiler API
- */
+// Platform-agnostic AssemblyScript Compiler API
 export const PlatformASC = {
   async compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult> {
     // Prefer Electron native compiler (faster, more features)
@@ -172,12 +202,10 @@ export const PlatformASC = {
   },
 
   async getStatus(): Promise<{ ready: boolean; version: string; installed: boolean }> {
-    // Check Electron compiler first
     if (isElectron() && window.electronASC) {
       return window.electronASC.getStatus();
     }
 
-    // Check browser compiler
     try {
       const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
       const browserCompiler = getBrowserASCCompiler();
@@ -206,29 +234,22 @@ export const PlatformASC = {
   },
 
   isAvailable(): boolean {
-    // Available in both Electron (native) and browser (browser compiler)
     return true;
   },
 
-  /**
-   * Check if running native Electron compiler (recommended for best performance)
-   */
   isNative(): boolean {
     return isElectron() && window.electronASC !== undefined;
   },
 };
 
-/**
- * Platform-agnostic Serial Port API
- */
+// Platform-agnostic Serial Port API
 export const PlatformSerial = {
   async list(): Promise<SerialPortInfo[]> {
     if (isElectron() && window.electronSerial) {
       return window.electronSerial.list();
     }
-    // Browser: try Web Serial API
+    // Browser: Web Serial API doesn't support listing without user gesture
     if ('serial' in navigator) {
-      // Web Serial API doesn't support listing without user gesture
       return [];
     }
     return [];
@@ -273,9 +294,7 @@ export const PlatformSerial = {
   },
 };
 
-/**
- * Platform-agnostic System API
- */
+// Platform-agnostic System API
 export const PlatformSystem = {
   async getPlatform(): Promise<string> {
     if (isElectron() && window.electronSystem) {
@@ -325,9 +344,7 @@ export const PlatformSystem = {
   },
 };
 
-/**
- * Platform info for display
- */
+// Platform info for display
 export function getPlatformInfo(): {
   type: PlatformType;
   displayName: string;
@@ -358,3 +375,7 @@ export function getPlatformInfo(): {
         ],
   };
 }
+
+* ============================================================================
+* END OF BROWSER SUPPORT CODE
+* ============================================================================ */

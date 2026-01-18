@@ -234,6 +234,29 @@ A: Yes! LLMos works with any ESP32-based robot.
 **Q: Is this for kids?**
 A: Great for anyone interested in robotics - kids, students, hobbyists, makers!
 
+## 🚀 Project Roadmap
+
+Want to see where LLMos is heading? Check out our **[ROADMAP.md](ROADMAP.md)** for:
+- Development phases and milestones
+- Feature timeline
+- How to contribute
+- Community goals
+
+**Current Phase**: Foundation (Desktop + ESP32)
+**Next Up**: Plugin architecture for community extensions
+
+## 🤝 Contributing
+
+We're building this in the open! Whether you're a developer, maker, or just enthusiastic about robots, you can help:
+
+- **Build plugins** for new hardware
+- **Report bugs** and suggest features
+- **Share projects** you've built
+- **Help others** in Discussions
+- **Improve docs** and tutorials
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
+
 ## License
 
 Free to use and modify (Apache 2.0 License).
