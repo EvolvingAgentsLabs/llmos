@@ -156,35 +156,50 @@ function FileLink({ file, onClick }: { file: FileReference; onClick?: () => void
   );
 }
 
-// Agent call visualization
+// Agent call visualization - Enhanced
 function AgentCallDisplay({ call }: { call: AgentCall }) {
   const statusColors = {
-    pending: 'text-[#8b949e]',
-    running: 'text-[#d29922]',
-    completed: 'text-[#3fb950]',
-    failed: 'text-[#f85149]',
+    pending: 'text-[#8b949e] border-[#30363d] bg-[#21262d]',
+    running: 'text-[#d29922] border-[#d29922]/30 bg-[#d29922]/10 shadow-lg shadow-[#d29922]/20',
+    completed: 'text-[#3fb950] border-[#3fb950]/30 bg-[#3fb950]/10',
+    failed: 'text-[#f85149] border-[#f85149]/30 bg-[#f85149]/10',
   };
 
   const statusIcons = {
-    pending: '○',
-    running: '◐',
-    completed: '●',
+    pending: '⏳',
+    running: '⚡',
+    completed: '✓',
     failed: '✕',
   };
 
+  const statusLabels = {
+    pending: 'Queued',
+    running: 'Running',
+    completed: 'Complete',
+    failed: 'Failed',
+  };
+
   return (
-    <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-[#21262d] border border-[#30363d]">
-      <Cpu className={`w-3.5 h-3.5 mt-0.5 ${statusColors[call.status]}`} />
+    <div className={`flex items-start gap-3 py-2.5 px-3 rounded-lg border transition-all duration-300 ${statusColors[call.status]}`}>
+      <div className="relative flex-shrink-0">
+        <Cpu className={`w-4 h-4 mt-0.5 ${statusColors[call.status].split(' ')[0]}`} />
+        {call.status === 'running' && (
+          <div className="absolute -inset-1 rounded-full border border-[#d29922] animate-ping opacity-50" />
+        )}
+      </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-[#c9d1d9]">{call.agentName}</span>
-          <span className={`text-[10px] ${statusColors[call.status]}`}>
-            {statusIcons[call.status]} {call.status}
-          </span>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-semibold text-[#e6edf3]">{call.agentName}</span>
+          <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium ${statusColors[call.status]}`}>
+            <span>{statusIcons[call.status]}</span>
+            <span>{statusLabels[call.status]}</span>
+          </div>
         </div>
-        <p className="text-[11px] text-[#8b949e] mt-0.5">{call.purpose}</p>
+        <p className="text-xs text-[#c9d1d9] leading-relaxed">{call.purpose}</p>
         {call.result && (
-          <p className="text-[11px] text-[#3fb950] mt-1 truncate">{call.result}</p>
+          <div className="mt-2 p-2 rounded bg-[#0d1117] border border-[#3fb950]/30">
+            <p className="text-xs text-[#3fb950] leading-relaxed">{call.result}</p>
+          </div>
         )}
       </div>
     </div>
@@ -469,13 +484,21 @@ export default function UnifiedChat({
 
                   {/* Agent Calls - Show sub-agent interactions */}
                   {hasAgentCalls && (
-                    <div className="mt-3 space-y-2">
-                      <span className="text-[10px] text-[#6e7681] uppercase tracking-wider flex items-center gap-1">
-                        <Cpu className="w-3 h-3" /> Sub-agent calls:
-                      </span>
-                      {message.agentCalls!.map((call, callIdx) => (
-                        <AgentCallDisplay key={callIdx} call={call} />
-                      ))}
+                    <div className="mt-4 p-3 rounded-lg bg-[#161b22] border border-[#30363d]">
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#30363d]">
+                        <Cpu className="w-4 h-4 text-[#58a6ff]" />
+                        <span className="text-xs font-semibold text-[#58a6ff] uppercase tracking-wider">
+                          Sub-Agent Activity
+                        </span>
+                        <span className="ml-auto text-[10px] text-[#8b949e] px-2 py-0.5 rounded-full bg-[#21262d]">
+                          {message.agentCalls!.length} {message.agentCalls!.length === 1 ? 'agent' : 'agents'}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {message.agentCalls!.map((call, callIdx) => (
+                          <AgentCallDisplay key={callIdx} call={call} />
+                        ))}
+                      </div>
                     </div>
                   )}
 

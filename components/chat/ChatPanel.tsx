@@ -398,16 +398,70 @@ export default function ChatPanel({
   // Active conversation with multi-agent chat
   return (
     <div className="h-full flex flex-col bg-[#0d1117]">
-      {/* Phase indicator */}
+      {/* Enhanced Agent Workflow Panel */}
       {currentPhase !== 'idle' && currentPhase !== 'completed' && (
-        <div className="px-3 py-1.5 bg-[#161b22] border-b border-[#30363d] flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#d29922] animate-pulse" />
-          <span className="text-xs text-[#d29922] uppercase tracking-wider font-medium">
-            Phase: {currentPhase}
-          </span>
-          {loadingStatus && (
-            <span className="text-xs text-[#8b949e] ml-auto">{loadingStatus}</span>
-          )}
+        <div className="px-4 py-3 bg-gradient-to-r from-[#161b22] to-[#1c2128] border-b border-[#30363d] shadow-lg">
+          {/* Phase Header */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <div className="w-3 h-3 rounded-full bg-[#d29922] animate-pulse" />
+                <div className="absolute inset-0 w-3 h-3 rounded-full bg-[#d29922] animate-ping opacity-75" />
+              </div>
+              <span className="text-sm text-[#d29922] uppercase tracking-wider font-semibold">
+                {currentPhase === 'analyzing' && '🔍 Analyzing Goal'}
+                {currentPhase === 'planning' && '📋 Creating Plan'}
+                {currentPhase === 'voting' && '🗳️  Proposals Ready'}
+                {currentPhase === 'executing' && '⚡ Executing'}
+                {currentPhase === 'sub-agent-execution' && '🤖 Sub-Agents Working'}
+                {!['analyzing', 'planning', 'voting', 'executing', 'sub-agent-execution'].includes(currentPhase) && `⚙️  ${currentPhase}`}
+              </span>
+            </div>
+            <div className="text-xs text-[#8b949e] font-mono">{loadingStatus}</div>
+          </div>
+
+          {/* Active Agents Visualization */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-[#6e7681] uppercase tracking-wider">Active:</span>
+            {participants.filter(p => p.type !== 'user').map((agent, idx) => (
+              <div
+                key={agent.id}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md border"
+                style={{
+                  backgroundColor: agent.color + '15',
+                  borderColor: agent.color + '40',
+                  animation: isLoading ? `pulse 2s ease-in-out ${idx * 0.2}s infinite` : 'none'
+                }}
+              >
+                <div
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: agent.color }}
+                />
+                <span className="text-xs font-medium" style={{ color: agent.color }}>
+                  {agent.name}
+                </span>
+                {agent.role && (
+                  <span className="text-[10px] text-[#8b949e]">({agent.role})</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Workflow Progress Bar */}
+          <div className="mt-2 flex items-center gap-1">
+            {['analyzing', 'planning', 'voting', 'executing'].map((phase, idx) => (
+              <div
+                key={phase}
+                className="flex-1 h-1 rounded-full transition-all duration-300"
+                style={{
+                  backgroundColor:
+                    ['analyzing', 'planning', 'voting', 'executing'].indexOf(currentPhase) >= idx
+                      ? '#3fb950'
+                      : '#21262d',
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
 

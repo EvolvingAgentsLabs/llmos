@@ -69,7 +69,7 @@ export class NativeFileSystem extends EventEmitter {
 
         // Create default subdirectories for user/team volumes
         if (volumeType !== 'system') {
-          const subdirs = ['agents', 'applets', 'output', 'memory', 'projects'];
+          const subdirs = ['agents', 'maps', 'logs', 'firmware', 'data'];
           for (const subdir of subdirs) {
             await fs.mkdir(path.join(volumePath, subdir), { recursive: true });
           }

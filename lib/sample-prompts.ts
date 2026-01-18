@@ -18,92 +18,197 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Robot Control Applet Demo',
-    prompt: 'Open the Robot Control applet and simulate the robot driving in a square.',
-    description: 'Test the differential drive robot simulator',
-    category: 'Hardware + Applet',
+    title: 'Create Wall Avoidance AI Agent',
+    prompt: `Create an AI robot agent that autonomously explores the 5m × 5m arena while avoiding walls.
+
+The agent should:
+- Use LLM reasoning to make navigation decisions
+- Read distance sensors continuously
+- Turn away when obstacles are detected within 30cm
+- Use LED colors: green=exploring, yellow=turning, red=obstacle detected
+- Navigate smoothly without collisions
+
+Set it up to run in the simulation with a virtual robot.`,
+    description: 'Autonomous wall-avoiding AI agent',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'Robot4 WASM Simulator',
-    prompt: `Open the Robot4 World applet and show me how to program a wall-avoiding robot.
+    title: 'Maze-Solving AI Agent',
+    prompt: `Build an AI agent that can solve mazes using LLM reasoning.
 
-I want to:
-1. Write C firmware using the robot4.h API (like WASM4 games)
-2. Compile it to WebAssembly in the browser
-3. Run it in the simulation arena
-4. Watch the robot navigate autonomously
+The agent should:
+- Analyze sensor readings to understand its surroundings
+- Use LLM to decide which direction to turn at intersections
+- Remember where it has been (via conversation history)
+- Find the exit of the 5m × 5m maze
+- Explain its decision-making process
 
-Show me the code structure with start() and update() functions, and explain how to use the sensors and motors.`,
-    description: 'WASM4-style robot firmware development',
-    category: 'Simulation + WASM',
+Test it in the standard maze map.`,
+    description: 'Intelligent maze navigation',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'Robot4 Line Follower Challenge',
-    prompt: `Create a Robot4 firmware that follows a line track:
+    title: 'Adaptive Explorer Agent',
+    prompt: `Create an AI agent that learns to explore efficiently.
 
-Requirements:
-- Use the 5 line sensors (R4_LINE array)
-- Implement PD control for smooth steering
-- LED color indicates tracking status
-- Maximize speed while staying on track
+The agent should:
+- Start with random exploration
+- Use LLM to analyze which strategies work best
+- Adapt its behavior based on sensor feedback
+- Maximize arena coverage
+- LED shows confidence level (dim=uncertain, bright=confident)
 
-The arena should have a figure-8 or complex track pattern. Compile and run in the Robot4 World simulator.`,
-    description: 'Line following robot challenge',
-    category: 'Robotics + WASM',
+Let it run for 20 iterations to see it improve.`,
+    description: 'Self-improving exploration behavior',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'ESP32-S3 Robot Monitor',
-    prompt: `Create a real-time monitoring dashboard for a physical ESP32-S3 2-wheel robot:
-- WebSocket connection to robot's IP address for live telemetry
-- Camera feed viewer (MJPEG stream from ESP32-CAM)
-- Motor status: current PWM values, wheel encoder ticks, battery voltage
-- Sensor readings: ultrasonic distance, IMU orientation, line sensor array
-- Manual control mode: WASD keys or virtual joystick
-- Command console to send custom commands to the robot
+    title: 'Multi-Strategy Navigation Agent',
+    prompt: `Create an AI agent that uses multiple navigation strategies in the obstacle-filled arena.
 
-Design it to connect to a real ESP32-S3 robot over WiFi.`,
-    description: 'Live dashboard for real ESP32 robot',
-    category: 'IoT + Monitoring',
+Map: standard5x5Obstacles (11 circular obstacles)
+Goal: Navigate from (-2, -2) to (2, 2) without collisions
+
+The agent should:
+- Try different strategies: wall following, direct path, random exploration
+- Use LLM to evaluate which strategy works best in current situation
+- Switch strategies dynamically when stuck
+- Learn from failures and adapt approach
+- LED color indicates strategy: blue=wall-follow, green=direct, yellow=exploring
+- Complete challenge using optimal strategy combination
+
+Let the agent experiment and find the best approach.`,
+    description: 'Adaptive multi-strategy navigation',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'Robot Code Generator',
-    prompt: `Build a visual robot programmer for ESP32-S3 2-wheel robots:
-- Drag-and-drop behavior blocks: move, turn, read camera, detect obstacle
-- Connect blocks to create robot programs visually
-- Preview behavior in a mini simulator before deploying
-- Generate Arduino/ESP-IDF C++ code from the visual program
-- Export .ino file ready to flash to the robot
-- Include motor driver setup (L298N/TB6612) and camera init code
+    title: 'Collaborative Maze Team',
+    prompt: `Create a team of AI agents that solve mazes through collaboration.
 
-Support both simulation testing and real hardware deployment.`,
-    description: 'Visual programming to real robot code',
-    category: 'CodeGen + ESP32',
+Map: standard5x5Maze
+Goal: Find optimal path from (-2, -2) to (2, 2)
+
+The system should:
+- Generate 2-3 AI agents with different exploration strategies
+- Each agent explores independently and shares findings via LLM
+- Agents vote on best path forward using LLM reasoning
+- LED colors distinguish agents: red, green, blue
+- Compare single-agent vs. multi-agent performance
+- Agents explain their reasoning and learn from each other
+
+Watch them collaborate and debate the best path.`,
+    description: 'Multi-agent collaborative problem solving',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'Robot Arm Simulator',
-    prompt: `Create a 2-link robot arm control panel with:
-- Sliders for joint angles θ1 and θ2
-- Input fields for target (x, y) position
-- Visual display of arm configuration
-- Forward and inverse kinematics calculations
-- Animate trajectory from current to target position
+    title: 'Self-Tuning Line Follower',
+    prompt: `Build an AI agent that tunes its own PID controller for line following.
 
-Show the workspace boundary and joint limits.`,
-    description: 'Robotics kinematics playground',
-    category: 'Robotics + UI',
+Map: standard5x5LineTrack (3.6m × 2.4m oval)
+Goal: Complete 3 laps with self-optimized control
+
+The agent should:
+- Start with default PID values
+- Use LLM to analyze line sensor patterns and track deviation
+- Adjust Kp, Ki, Kd parameters between laps based on performance
+- Learn optimal settings through experimentation
+- LED brightness shows tuning confidence
+- Explain its tuning decisions and reasoning
+
+Watch it improve lap times through intelligent parameter tuning.`,
+    description: 'LLM-based PID auto-tuning',
+    category: 'AI Robot Agents',
   },
   {
-    title: 'Neural Network Visualizer',
-    prompt: `Build a neural network architecture designer with:
-- Add/remove layers (input, hidden, output)
-- Adjust neurons per layer with sliders
-- Choose activation functions (ReLU, Sigmoid, Tanh)
-- Visualize network topology as a graph
-- Generate PyTorch/TensorFlow code for the architecture
+    title: 'Intelligent Delivery Coordinator',
+    prompt: `Create an AI agent that plans and optimizes delivery routes.
 
-Show parameter count and network depth.`,
-    description: 'ML architecture design tool',
-    category: 'ML + UI',
+Map: standard5x5Delivery
+Waypoints: (2, -2), (2, 2), (-2, 2), (-2, -2)
+
+The agent should:
+- Use LLM to analyze waypoint positions and plan optimal route
+- Consider obstacle (0.4m radius at center) in path planning
+- Adapt route if obstacles detected during navigation
+- Decide when to take shortcuts vs. safe paths
+- LED blinks different colors for each waypoint reached
+- Explain routing decisions and trade-offs
+- Complete mission in minimum time with zero collisions
+
+Let it strategize the best delivery sequence and path.`,
+    description: 'LLM-powered route optimization',
+    category: 'AI Robot Agents',
+  },
+  {
+    title: 'Real Robot AI Agent',
+    prompt: `Create an AI agent that controls a real ESP32-S3 robot connected via WiFi.
+
+The agent should:
+- Connect to physical ESP32 robot over WebSocket
+- Read real sensor data: ultrasonic distance, IMU, line sensors, camera
+- Use LLM to make decisions based on real-world sensor inputs
+- Control real motors and LED via robot API
+- Handle connection failures gracefully
+- Monitor battery level and stop if low
+- Log decision-making process and sensor readings
+- Compare simulated predictions vs. real-world results
+
+Bridge the gap between simulation and physical hardware.`,
+    description: 'LLM control of real ESP32 hardware',
+    category: 'AI Robot Agents',
+  },
+  {
+    title: 'Sim-to-Real Transfer Agent',
+    prompt: `Build an AI agent that learns in simulation then transfers to real robot.
+
+The agent should:
+- Train navigation strategy in 5m × 5m simulation
+- Use LLM to analyze performance and refine approach
+- Test trained behavior on real ESP32 robot
+- Measure sim-to-real gap (position error, time difference)
+- Adapt strategy based on real-world feedback
+- Explain differences between sim and real behavior
+- Auto-tune parameters to minimize transfer gap
+
+Document the complete sim-to-real workflow.`,
+    description: 'Simulation to reality AI transfer',
+    category: 'AI Robot Agents',
+  },
+  {
+    title: 'Curious Exploration Agent',
+    prompt: `Create an AI agent with curiosity-driven exploration behavior.
+
+The agent should:
+- Explore 5m × 5m arena driven by curiosity
+- Use LLM to identify "interesting" sensor patterns
+- Prioritize visiting unexplored areas
+- Investigate anomalies or novel observations
+- Build internal map of discovered features
+- LED brightness shows curiosity level
+- Explain what it finds interesting and why
+- Generate exploration report with discoveries
+
+Watch it autonomously discover arena features.`,
+    description: 'Curiosity-driven autonomous exploration',
+    category: 'AI Robot Agents',
+  },
+  {
+    title: 'Behavior Evolution Agent',
+    prompt: `Build an AI agent that evolves its behavior through experimentation.
+
+The agent should:
+- Start with random movement behavior
+- Use LLM to generate behavior variations
+- Test each variation and measure success (speed, efficiency, smoothness)
+- Select best-performing behaviors
+- Combine successful strategies into improved behaviors
+- LED color shows generation number (red→yellow→green as it improves)
+- Run 10+ generations to see evolution
+- Explain fitness function and selection criteria
+
+Observe emergent intelligent behavior through LLM-guided evolution.`,
+    description: 'LLM-guided behavior evolution',
+    category: 'AI Robot Agents',
   },
 ];
 

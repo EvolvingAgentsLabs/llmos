@@ -183,7 +183,7 @@ export class CubeRobotSimulator {
   private pose: RobotPose = { x: 0, y: 0, rotation: 0 };
   private velocity: RobotVelocity = { linear: 0, angular: 0 };
   private motors: MotorState = { leftPWM: 0, rightPWM: 0, leftRPM: 0, rightRPM: 0 };
-  private led: LEDState = { r: 0, g: 0, b: 0, brightness: 100 };
+  private led: LEDState = { r: 88, g: 166, b: 255, brightness: 100 }; // Default blue (#58a6ff)
 
   // Sensors
   private encoders = { left: 0, right: 0 };
@@ -282,7 +282,7 @@ export class CubeRobotSimulator {
     this.encoders = { left: 0, right: 0 };
     this.prevEncoders = { left: 0, right: 0 };
     this.bumperState = { front: false, back: false };
-    this.led = { r: 0, g: 0, b: 0, brightness: 100 };
+    this.led = { r: 88, g: 166, b: 255, brightness: 100 }; // Default blue (#58a6ff)
     this.batteryMAh = ROBOT_SPECS.BATTERY_CAPACITY_MAH;
     this.batteryVoltage = ROBOT_SPECS.BATTERY_VOLTAGE;
     this.checkpointsReached.clear();
@@ -885,5 +885,214 @@ export const FLOOR_MAPS = {
       { x: 1.2, y: -1.2 },
     ],
     startPosition: { x: 0, y: -1.2, rotation: Math.PI / 2 },
+  }),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STANDARD 5m x 5m ARENA MAPS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Standard 5m x 5m empty arena
+   * Perfect for testing basic navigation and motor control
+   */
+  standard5x5Empty: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },  // Bottom
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },    // Right
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },    // Top
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },  // Left
+    ],
+    obstacles: [],
+    lines: [],
+    checkpoints: [
+      { x: 2.0, y: 0 },    // Right
+      { x: 0, y: 2.0 },    // Top
+      { x: -2.0, y: 0 },   // Left
+      { x: 0, y: -2.0 },   // Bottom
+    ],
+    startPosition: { x: 0, y: 0, rotation: 0 },
+  }),
+
+  /**
+   * Standard 5m x 5m arena with obstacles
+   * Obstacle avoidance practice
+   */
+  standard5x5Obstacles: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+    ],
+    obstacles: [
+      // Corner obstacles
+      { x: -1.5, y: -1.5, radius: 0.25 },
+      { x: 1.5, y: -1.5, radius: 0.20 },
+      { x: 1.5, y: 1.5, radius: 0.25 },
+      { x: -1.5, y: 1.5, radius: 0.20 },
+      // Center cluster
+      { x: 0, y: 0, radius: 0.30 },
+      { x: -0.6, y: 0.6, radius: 0.15 },
+      { x: 0.6, y: -0.6, radius: 0.15 },
+      // Edge obstacles
+      { x: 0, y: 1.8, radius: 0.18 },
+      { x: 0, y: -1.8, radius: 0.18 },
+      { x: 1.8, y: 0, radius: 0.18 },
+      { x: -1.8, y: 0, radius: 0.18 },
+    ],
+    lines: [],
+    checkpoints: [
+      { x: 2.0, y: 2.0 },    // Top-right goal
+    ],
+    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },
+  }),
+
+  /**
+   * Standard 5m x 5m oval line track
+   * Line following challenge
+   */
+  standard5x5LineTrack: (): FloorMap => {
+    const points: Vector2D[] = [];
+    // Create smooth oval using bezier-like curve
+    const segments = 40;
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * 2 * Math.PI;
+      const x = 1.8 * Math.cos(t);
+      const y = 1.2 * Math.sin(t);
+      points.push({ x, y });
+    }
+
+    return {
+      bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+      walls: [
+        { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+        { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+        { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+        { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+      ],
+      obstacles: [],
+      lines: [{
+        points,
+        width: 0.03,  // 3cm wide line
+        color: '#000000',
+      }],
+      checkpoints: [
+        { x: 1.8, y: 0 },     // Right
+        { x: 0, y: 1.2 },     // Top
+        { x: -1.8, y: 0 },    // Left
+        { x: 0, y: -1.2 },    // Bottom
+      ],
+      startPosition: { x: 0, y: 0, rotation: 0 },
+    };
+  },
+
+  /**
+   * Standard 5m x 5m maze
+   * Path planning and navigation challenge
+   */
+  standard5x5Maze: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      // Outer walls
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+      // Inner maze walls (creating a solvable maze)
+      // Vertical walls
+      { x1: -1.5, y1: -2.5, x2: -1.5, y2: -0.5 },
+      { x1: -0.5, y1: -1.5, x2: -0.5, y2: 1.0 },
+      { x1: 0.5, y1: -1.0, x2: 0.5, y2: 2.0 },
+      { x1: 1.5, y1: -2.0, x2: 1.5, y2: 0.5 },
+      // Horizontal walls
+      { x1: -2.5, y1: -1.5, x2: 0, y2: -1.5 },
+      { x1: -1.0, y1: -0.5, x2: 2.0, y2: -0.5 },
+      { x1: -2.0, y1: 0.5, x2: 0.5, y2: 0.5 },
+      { x1: -0.5, y1: 1.5, x2: 2.5, y2: 1.5 },
+    ],
+    obstacles: [
+      // Additional circular obstacles in open spaces
+      { x: -1.0, y: 1.0, radius: 0.15 },
+      { x: 1.0, y: -1.5, radius: 0.15 },
+      { x: 0.8, y: 0.8, radius: 0.12 },
+    ],
+    lines: [],
+    checkpoints: [
+      { x: 2.0, y: 2.0 },  // Top-right goal
+    ],
+    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },
+  }),
+
+  /**
+   * Standard 5m x 5m figure-8 track
+   * Advanced line following challenge
+   */
+  standard5x5Figure8: (): FloorMap => {
+    const points: Vector2D[] = [];
+    // Generate smooth figure-8 using parametric equations
+    // Scaled for 5m x 5m arena
+    const segments = 60;
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * 2 * Math.PI;
+      const x = 1.5 * Math.sin(t);
+      const y = 1.0 * Math.sin(2 * t);
+      points.push({ x, y });
+    }
+
+    return {
+      bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+      walls: [
+        { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+        { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+        { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+        { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+      ],
+      obstacles: [],
+      lines: [{
+        points,
+        width: 0.03,  // 3cm wide line
+        color: '#000000',
+      }],
+      checkpoints: [
+        { x: 1.5, y: 0 },     // Right loop
+        { x: -1.5, y: 0 },    // Left loop
+        { x: 0, y: 1.0 },     // Top crossing
+        { x: 0, y: -1.0 },    // Bottom crossing
+      ],
+      startPosition: { x: 0, y: 0, rotation: 0 },
+    };
+  },
+
+  /**
+   * Standard 5m x 5m delivery challenge
+   * Navigate to 4 corners in sequence
+   */
+  standard5x5Delivery: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+    ],
+    obstacles: [
+      // Center obstacle to force pathfinding
+      { x: 0, y: 0, radius: 0.4 },
+      // Minor obstacles near corners
+      { x: -1.2, y: -1.2, radius: 0.15 },
+      { x: 1.2, y: -1.2, radius: 0.15 },
+      { x: 1.2, y: 1.2, radius: 0.15 },
+      { x: -1.2, y: 1.2, radius: 0.15 },
+    ],
+    lines: [],
+    checkpoints: [
+      { x: 2.0, y: -2.0 },   // Bottom-right (1st delivery)
+      { x: 2.0, y: 2.0 },    // Top-right (2nd delivery)
+      { x: -2.0, y: 2.0 },   // Top-left (3rd delivery)
+      { x: -2.0, y: -2.0 },  // Bottom-left (4th delivery)
+    ],
+    startPosition: { x: 0, y: 0, rotation: 0 },
   }),
 };
