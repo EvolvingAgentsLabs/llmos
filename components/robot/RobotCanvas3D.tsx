@@ -379,13 +379,29 @@ function LineTrack({ lines }: { lines: FloorMap['lines'] }) {
   );
 }
 
-// Camera controller with presets
-function CameraController({ preset, robotState }: { preset: string; robotState: SimulatorState | null }) {
+// Camera controller with presets and agent activity animations
+function CameraController({
+  preset,
+  robotState,
+  agentActivity
+}: {
+  preset: string;
+  robotState: SimulatorState | null;
+  agentActivity?: AgentActivity;
+}) {
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
   const config = CAMERA_PRESETS[preset as keyof typeof CAMERA_PRESETS];
+  const timeRef = useRef(0);
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     if (cameraRef.current && config) {
+      timeRef.current += delta;
+
+      // Check if agent is actively working (not idle)
+      const isAgentActive = agentActivity &&
+        agentActivity.phase !== 'idle' &&
+        agentActivity.isLoading;
+
       // Smooth camera transitions
       if (preset === 'follow' && robotState) {
         // Follow mode: camera follows robot
@@ -396,10 +412,55 @@ function CameraController({ preset, robotState }: { preset: string; robotState: 
         );
         cameraRef.current.position.lerp(targetPos, 0.1);
         cameraRef.current.lookAt(robotState.pose.x, 0, robotState.pose.y);
+      } else if (isAgentActive) {
+        // Agent is thinking/planning - dramatic zoom and orbit
+        const orbitSpeed = 0.3;
+        const orbitRadius = 0.4; // Much closer zoom
+        const orbitHeight = 0.25; // Lower, more dramatic angle
+
+        // Smooth orbit around robot
+        const angle = timeRef.current * orbitSpeed;
+        const targetPos = new THREE.Vector3(
+          Math.cos(angle) * orbitRadius,
+          orbitHeight,
+          Math.sin(angle) * orbitRadius
+        );
+
+        // If robot is at a position, orbit around it
+        if (robotState) {
+          targetPos.x += robotState.pose.x;
+          targetPos.z += robotState.pose.y;
+        }
+
+        cameraRef.current.position.lerp(targetPos, 0.05);
+
+        // Always look at robot center
+        const lookAtPos = robotState
+          ? new THREE.Vector3(robotState.pose.x, 0.04, robotState.pose.y)
+          : new THREE.Vector3(0, 0.04, 0);
+        cameraRef.current.lookAt(lookAtPos);
+
+        // Adjust FOV for more dramatic zoom effect
+        const targetFOV = 40; // Narrower FOV = more zoom
+        cameraRef.current.fov += (targetFOV - cameraRef.current.fov) * 0.05;
+        cameraRef.current.updateProjectionMatrix();
       } else {
-        // Static presets
+        // Static presets - return to normal view
         const targetPos = new THREE.Vector3(...config.position);
-        cameraRef.current.position.lerp(targetPos, 0.1);
+        cameraRef.current.position.lerp(targetPos, 0.05);
+
+        // Look at center
+        const lookAt = new THREE.Vector3(0, 0, 0);
+        const currentLookAt = new THREE.Vector3();
+        cameraRef.current.getWorldDirection(currentLookAt);
+        currentLookAt.multiplyScalar(-1).add(cameraRef.current.position);
+        currentLookAt.lerp(lookAt, 0.05);
+        cameraRef.current.lookAt(currentLookAt);
+
+        // Reset FOV
+        const targetFOV = 50;
+        cameraRef.current.fov += (targetFOV - cameraRef.current.fov) * 0.05;
+        cameraRef.current.updateProjectionMatrix();
       }
     }
   });
@@ -452,7 +513,7 @@ export default function RobotCanvas3D({
       className="w-full h-full"
     >
       {/* Camera */}
-      <CameraController preset={cameraPreset} robotState={robotState} />
+      <CameraController preset={cameraPreset} robotState={robotState} agentActivity={agentActivity} />
 
       {/* Lights */}
       <ambientLight intensity={0.4} />

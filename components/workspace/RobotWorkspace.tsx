@@ -46,10 +46,13 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
 
   // Extract agent activity from workspace state
+  // Map the simple agentState string to the AgentActivity interface expected by RobotWorldPanel
   const agentActivity = {
-    phase: state.agentState.currentPhase as 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed',
-    activeAgents: state.agentState.activeAgents.length,
-    isLoading: state.isLoading,
+    phase: state.agentState === 'thinking' ? 'analyzing' :
+           state.agentState === 'executing' ? 'executing' :
+           state.agentState === 'success' ? 'completed' : 'idle' as 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed',
+    activeAgents: state.agentState !== 'idle' ? 1 : 0,
+    isLoading: state.agentState === 'thinking' || state.agentState === 'executing',
   };
 
   // Toggle sidebars
@@ -88,7 +91,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           <div className="px-3 py-2 border-b border-[#30363d] bg-[#161b22] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FolderTree className="w-4 h-4 text-[#58a6ff]" />
-              <span className="text-xs font-semibold text-[#e6edf3]">Robot Programs</span>
+              <span className="text-xs font-semibold text-[#e6edf3]">AI Robot Agents</span>
             </div>
             <button
               onClick={toggleFileBrowser}
@@ -122,34 +125,37 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
             {activeVolume === 'user' && (
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  My Robots
+                  My AI Agents
                 </div>
-                <FileTreeItem
-                  name="wall-avoider-v1.c"
-                  type="file"
+                <AgentTreeItem
+                  name="Wall Avoider"
+                  description="Navigate without collisions"
                   icon="🤖"
-                  onClick={() => handleProgramSelect('user/my-robots/wall-avoider-v1.c')}
+                  capabilities={['distance-sensors', 'reactive-control', 'led-feedback']}
+                  onClick={() => handleProgramSelect('user/agents/wall-avoider')}
                 />
-                <FileTreeItem
-                  name="maze-solver.c"
-                  type="file"
+                <AgentTreeItem
+                  name="Maze Solver"
+                  description="Path planning & navigation"
                   icon="🧩"
-                  onClick={() => handleProgramSelect('user/my-robots/maze-solver.c')}
+                  capabilities={['mapping', 'path-finding', 'llm-reasoning']}
+                  onClick={() => handleProgramSelect('user/agents/maze-solver')}
                 />
-                <FileTreeItem
-                  name="line-follower.c"
-                  type="file"
+                <AgentTreeItem
+                  name="Line Follower"
+                  description="PID control with LLM tuning"
                   icon="➡️"
-                  onClick={() => handleProgramSelect('user/my-robots/line-follower.c')}
+                  capabilities={['line-sensors', 'pid-control', 'adaptive-tuning']}
+                  onClick={() => handleProgramSelect('user/agents/line-follower')}
                 />
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
-                  Telemetry
+                  Agent Logs
                 </div>
                 <FileTreeItem
                   name="session-1.log"
                   type="file"
                   icon="📊"
-                  onClick={() => handleProgramSelect('user/telemetry/session-1.log')}
+                  onClick={() => handleProgramSelect('user/logs/session-1.log')}
                 />
               </div>
             )}
@@ -158,19 +164,21 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
             {activeVolume === 'team' && (
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  Shared Programs
+                  Shared AI Agents
                 </div>
-                <FileTreeItem
-                  name="challenge-1-solution.c"
-                  type="file"
+                <AgentTreeItem
+                  name="Competition Winner"
+                  description="Multi-agent challenge solver"
                   icon="🏆"
-                  onClick={() => handleProgramSelect('team/shared/challenge-1-solution.c')}
+                  capabilities={['multi-agent', 'llm-coordination', 'advanced-planning']}
+                  onClick={() => handleProgramSelect('team/agents/challenge-winner')}
                 />
-                <FileTreeItem
-                  name="swarm-coordinator.c"
-                  type="file"
-                  icon="🤖"
-                  onClick={() => handleProgramSelect('team/shared/swarm-coordinator.c')}
+                <AgentTreeItem
+                  name="Swarm Coordinator"
+                  description="Multi-robot coordination"
+                  icon="🤝"
+                  capabilities={['swarm-intelligence', 'communication', 'distributed-ai']}
+                  onClick={() => handleProgramSelect('team/agents/swarm-coordinator')}
                 />
               </div>
             )}
@@ -179,19 +187,28 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
             {activeVolume === 'system' && (
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  Templates
+                  Agent Templates
                 </div>
-                <FileTreeItem
-                  name="basic-drive.c"
-                  type="file"
-                  icon="📄"
-                  onClick={() => handleProgramSelect('system/templates/basic-drive.c')}
+                <AgentTreeItem
+                  name="Basic Navigator"
+                  description="Simple movement control"
+                  icon="📘"
+                  capabilities={['motor-control', 'basic-sensors']}
+                  onClick={() => handleProgramSelect('system/templates/basic-navigator')}
                 />
-                <FileTreeItem
-                  name="obstacle-avoider.c"
-                  type="file"
-                  icon="📄"
-                  onClick={() => handleProgramSelect('system/templates/obstacle-avoider.c')}
+                <AgentTreeItem
+                  name="Reactive Agent"
+                  description="Sensor-based reactive behavior"
+                  icon="⚡"
+                  capabilities={['distance-sensors', 'reactive-control']}
+                  onClick={() => handleProgramSelect('system/templates/reactive-agent')}
+                />
+                <AgentTreeItem
+                  name="LLM-Powered Agent"
+                  description="Claude-driven decision making"
+                  icon="🧠"
+                  capabilities={['llm-reasoning', 'tool-calling', 'adaptive-behavior']}
+                  onClick={() => handleProgramSelect('system/templates/llm-agent')}
                 />
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
                   Standard Maps
@@ -258,7 +275,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           <div className="px-3 py-2 border-b border-[#30363d] bg-[#161b22] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileCode className="w-4 h-4 text-[#3fb950]" />
-              <span className="text-xs font-semibold text-[#e6edf3]">Robot Programming</span>
+              <span className="text-xs font-semibold text-[#e6edf3]">AI Agent Creator</span>
             </div>
             <button
               onClick={toggleChat}
@@ -281,12 +298,55 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
         <button
           onClick={toggleChat}
           className="w-8 flex-shrink-0 border-l border-[#30363d] bg-[#161b22] hover:bg-[#21262d] flex items-center justify-center transition-colors"
-          title="Show robot programming chat"
+          title="Show AI agent creator"
         >
           <ChevronLeft className="w-3.5 h-3.5 text-[#8b949e]" />
         </button>
       )}
     </div>
+  );
+}
+
+// AI Agent tree item component
+interface AgentTreeItemProps {
+  name: string;
+  description: string;
+  icon?: string;
+  capabilities: string[];
+  isActive?: boolean;
+  onClick?: () => void;
+}
+
+function AgentTreeItem({ name, description, icon, capabilities, isActive, onClick }: AgentTreeItemProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-2 py-2 rounded-md text-xs flex flex-col gap-1 transition-colors ${
+        isActive
+          ? 'bg-[#58a6ff]/20 border border-[#58a6ff]/50'
+          : 'bg-[#161b22] border border-[#30363d] hover:border-[#58a6ff]/50 hover:bg-[#21262d]'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        {icon && <span className="text-base">{icon}</span>}
+        <span className={`font-medium flex-1 ${isActive ? 'text-[#58a6ff]' : 'text-[#e6edf3]'}`}>{name}</span>
+        <span className="text-[10px] text-[#8b949e] px-1.5 py-0.5 rounded bg-[#21262d]">AI</span>
+      </div>
+      <p className="text-[10px] text-[#8b949e] pl-6">{description}</p>
+      <div className="flex flex-wrap gap-1 pl-6">
+        {capabilities.slice(0, 2).map((cap) => (
+          <span
+            key={cap}
+            className="text-[9px] px-1.5 py-0.5 rounded bg-[#238636]/20 text-[#3fb950] border border-[#238636]/30"
+          >
+            {cap}
+          </span>
+        ))}
+        {capabilities.length > 2 && (
+          <span className="text-[9px] px-1 py-0.5 text-[#8b949e]">+{capabilities.length - 2}</span>
+        )}
+      </div>
+    </button>
   );
 }
 

@@ -183,7 +183,7 @@ export class CubeRobotSimulator {
   private pose: RobotPose = { x: 0, y: 0, rotation: 0 };
   private velocity: RobotVelocity = { linear: 0, angular: 0 };
   private motors: MotorState = { leftPWM: 0, rightPWM: 0, leftRPM: 0, rightRPM: 0 };
-  private led: LEDState = { r: 0, g: 0, b: 0, brightness: 100 };
+  private led: LEDState = { r: 88, g: 166, b: 255, brightness: 100 }; // Default blue (#58a6ff)
 
   // Sensors
   private encoders = { left: 0, right: 0 };
@@ -282,7 +282,7 @@ export class CubeRobotSimulator {
     this.encoders = { left: 0, right: 0 };
     this.prevEncoders = { left: 0, right: 0 };
     this.bumperState = { front: false, back: false };
-    this.led = { r: 0, g: 0, b: 0, brightness: 100 };
+    this.led = { r: 88, g: 166, b: 255, brightness: 100 }; // Default blue (#58a6ff)
     this.batteryMAh = ROBOT_SPECS.BATTERY_CAPACITY_MAH;
     this.batteryVoltage = ROBOT_SPECS.BATTERY_VOLTAGE;
     this.checkpointsReached.clear();

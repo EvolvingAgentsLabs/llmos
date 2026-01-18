@@ -18,38 +18,32 @@ export interface SamplePrompt {
  */
 const developerPrompts: SamplePrompt[] = [
   {
-    title: 'Robot Control Applet Demo',
-    prompt: 'Open the Robot Control applet and simulate the robot driving in a square.',
-    description: 'Test the differential drive robot simulator',
-    category: 'Hardware + Applet',
+    title: 'Program Cube Robot Basics',
+    prompt: `I want to program my cube robot to move forward for 2 seconds, then turn right 90 degrees.
+
+Show me the code and simulate it in the 5m × 5m arena. Explain how the differential drive motors work.`,
+    description: 'Learn robot movement fundamentals',
+    category: 'Getting Started',
   },
   {
-    title: 'Robot4 WASM Simulator',
-    prompt: `Open the Robot4 World applet and show me how to program a wall-avoiding robot.
+    title: 'Wall Detection & Avoidance',
+    prompt: `Help me program my cube robot to detect walls using distance sensors and turn away before hitting them.
 
-I want to:
-1. Write C firmware using the robot4.h API (like WASM4 games)
-2. Compile it to WebAssembly in the browser
-3. Run it in the simulation arena
-4. Watch the robot navigate autonomously
-
-Show me the code structure with start() and update() functions, and explain how to use the sensors and motors.`,
-    description: 'WASM4-style robot firmware development',
-    category: 'Simulation + WASM',
+Test it in the 5m × 5m arena with obstacles. The robot should drive around exploring without collisions.`,
+    description: 'Obstacle avoidance with sensors',
+    category: 'Sensor Programming',
   },
   {
-    title: 'Robot4 Line Follower Challenge',
-    prompt: `Create a Robot4 firmware that follows a line track:
+    title: 'LED Color Control',
+    prompt: `Program my robot to change LED colors based on what it's doing:
+- Blue when idle
+- Green when moving forward
+- Red when obstacle detected
+- Yellow when turning
 
-Requirements:
-- Use the 5 line sensors (R4_LINE array)
-- Implement PD control for smooth steering
-- LED color indicates tracking status
-- Maximize speed while staying on track
-
-The arena should have a figure-8 or complex track pattern. Compile and run in the Robot4 World simulator.`,
-    description: 'Line following robot challenge',
-    category: 'Robotics + WASM',
+Show me how to control the RGB LED.`,
+    description: 'Visual feedback with RGB LED',
+    category: 'Robot Control',
   },
   {
     title: '5m × 5m Obstacle Avoidance Challenge',

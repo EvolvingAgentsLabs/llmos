@@ -25,10 +25,6 @@ const HolographicBackground = dynamic(
   () => import('@/components/system/HolographicBackground'),
   { ssr: false }
 );
-const FloatingJarvis = dynamic(
-  () => import('@/components/system/FloatingJarvis'),
-  { ssr: false }
-);
 
 // ============================================================================
 // TYPES
@@ -257,9 +253,6 @@ export default function AdaptiveLayout() {
           onVolumeChange={setActiveVolume}
         />
       </div>
-
-      {/* Floating AI Avatar - Always visible like Siri */}
-      <FloatingJarvis position="bottom-right" />
     </div>
   );
 }
