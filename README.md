@@ -209,6 +209,41 @@ void update() {
 
 **Start simple, build complex!**
 
+## 🎮 Simulation-to-Real Platform
+
+LLMos includes a physics-based simulator that lets you test robots before building them!
+
+### Standard 5m x 5m Arena
+
+Test in a virtual 5m × 5m arena, then build the same arena in real life:
+
+```
+   Virtual Arena              Real Arena
+┌─────────────────┐       ┌─────────────────┐
+│  🎮 Simulator   │  ═══► │  🏗️  Physical   │
+│                 │ SAME  │                 │
+│  5m x 5m        │ CODE  │  5m x 5m        │
+│                 │  ═══► │                 │
+│  FREE, INSTANT  │       │  $30-40 ROBOT   │
+└─────────────────┘       └─────────────────┘
+```
+
+**6 Standard Maps** (simulation → real world):
+- `standard5x5Empty` - Basic navigation
+- `standard5x5Obstacles` - Obstacle avoidance (11 obstacles)
+- `standard5x5LineTrack` - Line following (oval)
+- `standard5x5Maze` - Path planning challenge
+- `standard5x5Figure8` - Advanced line following
+- `standard5x5Delivery` - Sequential navigation
+
+**10 Challenge Courses**:
+From beginner (basic navigation) to advanced (maze solving, obstacle racing)
+
+**See**:
+- **[Standard Robot v1.0](docs/hardware/STANDARD_ROBOT_V1.md)** - Official hardware spec (~$80)
+- **[Arena Setup Guide](docs/hardware/ARENA_SETUP_GUIDE.md)** - Build 5m × 5m real arena
+- **[Challenge Courses](docs/CHALLENGE_COURSES.md)** - 10 standard challenges
+
 ## Getting Help
 
 ### Documentation for Makers
