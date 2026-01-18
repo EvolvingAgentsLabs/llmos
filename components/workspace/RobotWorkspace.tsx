@@ -45,6 +45,13 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const [currentMap, setCurrentMap] = useState('standard5x5Empty');
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
 
+  // Extract agent activity from workspace state
+  const agentActivity = {
+    phase: state.agentState.currentPhase as 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed',
+    activeAgents: state.agentState.activeAgents.length,
+    isLoading: state.isLoading,
+  };
+
   // Toggle sidebars
   const toggleFileBrowser = useCallback(() => {
     setShowFileBrowser(!showFileBrowser);
@@ -240,6 +247,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           currentMap={currentMap}
           onRobotClick={handleRobotClick}
           onArenaClick={handleArenaClick}
+          agentActivity={agentActivity}
         />
       </div>
 

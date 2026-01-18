@@ -40,16 +40,26 @@ const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
 type ExecutionMode = 'simulation' | 'real-robot' | 'replay';
 type CameraPreset = 'top-down' | 'isometric' | 'follow' | 'side';
 
+type AgentPhase = 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed';
+
+interface AgentActivity {
+  phase: AgentPhase;
+  activeAgents: number;
+  isLoading: boolean;
+}
+
 interface RobotWorldPanelProps {
   currentMap?: string; // e.g., 'standard5x5Empty'
   onRobotClick?: () => void;
   onArenaClick?: (x: number, y: number) => void;
+  agentActivity?: AgentActivity;
 }
 
 export default function RobotWorldPanel({
   currentMap = 'standard5x5Empty',
   onRobotClick,
   onArenaClick,
+  agentActivity,
 }: RobotWorldPanelProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const simulatorRef = useRef<ReturnType<typeof createCubeRobotSimulator> | null>(null);
@@ -277,6 +287,7 @@ export default function RobotWorldPanel({
               floorMap={floorMap}
               cameraPreset={cameraPreset}
               onArenaClick={handleArenaClick}
+              agentActivity={agentActivity}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

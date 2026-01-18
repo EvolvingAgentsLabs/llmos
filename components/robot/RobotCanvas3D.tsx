@@ -17,11 +17,20 @@ import * as THREE from 'three';
  * - Real-time updates from simulator or telemetry
  */
 
+type AgentPhase = 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed';
+
+interface AgentActivity {
+  phase: AgentPhase;
+  activeAgents: number;
+  isLoading: boolean;
+}
+
 interface RobotCanvas3DProps {
   robotState: SimulatorState | null;
   floorMap: FloorMap;
   cameraPreset: 'top-down' | 'isometric' | 'follow' | 'side';
   onArenaClick?: (x: number, y: number) => void;
+  agentActivity?: AgentActivity;
 }
 
 // Camera positions for each preset
@@ -32,32 +41,177 @@ const CAMERA_PRESETS = {
   'side': { position: [4, 1, 0] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] },
 };
 
-// Robot cube component
-function RobotCube({ state }: { state: SimulatorState | null }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+// R2D2-style Robot component with tilted cube, wheels, and camera
+function RobotCube({ state, agentActivity }: { state: SimulatorState | null; agentActivity?: AgentActivity }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const cubeRef = useRef<THREE.Mesh>(null);
 
   useEffect(() => {
-    if (meshRef.current && state) {
-      meshRef.current.position.set(state.pose.x, 0.04, state.pose.y);
-      meshRef.current.rotation.y = -state.pose.rotation; // Negative for correct orientation
+    if (groupRef.current && state) {
+      groupRef.current.position.set(state.pose.x, 0, state.pose.y);
+      groupRef.current.rotation.y = -state.pose.rotation; // Negative for correct orientation
     }
   }, [state]);
 
-  const ledColor = state
-    ? `rgb(${state.led.r}, ${state.led.g}, ${state.led.b})`
-    : '#58a6ff';
+  // Agent activity affects LED color
+  const getAgentColor = () => {
+    if (!agentActivity || agentActivity.phase === 'idle') {
+      return state ? `rgb(${state.led.r}, ${state.led.g}, ${state.led.b})` : '#58a6ff';
+    }
+
+    switch (agentActivity.phase) {
+      case 'analyzing': return '#d29922'; // Amber
+      case 'planning': return '#a371f7'; // Purple
+      case 'voting': return '#58a6ff'; // Blue
+      case 'executing': return '#3fb950'; // Green
+      case 'sub-agent-execution': return '#f85149'; // Red
+      case 'completed': return '#3fb950'; // Green
+      default: return '#58a6ff';
+    }
+  };
+
+  const ledColor = getAgentColor();
+
+  // R2D2-style tilt angle (cube leans forward)
+  const tiltAngle = Math.PI / 6; // 30 degrees forward tilt
 
   return (
-    <mesh ref={meshRef} position={[0, 0.04, 0]} castShadow receiveShadow>
-      <boxGeometry args={[0.08, 0.08, 0.08]} />
-      <meshStandardMaterial
-        color={ledColor}
-        emissive={ledColor}
-        emissiveIntensity={0.5}
-        metalness={0.6}
-        roughness={0.2}
+    <group ref={groupRef} position={[0, 0, 0]}>
+      {/* Main cube body - tilted forward like R2D2 */}
+      <mesh
+        ref={cubeRef}
+        position={[0, 0.045, 0]}
+        rotation={[tiltAngle, 0, 0]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[0.08, 0.08, 0.08]} />
+        <meshStandardMaterial
+          color={ledColor}
+          emissive={ledColor}
+          emissiveIntensity={0.5}
+          metalness={0.6}
+          roughness={0.2}
+        />
+      </mesh>
+
+      {/* Left wheel */}
+      <mesh
+        position={[-0.035, 0.0163, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.0163, 0.0163, 0.01, 16]} />
+        <meshStandardMaterial
+          color="#1f2937"
+          metalness={0.8}
+          roughness={0.3}
+        />
+      </mesh>
+
+      {/* Right wheel */}
+      <mesh
+        position={[0.035, 0.0163, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.0163, 0.0163, 0.01, 16]} />
+        <meshStandardMaterial
+          color="#1f2937"
+          metalness={0.8}
+          roughness={0.3}
+        />
+      </mesh>
+
+      {/* Camera/eye on front - small sphere */}
+      <mesh
+        position={[0, 0.055, 0.045]}
+        rotation={[tiltAngle, 0, 0]}
+        castShadow
+      >
+        <sphereGeometry args={[0.008, 16, 16]} />
+        <meshStandardMaterial
+          color="#e74c3c"
+          emissive="#e74c3c"
+          emissiveIntensity={0.8}
+          metalness={0.9}
+          roughness={0.1}
+        />
+      </mesh>
+
+      {/* Camera lens glow effect */}
+      <pointLight
+        position={[0, 0.055, 0.05]}
+        color="#e74c3c"
+        intensity={0.3}
+        distance={0.15}
       />
-    </mesh>
+
+      {/* Agent activity indicator - animated rings around robot */}
+      {agentActivity && agentActivity.phase !== 'idle' && agentActivity.isLoading && (
+        <>
+          {/* Primary ring - pulsing */}
+          <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.055, 0.065, 32]} />
+            <meshBasicMaterial
+              color={ledColor}
+              transparent
+              opacity={0.8}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+
+          {/* Secondary ring - rotating */}
+          <group position={[0, 0.003, 0]} rotation={[0, 0, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.07, 0.075, 32]} />
+              <meshBasicMaterial
+                color={ledColor}
+                transparent
+                opacity={0.4}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          </group>
+
+          {/* Multiple agent indicators - small spheres orbiting */}
+          {Array.from({ length: Math.min(agentActivity.activeAgents, 5) }).map((_, i) => {
+            const angle = (i / agentActivity.activeAgents) * Math.PI * 2;
+            const radius = 0.08;
+            return (
+              <mesh
+                key={i}
+                position={[
+                  Math.cos(angle) * radius,
+                  0.005,
+                  Math.sin(angle) * radius
+                ]}
+              >
+                <sphereGeometry args={[0.005, 8, 8]} />
+                <meshStandardMaterial
+                  color={ledColor}
+                  emissive={ledColor}
+                  emissiveIntensity={1}
+                />
+              </mesh>
+            );
+          })}
+        </>
+      )}
+
+      {/* Movement indicator */}
+      {state && state.velocity.linear !== 0 && (
+        <mesh position={[0, 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.05, 0.053, 32]} />
+          <meshBasicMaterial
+            color="#3fb950"
+            transparent
+            opacity={0.6}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+    </group>
   );
 }
 
@@ -262,11 +416,27 @@ function CameraController({ preset, robotState }: { preset: string; robotState: 
   );
 }
 
+// Animated agent indicator component with rotation
+function AgentIndicators({ agentActivity }: { agentActivity?: AgentActivity }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (groupRef.current && agentActivity?.isLoading) {
+      groupRef.current.rotation.y += 0.02; // Rotate the agent spheres
+    }
+  });
+
+  if (!agentActivity || agentActivity.phase === 'idle') return null;
+
+  return <group ref={groupRef} />;
+}
+
 export default function RobotCanvas3D({
   robotState,
   floorMap,
   cameraPreset,
   onArenaClick,
+  agentActivity,
 }: RobotCanvas3DProps) {
   const handleCanvasClick = (event: THREE.Intersection) => {
     if (event.point && onArenaClick) {
@@ -306,7 +476,8 @@ export default function RobotCanvas3D({
       {floorMap.obstacles && <Obstacles obstacles={floorMap.obstacles} />}
       {floorMap.checkpoints && <Checkpoints checkpoints={floorMap.checkpoints} />}
       {floorMap.lines && <LineTrack lines={floorMap.lines} />}
-      <RobotCube state={robotState} />
+      <RobotCube state={robotState} agentActivity={agentActivity} />
+      <AgentIndicators agentActivity={agentActivity} />
 
       {/* Controls - Only enable for non-follow mode */}
       {cameraPreset !== 'follow' && (
