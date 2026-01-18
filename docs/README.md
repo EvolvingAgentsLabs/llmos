@@ -30,7 +30,7 @@ Think of these as recipes for building cool stuff:
 ## What You Can Do
 
 ### Without Any Hardware
-- Create virtual robots in your browser
+- Create virtual robots in the desktop app
 - Test obstacle avoidance
 - Try line following
 - Build maze solvers

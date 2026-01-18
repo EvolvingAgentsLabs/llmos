@@ -1,10 +1,28 @@
 # LLMos - Build AI Robots with Your Voice
 
-**Turn your words into working robots.**
+```
+    ___
+   /   \     "Turn your words into working robots!"
+  | o o |
+   \ ◡ /     LLMos: AI-Powered Robotics for Makers
+   |   |
+  _|___|_
+ |  ___  |
+ | |   | |    ┌──────────────────────────────────┐
+ |_|   |_|    │  💬 "Make a wall-avoiding robot" │
+  /     \     └──────────────────────────────────┘
+ /       \              ↓
+└─┘   └─┘         🤖 AI writes code
+                       ↓
+                  📦 Test in simulator
+                       ↓
+                  🔌 Upload to ESP32
+                       ↓
+                  🎉 Real robot!
+```
 
-LLMos lets you create AI-powered robots just by describing what you want them to do. No coding required (but you can if you want!). Build robots that avoid walls, follow lines, navigate mazes, and more.
-
-https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07
+**No coding required (but you can if you want!)**
+Build robots that avoid walls, follow lines, navigate mazes, and more.
 
 ## What Can You Build?
 
@@ -13,21 +31,42 @@ https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07
 - **Custom Tools**: Create your own apps and interfaces
 - **Interactive Dashboards**: Build control panels for your robots
 
-## Two Ways to Use LLMos
+## Desktop-First Experience
 
-1. **In Your Browser**: Just open a website - no installation needed
-2. **Desktop App**: Download for faster performance and more features
-
-Both work the same way. Your choice!
+LLMos is a **desktop application** built with Electron for the best performance and full hardware access:
+- **Native file system** for your robot projects
+- **Direct ESP32 flashing** without browser limitations
+- **Full serial port access** for debugging
+- **Faster compilation** using native AssemblyScript compiler
+- **Offline operation** - no internet required after setup
 
 ## How It Works (The Magic)
 
-1. **You describe what you want**: "Make a robot that avoids walls"
-2. **LLMos creates the code**: AI generates the program
-3. **Test in simulation**: See your robot run in a virtual world
-4. **Deploy to real hardware**: Upload to your ESP32 robot
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      🖥️  LLMos Desktop                          │
+│                                                                 │
+│  You: "Make a robot that avoids walls"                         │
+│   ↓                                                             │
+│  🤖 AI Agent analyzes request                                  │
+│   ↓                                                             │
+│  📝 Generates C code for ESP32                                 │
+│   ↓                                                             │
+│  ⚡ Compiles to binary                                         │
+│   ↓                                                             │
+│  ┌─────────────────┐        ┌─────────────────┐               │
+│  │  🎮 Simulator   │   OR   │  🔌 Real ESP32  │               │
+│  │                 │        │                 │               │
+│  │  Test first!    │   →    │  Flash & run!   │               │
+│  └─────────────────┘        └─────────────────┘               │
+│                                      ↓                          │
+│                              🤖 Robot moves!                    │
+└─────────────────────────────────────────────────────────────────┘
 
-Everything happens in your browser or on your computer. Your code never leaves your machine.
+✨ Everything happens on YOUR computer
+🔒 Your code never leaves your machine
+📡 No cloud, no internet required
+```
 
 ## Quick Start (5 Minutes)
 
@@ -40,14 +79,13 @@ You don't need a robot to get started! Try it with a virtual robot first:
 git clone https://github.com/EvolvingAgentsLabs/llmos
 cd llmos
 
-# 2. Install (one time only)
+# 2. Install dependencies (one time only)
 npm install
 
-# 3. Start LLMos
-npm run dev
+# 3. Start LLMos Desktop
+npm run electron:dev
 
-# 4. Open your browser
-# Go to http://localhost:3000
+# The desktop app will launch automatically
 ```
 
 Now type in the chat: **"Create a virtual robot that avoids walls"**
@@ -59,11 +97,28 @@ LLMos will:
 
 ### Ready for Real Hardware?
 
-Want to build a physical robot? You'll need:
+Want to build a physical robot? Here's what a simple ESP32 robot looks like:
 
+```
+        [Distance Sensor]
+             |||
+        ┌────┴┴┴────┐
+        │  ESP32-S3 │  ← Brain ($10)
+        │   ┌───┐   │
+        │   │USB│   │  ← Connect to computer
+        └───┴───┴───┘
+         │         │
+    ┌────┴─┐   ┌──┴────┐
+    │Motor │   │ Motor │  ← Wheels ($10)
+    └──────┘   └───────┘
+```
+
+**Shopping list:**
 - **ESP32 board** (about $10 online)
-- **Some motors and sensors** (optional)
+- **Some motors and sensors** (optional, ~$20)
 - **USB cable** to connect to your computer
+
+**Total cost**: $30-40 for a complete robot!
 
 See the [ESP32 Guide](docs/hardware/ESP32_GUIDE.md) for step-by-step instructions.
 
@@ -89,19 +144,31 @@ LLMos remembers what worked and learns from mistakes. Your robots get smarter ov
 Here's what happens when you say: "Create a wall-avoiding robot"
 
 ```
-You: "Make a robot that drives forward and turns away from walls"
-
-LLMos:
-✓ Creates virtual robot
-✓ Writes the program
-✓ Tests in simulation
-✓ Shows you the result
-
-Your robot now:
-- Drives forward when path is clear
-- Detects walls with sensors
-- Turns away from obstacles
-- Never crashes!
+┌─────────────────────────────────────────────────────────┐
+│ 💬 You: "Make a robot that avoids walls"               │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│ 🤖 LLMos AI Agent:                                      │
+│  ✓ Creates virtual robot                                │
+│  ✓ Writes the program                                   │
+│  ✓ Tests in simulation                                  │
+│  ✓ Ready to deploy!                                     │
+└─────────────────────────────────────────────────────────┘
+                         ↓
+              ┌──────────────────┐
+              │   Simulator      │
+              │                  │
+              │   🤖 →  🧱       │  Robot turns away!
+              │                  │
+              │   → → → →        │  Path clear!
+              └──────────────────┘
+                         ↓
+              Your robot now:
+              ✓ Drives forward when path is clear
+              ✓ Detects walls with sensors
+              ✓ Turns away from obstacles
+              ✓ Never crashes!
 ```
 
 The program is simple:
@@ -123,20 +190,24 @@ void update() {
 
 ## Cool Things You Can Build
 
-### Beginner Projects
-- **Blink Bot**: Make an LED blink in patterns
-- **Distance Detector**: Measure how far away objects are
-- **Light Show**: Create color patterns with RGB LEDs
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│   🟢 BEGINNER   │ 🟡 INTERMEDIATE │   🔴 ADVANCED   │
+├─────────────────┼─────────────────┼─────────────────┤
+│                 │                 │                 │
+│  💡 Blink Bot   │  ═══🤖═══      │  🤖  🤖  🤖     │
+│     * * *       │  Line Follower  │  Swarm Robots   │
+│                 │                 │                 │
+│  📏 Distance    │    🤖           │  📷🤖           │
+│     Detector    │   /│\           │  Camera Vision  │
+│                 │  Wall Avoider   │                 │
+│  🌈 Light       │                 │  📱→🤖          │
+│     Show        │  🤖→🔄→🚪       │  Remote Control │
+│                 │  Maze Solver    │                 │
+└─────────────────┴─────────────────┴─────────────────┘
+```
 
-### Intermediate Projects
-- **Line Follower**: Robot follows a black line on the floor
-- **Wall Avoider**: Robot navigates around obstacles
-- **Maze Solver**: Robot finds its way out of a maze
-
-### Advanced Projects
-- **Swarm Robots**: Multiple robots working together
-- **Camera Vision**: Robot recognizes and follows objects
-- **Remote Control**: Control your robot from anywhere
+**Start simple, build complex!**
 
 ## Getting Help
 
@@ -195,7 +266,7 @@ Don't have an ESP32 yet? Here's what to look for:
 ## What's Inside
 
 ### For Virtual Robots
-Everything works in your browser - no hardware needed:
+Test your ideas in simulation - no hardware needed:
 - Create robots in different environments
 - Test obstacle avoidance
 - Try line following
@@ -208,6 +279,7 @@ Connect to ESP32 hardware:
 - Flash LEDs
 - Make sounds
 - Take pictures (with camera module)
+- **One-click flashing** directly from the desktop app
 
 ## Next Steps
 
@@ -265,12 +337,12 @@ Free to use and modify (Apache 2.0 License).
 
 ```bash
 npm install
-npm run dev
+npm run electron:dev
 ```
 
 Then type: **"Create a robot that avoids walls"**
 
-Watch the magic happen!
+Watch the magic happen in your desktop app!
 
 ---
 
