@@ -52,6 +52,83 @@ The arena should have a figure-8 or complex track pattern. Compile and run in th
     category: 'Robotics + WASM',
   },
   {
+    title: '5m × 5m Obstacle Avoidance Challenge',
+    prompt: `Create a wall-avoiding robot in the standard 5m × 5m arena:
+
+Map: standard5x5Obstacles (11 circular obstacles)
+Goal: Navigate from (-2, -2) to (2, 2) without collisions
+
+Requirements:
+- Use distance sensors for obstacle detection
+- Implement reactive avoidance algorithm
+- Green LED when path clear, red when turning
+- Complete in under 90 seconds
+- Zero collisions
+
+Test in simulation first, then deploy to real ESP32 robot.`,
+    description: 'Navigate 5m arena with obstacles',
+    category: 'Simulation Challenge',
+  },
+  {
+    title: '5m × 5m Maze Solver',
+    prompt: `Program a robot to solve the standard 5m × 5m maze:
+
+Map: standard5x5Maze
+Start: (-2, -2) bottom-left corner
+Goal: (2, 2) top-right corner
+
+Requirements:
+- Wall-following or mapping algorithm
+- Distance sensors for wall detection
+- LED changes color as robot progresses
+- Find optimal path
+- Complete in under 180 seconds
+
+Code should work in both simulation and real robot.`,
+    description: 'Autonomous maze navigation',
+    category: 'Advanced Challenge',
+  },
+  {
+    title: '5m × 5m Line Following Track',
+    prompt: `Build a line-following robot for the standard oval track:
+
+Map: standard5x5LineTrack (3.6m × 2.4m oval)
+Goal: Complete 3 laps staying on line
+
+Requirements:
+- Use QTR-5RC line sensor array (5 sensors)
+- PID control for smooth following
+- Minimize line deviation (< 5cm)
+- LED shows: green (on track), yellow (recovering), red (lost)
+- Average lap time under 40 seconds
+
+Test in simulator, measure sim-to-real accuracy.`,
+    description: 'Precision line following challenge',
+    category: 'Sensor Fusion',
+  },
+  {
+    title: '5m × 5m Delivery Mission',
+    prompt: `Create a sequential waypoint navigation robot:
+
+Map: standard5x5Delivery
+Waypoints (in order):
+1. (2.0, -2.0) - Bottom-right
+2. (2.0, 2.0) - Top-right
+3. (-2.0, 2.0) - Top-left
+4. (-2.0, -2.0) - Bottom-left
+
+Requirements:
+- Navigate to each waypoint in sequence
+- Avoid center obstacle (0.4m radius)
+- Pass within 30cm of each waypoint
+- LED blinks when reaching waypoint
+- Complete all 4 deliveries in under 120 seconds
+
+Build standard robot (~$80) and test in real 5m × 5m arena.`,
+    description: 'Multi-point autonomous navigation',
+    category: 'Path Planning',
+  },
+  {
     title: 'ESP32-S3 Robot Monitor',
     prompt: `Create a real-time monitoring dashboard for a physical ESP32-S3 2-wheel robot:
 - WebSocket connection to robot's IP address for live telemetry

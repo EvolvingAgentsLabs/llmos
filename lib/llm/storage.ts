@@ -57,6 +57,8 @@ export const LLMStorage = {
   saveModel(modelId: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEYS.MODEL, modelId);
+      // Dispatch custom event for same-tab synchronization
+      window.dispatchEvent(new CustomEvent('llmos:model-changed', { detail: { modelId } }));
     }
   },
 

@@ -67,7 +67,7 @@ export default function Home() {
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('fluid'); // Default to Fluid layout
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('adaptive'); // Default to Adaptive layout (Robot Mode)
   const [bootProgress, setBootProgress] = useState<BootProgress>({
     stage: {
       name: 'init',

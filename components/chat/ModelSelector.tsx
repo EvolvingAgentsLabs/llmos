@@ -30,6 +30,25 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
     if (savedCustomModel && !customModel) {
       setCustomModel(savedCustomModel);
     }
+
+    // Listen for model changes from other components
+    const handleModelChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ modelId: string }>;
+      const newModelId = customEvent.detail.modelId;
+      setSelectedModel(newModelId);
+      // Check if it's a custom model
+      if (!AVAILABLE_MODELS[newModelId]) {
+        setIsCustomMode(true);
+        setCustomModel(newModelId);
+      } else {
+        setIsCustomMode(false);
+      }
+    };
+
+    window.addEventListener('llmos:model-changed', handleModelChange);
+    return () => {
+      window.removeEventListener('llmos:model-changed', handleModelChange);
+    };
   }, []);
 
   const handleModelSelect = (modelId: string) => {

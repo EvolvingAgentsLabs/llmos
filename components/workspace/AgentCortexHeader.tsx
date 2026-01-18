@@ -62,7 +62,7 @@ export default function AgentCortexHeader() {
   const isActive = state.agentState !== 'idle' && state.agentState !== 'success';
   const colors = stateColors[state.agentState];
 
-  // Load saved model
+  // Load saved model and listen for changes
   useEffect(() => {
     const currentModel = LLMStorage.getModel();
     if (currentModel) {
@@ -76,6 +76,25 @@ export default function AgentCortexHeader() {
     if (savedCustomModel && !customModel) {
       setCustomModel(savedCustomModel);
     }
+
+    // Listen for model changes from other components (e.g., chat panel model selector)
+    const handleModelChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ modelId: string }>;
+      const newModelId = customEvent.detail.modelId;
+      setSelectedModel(newModelId);
+      // Check if it's a custom model
+      if (!AVAILABLE_MODELS[newModelId]) {
+        setIsCustomMode(true);
+        setCustomModel(newModelId);
+      } else {
+        setIsCustomMode(false);
+      }
+    };
+
+    window.addEventListener('llmos:model-changed', handleModelChange);
+    return () => {
+      window.removeEventListener('llmos:model-changed', handleModelChange);
+    };
   }, []);
 
   // Pulse animation for active states
