@@ -29,23 +29,23 @@ Open your terminal (Command Prompt on Windows) and type:
 git clone https://github.com/EvolvingAgentsLabs/llmos
 cd llmos
 
-# Install it (this takes a few minutes)
+# Install dependencies (this takes a few minutes)
 npm install
 
-# Start LLMos
-npm run dev
+# Start LLMos Desktop
+npm run electron:dev
 ```
 
-You should see something like:
+You should see:
 ```
-Ready! Open http://localhost:3000
+Starting Electron app...
 ```
 
-## Step 2: Open LLMos
+## Step 2: LLMos Desktop Opens
 
-1. Open your web browser
-2. Go to: http://localhost:3000
-3. You should see a chat interface
+1. The desktop app launches automatically
+2. You'll see the LLMos Desktop window
+3. You'll see a chat interface ready to use
 
 ## Step 3: Create Your First Robot
 
@@ -173,12 +173,12 @@ Ideas for your next project:
 ## Troubleshooting
 
 ### LLMos Won't Start
-**Problem**: Error when running `npm run dev`
+**Problem**: Error when running `npm run electron:dev`
 **Fix**: Make sure you have Node.js installed. Download from nodejs.org
 
 ### Can't See the Robot
 **Problem**: Robot created but not visible
-**Fix**: Refresh the browser page and try again
+**Fix**: Restart the desktop app (Cmd+R on Mac, Ctrl+R on Windows)
 
 ### Robot Doesn't Move
 **Problem**: Commands sent but robot stays still

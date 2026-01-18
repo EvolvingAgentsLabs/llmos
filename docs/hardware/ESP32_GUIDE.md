@@ -66,13 +66,13 @@ Let's make sure your ESP32 works:
 ### Step 1: Connect ESP32
 
 1. Plug ESP32 into your computer with USB cable
-2. Open LLMos (http://localhost:3000)
+2. Open LLMos Desktop (run `npm run electron:dev` if not already open)
 3. In the chat, type:
 ```
 Connect to my ESP32 device
 ```
 
-Your browser will show a list of devices. Pick the one that says "CP2102" or "CH340" or "USB Serial".
+The app will show a list of available serial ports. Pick the one that says "CP2102" or "CH340" or "USB Serial".
 
 ### Step 2: Test It
 

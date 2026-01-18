@@ -13,12 +13,14 @@ https://github.com/user-attachments/assets/f7a17e3f-42c8-47ae-a8f1-0f9f67490e07
 - **Custom Tools**: Create your own apps and interfaces
 - **Interactive Dashboards**: Build control panels for your robots
 
-## Two Ways to Use LLMos
+## Desktop-First Experience
 
-1. **In Your Browser**: Just open a website - no installation needed
-2. **Desktop App**: Download for faster performance and more features
-
-Both work the same way. Your choice!
+LLMos is a **desktop application** built with Electron for the best performance and full hardware access:
+- **Native file system** for your robot projects
+- **Direct ESP32 flashing** without browser limitations
+- **Full serial port access** for debugging
+- **Faster compilation** using native AssemblyScript compiler
+- **Offline operation** - no internet required after setup
 
 ## How It Works (The Magic)
 
@@ -27,7 +29,7 @@ Both work the same way. Your choice!
 3. **Test in simulation**: See your robot run in a virtual world
 4. **Deploy to real hardware**: Upload to your ESP32 robot
 
-Everything happens in your browser or on your computer. Your code never leaves your machine.
+Everything happens on your computer. Your code never leaves your machine. No cloud, no internet required.
 
 ## Quick Start (5 Minutes)
 
@@ -40,14 +42,13 @@ You don't need a robot to get started! Try it with a virtual robot first:
 git clone https://github.com/EvolvingAgentsLabs/llmos
 cd llmos
 
-# 2. Install (one time only)
+# 2. Install dependencies (one time only)
 npm install
 
-# 3. Start LLMos
-npm run dev
+# 3. Start LLMos Desktop
+npm run electron:dev
 
-# 4. Open your browser
-# Go to http://localhost:3000
+# The desktop app will launch automatically
 ```
 
 Now type in the chat: **"Create a virtual robot that avoids walls"**
@@ -195,7 +196,7 @@ Don't have an ESP32 yet? Here's what to look for:
 ## What's Inside
 
 ### For Virtual Robots
-Everything works in your browser - no hardware needed:
+Test your ideas in simulation - no hardware needed:
 - Create robots in different environments
 - Test obstacle avoidance
 - Try line following
@@ -208,6 +209,7 @@ Connect to ESP32 hardware:
 - Flash LEDs
 - Make sounds
 - Take pictures (with camera module)
+- **One-click flashing** directly from the desktop app
 
 ## Next Steps
 
@@ -265,12 +267,12 @@ Free to use and modify (Apache 2.0 License).
 
 ```bash
 npm install
-npm run dev
+npm run electron:dev
 ```
 
 Then type: **"Create a robot that avoids walls"**
 
-Watch the magic happen!
+Watch the magic happen in your desktop app!
 
 ---
 
