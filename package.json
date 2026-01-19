@@ -19,7 +19,7 @@
     "electron:build:win": "npm run build && npm run electron:compile && electron-builder --win",
     "electron:build:mac": "npm run build && npm run electron:compile && electron-builder --mac",
     "electron:build:linux": "npm run build && npm run electron:compile && electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "node -e \"if(!process.env.VERCEL){require('child_process').execSync('electron-builder install-app-deps',{stdio:'inherit'})}\""
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.0",

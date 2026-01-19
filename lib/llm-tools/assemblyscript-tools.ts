@@ -12,7 +12,7 @@
  */
 
 import { ToolDefinition, ToolResult } from './file-tools';
-import type { ElectronASCAPI, ASCCompileResult, ASCCompileOptions } from '../../electron/types';
+import type { ElectronASCAPI, ASCCompileResult, ASCCompileOptions } from '../types/asc-types';
 import {
   getBrowserASCCompiler,
   BrowserASCCompileResult,

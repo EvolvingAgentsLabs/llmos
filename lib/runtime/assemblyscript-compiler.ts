@@ -613,14 +613,16 @@ export class BrowserAssemblyScriptCompiler {
       // Extract exports from WAT
       const exports = this.extractExports(textOutput);
 
-      console.log(`[Browser-ASC] Compilation successful: ${wasmBinary.length} bytes in ${compilationTime}ms`);
+      // Type assertion: after the early return above, wasmBinary is guaranteed to be non-null
+      const binary = wasmBinary as Uint8Array;
+      console.log(`[Browser-ASC] Compilation successful: ${binary.length} bytes in ${compilationTime}ms`);
 
       return {
         success: true,
-        wasmBinary,
-        wasmBase64: this.uint8ArrayToBase64(wasmBinary),
+        wasmBinary: binary,
+        wasmBase64: this.uint8ArrayToBase64(binary),
         textOutput,
-        size: wasmBinary.length,
+        size: binary.length,
         compilationTime,
         exports,
       };
