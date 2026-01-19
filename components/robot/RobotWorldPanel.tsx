@@ -143,14 +143,12 @@ export default function RobotWorldPanel({
 
   // Simulation loop - handle both local simulator and Device Manager modes
   useEffect(() => {
-    // If using Device Manager, forward start/stop commands there
+    // If using Device Manager, the device is controlled externally (e.g., by RobotAgentPanel)
+    // We only send start/stop commands when the user explicitly clicks play/pause in THIS panel
+    // The device may already be running from the agent, so we don't stop it on mount
     if (deviceId) {
-      const manager = getDeviceManager();
-      if (isRunning && mode === 'simulation') {
-        manager.sendCommand(deviceId, { type: 'start' });
-      } else {
-        manager.sendCommand(deviceId, { type: 'stop' });
-      }
+      // Don't send any commands here - the device is controlled by RobotAgentPanel
+      // This panel just passively receives telemetry updates
       return;
     }
 
