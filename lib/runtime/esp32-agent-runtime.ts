@@ -451,7 +451,9 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       // STEP 3: Parse and execute tool calls (LOCAL on ESP32)
       // ═══════════════════════════════════════════════════════════════════
+      console.log('[ESP32Agent] Raw LLM response:', llmResponse);
       const toolCalls = this.parseToolCalls(llmResponse);
+      console.log('[ESP32Agent] Parsed tool calls:', toolCalls);
       this.state.lastToolCalls = [];
 
       for (const { tool, args } of toolCalls) {
@@ -590,14 +592,19 @@ Based on these readings, decide what action to take next.`;
     // Extract JSON objects by properly tracking brace nesting
     const jsonObjects = this.extractJsonObjects(response);
 
+    console.log('[parseToolCalls] Found JSON objects:', jsonObjects.length, jsonObjects);
+
     for (const jsonStr of jsonObjects) {
       try {
         const parsed = JSON.parse(jsonStr);
+        console.log('[parseToolCalls] Parsed object:', parsed);
+
         if (parsed.tool && typeof parsed.tool === 'string') {
           calls.push({
             tool: parsed.tool,
             args: parsed.args || {},
           });
+          console.log('[parseToolCalls] Added tool call:', parsed.tool);
         }
         // Also handle {"tool_calls": [...]} format
         if (Array.isArray(parsed.tool_calls)) {
@@ -607,14 +614,16 @@ Based on these readings, decide what action to take next.`;
                 tool: call.tool,
                 args: call.args || {},
               });
+              console.log('[parseToolCalls] Added tool_calls item:', call.tool);
             }
           }
         }
-      } catch {
-        // Skip invalid JSON
+      } catch (e) {
+        console.log('[parseToolCalls] JSON parse error for:', jsonStr.substring(0, 100), e);
       }
     }
 
+    console.log('[parseToolCalls] Total calls extracted:', calls.length);
     return calls;
   }
 
