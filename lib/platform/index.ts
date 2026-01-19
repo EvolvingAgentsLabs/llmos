@@ -14,7 +14,7 @@ import type {
   ASCCompileOptions,
   SerialPortInfo,
   SerialPortOptions,
-} from '../../electron/types';
+} from '../types/asc-types';
 
 // Platform type (browser or electron)
 export type PlatformType = 'browser' | 'electron';

@@ -18,7 +18,7 @@ import type {
   ASCCompileOptions,
   SerialPortInfo,
   SerialPortOptions,
-} from '../../electron/types';
+} from '../types/asc-types';
 
 /**
  * Check if running in Electron
