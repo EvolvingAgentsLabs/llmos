@@ -493,7 +493,7 @@ function Checkpoints({
               onClick={(e) => { e.stopPropagation(); onSelect(idx, checkpoint); }}
               onPointerOver={() => document.body.style.cursor = 'pointer'}
               onPointerOut={() => document.body.style.cursor = 'auto'}
-              userData={{ type: 'checkpoint', name: checkpoint.label || `Checkpoint ${idx + 1}` }}
+              userData={{ type: 'checkpoint', name: `Checkpoint ${idx + 1}` }}
             >
               <circleGeometry args={[0.15, 16]} />
               <meshStandardMaterial
@@ -844,9 +844,8 @@ export default function RobotCanvas3D({
   const handleCheckpointClick = useCallback((index: number, checkpoint: FloorMap['checkpoints'][0]) => {
     const info: SelectedObjectInfo = {
       type: 'checkpoint',
-      name: checkpoint.label || `Checkpoint ${index + 1}`,
+      name: `Checkpoint ${index + 1}`,
       position: { x: checkpoint.x, y: 0.05, z: checkpoint.y },
-      data: checkpoint.label ? { label: checkpoint.label } : undefined,
     };
     setSelectedObject(info);
     setSelectedType({ type: 'checkpoint', index });
