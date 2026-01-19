@@ -242,22 +242,30 @@ export default function RobotWorldPanel({
 
         {/* Right: Camera & Settings */}
         <div className="flex items-center gap-2">
-          {/* Camera Presets */}
+          {/* Camera Presets - Click to reset camera to preset view */}
           <div className="flex items-center gap-1 bg-[#21262d] rounded-lg p-0.5">
-            {(['top-down', 'isometric', 'follow', 'side'] as CameraPreset[]).map((preset) => (
-              <button
-                key={preset}
-                onClick={() => handleCameraPreset(preset)}
-                className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-                  cameraPreset === preset
-                    ? 'bg-[#58a6ff] text-white'
-                    : 'text-[#8b949e] hover:text-[#e6edf3]'
-                }`}
-                title={`${preset} view`}
-              >
-                {preset.split('-')[0]}
-              </button>
-            ))}
+            {(['top-down', 'isometric', 'follow', 'side'] as CameraPreset[]).map((preset) => {
+              const labels: Record<CameraPreset, string> = {
+                'top-down': 'Top',
+                'isometric': 'Iso',
+                'follow': 'Follow',
+                'side': 'Side',
+              };
+              return (
+                <button
+                  key={preset}
+                  onClick={() => handleCameraPreset(preset)}
+                  className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
+                    cameraPreset === preset
+                      ? 'bg-[#58a6ff] text-white'
+                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]'
+                  }`}
+                  title={`Reset camera to ${preset} view (use mouse to orbit/pan/zoom)`}
+                >
+                  {labels[preset]}
+                </button>
+              );
+            })}
           </div>
 
           <button
