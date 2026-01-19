@@ -360,20 +360,24 @@ function Checkpoints({ checkpoints }: { checkpoints: FloorMap['checkpoints'] }) 
 }
 
 // Line track rendering
-function LineTrack({ lines }: { lines: FloorMap['lines'] }) {
+function LineTrackRenderer({ lines }: { lines: FloorMap['lines'] }) {
   if (!lines || lines.length === 0) return null;
 
   return (
     <group>
-      {lines.map((line, idx) => (
-        <mesh
-          key={idx}
-          position={[line.x, 0.002, line.y]}
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <circleGeometry args={[0.015, 8]} />
-          <meshBasicMaterial color="#000000" />
-        </mesh>
+      {lines.map((line, lineIdx) => (
+        <group key={lineIdx}>
+          {line.points.map((point, pointIdx) => (
+            <mesh
+              key={`${lineIdx}-${pointIdx}`}
+              position={[point.x, 0.002, point.y]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <circleGeometry args={[line.width / 2 || 0.015, 8]} />
+              <meshBasicMaterial color={line.color || "#000000"} />
+            </mesh>
+          ))}
+        </group>
       ))}
     </group>
   );
@@ -536,7 +540,7 @@ export default function RobotCanvas3D({
       <Walls walls={floorMap.walls} />
       {floorMap.obstacles && <Obstacles obstacles={floorMap.obstacles} />}
       {floorMap.checkpoints && <Checkpoints checkpoints={floorMap.checkpoints} />}
-      {floorMap.lines && <LineTrack lines={floorMap.lines} />}
+      {floorMap.lines && <LineTrackRenderer lines={floorMap.lines} />}
       <RobotCube state={robotState} agentActivity={agentActivity} />
       <AgentIndicators agentActivity={agentActivity} />
 

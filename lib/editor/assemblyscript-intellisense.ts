@@ -498,11 +498,16 @@ export function configureMonacoForAssemblyScript(monaco: typeof Monaco): void {
   // Register AssemblyScript as a language (based on TypeScript)
   monaco.languages.register({ id: 'assemblyscript' });
 
+  // Access TypeScript language service (type assertion needed for older @types/monaco-editor)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const typescript = (monaco.languages as any).typescript;
+  if (!typescript?.typescriptDefaults) return;
+
   // Configure TypeScript compiler options for AssemblyScript
-  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-    target: monaco.languages.typescript.ScriptTarget.ES2020,
-    module: monaco.languages.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+  typescript.typescriptDefaults.setCompilerOptions({
+    target: typescript.ScriptTarget.ES2020,
+    module: typescript.ModuleKind.ESNext,
+    moduleResolution: typescript.ModuleResolutionKind.NodeJs,
     allowNonTsExtensions: true,
     noEmit: true,
     strict: false,
@@ -511,14 +516,14 @@ export function configureMonacoForAssemblyScript(monaco: typeof Monaco): void {
   });
 
   // Add AssemblyScript type definitions
-  monaco.languages.typescript.typescriptDefaults.addExtraLib(
+  typescript.typescriptDefaults.addExtraLib(
     ASSEMBLYSCRIPT_TYPE_DEFS,
     'assemblyscript.d.ts'
   );
 
   // Add Robot4 API definitions
   const robot4TypeDefs = generateRobot4TypeDefinitions();
-  monaco.languages.typescript.typescriptDefaults.addExtraLib(
+  typescript.typescriptDefaults.addExtraLib(
     robot4TypeDefs,
     'robot4.d.ts'
   );
