@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen } from 'lucide-react';
+import RobotAgentPanel from '../robot/RobotAgentPanel';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare } from 'lucide-react';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 
 /**
@@ -45,6 +46,8 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const [showChat, setShowChat] = useState(true);
   const [currentMap, setCurrentMap] = useState('standard5x5Empty');
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
+  const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent'>('agent');
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
 
   // File viewer state
   const [viewMode, setViewMode] = useState<'agents' | 'files'>('agents');
@@ -498,33 +501,73 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
       <div className="flex-1 flex flex-col min-w-0">
         <RobotWorldPanel
           currentMap={currentMap}
+          deviceId={activeDeviceId}
           onRobotClick={handleRobotClick}
           onArenaClick={handleArenaClick}
           agentActivity={agentActivity}
         />
       </div>
 
-      {/* Right Sidebar: Chat (Programs Robot) */}
+      {/* Right Sidebar: Chat / Robot Agent Panel */}
       {showChat && (
         <div className="w-96 flex flex-col border-l border-[#30363d] bg-[#0d1117] flex-shrink-0">
           {/* Header */}
           <div className="px-3 py-2 border-b border-[#30363d] bg-[#161b22] flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <FileCode className="w-4 h-4 text-[#3fb950]" />
-              <span className="text-xs font-semibold text-[#e6edf3]">AI Agent Creator</span>
+              {rightPanelMode === 'chat' ? (
+                <FileCode className="w-4 h-4 text-[#3fb950]" />
+              ) : (
+                <Bot className="w-4 h-4 text-[#58a6ff]" />
+              )}
+              <span className="text-xs font-semibold text-[#e6edf3]">
+                {rightPanelMode === 'chat' ? 'AI Agent Creator' : 'Robot AI Agent'}
+              </span>
             </div>
             <button
               onClick={toggleChat}
               className="w-6 h-6 rounded hover:bg-[#21262d] flex items-center justify-center transition-colors"
-              title="Collapse chat"
+              title="Collapse panel"
             >
               <ChevronRight className="w-3.5 h-3.5 text-[#8b949e]" />
             </button>
           </div>
 
-          {/* Chat Panel */}
+          {/* Mode Switcher Tabs */}
+          <div className="flex border-b border-[#30363d] bg-[#0d1117]">
+            <button
+              onClick={() => setRightPanelMode('agent')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                rightPanelMode === 'agent'
+                  ? 'text-[#58a6ff] border-b-2 border-[#58a6ff] bg-[#161b22]'
+                  : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              Run Agent
+            </button>
+            <button
+              onClick={() => setRightPanelMode('chat')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                rightPanelMode === 'chat'
+                  ? 'text-[#3fb950] border-b-2 border-[#3fb950] bg-[#161b22]'
+                  : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Create Agent
+            </button>
+          </div>
+
+          {/* Panel Content */}
           <div className="flex-1 overflow-hidden">
-            <ChatPanel activeVolume={activeVolume} />
+            {rightPanelMode === 'chat' ? (
+              <ChatPanel activeVolume={activeVolume} />
+            ) : (
+              <RobotAgentPanel
+                deviceId={activeDeviceId || undefined}
+                onDeviceCreated={(deviceId) => setActiveDeviceId(deviceId)}
+              />
+            )}
           </div>
         </div>
       )}

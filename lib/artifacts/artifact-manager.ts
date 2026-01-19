@@ -28,7 +28,95 @@ export class ArtifactManager {
     // Load artifacts from localStorage
     this.loadFromStorage();
 
+    // Load system agents from public folder
+    await this.loadSystemAgents();
+
     this.initialized = true;
+  }
+
+  /**
+   * Load system agents from /public/system/agents/
+   */
+  private async loadSystemAgents(): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    // Known system agents
+    const systemAgents = [
+      'RobotAIAgent.md',
+      'SystemAgent.md',
+      'PlanningAgent.md',
+      'PatternMatcherAgent.md',
+      'UXDesigner.md',
+      'ProjectAgentPlanner.md',
+      'HardwareControlAgent.md',
+      'MutationAgent.md',
+      'LensSelectorAgent.md',
+      'MemoryAnalysisAgent.md',
+      'MemoryConsolidationAgent.md',
+      'AppletDebuggerAgent.md',
+      'ExecutionStrategyAgent.md',
+    ];
+
+    for (const fileName of systemAgents) {
+      try {
+        // Check if this agent is already loaded
+        const existingAgent = this.getAll().find(
+          (a) => a.volume === 'system' && a.type === 'agent' && a.filePath === `/system/agents/${fileName}`
+        );
+        if (existingAgent) continue;
+
+        // Fetch from public folder
+        const response = await fetch(`/system/agents/${fileName}`);
+        if (!response.ok) continue;
+
+        const content = await response.text();
+
+        // Parse frontmatter to get agent metadata
+        const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+        let name = fileName.replace('.md', '');
+        let description = '';
+        let id = name.toLowerCase().replace(/\s+/g, '-');
+
+        if (frontmatterMatch) {
+          const frontmatter = frontmatterMatch[1];
+          const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
+          const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
+          const idMatch = frontmatter.match(/^id:\s*(.+)$/m);
+
+          if (nameMatch) name = nameMatch[1].trim();
+          if (descMatch) description = descMatch[1].trim();
+          if (idMatch) id = idMatch[1].trim();
+        }
+
+        // Create artifact for the system agent
+        const now = new Date().toISOString();
+        const artifact: Artifact = {
+          id: `system-agent-${id}`,
+          name,
+          type: 'agent',
+          volume: 'system',
+          status: 'committed',
+          createdAt: now,
+          updatedAt: now,
+          createdBy: 'system',
+          description,
+          codeView: content,
+          filePath: `/system/agents/${fileName}`,
+          tags: ['robot', 'hardware', 'ai-agent'].filter((tag) =>
+            fileName.toLowerCase().includes('robot') || fileName.toLowerCase().includes('hardware')
+              ? true
+              : tag !== 'robot' && tag !== 'hardware'
+          ),
+        };
+
+        this.artifacts.set(artifact.id, artifact);
+      } catch (error) {
+        console.warn(`Failed to load system agent ${fileName}:`, error);
+      }
+    }
+
+    // Save loaded agents
+    this.saveToStorage();
   }
 
   /**

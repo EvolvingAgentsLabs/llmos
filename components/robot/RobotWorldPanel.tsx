@@ -50,6 +50,7 @@ interface AgentActivity {
 
 interface RobotWorldPanelProps {
   currentMap?: string; // e.g., 'standard5x5Empty'
+  deviceId?: string | null; // Optional device ID to sync with robot agent
   onRobotClick?: () => void;
   onArenaClick?: (x: number, y: number) => void;
   agentActivity?: AgentActivity;
@@ -57,6 +58,7 @@ interface RobotWorldPanelProps {
 
 export default function RobotWorldPanel({
   currentMap = 'standard5x5Empty',
+  deviceId,
   onRobotClick,
   onArenaClick,
   agentActivity,
