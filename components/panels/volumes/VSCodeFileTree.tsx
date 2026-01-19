@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { getVFS } from '@/lib/virtual-fs';
+import { initializeSystemVolume } from '@/lib/volumes/system-volume-loader';
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 
@@ -119,86 +120,110 @@ export default function VSCodeFileTree({
     name: string;
   } | null>(null);
 
-  // Load volumes from API and VFS on mount
+  // Load all volumes from VFS (client-side only)
   useEffect(() => {
-    const loadAllVolumes = async () => {
+    const loadAllVolumesFromVFS = async () => {
       setIsLoading(true);
       try {
-        // Fetch system and team volumes from API
-        const response = await fetch('/api/volumes');
-        const data = await response.json();
+        // First, ensure system volume is loaded into VFS
+        await initializeSystemVolume();
 
-        if (data.success && data.volumes) {
-          // Get VFS files for user volume
-          const vfs = getVFS();
-          const allFiles = vfs.getAllFiles();
-          const vfsTree = buildVFSTree(allFiles);
+        // Now load all volumes from VFS
+        const vfs = getVFS();
+        const allFiles = vfs.getAllFiles();
 
-          // Merge API volumes with VFS user volume
-          const newTree = data.volumes.map((volume: TreeNode) => {
-            if (volume.id === 'user') {
-              return {
-                ...volume,
-                children: vfsTree,
-              };
-            }
-            return volume;
-          });
+        // Build trees for each volume
+        const systemFiles = allFiles.filter(f => f.path.startsWith('system/'));
+        const teamFiles = allFiles.filter(f => f.path.startsWith('team/'));
+        const userFiles = allFiles.filter(f => f.path.startsWith('user/'));
 
-          setTreeData(newTree);
-        }
+        const systemTree = buildVFSTree(systemFiles, 'system');
+        const teamTree = buildVFSTree(teamFiles, 'team');
+        const userTree = buildVFSTree(userFiles, 'user');
+
+        setTreeData([
+          {
+            id: 'system',
+            name: 'System',
+            type: 'volume',
+            path: '/volumes/system',
+            metadata: { volume: 'system', readonly: true },
+            children: systemTree,
+          },
+          {
+            id: 'team',
+            name: 'Team',
+            type: 'volume',
+            path: '/volumes/team',
+            metadata: { volume: 'team' },
+            children: teamTree,
+          },
+          {
+            id: 'user',
+            name: 'User',
+            type: 'volume',
+            path: '/volumes/user',
+            metadata: { volume: 'user' },
+            children: userTree,
+          },
+        ]);
       } catch (error) {
-        console.error('Failed to load volumes from API:', error);
-        // Fallback to VFS-only loading
-        loadVFSOnly();
+        console.error('Failed to load volumes from VFS:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    const loadVFSOnly = () => {
-      try {
-        const vfs = getVFS();
-        const allFiles = vfs.getAllFiles();
-        const vfsTree = buildVFSTree(allFiles);
+    loadAllVolumesFromVFS();
 
-        setTreeData(prev => {
-          const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
-          const userVolume = newTree.find(v => v.id === 'user');
-          if (userVolume) {
-            userVolume.children = vfsTree;
-          }
-          return newTree;
-        });
-      } catch (error) {
-        console.error('Failed to load VFS files:', error);
-      }
-    };
-
-    loadAllVolumes();
-
-    // Refresh VFS every 2 seconds (API data is static, no need to refetch)
+    // Refresh VFS every 2 seconds to pick up changes
     const interval = setInterval(() => {
       const vfs = getVFS();
       const allFiles = vfs.getAllFiles();
-      const vfsTree = buildVFSTree(allFiles);
 
-      setTreeData(prev => {
-        const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
-        const userVolume = newTree.find(v => v.id === 'user');
-        if (userVolume) {
-          userVolume.children = vfsTree;
-        }
-        return newTree;
-      });
+      const systemFiles = allFiles.filter(f => f.path.startsWith('system/'));
+      const teamFiles = allFiles.filter(f => f.path.startsWith('team/'));
+      const userFiles = allFiles.filter(f => f.path.startsWith('user/'));
+
+      const systemTree = buildVFSTree(systemFiles, 'system');
+      const teamTree = buildVFSTree(teamFiles, 'team');
+      const userTree = buildVFSTree(userFiles, 'user');
+
+      setTreeData([
+        {
+          id: 'system',
+          name: 'System',
+          type: 'volume',
+          path: '/volumes/system',
+          metadata: { volume: 'system', readonly: true },
+          children: systemTree,
+        },
+        {
+          id: 'team',
+          name: 'Team',
+          type: 'volume',
+          path: '/volumes/team',
+          metadata: { volume: 'team' },
+          children: teamTree,
+        },
+        {
+          id: 'user',
+          name: 'User',
+          type: 'volume',
+          path: '/volumes/user',
+          metadata: { volume: 'user' },
+          children: userTree,
+        },
+      ]);
     }, 2000);
 
     return () => clearInterval(interval);
   }, [activeVolume]);
 
-  // Build tree from VFS files
-  const buildVFSTree = (files: any[]): TreeNode[] => {
+  // Build tree from VFS files for a specific volume
+  const buildVFSTree = (files: any[], volumeName?: string): TreeNode[] => {
     const nodeMap = new Map<string, TreeNode>();
+    const volumePrefix = volumeName ? `${volumeName}/` : '';
 
     // Helper to ensure a directory exists
     const ensureDirectory = (path: string): TreeNode => {
@@ -209,12 +234,20 @@ export default function VSCodeFileTree({
       const parts = path.split('/');
       const name = parts[parts.length - 1];
 
+      // Determine if this is a readonly system folder
+      const isSystem = volumeName === 'system';
+      const parentDir = parts.length > 1 ? parts[parts.length - 2] : '';
+
       const node: TreeNode = {
-        id: `vfs-dir-${path}`,
+        id: `vfs-dir-${volumeName}-${path}`,
         name,
         type: 'folder',
-        path,
+        path: `/volumes/${volumeName}/${path}`,
         children: [],
+        metadata: {
+          volume: volumeName as 'system' | 'team' | 'user',
+          readonly: isSystem,
+        },
       };
 
       nodeMap.set(path, node);
@@ -233,7 +266,12 @@ export default function VSCodeFileTree({
 
     // Process all files
     files.forEach(file => {
-      const parts = file.path.split('/');
+      // Strip volume prefix from path (e.g., "system/agents/foo.md" -> "agents/foo.md")
+      const relativePath = volumeName && file.path.startsWith(volumePrefix)
+        ? file.path.slice(volumePrefix.length)
+        : file.path;
+
+      const parts = relativePath.split('/');
 
       // Ensure parent directories exist
       if (parts.length > 1) {
@@ -241,14 +279,24 @@ export default function VSCodeFileTree({
         ensureDirectory(dirPath);
       }
 
+      // Determine file type based on parent directory
+      const parentDir = parts.length > 1 ? parts[parts.length - 2] : '';
+      let fileType: string | undefined;
+      if (parentDir === 'agents') fileType = 'agent';
+      else if (parentDir === 'tools') fileType = 'tool';
+      else if (parentDir === 'skills') fileType = 'skill';
+
       // Create file node
       const fileName = parts[parts.length - 1];
       const fileNode: TreeNode = {
-        id: `vfs-file-${file.path}`,
+        id: `vfs-file-${volumeName}-${relativePath}`,
         name: fileName,
         type: 'file',
-        path: file.path,
+        path: `/volumes/${volumeName}/${relativePath}`,
         metadata: {
+          volume: volumeName as 'system' | 'team' | 'user',
+          readonly: volumeName === 'system',
+          fileType,
           size: `${(file.size / 1024).toFixed(1)} KB`,
           modified: new Date(file.modified).toLocaleString(),
         },
@@ -263,7 +311,7 @@ export default function VSCodeFileTree({
         }
       } else {
         // Root level file
-        nodeMap.set(file.path, fileNode as any);
+        nodeMap.set(relativePath, fileNode as any);
       }
     });
 

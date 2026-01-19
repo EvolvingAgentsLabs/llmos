@@ -1,0 +1,146 @@
+{
+  "version": "1.0.0",
+  "volume": "system",
+  "description": "System volume containing agents, tools, and skills for LLM OS",
+  "readonly": true,
+  "files": [
+    {
+      "path": "agents/HardwareControlAgent.md",
+      "type": "agent",
+      "name": "Hardware Control Agent",
+      "description": "Controls ESP32-based hardware and robots"
+    },
+    {
+      "path": "tools/hardware-serial.md",
+      "type": "tool",
+      "name": "Hardware Serial",
+      "description": "Serial communication tools for hardware"
+    },
+    {
+      "path": "skills/esp32-cube-robot.md",
+      "type": "skill",
+      "name": "ESP32 Cube Robot",
+      "description": "Differential drive cube robot controller"
+    },
+    {
+      "path": "skills/esp32-json-protocol.md",
+      "type": "skill",
+      "name": "ESP32 JSON Protocol",
+      "description": "JSON communication protocol for ESP32"
+    },
+    {
+      "path": "skills/esp32-wasm-development.md",
+      "type": "skill",
+      "name": "ESP32 WASM Development",
+      "description": "WebAssembly development for ESP32"
+    },
+    {
+      "path": "skills/esp32-wasm-native-api.md",
+      "type": "skill",
+      "name": "ESP32 WASM Native API",
+      "description": "Native API bindings for ESP32 WASM"
+    },
+    {
+      "path": "skills/hardware-flight-controller.md",
+      "type": "skill",
+      "name": "Hardware Flight Controller",
+      "description": "Drone flight controller skill"
+    },
+    {
+      "path": "skills/circuit-rc-node.md",
+      "type": "skill",
+      "name": "Circuit RC Node",
+      "description": "RC circuit simulation"
+    },
+    {
+      "path": "skills/data-analysis.md",
+      "type": "skill",
+      "name": "Data Analysis",
+      "description": "Data analysis and visualization"
+    },
+    {
+      "path": "skills/database-query-node.md",
+      "type": "skill",
+      "name": "Database Query",
+      "description": "Database query execution"
+    },
+    {
+      "path": "skills/plan-first-execution.md",
+      "type": "skill",
+      "name": "Plan First Execution",
+      "description": "Planning before execution strategy"
+    },
+    {
+      "path": "skills/python-coding.md",
+      "type": "skill",
+      "name": "Python Coding",
+      "description": "Python code generation and execution"
+    },
+    {
+      "path": "skills/quantum-cardiac-cepstrum.md",
+      "type": "skill",
+      "name": "Quantum Cardiac Cepstrum",
+      "description": "Quantum computing for cardiac analysis"
+    },
+    {
+      "path": "skills/quantum-openqasm-browser.md",
+      "type": "skill",
+      "name": "Quantum OpenQASM Browser",
+      "description": "Browser-based quantum circuit execution"
+    },
+    {
+      "path": "skills/quantum-qft-openqasm.md",
+      "type": "skill",
+      "name": "Quantum QFT OpenQASM",
+      "description": "Quantum Fourier Transform implementation"
+    },
+    {
+      "path": "skills/quantum-solver.md",
+      "type": "skill",
+      "name": "Quantum Solver",
+      "description": "Quantum algorithm solver"
+    },
+    {
+      "path": "skills/quantum-vqe-node.md",
+      "type": "skill",
+      "name": "Quantum VQE",
+      "description": "Variational Quantum Eigensolver"
+    },
+    {
+      "path": "skills/semantic-pattern-matching.md",
+      "type": "skill",
+      "name": "Semantic Pattern Matching",
+      "description": "AI-powered pattern matching"
+    },
+    {
+      "path": "skills/system-quantum-circuit-improver.md",
+      "type": "skill",
+      "name": "Quantum Circuit Improver",
+      "description": "Quantum circuit optimization"
+    },
+    {
+      "path": "skills/threejs-cube-node.md",
+      "type": "skill",
+      "name": "Three.js Cube Node",
+      "description": "3D cube visualization with Three.js"
+    },
+    {
+      "path": "skills/weather-analysis-node.md",
+      "type": "skill",
+      "name": "Weather Analysis",
+      "description": "Weather data analysis"
+    },
+    {
+      "path": "project-templates/drone-simulator/context.md",
+      "type": "template",
+      "name": "Drone Simulator Context",
+      "description": "Drone simulator project context"
+    },
+    {
+      "path": "project-templates/drone-simulator/memory.md",
+      "type": "template",
+      "name": "Drone Simulator Memory",
+      "description": "Drone simulator project memory"
+    }
+  ]
+}

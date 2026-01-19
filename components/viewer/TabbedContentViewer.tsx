@@ -197,7 +197,7 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
 
   const { actualVolume, relativePath, vfsPath } = parseFilePath(filePath);
 
-  // Load file content
+  // Load file content from VFS (client-side only)
   useEffect(() => {
     const loadFile = async () => {
       setIsLoading(true);
@@ -205,52 +205,37 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
       logActivity?.('action', 'Loading file', filePath);
 
       try {
-        // Try VFS first for user and team files
-        if (actualVolume === 'user' || actualVolume === 'team') {
-          const vfs = getVFS();
-          const content = vfs.readFileContent(vfsPath);
-          if (content !== null) {
+        // All volumes are now in VFS (system files are cached on first load)
+        const vfs = getVFS();
+        const content = vfs.readFileContent(vfsPath);
+
+        if (content !== null) {
+          setCode(content);
+          setOriginalCode(content);
+          logActivity?.('success', 'File loaded from VFS', vfsPath);
+          setIsLoading(false);
+          return;
+        }
+
+        // If system file not found in VFS, try fetching from public folder
+        if (actualVolume === 'system') {
+          const publicPath = `/volumes/system/${relativePath}`;
+          const response = await fetch(publicPath);
+          if (response.ok) {
+            const content = await response.text();
+            // Cache in VFS for future use
+            vfs.writeFile(vfsPath, content);
             setCode(content);
             setOriginalCode(content);
-            logActivity?.('success', 'File loaded from VFS', vfsPath);
+            logActivity?.('success', 'File loaded from public', publicPath);
             setIsLoading(false);
             return;
           }
         }
 
-        // Try API for system and team files from filesystem
-        if (actualVolume === 'system' || actualVolume === 'team') {
-          // First try VFS for any cached files
-          const vfs = getVFS();
-          const vfsContent = vfs.readFileContent(vfsPath);
-          if (vfsContent !== null) {
-            setCode(vfsContent);
-            setOriginalCode(vfsContent);
-            logActivity?.('success', 'File loaded from VFS', vfsPath);
-            setIsLoading(false);
-            return;
-          }
-
-          // Then try the volumes API endpoint
-          const apiPath = filePath.startsWith('/volumes/') ? filePath : `/volumes/${actualVolume}/${relativePath}`;
-          const response = await fetch(`/api/volumes/file?path=${encodeURIComponent(apiPath)}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.content) {
-              setCode(data.content);
-              setOriginalCode(data.content);
-              logActivity?.('success', 'File loaded from volumes API', apiPath);
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
-
-        // Fallback to volume file system (GitHub-backed)
-        const content = await fileSystem.readFile(actualVolume, relativePath);
-        setCode(content);
-        setOriginalCode(content);
-        logActivity?.('success', 'File loaded', relativePath);
+        // File not found
+        setError(`File not found: ${vfsPath}`);
+        logActivity?.('error', 'File not found', vfsPath);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMsg);
