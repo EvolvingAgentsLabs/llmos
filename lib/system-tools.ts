@@ -832,6 +832,7 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
         'UXDesigner.md',
         'ProjectAgentPlanner.md',
         'HardwareControlAgent.md',
+        'RobotAIAgent.md',
       ];
 
       for (const fileName of knownSystemAgents) {
@@ -1885,6 +1886,342 @@ The firmware runs in the browser using the VirtualESP32 simulator.`,
 };
 
 /**
+ * Deploy ESP32 Agent Tool
+ * Deploys an AI agent to run on an ESP32-S3 device (simulation or physical)
+ *
+ * Architecture:
+ * - The agent loop runs ON THE DEVICE (ESP32-S3)
+ * - Device-side tools control local hardware (wheels, LED, camera, sensors)
+ * - Device calls back to host for LLM responses
+ * - Same code works in browser simulation and on physical devices
+ */
+export const DeployESP32AgentTool: ToolDefinition = {
+  id: 'deploy-esp32-agent',
+  name: 'Deploy ESP32 Agent',
+  description: `Deploy an AI agent to run on an ESP32-S3 device.
+
+The agent loop runs ON THE DEVICE with these local tools:
+- control_left_wheel(power): Left motor control (-255 to 255)
+- control_right_wheel(power): Right motor control (-255 to 255)
+- drive(left, right): Both motors at once
+- stop(): Emergency stop
+- set_led(r, g, b): RGB LED control
+- read_sensors(): Read all sensors
+- use_camera(): Capture and analyze camera frame
+
+The device calls back to the LLMOS host for LLM responses.
+Works in browser simulation first, then deploy to physical ESP32-S3.`,
+  inputs: [
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Target device ID (virtual or physical)',
+      required: true,
+    },
+    {
+      name: 'agentName',
+      type: 'string',
+      description: 'Name for this agent instance',
+      required: true,
+    },
+    {
+      name: 'systemPrompt',
+      type: 'string',
+      description: 'The system prompt defining robot behavior (from agent definition file)',
+      required: true,
+    },
+    {
+      name: 'loopIntervalMs',
+      type: 'number',
+      description: 'Milliseconds between control loop iterations (default: 500)',
+      required: false,
+    },
+    {
+      name: 'maxIterations',
+      type: 'number',
+      description: 'Maximum iterations before stopping (optional, unlimited if not set)',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceId, agentName, systemPrompt, loopIntervalMs = 500, maxIterations } = inputs;
+
+    if (!deviceId || typeof deviceId !== 'string') {
+      throw new Error('deviceId is required');
+    }
+    if (!agentName || typeof agentName !== 'string') {
+      throw new Error('agentName is required');
+    }
+    if (!systemPrompt || typeof systemPrompt !== 'string') {
+      throw new Error('systemPrompt is required');
+    }
+
+    // Check device exists
+    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
+    const manager = getDeviceManager();
+    const device = manager.getDevice(deviceId);
+
+    if (!device) {
+      return {
+        success: false,
+        error: `Device not found: ${deviceId}`,
+        hint: 'Create a virtual device first with create-virtual-device tool, or connect a physical device.',
+      };
+    }
+
+    // Create and start the ESP32 agent
+    const { createESP32Agent, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
+
+    // Check if agent already exists
+    const agentId = `${deviceId}-${agentName.toLowerCase().replace(/\s+/g, '-')}`;
+    const existingAgent = getESP32Agent(agentId);
+    if (existingAgent) {
+      return {
+        success: false,
+        error: `Agent already running: ${agentId}`,
+        hint: 'Stop the existing agent first with stop-esp32-agent tool.',
+      };
+    }
+
+    const agent = createESP32Agent({
+      id: agentId,
+      name: agentName,
+      deviceId,
+      systemPrompt,
+      loopIntervalMs,
+      maxIterations,
+      onLog: (msg, level) => console.log(`[${level}] ${msg}`),
+    });
+
+    agent.start();
+
+    return {
+      success: true,
+      agentId,
+      deviceId,
+      agentName,
+      loopIntervalMs,
+      maxIterations: maxIterations || 'unlimited',
+      message: `ESP32 agent "${agentName}" deployed to device ${deviceId}
+
+The agent is now running its control loop:
+1. Reading sensors from device hardware
+2. Calling LLMOS host for LLM decisions
+3. Executing tool calls locally on device
+4. Repeating every ${loopIntervalMs}ms
+
+Use stop-esp32-agent to stop, or list-esp32-agents to see all running agents.`,
+    };
+  },
+};
+
+/**
+ * Stop ESP32 Agent Tool
+ * Stops a running ESP32 agent
+ */
+export const StopESP32AgentTool: ToolDefinition = {
+  id: 'stop-esp32-agent',
+  name: 'Stop ESP32 Agent',
+  description: 'Stop a running ESP32 robot agent and safely halt the robot motors.',
+  inputs: [
+    {
+      name: 'agentId',
+      type: 'string',
+      description: 'The agent ID to stop (from deploy-esp32-agent or list-esp32-agents)',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { agentId } = inputs;
+
+    if (!agentId || typeof agentId !== 'string') {
+      throw new Error('agentId is required');
+    }
+
+    const { stopESP32Agent, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
+
+    const agent = getESP32Agent(agentId);
+    if (!agent) {
+      return {
+        success: false,
+        error: `Agent not found: ${agentId}`,
+        hint: 'Use list-esp32-agents to see running agents.',
+      };
+    }
+
+    const state = agent.getState();
+    const stopped = stopESP32Agent(agentId);
+
+    return {
+      success: stopped,
+      agentId,
+      finalStats: {
+        totalIterations: state.stats.totalIterations,
+        totalToolCalls: state.stats.totalToolCalls,
+        avgLoopTimeMs: Math.round(state.stats.avgLoopTimeMs),
+        avgLLMLatencyMs: Math.round(state.stats.avgLLMLatencyMs),
+      },
+      message: stopped
+        ? `Agent ${agentId} stopped. Motors halted, LED off.`
+        : `Failed to stop agent ${agentId}`,
+    };
+  },
+};
+
+/**
+ * List ESP32 Agents Tool
+ * Lists all running ESP32 agents
+ */
+export const ListESP32AgentsTool: ToolDefinition = {
+  id: 'list-esp32-agents',
+  name: 'List ESP32 Agents',
+  description: 'List all running ESP32 robot agents with their current status and stats.',
+  inputs: [],
+  execute: async () => {
+    const { listActiveESP32Agents, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
+
+    const agentIds = listActiveESP32Agents();
+    const agents = agentIds.map((id) => {
+      const agent = getESP32Agent(id);
+      if (!agent) return null;
+
+      const state = agent.getState();
+      return {
+        agentId: id,
+        running: state.running,
+        iteration: state.iteration,
+        stats: {
+          totalIterations: state.stats.totalIterations,
+          totalToolCalls: state.stats.totalToolCalls,
+          avgLoopTimeMs: Math.round(state.stats.avgLoopTimeMs),
+          llmCalls: state.stats.llmCallCount,
+          avgLLMLatencyMs: Math.round(state.stats.avgLLMLatencyMs),
+        },
+        lastToolCalls: state.lastToolCalls.slice(-3).map((tc) => ({
+          tool: tc.tool,
+          success: tc.result.success,
+        })),
+        errors: state.errors.slice(-3),
+      };
+    }).filter(Boolean);
+
+    return {
+      success: true,
+      count: agents.length,
+      agents,
+      message: agents.length > 0
+        ? `${agents.length} ESP32 agent(s) running`
+        : 'No ESP32 agents currently running',
+    };
+  },
+};
+
+/**
+ * Copy Agent to User Tool
+ * Copies a system agent definition to the user volume for customization
+ */
+export const CopyAgentToUserTool: ToolDefinition = {
+  id: 'copy-agent-to-user',
+  name: 'Copy Agent to User',
+  description: `Copy the RobotAIAgent (or any system agent) to your user volume for customization.
+
+This allows you to:
+- Create your own robot behavior based on the base agent
+- Modify the system prompt and decision logic
+- Customize sensor thresholds and movement patterns
+- Build specialized robots (maze solver, line follower, etc.)
+
+The copied agent can be edited and used with generate-robot-agent.`,
+  inputs: [
+    {
+      name: 'sourceAgent',
+      type: 'string',
+      description: 'Source agent path (default: system/agents/RobotAIAgent.md)',
+      required: false,
+    },
+    {
+      name: 'newName',
+      type: 'string',
+      description: 'Name for the copied agent (default: MyRobotAgent)',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { sourceAgent = 'system/agents/RobotAIAgent.md', newName = 'MyRobotAgent' } = inputs;
+
+    // Sanitize the new name for file system
+    const sanitizedName = newName.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!sanitizedName) {
+      throw new Error('Invalid agent name. Use alphanumeric characters, underscores, or hyphens.');
+    }
+
+    // Read the source agent
+    let sourceContent: string;
+
+    try {
+      // Try to fetch from public system folder
+      const sourcePath = sourceAgent.replace(/^\//, '');
+      const response = await fetch(`/${sourcePath}`);
+
+      if (!response.ok) {
+        throw new Error(`Source agent not found: ${sourceAgent}`);
+      }
+
+      sourceContent = await response.text();
+    } catch (error: any) {
+      // Try to read from VFS as fallback
+      const vfs = getVFS();
+      const file = vfs.readFile(sourceAgent);
+
+      if (!file) {
+        throw new Error(`Could not read source agent: ${sourceAgent}`);
+      }
+
+      sourceContent = file.content;
+    }
+
+    // Update the frontmatter with new name and indicate it's evolved
+    const updatedContent = sourceContent
+      .replace(/^name:\s*.+$/m, `name: ${sanitizedName}`)
+      .replace(/^id:\s*.+$/m, `id: ${sanitizedName.toLowerCase().replace(/_/g, '-')}`)
+      .replace(/^evolved_from:\s*.+$/m, `evolved_from: ${sourceAgent}`)
+      .replace(/^origin:\s*.+$/m, 'origin: evolved');
+
+    // Write to user volume
+    const vfs = getVFS();
+    const destPath = `user/components/agents/${sanitizedName}.md`;
+    vfs.writeFile(destPath, updatedContent);
+
+    return {
+      success: true,
+      sourcePath: sourceAgent,
+      destinationPath: destPath,
+      agentName: sanitizedName,
+      message: `Agent copied successfully!
+
+Your custom agent is now at: ${destPath}
+
+To customize it:
+1. Edit the file to change the behavior, goals, and decision logic
+2. Modify sensor thresholds and movement patterns
+3. Use it with generate-robot-agent tool:
+
+\`\`\`tool
+{
+  "tool": "generate-robot-agent",
+  "inputs": {
+    "name": "${sanitizedName}",
+    "deviceId": "YOUR_DEVICE_ID",
+    "systemPrompt": "YOUR_CUSTOM_PROMPT_FROM_THE_AGENT_FILE"
+  }
+}
+\`\`\``,
+      hint: 'Edit the agent file to customize robot behavior, then use generate-robot-agent to run it.',
+    };
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -1896,10 +2233,15 @@ export function getSystemTools(): ToolDefinition[] {
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
     GenerateAppletTool,
-    // Robot Agent Tools
+    // Robot Agent Tools (legacy)
     GenerateRobotAgentTool,
     StopRobotAgentTool,
     ListRobotAgentsTool,
+    // ESP32 Agent Tools (device-centric architecture)
+    DeployESP32AgentTool,
+    StopESP32AgentTool,
+    ListESP32AgentsTool,
+    CopyAgentToUserTool,
     ValidateProjectAgentsTool,
     ConnectDeviceTool,
     SendDeviceCommandTool,
