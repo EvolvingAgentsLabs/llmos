@@ -35,7 +35,9 @@
       "Bash(find:*)",
       "Bash(npm run type-check:*)",
       "Bash(npm install:*)",
-      "Bash(npm run electron:compile:*)"
+      "Bash(npm run electron:compile:*)",
+      "Bash(npx concurrently:*)",
+      "Bash(npx kill-port:*)"
     ],
     "deny": [],
     "ask": []

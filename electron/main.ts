@@ -17,8 +17,8 @@ import { AssemblyScriptCompiler } from './services/assemblyscript-compiler';
 import { NativeFileSystem } from './services/native-fs';
 import { ElectronSerialManager } from './services/serial-manager';
 
-// Environment
-const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+// Environment - auto-detect dev mode when app is not packaged
+const isDev = process.env.ELECTRON_DEV_MODE === 'true' || !app.isPackaged;
 const isProduction = app.isPackaged;
 
 // Services
