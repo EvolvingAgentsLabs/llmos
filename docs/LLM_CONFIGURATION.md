@@ -122,13 +122,14 @@ While OpenRouter is the default, you can switch to other providers:
 
 ## Environment Variables
 
-### Optional (for backend/server usage)
-```bash
-# .env file (optional - frontend uses localStorage)
-OPENROUTER_API_KEY=sk-or-...your-api-key-here
+**Note: LLM API keys are stored client-side only.**
+
+The browser calls OpenRouter directly - your API key never touches the server:
+```
+Browser (localStorage) → OpenRouter API
 ```
 
-Note: The desktop app uses `localStorage` for API key storage, not environment variables.
+No server-side environment variables are needed for LLM functionality. All configuration is stored in the browser's `localStorage`.
 
 ## Usage
 
