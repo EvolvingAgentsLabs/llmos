@@ -212,13 +212,19 @@ export interface ESP32AgentConfig {
   // The system prompt defining robot behavior (stored in user volume)
   systemPrompt: string;
   // Loop timing
-  loopIntervalMs: number; // How often to run the control loop (default: 500ms)
+  loopIntervalMs?: number; // How often to run the control loop (default: 500ms)
   maxIterations?: number; // Optional limit
   // Host connection for LLM requests
   hostUrl?: string; // Default: current host
   // Callbacks
   onStateChange?: (state: ESP32AgentState) => void;
   onLog?: (message: string, level: 'info' | 'warn' | 'error') => void;
+}
+
+// Internal config with all defaults resolved
+interface ResolvedESP32AgentConfig extends ESP32AgentConfig {
+  loopIntervalMs: number;
+  hostUrl: string;
 }
 
 export interface ESP32AgentState {
@@ -243,7 +249,7 @@ export interface ESP32AgentState {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class ESP32AgentRuntime {
-  private config: ESP32AgentConfig;
+  private config: ResolvedESP32AgentConfig;
   private state: ESP32AgentState;
   private deviceContext: DeviceContext | null = null;
   private loopHandle: any = null;
@@ -252,9 +258,9 @@ export class ESP32AgentRuntime {
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
-      loopIntervalMs: 500,
-      hostUrl: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
       ...config,
+      loopIntervalMs: config.loopIntervalMs ?? 500,
+      hostUrl: config.hostUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
     };
 
     this.state = {
