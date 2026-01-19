@@ -78,7 +78,7 @@ export default function RobotAgentPanel({ deviceId: initialDeviceId, onDeviceCre
       onDeviceCreated?.(newDeviceId);
 
       // Start the simulation
-      manager.startDevice(newDeviceId);
+      await manager.sendCommand(newDeviceId, { type: 'start' });
       addMessage('system', 'Device simulation started');
     } catch (error: any) {
       addMessage('error', `Failed to create device: ${error.message}`);
