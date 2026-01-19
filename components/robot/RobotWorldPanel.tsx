@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings } from 'lucide-react';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
+import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
 
 // Lazy load 3D canvas for better performance
@@ -75,8 +76,48 @@ export default function RobotWorldPanel({
   const [showStats, setShowStats] = useState(true);
   const [floorMap, setFloorMap] = useState<FloorMap | null>(null);
 
-  // Initialize simulator
+  // Initialize simulator OR sync with Device Manager
   useEffect(() => {
+    // Load floor map regardless of mode
+    const mapKey = currentMap as keyof typeof FLOOR_MAPS;
+    const map = FLOOR_MAPS[mapKey] ? FLOOR_MAPS[mapKey]() : null;
+    if (map) {
+      setFloorMap(map);
+    }
+
+    // If we have a deviceId, sync with Device Manager instead of local simulator
+    if (deviceId) {
+      const manager = getDeviceManager();
+
+      // Subscribe to telemetry events from the device
+      const unsubscribeTelemetry = manager.on('device:telemetry', (telemetry: DeviceTelemetry) => {
+        if (telemetry.deviceId === deviceId) {
+          setRobotState(telemetry.robotState);
+        }
+      });
+
+      // Get initial state from device
+      const deviceState = manager.getDeviceState(deviceId);
+      if (deviceState) {
+        setRobotState(deviceState.robot);
+        // Device is already running if status is running
+        const deviceInfo = manager.getDevice(deviceId);
+        if (deviceInfo?.status === 'running') {
+          setIsRunning(true);
+        }
+      }
+
+      // Update map on the device if needed
+      if (map) {
+        manager.sendCommand(deviceId, { type: 'set_map', payload: { map } });
+      }
+
+      return () => {
+        unsubscribeTelemetry();
+      };
+    }
+
+    // No deviceId - use local simulator (original behavior)
     const simulator = createCubeRobotSimulator({
       onStateChange: (state) => {
         setRobotState(state);
@@ -85,11 +126,8 @@ export default function RobotWorldPanel({
     simulatorRef.current = simulator;
 
     // Load current map
-    const mapKey = currentMap as keyof typeof FLOOR_MAPS;
-    if (FLOOR_MAPS[mapKey]) {
-      const map = FLOOR_MAPS[mapKey]();
+    if (map) {
       simulator.setMap(map);
-      setFloorMap(map);
     }
 
     // Get initial state
@@ -101,10 +139,22 @@ export default function RobotWorldPanel({
       }
       simulator.dispose();
     };
-  }, [currentMap]);
+  }, [currentMap, deviceId]);
 
-  // Simulation loop
+  // Simulation loop - handle both local simulator and Device Manager modes
   useEffect(() => {
+    // If using Device Manager, forward start/stop commands there
+    if (deviceId) {
+      const manager = getDeviceManager();
+      if (isRunning && mode === 'simulation') {
+        manager.sendCommand(deviceId, { type: 'start' });
+      } else {
+        manager.sendCommand(deviceId, { type: 'stop' });
+      }
+      return;
+    }
+
+    // Local simulator mode (original behavior)
     const simulator = simulatorRef.current;
     if (!simulator) return;
 
@@ -119,7 +169,7 @@ export default function RobotWorldPanel({
     return () => {
       simulator.stop();
     };
-  }, [isRunning, mode]);
+  }, [isRunning, mode, deviceId]);
 
   // Control functions
   const handlePlayPause = useCallback(() => {
@@ -127,10 +177,17 @@ export default function RobotWorldPanel({
   }, [isRunning]);
 
   const handleReset = useCallback(() => {
-    simulatorRef.current?.reset();
+    if (deviceId) {
+      // Reset via Device Manager
+      const manager = getDeviceManager();
+      manager.sendCommand(deviceId, { type: 'reset' });
+    } else {
+      // Reset local simulator
+      simulatorRef.current?.reset();
+    }
     setIsRunning(false);
     setRobotState(null);
-  }, []);
+  }, [deviceId]);
 
   const handleModeToggle = useCallback(() => {
     const modes: ExecutionMode[] = ['simulation', 'real-robot', 'replay'];
