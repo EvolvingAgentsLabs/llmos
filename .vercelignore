@@ -33,14 +33,12 @@ backend/
 # Firmware (ESP32 specific)
 firmware/
 
-# Local workspace data
-workspace/
-volumes/
+# Local workspace data (root level only, not lib/volumes or components/panels/volumes)
+/workspace/
+/volumes/
 
 # Development documentation
 docs/
-*.md
-!README.md
 
 # Build artifacts
 *.log
@@ -52,6 +50,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
-# Core directory
-../core/
