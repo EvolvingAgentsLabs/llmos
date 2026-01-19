@@ -587,18 +587,28 @@ Based on these readings, decide what action to take next.`;
   private parseToolCalls(response: string): Array<{ tool: string; args: Record<string, any> }> {
     const calls: Array<{ tool: string; args: Record<string, any> }> = [];
 
-    // Find all JSON objects with tool calls
-    const jsonPattern = /\{[\s\S]*?"tool"[\s\S]*?\}/g;
-    const matches = response.match(jsonPattern) || [];
+    // Extract JSON objects by properly tracking brace nesting
+    const jsonObjects = this.extractJsonObjects(response);
 
-    for (const match of matches) {
+    for (const jsonStr of jsonObjects) {
       try {
-        const parsed = JSON.parse(match);
+        const parsed = JSON.parse(jsonStr);
         if (parsed.tool && typeof parsed.tool === 'string') {
           calls.push({
             tool: parsed.tool,
             args: parsed.args || {},
           });
+        }
+        // Also handle {"tool_calls": [...]} format
+        if (Array.isArray(parsed.tool_calls)) {
+          for (const call of parsed.tool_calls) {
+            if (call.tool && typeof call.tool === 'string') {
+              calls.push({
+                tool: call.tool,
+                args: call.args || {},
+              });
+            }
+          }
         }
       } catch {
         // Skip invalid JSON
@@ -606,6 +616,71 @@ Based on these readings, decide what action to take next.`;
     }
 
     return calls;
+  }
+
+  /**
+   * Extract complete JSON objects from text, properly handling nested braces
+   */
+  private extractJsonObjects(text: string): string[] {
+    const objects: string[] = [];
+    let i = 0;
+
+    while (i < text.length) {
+      // Find the start of a JSON object
+      const start = text.indexOf('{', i);
+      if (start === -1) break;
+
+      // Track brace nesting to find the complete object
+      let depth = 0;
+      let end = start;
+      let inString = false;
+      let escape = false;
+
+      for (let j = start; j < text.length; j++) {
+        const char = text[j];
+
+        if (escape) {
+          escape = false;
+          continue;
+        }
+
+        if (char === '\\' && inString) {
+          escape = true;
+          continue;
+        }
+
+        if (char === '"' && !escape) {
+          inString = !inString;
+          continue;
+        }
+
+        if (!inString) {
+          if (char === '{') {
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+              end = j;
+              break;
+            }
+          }
+        }
+      }
+
+      if (depth === 0 && end > start) {
+        const jsonStr = text.slice(start, end + 1);
+        // Only include if it contains "tool"
+        if (jsonStr.includes('"tool"')) {
+          objects.push(jsonStr);
+        }
+        i = end + 1;
+      } else {
+        // Unbalanced braces, move past this opening brace
+        i = start + 1;
+      }
+    }
+
+    return objects;
   }
 
   private log(message: string, level: 'info' | 'warn' | 'error'): void {
