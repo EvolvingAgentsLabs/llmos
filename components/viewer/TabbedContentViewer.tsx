@@ -49,6 +49,19 @@ const AppletViewer = dynamic(
   }
 );
 
+// Dynamically import MarkdownRenderer for markdown preview
+const MarkdownRenderer = dynamic(
+  () => import('../chat/MarkdownRenderer'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full flex items-center justify-center bg-bg-primary">
+        <div className="text-fg-tertiary text-sm">Loading markdown...</div>
+      </div>
+    ),
+  }
+);
+
 type ViewTab = 'preview' | 'code';
 
 interface TabbedContentViewerProps {
@@ -87,6 +100,12 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
   const isExecutableFile = (path: string): boolean => {
     const ext = path.split('.').pop()?.toLowerCase() || '';
     return ['py', 'js', 'ts'].includes(ext);
+  };
+
+  // Check if file is a markdown file
+  const isMarkdownFile = (path: string): boolean => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    return ext === 'md';
   };
 
   // Get Monaco language from file extension
@@ -199,9 +218,9 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
           }
         }
 
-        // Try public folder for system files
-        if (actualVolume === 'system') {
-          // First try VFS for system files
+        // Try API for system and team files from filesystem
+        if (actualVolume === 'system' || actualVolume === 'team') {
+          // First try VFS for any cached files
           const vfs = getVFS();
           const vfsContent = vfs.readFileContent(vfsPath);
           if (vfsContent !== null) {
@@ -212,15 +231,18 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
             return;
           }
 
-          // Then try public folder
-          const response = await fetch(`/system/${relativePath}`);
+          // Then try the volumes API endpoint
+          const apiPath = filePath.startsWith('/volumes/') ? filePath : `/volumes/${actualVolume}/${relativePath}`;
+          const response = await fetch(`/api/volumes/file?path=${encodeURIComponent(apiPath)}`);
           if (response.ok) {
-            const content = await response.text();
-            setCode(content);
-            setOriginalCode(content);
-            logActivity?.('success', 'File loaded from public', relativePath);
-            setIsLoading(false);
-            return;
+            const data = await response.json();
+            if (data.success && data.content) {
+              setCode(data.content);
+              setOriginalCode(data.content);
+              logActivity?.('success', 'File loaded from volumes API', apiPath);
+              setIsLoading(false);
+              return;
+            }
           }
         }
 
@@ -342,14 +364,15 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
 
   const isApplet = isAppletFile(filePath);
   const isExecutable = isExecutableFile(filePath);
+  const isMarkdown = isMarkdownFile(filePath);
 
   // Determine default tab based on file type
   useEffect(() => {
-    // Applets default to preview, other files to code
-    if (!isApplet && !isExecutable) {
+    // Applets and markdown files default to preview, other files to code
+    if (!isApplet && !isExecutable && !isMarkdown) {
       setActiveTab('code');
     }
-  }, [isApplet, isExecutable]);
+  }, [isApplet, isExecutable, isMarkdown]);
 
   if (isLoading) {
     return (
@@ -568,6 +591,16 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
                     )}
                   </div>
                 )}
+              </div>
+            ) : isMarkdown ? (
+              // Render markdown files with MarkdownRenderer
+              <div className="h-full overflow-auto p-6 bg-[#0d1117]">
+                <div className="max-w-3xl mx-auto">
+                  <MarkdownRenderer
+                    content={code}
+                    enableCodeExecution={true}
+                  />
+                </div>
               </div>
             ) : (
               // For non-executable files, show a preview message

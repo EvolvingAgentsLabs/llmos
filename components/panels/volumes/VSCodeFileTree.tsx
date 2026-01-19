@@ -29,7 +29,7 @@ interface TreeNode {
     readonly?: boolean;
     volume?: 'system' | 'team' | 'user';
     fileType?: string;
-    size?: string;
+    size?: string | number;
     modified?: string;
     action?: 'desktop' | 'applet' | 'code' | 'file';
   };
@@ -43,55 +43,15 @@ interface VSCodeFileTreeProps {
   selectedFile?: string | null;
 }
 
-// Root tree structure - volumes as drives
-const ROOT_TREE: TreeNode[] = [
+// Initial empty tree structure - will be populated from API
+const INITIAL_TREE: TreeNode[] = [
   {
     id: 'system',
     name: 'System',
     type: 'volume',
     path: '/volumes/system',
     metadata: { volume: 'system', readonly: true },
-    children: [
-      {
-        id: 'system-agents',
-        name: 'agents',
-        type: 'folder',
-        path: '/volumes/system/agents',
-        metadata: { readonly: true },
-        children: [
-          { id: 'system-agent', name: 'SystemAgent.md', type: 'file', path: '/volumes/system/agents/SystemAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'memory-analysis', name: 'MemoryAnalysisAgent.md', type: 'file', path: '/volumes/system/agents/MemoryAnalysisAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'memory-consolidation', name: 'MemoryConsolidationAgent.md', type: 'file', path: '/volumes/system/agents/MemoryConsolidationAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'execution-strategy', name: 'ExecutionStrategyAgent.md', type: 'file', path: '/volumes/system/agents/ExecutionStrategyAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'planning', name: 'PlanningAgent.md', type: 'file', path: '/volumes/system/agents/PlanningAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'pattern-matcher', name: 'PatternMatcherAgent.md', type: 'file', path: '/volumes/system/agents/PatternMatcherAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'lens-selector', name: 'LensSelectorAgent.md', type: 'file', path: '/volumes/system/agents/LensSelectorAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'ux-designer', name: 'UXDesigner.md', type: 'file', path: '/volumes/system/agents/UXDesigner.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'mutation', name: 'MutationAgent.md', type: 'file', path: '/volumes/system/agents/MutationAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'applet-debugger', name: 'AppletDebuggerAgent.md', type: 'file', path: '/volumes/system/agents/AppletDebuggerAgent.md', metadata: { fileType: 'agent', readonly: true } },
-          { id: 'project-planner', name: 'ProjectAgentPlanner.md', type: 'file', path: '/volumes/system/agents/ProjectAgentPlanner.md', metadata: { fileType: 'agent', readonly: true } },
-        ],
-      },
-      {
-        id: 'system-tools',
-        name: 'tools',
-        type: 'folder',
-        path: '/volumes/system/tools',
-        metadata: { readonly: true },
-        children: [
-          { id: 'fix-applet', name: 'fix-applet.md', type: 'file', path: '/volumes/system/tools/fix-applet.md', metadata: { fileType: 'tool', readonly: true } },
-          { id: 'plan-task', name: 'plan-task.md', type: 'file', path: '/volumes/system/tools/plan-task.md', metadata: { fileType: 'tool', readonly: true } },
-          { id: 'query-memory', name: 'query-memory.md', type: 'file', path: '/volumes/system/tools/query-memory.md', metadata: { fileType: 'tool', readonly: true } },
-        ],
-      },
-      {
-        id: 'system-memory-log',
-        name: 'memory_log.md',
-        type: 'file',
-        path: '/volumes/system/memory_log.md',
-        metadata: { readonly: true },
-      },
-    ],
+    children: [],
   },
   {
     id: 'team',
@@ -99,7 +59,7 @@ const ROOT_TREE: TreeNode[] = [
     type: 'volume',
     path: '/volumes/team',
     metadata: { volume: 'team' },
-    children: [], // Populated from VFS
+    children: [],
   },
   {
     id: 'user',
@@ -107,7 +67,7 @@ const ROOT_TREE: TreeNode[] = [
     type: 'volume',
     path: '/volumes/user',
     metadata: { volume: 'user' },
-    children: [], // Populated from VFS
+    children: [],
   },
 ];
 
@@ -118,12 +78,13 @@ export default function VSCodeFileTree({
   onCodeFileSelect,
   selectedFile,
 }: VSCodeFileTreeProps) {
-  // Start with user and team expanded
+  // Start with system, user and team expanded
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    new Set(['team', 'user'])
+    new Set(['system', 'team', 'user'])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [treeData, setTreeData] = useState<TreeNode[]>(ROOT_TREE);
+  const [treeData, setTreeData] = useState<TreeNode[]>(INITIAL_TREE);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check if a file is a code file based on extension
   const isCodeFile = (filename: string): boolean => {
@@ -158,17 +119,49 @@ export default function VSCodeFileTree({
     name: string;
   } | null>(null);
 
-  // Load VFS files on mount and periodically refresh
+  // Load volumes from API and VFS on mount
   useEffect(() => {
-    const loadVFSFiles = () => {
+    const loadAllVolumes = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch system and team volumes from API
+        const response = await fetch('/api/volumes');
+        const data = await response.json();
+
+        if (data.success && data.volumes) {
+          // Get VFS files for user volume
+          const vfs = getVFS();
+          const allFiles = vfs.getAllFiles();
+          const vfsTree = buildVFSTree(allFiles);
+
+          // Merge API volumes with VFS user volume
+          const newTree = data.volumes.map((volume: TreeNode) => {
+            if (volume.id === 'user') {
+              return {
+                ...volume,
+                children: vfsTree,
+              };
+            }
+            return volume;
+          });
+
+          setTreeData(newTree);
+        }
+      } catch (error) {
+        console.error('Failed to load volumes from API:', error);
+        // Fallback to VFS-only loading
+        loadVFSOnly();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const loadVFSOnly = () => {
       try {
         const vfs = getVFS();
         const allFiles = vfs.getAllFiles();
-
-        // Build tree from all VFS files
         const vfsTree = buildVFSTree(allFiles);
 
-        // Update tree data
         setTreeData(prev => {
           const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
           const userVolume = newTree.find(v => v.id === 'user');
@@ -182,10 +175,24 @@ export default function VSCodeFileTree({
       }
     };
 
-    loadVFSFiles();
+    loadAllVolumes();
 
-    // Refresh every 2 seconds
-    const interval = setInterval(loadVFSFiles, 2000);
+    // Refresh VFS every 2 seconds (API data is static, no need to refetch)
+    const interval = setInterval(() => {
+      const vfs = getVFS();
+      const allFiles = vfs.getAllFiles();
+      const vfsTree = buildVFSTree(allFiles);
+
+      setTreeData(prev => {
+        const newTree = JSON.parse(JSON.stringify(prev)) as TreeNode[];
+        const userVolume = newTree.find(v => v.id === 'user');
+        if (userVolume) {
+          userVolume.children = vfsTree;
+        }
+        return newTree;
+      });
+    }, 2000);
+
     return () => clearInterval(interval);
   }, [activeVolume]);
 
@@ -615,12 +622,21 @@ export default function VSCodeFileTree({
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-border-primary/50 bg-bg-secondary/30">
         <div className="text-[10px] text-fg-tertiary flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-accent-success"></span>
-            {activeVolumeItemCount} items
-          </span>
-          <span>•</span>
-          <span>{activeVolume}</span>
+          {isLoading ? (
+            <span className="flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse"></span>
+              Loading...
+            </span>
+          ) : (
+            <>
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-accent-success"></span>
+                {activeVolumeItemCount} items
+              </span>
+              <span>•</span>
+              <span>{activeVolume}</span>
+            </>
+          )}
         </div>
       </div>
 
