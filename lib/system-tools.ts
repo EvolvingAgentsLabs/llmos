@@ -1886,184 +1886,77 @@ The firmware runs in the browser using the VirtualESP32 simulator.`,
 };
 
 /**
- * Control Left Wheel Tool
- * Independently controls the left wheel motor for the robot AI agent
+ * Deploy ESP32 Agent Tool
+ * Deploys an AI agent to run on an ESP32-S3 device (simulation or physical)
+ *
+ * Architecture:
+ * - The agent loop runs ON THE DEVICE (ESP32-S3)
+ * - Device-side tools control local hardware (wheels, LED, camera, sensors)
+ * - Device calls back to host for LLM responses
+ * - Same code works in browser simulation and on physical devices
  */
-export const ControlLeftWheelTool: ToolDefinition = {
-  id: 'control-left-wheel',
-  name: 'Control Left Wheel',
-  description: `Control the left wheel motor independently.
+export const DeployESP32AgentTool: ToolDefinition = {
+  id: 'deploy-esp32-agent',
+  name: 'Deploy ESP32 Agent',
+  description: `Deploy an AI agent to run on an ESP32-S3 device.
 
-Use this tool to set the power/speed of the left wheel. Combined with right wheel control,
-this enables differential drive:
-- Both wheels same speed = straight line
-- Different speeds = curved path
-- Opposite directions = spin in place`,
+The agent loop runs ON THE DEVICE with these local tools:
+- control_left_wheel(power): Left motor control (-255 to 255)
+- control_right_wheel(power): Right motor control (-255 to 255)
+- drive(left, right): Both motors at once
+- stop(): Emergency stop
+- set_led(r, g, b): RGB LED control
+- read_sensors(): Read all sensors
+- use_camera(): Capture and analyze camera frame
+
+The device calls back to the LLMOS host for LLM responses.
+Works in browser simulation first, then deploy to physical ESP32-S3.`,
   inputs: [
     {
-      name: 'power',
+      name: 'deviceId',
+      type: 'string',
+      description: 'Target device ID (virtual or physical)',
+      required: true,
+    },
+    {
+      name: 'agentName',
+      type: 'string',
+      description: 'Name for this agent instance',
+      required: true,
+    },
+    {
+      name: 'systemPrompt',
+      type: 'string',
+      description: 'The system prompt defining robot behavior (from agent definition file)',
+      required: true,
+    },
+    {
+      name: 'loopIntervalMs',
       type: 'number',
-      description: 'Motor power from -255 (full reverse) to 255 (full forward). 0 = stop.',
-      required: true,
+      description: 'Milliseconds between control loop iterations (default: 500)',
+      required: false,
     },
     {
-      name: 'deviceId',
-      type: 'string',
-      description: 'Robot device ID',
-      required: true,
-    },
-  ],
-  execute: async (inputs) => {
-    const { power, deviceId } = inputs;
-
-    if (typeof power !== 'number' || power < -255 || power > 255) {
-      throw new Error('Power must be a number between -255 and 255');
-    }
-
-    if (!deviceId || typeof deviceId !== 'string') {
-      throw new Error('Invalid deviceId parameter');
-    }
-
-    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
-    const manager = getDeviceManager();
-    const device = manager.getDevice(deviceId);
-
-    if (!device) {
-      return {
-        success: false,
-        error: `Device not found: ${deviceId}`,
-        hint: 'Use create-virtual-device or connect a physical device first.',
-      };
-    }
-
-    // Get current right wheel power to maintain it while updating left
-    const state = manager.getDeviceState(deviceId);
-    const currentRightPower = state?.robot?.motors?.right ?? 0;
-
-    const success = await manager.sendCommand(deviceId, {
-      type: 'drive',
-      payload: { left: Math.round(power), right: currentRightPower },
-    });
-
-    return {
-      success,
-      wheel: 'left',
-      power: Math.round(power),
-      message: success
-        ? `Left wheel set to power ${Math.round(power)}`
-        : 'Failed to control left wheel',
-    };
-  },
-};
-
-/**
- * Control Right Wheel Tool
- * Independently controls the right wheel motor for the robot AI agent
- */
-export const ControlRightWheelTool: ToolDefinition = {
-  id: 'control-right-wheel',
-  name: 'Control Right Wheel',
-  description: `Control the right wheel motor independently.
-
-Use this tool to set the power/speed of the right wheel. Combined with left wheel control,
-this enables differential drive:
-- Both wheels same speed = straight line
-- Different speeds = curved path
-- Opposite directions = spin in place`,
-  inputs: [
-    {
-      name: 'power',
+      name: 'maxIterations',
       type: 'number',
-      description: 'Motor power from -255 (full reverse) to 255 (full forward). 0 = stop.',
-      required: true,
-    },
-    {
-      name: 'deviceId',
-      type: 'string',
-      description: 'Robot device ID',
-      required: true,
-    },
-  ],
-  execute: async (inputs) => {
-    const { power, deviceId } = inputs;
-
-    if (typeof power !== 'number' || power < -255 || power > 255) {
-      throw new Error('Power must be a number between -255 and 255');
-    }
-
-    if (!deviceId || typeof deviceId !== 'string') {
-      throw new Error('Invalid deviceId parameter');
-    }
-
-    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
-    const manager = getDeviceManager();
-    const device = manager.getDevice(deviceId);
-
-    if (!device) {
-      return {
-        success: false,
-        error: `Device not found: ${deviceId}`,
-        hint: 'Use create-virtual-device or connect a physical device first.',
-      };
-    }
-
-    // Get current left wheel power to maintain it while updating right
-    const state = manager.getDeviceState(deviceId);
-    const currentLeftPower = state?.robot?.motors?.left ?? 0;
-
-    const success = await manager.sendCommand(deviceId, {
-      type: 'drive',
-      payload: { left: currentLeftPower, right: Math.round(power) },
-    });
-
-    return {
-      success,
-      wheel: 'right',
-      power: Math.round(power),
-      message: success
-        ? `Right wheel set to power ${Math.round(power)}`
-        : 'Failed to control right wheel',
-    };
-  },
-};
-
-/**
- * Use Camera Tool
- * Captures an image from the robot's camera and optionally analyzes it
- */
-export const UseCameraTool: ToolDefinition = {
-  id: 'use-camera',
-  name: 'Use Camera',
-  description: `Capture an image from the robot's camera and optionally analyze it.
-
-The camera provides visual perception for the robot AI agent. Use it to:
-- Detect obstacles and objects
-- Identify landmarks for navigation
-- Recognize colors, shapes, or patterns
-- Map the environment
-
-Note: Camera capture is computationally expensive. Use sparingly.`,
-  inputs: [
-    {
-      name: 'deviceId',
-      type: 'string',
-      description: 'Robot device ID',
-      required: true,
-    },
-    {
-      name: 'analysisPrompt',
-      type: 'string',
-      description: 'What to look for in the image (e.g., "Is there an obstacle ahead?", "What color is the object in front?")',
+      description: 'Maximum iterations before stopping (optional, unlimited if not set)',
       required: false,
     },
   ],
   execute: async (inputs) => {
-    const { deviceId, analysisPrompt } = inputs;
+    const { deviceId, agentName, systemPrompt, loopIntervalMs = 500, maxIterations } = inputs;
 
     if (!deviceId || typeof deviceId !== 'string') {
-      throw new Error('Invalid deviceId parameter');
+      throw new Error('deviceId is required');
+    }
+    if (!agentName || typeof agentName !== 'string') {
+      throw new Error('agentName is required');
+    }
+    if (!systemPrompt || typeof systemPrompt !== 'string') {
+      throw new Error('systemPrompt is required');
     }
 
+    // Check device exists
     const { getDeviceManager } = await import('./hardware/esp32-device-manager');
     const manager = getDeviceManager();
     const device = manager.getDevice(deviceId);
@@ -2072,86 +1965,153 @@ Note: Camera capture is computationally expensive. Use sparingly.`,
       return {
         success: false,
         error: `Device not found: ${deviceId}`,
-        hint: 'Use create-virtual-device or connect a physical device first.',
+        hint: 'Create a virtual device first with create-virtual-device tool, or connect a physical device.',
       };
     }
 
-    // Capture frame from the device's simulated camera
-    const state = manager.getDeviceState(deviceId);
+    // Create and start the ESP32 agent
+    const { createESP32Agent, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
 
-    if (!state) {
+    // Check if agent already exists
+    const agentId = `${deviceId}-${agentName.toLowerCase().replace(/\s+/g, '-')}`;
+    const existingAgent = getESP32Agent(agentId);
+    if (existingAgent) {
       return {
         success: false,
-        error: 'Device has no state',
+        error: `Agent already running: ${agentId}`,
+        hint: 'Stop the existing agent first with stop-esp32-agent tool.',
       };
     }
 
-    // Generate a simulated camera frame based on sensor data
-    // In a real implementation, this would capture from actual camera hardware
-    const cameraData = {
-      width: 160,
-      height: 120,
-      timestamp: Date.now(),
-      // Simulated camera data based on distance sensors
-      frontObstacle: state.robot.sensors.distance.front < 50,
-      frontObstacleDistance: state.robot.sensors.distance.front,
-      leftObstacle: state.robot.sensors.distance.left < 50,
-      rightObstacle: state.robot.sensors.distance.right < 50,
-      lineDetected: state.robot.sensors.line.some((v: number) => v > 500),
-    };
+    const agent = createESP32Agent({
+      id: agentId,
+      name: agentName,
+      deviceId,
+      systemPrompt,
+      loopIntervalMs,
+      maxIterations,
+      onLog: (msg, level) => console.log(`[${level}] ${msg}`),
+    });
 
-    // Generate analysis based on sensor data if prompt provided
-    let analysis = '';
-    if (analysisPrompt) {
-      const prompt = analysisPrompt.toLowerCase();
-
-      if (prompt.includes('obstacle') || prompt.includes('ahead') || prompt.includes('front')) {
-        if (cameraData.frontObstacle) {
-          analysis = `Yes, there is an obstacle approximately ${cameraData.frontObstacleDistance}cm ahead. `;
-        } else {
-          analysis = `The path ahead appears clear (nearest obstacle is ${cameraData.frontObstacleDistance}cm away). `;
-        }
-      }
-
-      if (prompt.includes('left')) {
-        analysis += cameraData.leftObstacle
-          ? 'There is an obstacle on the left side. '
-          : 'The left side appears clear. ';
-      }
-
-      if (prompt.includes('right')) {
-        analysis += cameraData.rightObstacle
-          ? 'There is an obstacle on the right side. '
-          : 'The right side appears clear. ';
-      }
-
-      if (prompt.includes('line') || prompt.includes('floor') || prompt.includes('ground')) {
-        analysis += cameraData.lineDetected
-          ? 'A line or marking is detected on the ground. '
-          : 'No line detected on the ground. ';
-      }
-
-      if (!analysis) {
-        analysis = `Camera captured frame at ${new Date().toISOString()}. `;
-        analysis += `Front: ${cameraData.frontObstacleDistance}cm, `;
-        analysis += `Left obstacle: ${cameraData.leftObstacle ? 'yes' : 'no'}, `;
-        analysis += `Right obstacle: ${cameraData.rightObstacle ? 'yes' : 'no'}, `;
-        analysis += `Line detected: ${cameraData.lineDetected ? 'yes' : 'no'}`;
-      }
-    }
+    agent.start();
 
     return {
       success: true,
-      width: cameraData.width,
-      height: cameraData.height,
-      timestamp: cameraData.timestamp,
-      frontObstacle: cameraData.frontObstacle,
-      frontObstacleDistance: cameraData.frontObstacleDistance,
-      leftObstacle: cameraData.leftObstacle,
-      rightObstacle: cameraData.rightObstacle,
-      lineDetected: cameraData.lineDetected,
-      analysis: analysis || 'No analysis requested',
-      message: `Camera frame captured (${cameraData.width}x${cameraData.height})`,
+      agentId,
+      deviceId,
+      agentName,
+      loopIntervalMs,
+      maxIterations: maxIterations || 'unlimited',
+      message: `ESP32 agent "${agentName}" deployed to device ${deviceId}
+
+The agent is now running its control loop:
+1. Reading sensors from device hardware
+2. Calling LLMOS host for LLM decisions
+3. Executing tool calls locally on device
+4. Repeating every ${loopIntervalMs}ms
+
+Use stop-esp32-agent to stop, or list-esp32-agents to see all running agents.`,
+    };
+  },
+};
+
+/**
+ * Stop ESP32 Agent Tool
+ * Stops a running ESP32 agent
+ */
+export const StopESP32AgentTool: ToolDefinition = {
+  id: 'stop-esp32-agent',
+  name: 'Stop ESP32 Agent',
+  description: 'Stop a running ESP32 robot agent and safely halt the robot motors.',
+  inputs: [
+    {
+      name: 'agentId',
+      type: 'string',
+      description: 'The agent ID to stop (from deploy-esp32-agent or list-esp32-agents)',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { agentId } = inputs;
+
+    if (!agentId || typeof agentId !== 'string') {
+      throw new Error('agentId is required');
+    }
+
+    const { stopESP32Agent, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
+
+    const agent = getESP32Agent(agentId);
+    if (!agent) {
+      return {
+        success: false,
+        error: `Agent not found: ${agentId}`,
+        hint: 'Use list-esp32-agents to see running agents.',
+      };
+    }
+
+    const state = agent.getState();
+    const stopped = stopESP32Agent(agentId);
+
+    return {
+      success: stopped,
+      agentId,
+      finalStats: {
+        totalIterations: state.stats.totalIterations,
+        totalToolCalls: state.stats.totalToolCalls,
+        avgLoopTimeMs: Math.round(state.stats.avgLoopTimeMs),
+        avgLLMLatencyMs: Math.round(state.stats.avgLLMLatencyMs),
+      },
+      message: stopped
+        ? `Agent ${agentId} stopped. Motors halted, LED off.`
+        : `Failed to stop agent ${agentId}`,
+    };
+  },
+};
+
+/**
+ * List ESP32 Agents Tool
+ * Lists all running ESP32 agents
+ */
+export const ListESP32AgentsTool: ToolDefinition = {
+  id: 'list-esp32-agents',
+  name: 'List ESP32 Agents',
+  description: 'List all running ESP32 robot agents with their current status and stats.',
+  inputs: [],
+  execute: async () => {
+    const { listActiveESP32Agents, getESP32Agent } = await import('./runtime/esp32-agent-runtime');
+
+    const agentIds = listActiveESP32Agents();
+    const agents = agentIds.map((id) => {
+      const agent = getESP32Agent(id);
+      if (!agent) return null;
+
+      const state = agent.getState();
+      return {
+        agentId: id,
+        running: state.running,
+        iteration: state.iteration,
+        stats: {
+          totalIterations: state.stats.totalIterations,
+          totalToolCalls: state.stats.totalToolCalls,
+          avgLoopTimeMs: Math.round(state.stats.avgLoopTimeMs),
+          llmCalls: state.stats.llmCallCount,
+          avgLLMLatencyMs: Math.round(state.stats.avgLLMLatencyMs),
+        },
+        lastToolCalls: state.lastToolCalls.slice(-3).map((tc) => ({
+          tool: tc.tool,
+          success: tc.result.success,
+        })),
+        errors: state.errors.slice(-3),
+      };
+    }).filter(Boolean);
+
+    return {
+      success: true,
+      count: agents.length,
+      agents,
+      message: agents.length > 0
+        ? `${agents.length} ESP32 agent(s) running`
+        : 'No ESP32 agents currently running',
     };
   },
 };
@@ -2273,14 +2233,14 @@ export function getSystemTools(): ToolDefinition[] {
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
     GenerateAppletTool,
-    // Robot Agent Tools
+    // Robot Agent Tools (legacy)
     GenerateRobotAgentTool,
     StopRobotAgentTool,
     ListRobotAgentsTool,
-    // Robot AI Agent Tools (individual wheel + camera control)
-    ControlLeftWheelTool,
-    ControlRightWheelTool,
-    UseCameraTool,
+    // ESP32 Agent Tools (device-centric architecture)
+    DeployESP32AgentTool,
+    StopESP32AgentTool,
+    ListESP32AgentsTool,
     CopyAgentToUserTool,
     ValidateProjectAgentsTool,
     ConnectDeviceTool,

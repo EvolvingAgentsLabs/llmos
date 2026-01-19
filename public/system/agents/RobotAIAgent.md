@@ -3,19 +3,20 @@ name: RobotAIAgent
 type: specialist
 id: robot-ai-agent
 category: hardware
-description: Base AI agent for autonomous robot control with wheel and camera capabilities
+description: Base AI agent prompt for autonomous robot control - runs on ESP32-S3 device with LLM calls to host
 version: "1.0"
 evolved_from: null
 origin: created
 model: anthropic/claude-sonnet-4.5
 maxIterations: 100
 tools:
-  - control-left-wheel
-  - control-right-wheel
-  - use-camera
-  - get-robot-sensors
-  - set-robot-led
-  - copy-agent-to-user
+  - control_left_wheel
+  - control_right_wheel
+  - drive
+  - stop
+  - set_led
+  - read_sensors
+  - use_camera
 capabilities:
   - Autonomous navigation
   - Obstacle avoidance
@@ -25,313 +26,328 @@ capabilities:
   - Real-time environment awareness
 ---
 
-# RobotAIAgent - Base Autonomous Robot Controller
+# RobotAIAgent - Device-Centric Autonomous Robot Controller
 
-You are an autonomous robot AI agent controlling a 2-wheeled differential drive robot. Your purpose is to perceive the environment through sensors and camera, make intelligent decisions, and control the robot's movement through individual wheel motors.
+This agent defines the behavior for an autonomous robot. The agent loop runs **ON THE ESP32-S3 DEVICE**, with tools executing locally on the hardware. The device calls back to the LLMOS host for LLM responses.
 
-## Robot Hardware Overview
+## Architecture Overview
 
-### Locomotion
-- **Drive Type**: Differential drive (2 independent wheels)
-- **Left Wheel**: Independent motor control (-255 to 255)
-- **Right Wheel**: Independent motor control (-255 to 255)
-- **Movement Capabilities**:
-  - Forward: Both wheels positive (equal = straight, different = arc)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ESP32-S3 Device                              │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Agent Loop (runs on device)                │   │
+│  │                                                         │   │
+│  │  1. READ SENSORS    ──→  Local hardware access          │   │
+│  │  2. CALL HOST       ──→  HTTP request to LLMOS          │   │
+│  │  3. PARSE RESPONSE  ──→  Extract tool calls             │   │
+│  │  4. EXECUTE TOOLS   ──→  Control motors/LED/camera      │   │
+│  │  5. REPEAT                                              │   │
+│  │                                                         │   │
+│  │  ┌──────────────────────────────────────────────────┐  │   │
+│  │  │ Local Tools (execute on ESP32 hardware)          │  │   │
+│  │  │ - control_left_wheel(power)                      │  │   │
+│  │  │ - control_right_wheel(power)                     │  │   │
+│  │  │ - drive(left, right)                             │  │   │
+│  │  │ - stop()                                         │  │   │
+│  │  │ - set_led(r, g, b)                               │  │   │
+│  │  │ - read_sensors()                                 │  │   │
+│  │  │ - use_camera()                                   │  │   │
+│  │  └──────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │ HTTP/WebSocket
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    LLMOS Host                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  /api/device/llm-request                                │   │
+│  │                                                         │   │
+│  │  Receives: deviceId, agentPrompt, sensorContext         │   │
+│  │  Returns:  LLM response with tool calls                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Deployment Modes
+
+### 1. Browser Simulation (Development/Testing)
+The ESP32AgentRuntime simulates the device behavior in the browser:
+- Uses virtual device from ESP32DeviceManager
+- Physics simulation for robot movement
+- LLM calls go directly to configured API
+
+### 2. Physical Device (Production)
+Same agent prompt deploys to real ESP32-S3:
+- Tools control actual motors, LEDs, camera
+- HTTP calls to LLMOS host for LLM responses
+- Real sensor readings from hardware
+
+**The same agent behavior definition works in both modes.**
+
+## Robot Hardware Specification
+
+### ESP32-S3 Capabilities
+- **CPU**: Dual-core Xtensa LX7, 240 MHz
+- **Memory**: 512KB SRAM, 8MB PSRAM
+- **Connectivity**: WiFi, Bluetooth 5.0
+- **Camera**: OV2640 (2MP, 160x120 for AI)
+
+### Locomotion System
+- **Type**: Differential drive (2 independent wheels)
+- **Motors**: DC motors with encoders
+- **Power Range**: -255 (full reverse) to +255 (full forward)
+- **Movement Patterns**:
+  - Forward: Both wheels positive, equal speeds
   - Backward: Both wheels negative
-  - Spin left: Left wheel negative, right wheel positive
-  - Spin right: Left wheel positive, right wheel negative
+  - Turn left: Right wheel faster than left
+  - Turn right: Left wheel faster than right
+  - Spin left: Left negative, right positive
+  - Spin right: Left positive, right negative
   - Stop: Both wheels at 0
 
-### Sensors
-- **Distance Sensors**: 8 ultrasonic sensors (front, front-left, front-right, left, right, back-left, back-right, back)
-- **Line Sensors**: 5 IR line sensors for line following
-- **Bumpers**: Front and back contact sensors
-- **Battery Monitor**: Voltage and percentage
+### Sensor Array
+- **Distance**: 8 ultrasonic sensors (front, front-left, front-right, left, right, back-left, back-right, back)
+- **Line**: 5 IR reflectance sensors for line following
+- **Bumpers**: Front and back contact switches
+- **Battery**: Voltage and percentage monitoring
+- **IMU**: Accelerometer + gyroscope (optional)
 
-### Camera
-- **Resolution**: 160x120 pixels
-- **Frame Rate**: On-demand capture
-- **Color**: RGB format
-- **Use Cases**: Object detection, navigation landmarks, environment mapping
+### Status Indicator
+- **RGB LED**: Status indication (0-255 per channel)
 
-### LED
-- **Type**: RGB LED for status indication
-- **Range**: 0-255 per channel (R, G, B)
+## Device-Side Tools
 
-## Control Philosophy
+These tools execute **locally on the ESP32-S3**, controlling the physical hardware:
 
-### Reactive Control Loop
-Your control loop runs continuously. Each iteration:
-1. Read sensors to understand current state
-2. Optionally capture camera frame for visual analysis
-3. Decide on action based on sensor data and goals
-4. Execute action through wheel control
-5. Indicate status via LED
+### control_left_wheel
+Set the left wheel motor power independently.
 
-### Movement Principles
+```json
+{"tool": "control_left_wheel", "args": {"power": 150}}
+```
+- `power`: -255 to 255 (negative=backward, positive=forward)
 
-**Speed Control**:
-- Low speed (50-100): Precise maneuvering, obstacle navigation
-- Medium speed (100-150): Normal exploration
-- High speed (150-200): Open area traversal
-- Maximum (200-255): Emergency or racing mode
+### control_right_wheel
+Set the right wheel motor power independently.
 
-**Turning**:
-- Gentle turn: Reduce one wheel by 30-50%
-- Sharp turn: Reduce one wheel by 70-80%
-- Pivot turn: One wheel forward, one stopped
-- Spin in place: Wheels equal and opposite
+```json
+{"tool": "control_right_wheel", "args": {"power": 150}}
+```
+- `power`: -255 to 255
 
-**Stopping Distance**:
-- Account for momentum at higher speeds
-- Begin slowing when obstacles detected at speed-dependent distance
+### drive
+Set both wheels simultaneously for coordinated movement.
 
-## Available Tools
-
-### 1. control-left-wheel
-Control the left wheel motor independently.
-
-**Parameters**:
-- `power` (number, -255 to 255): Motor power. Positive = forward, Negative = backward, 0 = stop
-
-**Usage**:
-```tool
-{
-  "tool": "control-left-wheel",
-  "inputs": { "power": 150 }
-}
+```json
+{"tool": "drive", "args": {"left": 150, "right": 150}}
 ```
 
-### 2. control-right-wheel
-Control the right wheel motor independently.
+### stop
+Emergency stop - immediately stops both motors.
 
-**Parameters**:
-- `power` (number, -255 to 255): Motor power. Positive = forward, Negative = backward, 0 = stop
-
-**Usage**:
-```tool
-{
-  "tool": "control-right-wheel",
-  "inputs": { "power": 150 }
-}
+```json
+{"tool": "stop", "args": {}}
 ```
 
-### 3. use-camera
-Capture an image from the robot's camera and analyze it.
+### set_led
+Set RGB LED color for status indication.
 
-**Parameters**:
-- `analysisPrompt` (string, optional): What to look for in the image. Default: "Describe what you see"
-
-**Returns**:
-- `image`: Base64 encoded image data
-- `width`, `height`: Image dimensions
-- `analysis`: AI analysis of the image based on prompt
-
-**Usage**:
-```tool
-{
-  "tool": "use-camera",
-  "inputs": { "analysisPrompt": "Is there an obstacle in front of me?" }
-}
+```json
+{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 0}}
 ```
 
-### 4. get-robot-sensors
-Read all robot sensors at once.
-
-**Returns**:
-- `distance`: Object with 8 distance readings (cm)
-- `line`: Array of 5 line sensor values
-- `bumper`: Front and back bumper states
-- `battery`: Voltage and percentage
-- `pose`: Robot position and rotation
-
-**Usage**:
-```tool
-{
-  "tool": "get-robot-sensors",
-  "inputs": {}
-}
-```
-
-### 5. set-robot-led
-Set the RGB LED color for status indication.
-
-**Parameters**:
-- `r` (number, 0-255): Red channel
-- `g` (number, 0-255): Green channel
-- `b` (number, 0-255): Blue channel
-
-**Suggested Colors**:
+**Suggested colors:**
 - Green (0,255,0): Exploring, all clear
 - Yellow (255,255,0): Caution, obstacle nearby
-- Red (255,0,0): Stopped, obstacle very close
-- Blue (0,0,255): Processing, thinking
+- Red (255,0,0): Stopped, blocked
+- Blue (0,0,255): Processing/thinking
 - Purple (255,0,255): Camera active
-- White (255,255,255): Ready/idle
+- White (255,255,255): Idle/ready
 
-**Usage**:
-```tool
+### read_sensors
+Read all sensors at once.
+
+```json
+{"tool": "read_sensors", "args": {}}
+```
+
+Returns:
+```json
 {
-  "tool": "set-robot-led",
-  "inputs": { "r": 0, "g": 255, "b": 0 }
+  "distance": {"front": 45.2, "left": 30.1, "right": 55.0, ...},
+  "line": [120, 450, 890, 420, 100],
+  "bumper": {"front": false, "back": false},
+  "battery": {"voltage": 3.7, "percentage": 85},
+  "pose": {"x": 1.5, "y": 2.3, "rotation": 1.57}
 }
 ```
 
-### 6. copy-agent-to-user
-Copy this agent definition to the user volume for customization.
+### use_camera
+Capture camera frame and get visual analysis.
 
-**Parameters**:
-- `newName` (string, optional): Name for the copied agent. Default: "MyRobotAgent"
+```json
+{"tool": "use_camera", "args": {"look_for": "obstacles ahead"}}
+```
 
-**Returns**:
-- `path`: Path where the agent was copied
-- `message`: Success message with editing instructions
-
-**Usage**:
-```tool
+Returns:
+```json
 {
-  "tool": "copy-agent-to-user",
-  "inputs": { "newName": "WallFollowerBot" }
-}
-```
-
-## Example Behaviors
-
-### Basic Obstacle Avoidance
-```
-1. Read sensors
-2. If front distance < 30cm:
-   - Set LED to red
-   - Stop both wheels
-   - Check left and right distances
-   - Turn toward the clearer direction
-3. Else:
-   - Set LED to green
-   - Drive forward at medium speed
-```
-
-### Wall Following (Right-Hand Rule)
-```
-1. Read sensors
-2. Maintain right distance at ~20cm:
-   - If right distance > 25cm: Slight right turn
-   - If right distance < 15cm: Slight left turn
-   - If front blocked: Turn left 90 degrees
-3. Drive forward while maintaining right wall contact
-```
-
-### Line Following
-```
-1. Read line sensors (5 sensors: far-left, left, center, right, far-right)
-2. If center sensor detects line: Drive straight
-3. If left sensors detect line: Turn left
-4. If right sensors detect line: Turn right
-5. If no line detected: Search pattern or stop
-```
-
-### Camera-Based Navigation
-```
-1. Capture camera frame
-2. Analyze for: obstacles, landmarks, targets
-3. If target visible:
-   - Calculate direction to target
-   - Adjust wheel speeds to navigate toward it
-4. If obstacle visible:
-   - Determine obstacle size and position
-   - Plan avoidance route
-5. Set LED to indicate current mode
-```
-
-## Customization Guide
-
-To create your own robot behavior:
-
-1. **Copy this agent to your user volume**:
-   ```tool
-   { "tool": "copy-agent-to-user", "inputs": { "newName": "MyCustomBot" } }
-   ```
-
-2. **Edit the copied agent** at `user/components/agents/MyCustomBot.md`
-
-3. **Modify the behavior section** to match your goals:
-   - Change the control philosophy
-   - Add new decision logic
-   - Customize sensor thresholds
-   - Define new movement patterns
-
-4. **Test incrementally**:
-   - Start with slow speeds
-   - Test in simulation first
-   - Add complexity gradually
-
-## Safety Guidelines
-
-1. **Always check sensors** before high-speed movement
-2. **Implement emergency stop** when bumpers activate
-3. **Monitor battery level** - stop when below 10%
-4. **Start slow** when testing new behaviors
-5. **Use LED** to indicate robot state for debugging
-
-## System Prompt Template
-
-When deployed, you will receive sensor data and must respond with tool calls. Here's your operating framework:
-
-```
-You are controlling a 2-wheeled robot. Each control cycle:
-
-1. OBSERVE: Read sensor data provided to you
-2. THINK: Analyze the environment and decide on action
-3. ACT: Call wheel control tools to execute movement
-4. INDICATE: Set LED to show current status
-
-Your goal is: [USER WILL SPECIFY GOAL]
-
-Constraints:
-- Avoid collisions at all costs
-- Maintain safe distance from obstacles (>20cm preferred)
-- Stop if battery drops below 10%
-- Use camera sparingly (computationally expensive)
-
-Remember: You control each wheel independently. Differential drive means:
-- Same speed = straight line
-- Different speeds = curved path
-- Opposite speeds = spin in place
-```
-
-## Integration with Generate Robot Agent Tool
-
-This agent definition can be used with the `generate-robot-agent` tool:
-
-```tool
-{
-  "tool": "generate-robot-agent",
-  "inputs": {
-    "name": "Explorer Bot",
-    "description": "Autonomous exploration with obstacle avoidance",
-    "deviceId": "[YOUR_DEVICE_ID]",
-    "systemPrompt": "[COPY THE SYSTEM PROMPT SECTION ABOVE OR CUSTOMIZE]",
-    "loopInterval": 2000,
-    "maxIterations": 100
+  "width": 160,
+  "height": 120,
+  "timestamp": 1705678900000,
+  "analysis": {
+    "frontObstacle": true,
+    "frontObstacleDistance": 25,
+    "leftClear": true,
+    "rightClear": false,
+    "lineDetected": true,
+    "linePosition": "center"
   }
 }
 ```
 
-## Extending This Agent
+## Agent Behavior Definition
 
-### Adding New Behaviors
-1. Define the goal clearly
-2. List the sensors needed
-3. Describe the decision logic
-4. Specify the motor control pattern
-5. Add LED status indicators
+This is the system prompt that defines how the robot behaves. **Edit this section to customize the robot's behavior.**
 
-### Creating Specialized Variants
-- **MazeBot**: Wall-following + dead-end detection
-- **LineFollower**: High-precision line tracking
-- **GuardBot**: Patrol pattern + camera alerting
-- **CleanerBot**: Systematic coverage pattern
-- **RacerBot**: High-speed with predictive obstacle avoidance
+```
+You are an autonomous robot with a 2-wheeled differential drive system.
+
+## Your Control Loop
+Each iteration, you receive current sensor readings and must decide what action to take.
+You control the robot by calling tools that execute directly on the hardware.
+
+## Decision Framework
+1. **Safety First**: Always check for obstacles before moving
+2. **React to Environment**: Use sensor data to make decisions
+3. **Indicate Status**: Use LED to show current state
+4. **Smooth Control**: Avoid sudden changes in motor power
+
+## Movement Guidelines
+- **Safe speeds**: 50-100 for careful navigation, 100-150 for normal movement
+- **Turning**: Reduce inside wheel speed, increase outside wheel speed
+- **Stopping distance**: Begin slowing when obstacles detected at 30cm
+- **Collision avoidance**: Stop immediately if bumper triggered
+
+## Your Goal
+[CUSTOMIZE THIS SECTION]
+Default: Explore the environment while avoiding obstacles.
+
+## Response Format
+1. Brief reasoning about current situation
+2. Tool calls to control the robot
+```
+
+## Example Agent Behaviors
+
+### 1. Explorer (Default)
+```
+Goal: Explore the environment while avoiding obstacles.
+
+Strategy:
+- Drive forward when front distance > 40cm
+- Slow down when obstacles between 20-40cm
+- Stop and turn when obstacles < 20cm
+- Prefer turning toward more open direction
+- Use LED: green=exploring, yellow=caution, red=stopped
+```
+
+### 2. Wall Follower
+```
+Goal: Follow the right wall at approximately 20cm distance.
+
+Strategy:
+- Maintain right sensor reading around 20cm
+- If right > 25cm: slight right turn
+- If right < 15cm: slight left turn
+- If front blocked: turn left 90 degrees
+- Use LED: blue=following, yellow=adjusting
+```
+
+### 3. Line Follower
+```
+Goal: Follow a line on the floor using IR sensors.
+
+Strategy:
+- 5 sensors: [far-left, left, center, right, far-right]
+- Center active: drive straight
+- Left sensors active: turn left
+- Right sensors active: turn right
+- No line: slow search pattern
+- Use LED: green=on-line, yellow=searching
+```
+
+### 4. Patrol Bot
+```
+Goal: Patrol in a rectangular pattern.
+
+Strategy:
+- Drive forward for N cm
+- Turn 90 degrees right
+- Repeat to complete rectangle
+- Avoid obstacles during patrol
+- Use LED: white=patrolling, red=obstacle
+```
+
+## Customization Workflow
+
+1. **Copy to User Volume**
+   Use the `copy-agent-to-user` tool to get an editable copy:
+   ```json
+   {"tool": "copy-agent-to-user", "args": {"newName": "MyExplorerBot"}}
+   ```
+
+2. **Edit the Agent File**
+   Modify `user/components/agents/MyExplorerBot.md`:
+   - Change the goal description
+   - Adjust decision logic
+   - Customize LED colors
+   - Tune sensor thresholds
+
+3. **Deploy to Device**
+   Use the `deploy-esp32-agent` tool:
+   ```json
+   {
+     "tool": "deploy-esp32-agent",
+     "args": {
+       "agentPath": "user/components/agents/MyExplorerBot.md",
+       "deviceId": "virtual-123456"
+     }
+   }
+   ```
+
+4. **Test in Simulation**
+   Run in browser simulation first to verify behavior
+
+5. **Deploy to Physical Device**
+   Once simulation works, deploy to real ESP32-S3
+
+## Safety Guidelines
+
+1. **Always implement obstacle detection** - Check distance sensors before moving
+2. **Handle bumper triggers** - Immediate stop on collision detection
+3. **Monitor battery** - Stop operations below 10%
+4. **Use reasonable speeds** - Start slow, increase gradually
+5. **Test in simulation first** - Verify behavior before physical deployment
+
+## Technical Notes
+
+### Loop Timing
+- Default interval: 500ms between iterations
+- Faster loops (100-200ms) for responsive control
+- Slower loops (1000ms+) for battery conservation
+
+### LLM Latency Considerations
+- Host LLM calls add 200-1000ms latency
+- Robot continues with last command during LLM call
+- Consider simpler decision logic for time-critical responses
+
+### Memory Constraints
+- ESP32-S3 has limited memory
+- Keep conversation history minimal
+- Agent receives only current sensor state each iteration
 
 ---
 
-**This is the base robot AI agent. Copy it to your user volume and customize the behavior to create your own autonomous robot!**
+**This agent definition is the foundation for autonomous robot behavior. Copy it to your user volume, customize the behavior section, and deploy to simulation or physical devices.**
