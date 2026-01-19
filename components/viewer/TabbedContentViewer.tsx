@@ -49,6 +49,19 @@ const AppletViewer = dynamic(
   }
 );
 
+// Dynamically import MarkdownRenderer for markdown preview
+const MarkdownRenderer = dynamic(
+  () => import('../chat/MarkdownRenderer'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full flex items-center justify-center bg-bg-primary">
+        <div className="text-fg-tertiary text-sm">Loading markdown...</div>
+      </div>
+    ),
+  }
+);
+
 type ViewTab = 'preview' | 'code';
 
 interface TabbedContentViewerProps {
@@ -87,6 +100,12 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
   const isExecutableFile = (path: string): boolean => {
     const ext = path.split('.').pop()?.toLowerCase() || '';
     return ['py', 'js', 'ts'].includes(ext);
+  };
+
+  // Check if file is a markdown file
+  const isMarkdownFile = (path: string): boolean => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    return ext === 'md';
   };
 
   // Get Monaco language from file extension
@@ -178,7 +197,7 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
 
   const { actualVolume, relativePath, vfsPath } = parseFilePath(filePath);
 
-  // Load file content
+  // Load file content from VFS (client-side only)
   useEffect(() => {
     const loadFile = async () => {
       setIsLoading(true);
@@ -186,49 +205,37 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
       logActivity?.('action', 'Loading file', filePath);
 
       try {
-        // Try VFS first for user and team files
-        if (actualVolume === 'user' || actualVolume === 'team') {
-          const vfs = getVFS();
-          const content = vfs.readFileContent(vfsPath);
-          if (content !== null) {
-            setCode(content);
-            setOriginalCode(content);
-            logActivity?.('success', 'File loaded from VFS', vfsPath);
-            setIsLoading(false);
-            return;
-          }
+        // All volumes are now in VFS (system files are cached on first load)
+        const vfs = getVFS();
+        const content = vfs.readFileContent(vfsPath);
+
+        if (content !== null) {
+          setCode(content);
+          setOriginalCode(content);
+          logActivity?.('success', 'File loaded from VFS', vfsPath);
+          setIsLoading(false);
+          return;
         }
 
-        // Try public folder for system files
+        // If system file not found in VFS, try fetching from public folder
         if (actualVolume === 'system') {
-          // First try VFS for system files
-          const vfs = getVFS();
-          const vfsContent = vfs.readFileContent(vfsPath);
-          if (vfsContent !== null) {
-            setCode(vfsContent);
-            setOriginalCode(vfsContent);
-            logActivity?.('success', 'File loaded from VFS', vfsPath);
-            setIsLoading(false);
-            return;
-          }
-
-          // Then try public folder
-          const response = await fetch(`/system/${relativePath}`);
+          const publicPath = `/volumes/system/${relativePath}`;
+          const response = await fetch(publicPath);
           if (response.ok) {
             const content = await response.text();
+            // Cache in VFS for future use
+            vfs.writeFile(vfsPath, content);
             setCode(content);
             setOriginalCode(content);
-            logActivity?.('success', 'File loaded from public', relativePath);
+            logActivity?.('success', 'File loaded from public', publicPath);
             setIsLoading(false);
             return;
           }
         }
 
-        // Fallback to volume file system (GitHub-backed)
-        const content = await fileSystem.readFile(actualVolume, relativePath);
-        setCode(content);
-        setOriginalCode(content);
-        logActivity?.('success', 'File loaded', relativePath);
+        // File not found
+        setError(`File not found: ${vfsPath}`);
+        logActivity?.('error', 'File not found', vfsPath);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMsg);
@@ -342,14 +349,15 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
 
   const isApplet = isAppletFile(filePath);
   const isExecutable = isExecutableFile(filePath);
+  const isMarkdown = isMarkdownFile(filePath);
 
   // Determine default tab based on file type
   useEffect(() => {
-    // Applets default to preview, other files to code
-    if (!isApplet && !isExecutable) {
+    // Applets and markdown files default to preview, other files to code
+    if (!isApplet && !isExecutable && !isMarkdown) {
       setActiveTab('code');
     }
-  }, [isApplet, isExecutable]);
+  }, [isApplet, isExecutable, isMarkdown]);
 
   if (isLoading) {
     return (
@@ -568,6 +576,16 @@ export default function TabbedContentViewer({ filePath, volume, onClose }: Tabbe
                     )}
                   </div>
                 )}
+              </div>
+            ) : isMarkdown ? (
+              // Render markdown files with MarkdownRenderer
+              <div className="h-full overflow-auto p-6 bg-[#0d1117]">
+                <div className="max-w-3xl mx-auto">
+                  <MarkdownRenderer
+                    content={code}
+                    enableCodeExecution={true}
+                  />
+                </div>
               </div>
             ) : (
               // For non-executable files, show a preview message
