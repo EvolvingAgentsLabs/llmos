@@ -832,6 +832,7 @@ export const DiscoverSubAgentsTool: ToolDefinition = {
         'UXDesigner.md',
         'ProjectAgentPlanner.md',
         'HardwareControlAgent.md',
+        'RobotAIAgent.md',
       ];
 
       for (const fileName of knownSystemAgents) {
@@ -1885,6 +1886,382 @@ The firmware runs in the browser using the VirtualESP32 simulator.`,
 };
 
 /**
+ * Control Left Wheel Tool
+ * Independently controls the left wheel motor for the robot AI agent
+ */
+export const ControlLeftWheelTool: ToolDefinition = {
+  id: 'control-left-wheel',
+  name: 'Control Left Wheel',
+  description: `Control the left wheel motor independently.
+
+Use this tool to set the power/speed of the left wheel. Combined with right wheel control,
+this enables differential drive:
+- Both wheels same speed = straight line
+- Different speeds = curved path
+- Opposite directions = spin in place`,
+  inputs: [
+    {
+      name: 'power',
+      type: 'number',
+      description: 'Motor power from -255 (full reverse) to 255 (full forward). 0 = stop.',
+      required: true,
+    },
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Robot device ID',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { power, deviceId } = inputs;
+
+    if (typeof power !== 'number' || power < -255 || power > 255) {
+      throw new Error('Power must be a number between -255 and 255');
+    }
+
+    if (!deviceId || typeof deviceId !== 'string') {
+      throw new Error('Invalid deviceId parameter');
+    }
+
+    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
+    const manager = getDeviceManager();
+    const device = manager.getDevice(deviceId);
+
+    if (!device) {
+      return {
+        success: false,
+        error: `Device not found: ${deviceId}`,
+        hint: 'Use create-virtual-device or connect a physical device first.',
+      };
+    }
+
+    // Get current right wheel power to maintain it while updating left
+    const state = manager.getDeviceState(deviceId);
+    const currentRightPower = state?.robot?.motors?.right ?? 0;
+
+    const success = await manager.sendCommand(deviceId, {
+      type: 'drive',
+      payload: { left: Math.round(power), right: currentRightPower },
+    });
+
+    return {
+      success,
+      wheel: 'left',
+      power: Math.round(power),
+      message: success
+        ? `Left wheel set to power ${Math.round(power)}`
+        : 'Failed to control left wheel',
+    };
+  },
+};
+
+/**
+ * Control Right Wheel Tool
+ * Independently controls the right wheel motor for the robot AI agent
+ */
+export const ControlRightWheelTool: ToolDefinition = {
+  id: 'control-right-wheel',
+  name: 'Control Right Wheel',
+  description: `Control the right wheel motor independently.
+
+Use this tool to set the power/speed of the right wheel. Combined with left wheel control,
+this enables differential drive:
+- Both wheels same speed = straight line
+- Different speeds = curved path
+- Opposite directions = spin in place`,
+  inputs: [
+    {
+      name: 'power',
+      type: 'number',
+      description: 'Motor power from -255 (full reverse) to 255 (full forward). 0 = stop.',
+      required: true,
+    },
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Robot device ID',
+      required: true,
+    },
+  ],
+  execute: async (inputs) => {
+    const { power, deviceId } = inputs;
+
+    if (typeof power !== 'number' || power < -255 || power > 255) {
+      throw new Error('Power must be a number between -255 and 255');
+    }
+
+    if (!deviceId || typeof deviceId !== 'string') {
+      throw new Error('Invalid deviceId parameter');
+    }
+
+    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
+    const manager = getDeviceManager();
+    const device = manager.getDevice(deviceId);
+
+    if (!device) {
+      return {
+        success: false,
+        error: `Device not found: ${deviceId}`,
+        hint: 'Use create-virtual-device or connect a physical device first.',
+      };
+    }
+
+    // Get current left wheel power to maintain it while updating right
+    const state = manager.getDeviceState(deviceId);
+    const currentLeftPower = state?.robot?.motors?.left ?? 0;
+
+    const success = await manager.sendCommand(deviceId, {
+      type: 'drive',
+      payload: { left: currentLeftPower, right: Math.round(power) },
+    });
+
+    return {
+      success,
+      wheel: 'right',
+      power: Math.round(power),
+      message: success
+        ? `Right wheel set to power ${Math.round(power)}`
+        : 'Failed to control right wheel',
+    };
+  },
+};
+
+/**
+ * Use Camera Tool
+ * Captures an image from the robot's camera and optionally analyzes it
+ */
+export const UseCameraTool: ToolDefinition = {
+  id: 'use-camera',
+  name: 'Use Camera',
+  description: `Capture an image from the robot's camera and optionally analyze it.
+
+The camera provides visual perception for the robot AI agent. Use it to:
+- Detect obstacles and objects
+- Identify landmarks for navigation
+- Recognize colors, shapes, or patterns
+- Map the environment
+
+Note: Camera capture is computationally expensive. Use sparingly.`,
+  inputs: [
+    {
+      name: 'deviceId',
+      type: 'string',
+      description: 'Robot device ID',
+      required: true,
+    },
+    {
+      name: 'analysisPrompt',
+      type: 'string',
+      description: 'What to look for in the image (e.g., "Is there an obstacle ahead?", "What color is the object in front?")',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { deviceId, analysisPrompt } = inputs;
+
+    if (!deviceId || typeof deviceId !== 'string') {
+      throw new Error('Invalid deviceId parameter');
+    }
+
+    const { getDeviceManager } = await import('./hardware/esp32-device-manager');
+    const manager = getDeviceManager();
+    const device = manager.getDevice(deviceId);
+
+    if (!device) {
+      return {
+        success: false,
+        error: `Device not found: ${deviceId}`,
+        hint: 'Use create-virtual-device or connect a physical device first.',
+      };
+    }
+
+    // Capture frame from the device's simulated camera
+    const state = manager.getDeviceState(deviceId);
+
+    if (!state) {
+      return {
+        success: false,
+        error: 'Device has no state',
+      };
+    }
+
+    // Generate a simulated camera frame based on sensor data
+    // In a real implementation, this would capture from actual camera hardware
+    const cameraData = {
+      width: 160,
+      height: 120,
+      timestamp: Date.now(),
+      // Simulated camera data based on distance sensors
+      frontObstacle: state.robot.sensors.distance.front < 50,
+      frontObstacleDistance: state.robot.sensors.distance.front,
+      leftObstacle: state.robot.sensors.distance.left < 50,
+      rightObstacle: state.robot.sensors.distance.right < 50,
+      lineDetected: state.robot.sensors.line.some((v: number) => v > 500),
+    };
+
+    // Generate analysis based on sensor data if prompt provided
+    let analysis = '';
+    if (analysisPrompt) {
+      const prompt = analysisPrompt.toLowerCase();
+
+      if (prompt.includes('obstacle') || prompt.includes('ahead') || prompt.includes('front')) {
+        if (cameraData.frontObstacle) {
+          analysis = `Yes, there is an obstacle approximately ${cameraData.frontObstacleDistance}cm ahead. `;
+        } else {
+          analysis = `The path ahead appears clear (nearest obstacle is ${cameraData.frontObstacleDistance}cm away). `;
+        }
+      }
+
+      if (prompt.includes('left')) {
+        analysis += cameraData.leftObstacle
+          ? 'There is an obstacle on the left side. '
+          : 'The left side appears clear. ';
+      }
+
+      if (prompt.includes('right')) {
+        analysis += cameraData.rightObstacle
+          ? 'There is an obstacle on the right side. '
+          : 'The right side appears clear. ';
+      }
+
+      if (prompt.includes('line') || prompt.includes('floor') || prompt.includes('ground')) {
+        analysis += cameraData.lineDetected
+          ? 'A line or marking is detected on the ground. '
+          : 'No line detected on the ground. ';
+      }
+
+      if (!analysis) {
+        analysis = `Camera captured frame at ${new Date().toISOString()}. `;
+        analysis += `Front: ${cameraData.frontObstacleDistance}cm, `;
+        analysis += `Left obstacle: ${cameraData.leftObstacle ? 'yes' : 'no'}, `;
+        analysis += `Right obstacle: ${cameraData.rightObstacle ? 'yes' : 'no'}, `;
+        analysis += `Line detected: ${cameraData.lineDetected ? 'yes' : 'no'}`;
+      }
+    }
+
+    return {
+      success: true,
+      width: cameraData.width,
+      height: cameraData.height,
+      timestamp: cameraData.timestamp,
+      frontObstacle: cameraData.frontObstacle,
+      frontObstacleDistance: cameraData.frontObstacleDistance,
+      leftObstacle: cameraData.leftObstacle,
+      rightObstacle: cameraData.rightObstacle,
+      lineDetected: cameraData.lineDetected,
+      analysis: analysis || 'No analysis requested',
+      message: `Camera frame captured (${cameraData.width}x${cameraData.height})`,
+    };
+  },
+};
+
+/**
+ * Copy Agent to User Tool
+ * Copies a system agent definition to the user volume for customization
+ */
+export const CopyAgentToUserTool: ToolDefinition = {
+  id: 'copy-agent-to-user',
+  name: 'Copy Agent to User',
+  description: `Copy the RobotAIAgent (or any system agent) to your user volume for customization.
+
+This allows you to:
+- Create your own robot behavior based on the base agent
+- Modify the system prompt and decision logic
+- Customize sensor thresholds and movement patterns
+- Build specialized robots (maze solver, line follower, etc.)
+
+The copied agent can be edited and used with generate-robot-agent.`,
+  inputs: [
+    {
+      name: 'sourceAgent',
+      type: 'string',
+      description: 'Source agent path (default: system/agents/RobotAIAgent.md)',
+      required: false,
+    },
+    {
+      name: 'newName',
+      type: 'string',
+      description: 'Name for the copied agent (default: MyRobotAgent)',
+      required: false,
+    },
+  ],
+  execute: async (inputs) => {
+    const { sourceAgent = 'system/agents/RobotAIAgent.md', newName = 'MyRobotAgent' } = inputs;
+
+    // Sanitize the new name for file system
+    const sanitizedName = newName.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!sanitizedName) {
+      throw new Error('Invalid agent name. Use alphanumeric characters, underscores, or hyphens.');
+    }
+
+    // Read the source agent
+    let sourceContent: string;
+
+    try {
+      // Try to fetch from public system folder
+      const sourcePath = sourceAgent.replace(/^\//, '');
+      const response = await fetch(`/${sourcePath}`);
+
+      if (!response.ok) {
+        throw new Error(`Source agent not found: ${sourceAgent}`);
+      }
+
+      sourceContent = await response.text();
+    } catch (error: any) {
+      // Try to read from VFS as fallback
+      const vfs = getVFS();
+      const file = vfs.readFile(sourceAgent);
+
+      if (!file) {
+        throw new Error(`Could not read source agent: ${sourceAgent}`);
+      }
+
+      sourceContent = file.content;
+    }
+
+    // Update the frontmatter with new name and indicate it's evolved
+    const updatedContent = sourceContent
+      .replace(/^name:\s*.+$/m, `name: ${sanitizedName}`)
+      .replace(/^id:\s*.+$/m, `id: ${sanitizedName.toLowerCase().replace(/_/g, '-')}`)
+      .replace(/^evolved_from:\s*.+$/m, `evolved_from: ${sourceAgent}`)
+      .replace(/^origin:\s*.+$/m, 'origin: evolved');
+
+    // Write to user volume
+    const vfs = getVFS();
+    const destPath = `user/components/agents/${sanitizedName}.md`;
+    vfs.writeFile(destPath, updatedContent);
+
+    return {
+      success: true,
+      sourcePath: sourceAgent,
+      destinationPath: destPath,
+      agentName: sanitizedName,
+      message: `Agent copied successfully!
+
+Your custom agent is now at: ${destPath}
+
+To customize it:
+1. Edit the file to change the behavior, goals, and decision logic
+2. Modify sensor thresholds and movement patterns
+3. Use it with generate-robot-agent tool:
+
+\`\`\`tool
+{
+  "tool": "generate-robot-agent",
+  "inputs": {
+    "name": "${sanitizedName}",
+    "deviceId": "YOUR_DEVICE_ID",
+    "systemPrompt": "YOUR_CUSTOM_PROMPT_FROM_THE_AGENT_FILE"
+  }
+}
+\`\`\``,
+      hint: 'Edit the agent file to customize robot behavior, then use generate-robot-agent to run it.',
+    };
+  },
+};
+
+/**
  * Get all system tools
  */
 export function getSystemTools(): ToolDefinition[] {
@@ -1900,6 +2277,11 @@ export function getSystemTools(): ToolDefinition[] {
     GenerateRobotAgentTool,
     StopRobotAgentTool,
     ListRobotAgentsTool,
+    // Robot AI Agent Tools (individual wheel + camera control)
+    ControlLeftWheelTool,
+    ControlRightWheelTool,
+    UseCameraTool,
+    CopyAgentToUserTool,
     ValidateProjectAgentsTool,
     ConnectDeviceTool,
     SendDeviceCommandTool,
