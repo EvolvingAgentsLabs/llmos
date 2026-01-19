@@ -1,59 +1,14 @@
 /**
- * Platform API - Desktop-First (Phase 1)
+ * Platform API - Hybrid (Desktop + Web)
  *
- * Simplified for desktop-only builds.
- * Browser support code is preserved below for Phase 2 if needed.
+ * Supports both Electron desktop and browser/Vercel deployment.
+ * Automatically detects platform and uses appropriate implementations.
  *
- * For Phase 1: All exports point to desktop-only implementations.
+ * Desktop (Electron): Full native capabilities
+ * Browser (Vercel): Virtual filesystem, CDN compilers, limited serial
  */
-
-// Desktop-only exports (Phase 1)
-export {
-  isElectron,
-  DesktopFS as PlatformFS,
-  DesktopASC as PlatformASC,
-  DesktopSerial as PlatformSerial,
-  DesktopSystem as PlatformSystem,
-  getDesktopCapabilities as getPlatformCapabilities,
-  getDesktopInfo as getPlatformInfo,
-} from './desktop';
-
-// Re-export types for compatibility
-export type { DesktopCapabilities as PlatformCapabilities } from './desktop';
-
-/**
- * Platform type (always 'electron' in Phase 1)
- */
-export type PlatformType = 'electron';
-
-/**
- * Get current platform type
- * Always returns 'electron' in desktop builds
- */
-export function getPlatformType(): PlatformType {
-  return 'electron';
-}
-
-/* ============================================================================
- * BROWSER SUPPORT CODE (Phase 2)
- * ============================================================================
- *
- * The code below is preserved for potential Phase 2 browser support.
- * It is commented out for Phase 1 desktop-only builds.
- *
- * To re-enable browser support in Phase 2:
- * 1. Uncomment the code below
- * 2. Update exports above to check platform type
- * 3. Create lib/platform/browser.ts with browser implementations
- * 4. Update build configuration
- *
- * ============================================================================
 
 import type {
-  ElectronFSAPI,
-  ElectronASCAPI,
-  ElectronSerialAPI,
-  ElectronSystemAPI,
   FileInfo,
   ASCCompileResult,
   ASCCompileOptions,
@@ -64,45 +19,70 @@ import type {
 // Platform type (browser or electron)
 export type PlatformType = 'browser' | 'electron';
 
-// Check if running in Electron
+/**
+ * Check if running in Electron
+ */
 export function isElectron(): boolean {
   return typeof window !== 'undefined' && window.electronSystem !== undefined;
 }
 
-// Get current platform type
+/**
+ * Check if running in browser (Vercel/web)
+ */
+export function isBrowser(): boolean {
+  return typeof window !== 'undefined' && !isElectron();
+}
+
+/**
+ * Get current platform type
+ */
 export function getPlatformType(): PlatformType {
   return isElectron() ? 'electron' : 'browser';
 }
 
-// Platform capabilities
+/**
+ * Platform capabilities
+ */
 export interface PlatformCapabilities {
   nativeFileSystem: boolean;
+  virtualFileSystem: boolean;
   assemblyScript: boolean;
   nativeAssemblyScript: boolean;
   serialPorts: boolean;
   fullSerialPorts: boolean;
+  webSerialAPI: boolean;
   nativeMenus: boolean;
   systemDialogs: boolean;
   offlineMode: boolean;
+  hardwareDeployment: boolean;
 }
 
-// Get platform capabilities
+/**
+ * Get platform capabilities
+ */
 export function getPlatformCapabilities(): PlatformCapabilities {
   const isDesktop = isElectron();
+  const hasWebSerial = typeof navigator !== 'undefined' && 'serial' in navigator;
 
   return {
     nativeFileSystem: isDesktop,
-    assemblyScript: true,
+    virtualFileSystem: true, // Always available via isomorphic-git/lightning-fs
+    assemblyScript: true, // Available on both (native or CDN)
     nativeAssemblyScript: isDesktop,
-    serialPorts: isDesktop || ('serial' in navigator),
+    serialPorts: isDesktop || hasWebSerial,
     fullSerialPorts: isDesktop,
+    webSerialAPI: hasWebSerial && !isDesktop,
     nativeMenus: isDesktop,
     systemDialogs: isDesktop,
     offlineMode: isDesktop,
+    hardwareDeployment: isDesktop, // Only desktop can deploy to real hardware
   };
 }
 
-// Platform-agnostic File System API
+/**
+ * Platform-agnostic File System API
+ * Uses native FS in Electron, virtual FS in browser
+ */
 export const PlatformFS = {
   async read(volumeType: string, filePath: string): Promise<string> {
     if (isElectron() && window.electronFS) {
@@ -155,6 +135,16 @@ export const PlatformFS = {
     }
   },
 
+  async mkdir(volumeType: string, dirPath: string): Promise<void> {
+    if (isElectron() && window.electronFS) {
+      return window.electronFS.mkdir(volumeType, dirPath);
+    }
+    // Browser fallback: directories are created implicitly when files are written
+    // in lightning-fs, so we just ensure the path is valid and do nothing
+    // The directory will be created when a file is written to it
+    console.debug(`[PlatformFS] mkdir called in browser mode for ${volumeType}:${dirPath} - directories are implicit`);
+  },
+
   async openFileDialog(options?: any): Promise<{ canceled: boolean; filePaths: string[] }> {
     if (isElectron() && window.electronFS) {
       return window.electronFS.openFileDialog(options);
@@ -177,9 +167,19 @@ export const PlatformFS = {
       input.click();
     });
   },
+
+  /**
+   * Check if using native or virtual file system
+   */
+  isNative(): boolean {
+    return isElectron();
+  },
 };
 
-// Platform-agnostic AssemblyScript Compiler API
+/**
+ * Platform-agnostic AssemblyScript Compiler API
+ * Uses native compiler in Electron (faster), CDN in browser
+ */
 export const PlatformASC = {
   async compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult> {
     // Prefer Electron native compiler (faster, more features)
@@ -234,7 +234,7 @@ export const PlatformASC = {
   },
 
   isAvailable(): boolean {
-    return true;
+    return true; // Available on both platforms
   },
 
   isNative(): boolean {
@@ -242,16 +242,17 @@ export const PlatformASC = {
   },
 };
 
-// Platform-agnostic Serial Port API
+/**
+ * Platform-agnostic Serial Port API
+ * Full access in Electron, limited Web Serial API in browser
+ */
 export const PlatformSerial = {
   async list(): Promise<SerialPortInfo[]> {
     if (isElectron() && window.electronSerial) {
       return window.electronSerial.list();
     }
     // Browser: Web Serial API doesn't support listing without user gesture
-    if ('serial' in navigator) {
-      return [];
-    }
+    // Return empty array - user must use requestPort()
     return [];
   },
 
@@ -259,13 +260,18 @@ export const PlatformSerial = {
     if (isElectron() && window.electronSerial) {
       return window.electronSerial.connect(portPath, options);
     }
-    throw new Error('Serial port access requires LLMos Desktop or Web Serial API');
+    // Browser: Would need Web Serial API implementation
+    throw new Error(
+      'Serial port access requires LLMos Desktop. ' +
+      'Web Serial API support coming soon - use the desktop app for hardware programming.'
+    );
   },
 
   async disconnect(portPath: string): Promise<void> {
     if (isElectron() && window.electronSerial) {
       return window.electronSerial.disconnect(portPath);
     }
+    // No-op in browser
   },
 
   async write(portPath: string, data: ArrayBuffer | string): Promise<void> {
@@ -289,12 +295,28 @@ export const PlatformSerial = {
     return () => {};
   },
 
+  /**
+   * Check if serial ports are available
+   */
   isAvailable(): boolean {
+    if (isElectron()) {
+      return window.electronSerial !== undefined;
+    }
+    // Check for Web Serial API
+    return typeof navigator !== 'undefined' && 'serial' in navigator;
+  },
+
+  /**
+   * Check if full serial port functionality is available (Electron only)
+   */
+  hasFullAccess(): boolean {
     return isElectron() && window.electronSerial !== undefined;
   },
 };
 
-// Platform-agnostic System API
+/**
+ * Platform-agnostic System API
+ */
 export const PlatformSystem = {
   async getPlatform(): Promise<string> {
     if (isElectron() && window.electronSystem) {
@@ -309,21 +331,20 @@ export const PlatformSystem = {
   },
 
   async isDesktop(): Promise<boolean> {
-    if (isElectron() && window.electronSystem) {
-      return window.electronSystem.isDesktop();
-    }
-    return false;
+    return isElectron();
   },
 
   async openExternal(url: string): Promise<void> {
     if (isElectron() && window.electronSystem) {
       return window.electronSystem.openExternal(url);
     }
-    window.open(url, '_blank');
+    // Browser: open in new tab
+    window.open(url, '_blank', 'noopener,noreferrer');
   },
 
   onMenuEvent(event: string, callback: (...args: any[]) => void): () => void {
     if (!isElectron() || !window.electronSystem) {
+      // No menu events in browser
       return () => {};
     }
 
@@ -344,38 +365,57 @@ export const PlatformSystem = {
   },
 };
 
-// Platform info for display
+/**
+ * Platform info for display
+ */
 export function getPlatformInfo(): {
   type: PlatformType;
   displayName: string;
   version: string;
   features: string[];
+  limitations: string[];
 } {
   const isDesktop = isElectron();
 
+  if (isDesktop) {
+    return {
+      type: 'electron',
+      displayName: 'LLMos Desktop',
+      version: '1.0.0',
+      features: [
+        'Native file system access',
+        'Native AssemblyScript compilation (faster)',
+        'Full serial port communication',
+        'Hardware deployment (ESP32)',
+        'Offline operation',
+        'System menus',
+        'Native dialogs',
+      ],
+      limitations: [],
+    };
+  }
+
   return {
-    type: isDesktop ? 'electron' : 'browser',
-    displayName: isDesktop ? 'LLMos Desktop' : 'LLMos Web',
+    type: 'browser',
+    displayName: 'LLMos Web',
     version: '1.0.0',
-    features: isDesktop
-      ? [
-          'Native file system access',
-          'Native AssemblyScript compilation (faster)',
-          'Full serial port communication',
-          'Offline operation',
-          'System menus',
-          'Native dialogs',
-        ]
-      : [
-          'Browser-based virtual filesystem',
-          'AssemblyScript compilation (browser CDN)',
-          'C to WASM compilation (browser)',
-          'Web Serial API (with user gesture)',
-          'Online operation',
-        ],
+    features: [
+      'Browser-based virtual filesystem',
+      'AssemblyScript compilation (CDN)',
+      'C to WASM compilation (Wasmer)',
+      'Python runtime (Pyodide)',
+      '3D robot simulation',
+      'AI agent system',
+      'Code editor',
+    ],
+    limitations: [
+      'No hardware deployment (use Desktop app)',
+      'No native serial port access',
+      'Files stored in browser (not persistent across browsers)',
+      'Requires internet connection',
+    ],
   };
 }
 
-* ============================================================================
-* END OF BROWSER SUPPORT CODE
-* ============================================================================ */
+// Re-export types
+export type { FileInfo, ASCCompileResult, ASCCompileOptions, SerialPortInfo, SerialPortOptions };

@@ -1,25 +1,29 @@
 /**
- * Next.js Configuration - Desktop-First (Phase 1)
+ * Next.js Configuration - Hybrid (Desktop + Web)
  *
- * Optimized for Electron desktop builds.
- * Browser fallbacks are minimal since Electron provides Node.js APIs.
- *
- * For Phase 2 (browser support), see commented configurations below.
+ * Supports both Electron desktop and Vercel web deployment.
+ * Platform detection at runtime determines available features.
  *
  * @type {import('next').NextConfig}
  */
 const nextConfig = {
   reactStrictMode: true,
 
-  // Desktop-only: Static export for Electron
-  output: 'export',
+  // No static export - enables API routes and serverless functions for Vercel
+  // For Electron-only builds, add: output: 'export'
 
   // Transpile Three.js packages for proper ESM support
   transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
 
-  // Desktop-only: Images are local files, no optimization needed
+  // Allow remote images for web deployment + local for Electron
   images: {
     unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
 
   webpack: (config, { isServer }) => {

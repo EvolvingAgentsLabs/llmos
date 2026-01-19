@@ -1,18 +1,17 @@
 /**
- * Platform Indicator Component - Desktop-Only (Phase 1)
+ * Platform Indicator Component - Hybrid (Desktop + Web)
  *
- * Displays LLMos Desktop status and available capabilities.
+ * Displays LLMos platform status and available capabilities.
  * Shows a subtle indicator that can be expanded to see detailed feature information.
  *
- * Simplified for desktop-only builds. For Phase 2 browser support,
- * restore web vs desktop detection from git history.
+ * Supports both Electron desktop and browser/Vercel deployment.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Monitor, ChevronDown, ChevronUp, Cpu, HardDrive, Usb, Wifi } from 'lucide-react';
-import { getPlatformInfo, getPlatformCapabilities } from '@/lib/platform';
+import { Monitor, Globe, ChevronDown, ChevronUp, Cpu, HardDrive, Usb, Wifi, AlertCircle } from 'lucide-react';
+import { getPlatformInfo, getPlatformCapabilities, isElectron } from '@/lib/platform';
 
 export function PlatformIndicator() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -36,7 +35,11 @@ export function PlatformIndicator() {
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 px-4 py-2 w-full text-left hover:bg-gray-800/50 transition-colors"
         >
-          <Monitor className="w-4 h-4 text-blue-400" />
+          {platformInfo.type === 'electron' ? (
+            <Monitor className="w-4 h-4 text-blue-400" />
+          ) : (
+            <Globe className="w-4 h-4 text-green-400" />
+          )}
           <span className="text-sm font-medium text-gray-100">
             {platformInfo.displayName}
           </span>
@@ -83,7 +86,9 @@ export function PlatformIndicator() {
 
             {/* Features List */}
             <div>
-              <h4 className="text-xs font-semibold text-gray-400 mb-2">Desktop Features</h4>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2">
+                {platformInfo.type === 'electron' ? 'Desktop Features' : 'Web Features'}
+              </h4>
               <ul className="space-y-1">
                 {platformInfo.features.map((feature, idx) => (
                   <li key={idx} className="text-xs text-gray-300 flex items-start gap-2">
@@ -93,6 +98,24 @@ export function PlatformIndicator() {
                 ))}
               </ul>
             </div>
+
+            {/* Limitations (Web only) */}
+            {platformInfo.limitations && platformInfo.limitations.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-yellow-400 mb-2 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Limitations
+                </h4>
+                <ul className="space-y-1">
+                  {platformInfo.limitations.map((limitation, idx) => (
+                    <li key={idx} className="text-xs text-gray-400 flex items-start gap-2">
+                      <span className="text-yellow-400 mt-0.5">!</span>
+                      <span>{limitation}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -128,7 +151,7 @@ function CapabilityBadge({ icon, label, enabled, tooltip }: CapabilityBadgeProps
 
 /**
  * Compact Platform Badge (for use in headers/toolbars)
- * Desktop-only version
+ * Shows Desktop or Web based on platform
  */
 export function PlatformBadge() {
   const [platformInfo, setPlatformInfo] = useState<ReturnType<typeof getPlatformInfo> | null>(null);
@@ -139,13 +162,19 @@ export function PlatformBadge() {
 
   if (!platformInfo) return null;
 
+  const isDesktop = platformInfo.type === 'electron';
+
   return (
     <div
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"
+      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
+        isDesktop
+          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+          : 'bg-green-500/10 text-green-400 border border-green-500/20'
+      }`}
       title={platformInfo.displayName}
     >
-      <Monitor className="w-3 h-3" />
-      <span>Desktop</span>
+      {isDesktop ? <Monitor className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
+      <span>{isDesktop ? 'Desktop' : 'Web'}</span>
     </div>
   );
 }
