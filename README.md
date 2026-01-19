@@ -1017,7 +1017,122 @@ In the **Team Volume**, multiple AI Physical Agents will be able to interact wit
 
 ### The LLM OS Evolutive Approach
 
-LLMos embodies an **evolutive approach** where the system continuously improves:
+LLMos is the result of a deliberate evolution in how we think about AI agent systems:
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="33%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="8" y="8" width="32" height="32" fill="#8957e5" rx="4"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="16">1</text>
+</svg>
+<br/><b>Evolving Agents</b>
+<br/><sub>Python + MongoDB</sub>
+<br/><sub><a href="https://github.com/matiasmolinas/evolving-agents">github.com/matiasmolinas/evolving-agents</a></sub>
+</td>
+<td align="center" width="33%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="8" y="8" width="32" height="32" fill="#3fb950" rx="4"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="16">2</text>
+</svg>
+<br/><b>LLMunix</b>
+<br/><sub>Pure Markdown</sub>
+<br/><sub><a href="https://github.com/EvolvingAgentsLabs/llmunix-marketplace">github.com/EvolvingAgentsLabs/llmunix-marketplace</a></sub>
+</td>
+<td align="center" width="33%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="8" y="8" width="32" height="32" fill="#58a6ff" rx="4"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="16">3</text>
+</svg>
+<br/><b>LLMos</b>
+<br/><sub>AI Physical Agents</sub>
+<br/><sub>You are here!</sub>
+</td>
+</tr>
+</table>
+</div>
+
+**Key insight**: Markdown files are the perfect medium for AI agent evolution - human-readable, AI-writable, and version-controllable.
+
+### Short-Term & Long-Term Learning
+
+Every AI Physical Agent maintains two types of memory:
+
+**Short-Term Memory** - Timestamped execution logs:
+```
+[14:32:01] PLAN: Navigate to loading dock B
+[14:32:03] SENSE: Obstacle at 45cm, right side
+[14:32:04] DECIDE: Apply pattern 'obstacle_avoidance_right'
+[14:32:05] ACT: drive_motors(60, 100) - gentle left turn
+[14:32:07] REFLECT: Success - cleared in 2.1s
+```
+
+**Long-Term Memory** - Distilled patterns and insights:
+```yaml
+pattern: obstacle_avoidance_right
+success_rate: 94.7%
+contexts: [warehouse, narrow_corridor]
+insight: "Gentle turns outperform sharp turns by 23%"
+```
+
+Learning happens at multiple levels:
+- **Individual agent** - Each robot learns from its experience
+- **User** - Personal agents share patterns in User Volume
+- **Team** - Team Volume enables collective intelligence
+- **System** - Successful patterns can be promoted to help everyone
+
+### Rich Chat: Collaborative Decision-Making
+
+The chat interface is a **collaborative workspace** where:
+
+**System Agent generates sub-agents dynamically:**
+```
+System Agent: I've analyzed your delivery task. I'm generating:
+  1. PathPlanner - optimizes routes
+  2. ObstacleHandler - manages avoidance
+  3. BatteryManager - ensures charge
+
+Should I proceed with this team?
+```
+
+**You're part of the team** - not just the commander:
+- **Define goals** - High-level objectives
+- **Vote on options** - Choose between valid approaches
+- **Review checkpoints** - Human-in-the-loop for critical decisions
+- **Contribute insights** - Your observations become learning
+
+```
+System Agent: Two approaches for warehouse mapping:
+
+Option A: Systematic grid sweep
+- Complete coverage, predictable time
+
+Option B: Adaptive exploration (Recommended)
+- Faster, builds on learned patterns
+
+Your vote?
+```
+
+### AI Physical Agents as First-Class Citizens
+
+In the LLM OS architecture, AI Physical Agents are not peripherals - they're **first-class citizens**:
+
+| Traditional OS | LLM OS |
+|----------------|--------|
+| Files | Artifacts (agents, tools, skills) |
+| Processes | Agent execution loops |
+| Users | Humans AND AI Physical Agents |
+| Permissions | Volume access (System/Team/User) |
+| IPC | Agent-to-agent messaging |
+| System calls | LLM inference requests |
+
+Each AI Physical Agent:
+- **Has identity** - Unique definition with history
+- **Has memory** - Short-term and long-term learning
+- **Has relationships** - Communicates with other agents
+- **Has evolution** - Grows and improves over time
+- **Has voice** - Proposes plans and contributes to decisions
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -1030,12 +1145,7 @@ LLMos embodies an **evolutive approach** where the system continuously improves:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-- **Pattern Matching**: LLMos remembers what worked and queries similar past tasks
-- **Skill Evolution**: Successful patterns become reusable skills
-- **Agent Improvement**: Agents learn from execution history
-- **Collective Intelligence**: Team volumes enable shared learning across users
-
-This is the foundation of a true **LLM Operating System** - where natural language becomes the interface for creating, controlling, and evolving intelligent physical systems.
+This is the foundation of a true **LLM Operating System** - where humans and AI Physical Agents evolve together, sharing not just artifacts but learning processes across individuals, devices, and teams.
 
 ---
 
