@@ -5,8 +5,11 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical } from 'lucide-react';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
+import { artifactManager } from '@/lib/artifacts/artifact-manager';
+import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
+import { getVFS } from '@/lib/virtual-fs';
 
 /**
  * RobotWorkspace - The new primary workspace layout
@@ -51,11 +54,17 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
   // File viewer state
   const [viewMode, setViewMode] = useState<'agents' | 'files'>('agents');
-  const [selectedFile, setSelectedFile] = useState<{ path: string; content: string; volume: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ path: string; content: string; volume: string; isEditing?: boolean; artifactId?: string } | null>(null);
   const [fileTree, setFileTree] = useState<any[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set());
+
+  // Agent artifacts state
+  const [agents, setAgents] = useState<Artifact[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; agent: Artifact } | null>(null);
 
   // Extract agent activity from workspace state
   // Map the simple agentState string to the AgentActivity interface expected by RobotWorldPanel
@@ -94,30 +103,98 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     // TODO: Add waypoint or target position
   }, []);
 
-  // Load file tree from volume
+  // Load file tree from volume (with VFS fallback)
   const loadFileTree = useCallback(async (volume: 'user' | 'team' | 'system') => {
     setIsLoadingFiles(true);
     try {
-      // Use Electron FS API to list files
-      if (typeof window !== 'undefined' && (window as any).electronFS) {
-        const entries = await (window as any).electronFS.list(volume, '');
-        console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${volume} volume`);
+      let entries: any[] = [];
 
-        // Convert FileInfo[] to tree node format
-        const formattedEntries = entries.map((entry: any) => ({
-          name: entry.name,
-          path: entry.path,
-          type: entry.isDirectory ? 'directory' : 'file',
-          children: entry.isDirectory ? [] : undefined,
-          loaded: false,
+      // Try Electron FS API first
+      if (typeof window !== 'undefined' && (window as any).electronFS) {
+        try {
+          entries = await (window as any).electronFS.list(volume, '');
+          console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${volume} volume via Electron FS`);
+        } catch (electronError) {
+          console.warn('[RobotWorkspace] Electron FS failed, falling back to VFS:', electronError);
+        }
+      }
+
+      // If Electron FS not available or returned empty, fall back to VFS
+      if (entries.length === 0 && typeof window !== 'undefined') {
+        const vfs = getVFS();
+        const vfsResult = vfs.listDirectory(volume);
+
+        // Convert VFS files to tree node format
+        const vfsFiles = vfsResult.files.map((file) => ({
+          name: file.path.split('/').pop() || file.path,
+          path: file.path.replace(`${volume}/`, ''),
+          type: 'file' as const,
+          children: undefined,
+          loaded: true,
         }));
 
-        setFileTree(formattedEntries);
-        setExpandedFolders(new Set());
-      } else {
-        console.warn('[RobotWorkspace] Electron FS API not available');
-        setFileTree([]);
+        // Convert VFS directories to tree node format
+        const vfsDirs = vfsResult.directories
+          .filter(dir => dir !== volume && dir.startsWith(`${volume}/`))
+          .map((dir) => ({
+            name: dir.split('/').pop() || dir,
+            path: dir.replace(`${volume}/`, ''),
+            type: 'directory' as const,
+            children: [],
+            loaded: false,
+          }));
+
+        entries = [...vfsDirs, ...vfsFiles];
+        console.log(`[RobotWorkspace] Loaded ${entries.length} entries from ${volume} volume via VFS`);
+
+        // Also include artifacts as virtual files
+        await artifactManager.initialize();
+        const volumeArtifacts = artifactManager.filter({ volume });
+        for (const artifact of volumeArtifacts) {
+          if (artifact.type === 'agent' && artifact.codeView) {
+            // Check if we already have this file
+            const fileName = `${artifact.name.replace(/\s+/g, '-')}.md`;
+            const existingFile = entries.find(e => e.name === fileName);
+            if (!existingFile) {
+              entries.push({
+                name: fileName,
+                path: `agents/${fileName}`,
+                type: 'file',
+                children: undefined,
+                loaded: true,
+                artifactId: artifact.id,
+              });
+            }
+          }
+        }
+
+        // Create agents directory if there are agent files
+        const agentFiles = entries.filter(e => e.path?.startsWith('agents/'));
+        if (agentFiles.length > 0 && !entries.find(e => e.path === 'agents' && e.type === 'directory')) {
+          entries.unshift({
+            name: 'agents',
+            path: 'agents',
+            type: 'directory',
+            children: agentFiles,
+            loaded: true,
+          });
+          // Remove agent files from root level
+          entries = entries.filter(e => !e.path?.startsWith('agents/') || e.path === 'agents');
+        }
       }
+
+      // Convert FileInfo[] to tree node format
+      const formattedEntries = entries.map((entry: any) => ({
+        name: entry.name,
+        path: entry.path,
+        type: entry.isDirectory ? 'directory' : entry.type || 'file',
+        children: entry.isDirectory ? [] : entry.children,
+        loaded: entry.loaded || false,
+        artifactId: entry.artifactId,
+      }));
+
+      setFileTree(formattedEntries);
+      setExpandedFolders(new Set());
     } catch (error) {
       console.error('[RobotWorkspace] Failed to load file tree:', error);
       setFileTree([]);
@@ -186,25 +263,132 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     }
   }, [expandedFolders, fileTree]);
 
-  // Load file content
-  const loadFileContent = useCallback(async (path: string, volume: 'user' | 'team' | 'system') => {
+  // Load file content (with VFS fallback)
+  const loadFileContent = useCallback(async (path: string, volume: 'user' | 'team' | 'system', artifactId?: string) => {
     try {
-      // Use Electron FS API to read file
-      if (typeof window !== 'undefined' && (window as any).electronFS) {
-        const content = await (window as any).electronFS.read(volume, path);
-        console.log(`[RobotWorkspace] Loaded file: ${volume}/${path}`);
+      let content: string | null = null;
 
+      // If we have an artifactId, load from artifact manager
+      if (artifactId) {
+        const artifact = artifactManager.get(artifactId);
+        if (artifact?.codeView) {
+          content = artifact.codeView;
+          console.log(`[RobotWorkspace] Loaded file from artifact: ${artifact.name}`);
+          setSelectedFile({
+            path: artifact.filePath || artifact.name,
+            content,
+            volume,
+            artifactId,
+          });
+          setEditContent(content);
+          return;
+        }
+      }
+
+      // Try Electron FS API first
+      if (typeof window !== 'undefined' && (window as any).electronFS) {
+        try {
+          content = await (window as any).electronFS.read(volume, path);
+          console.log(`[RobotWorkspace] Loaded file via Electron FS: ${volume}/${path}`);
+        } catch (electronError) {
+          console.warn('[RobotWorkspace] Electron FS read failed, falling back to VFS:', electronError);
+        }
+      }
+
+      // Fall back to VFS
+      if (!content && typeof window !== 'undefined') {
+        const vfs = getVFS();
+        const fullPath = `${volume}/${path}`;
+        content = vfs.readFileContent(fullPath);
+        if (content) {
+          console.log(`[RobotWorkspace] Loaded file via VFS: ${fullPath}`);
+        }
+      }
+
+      if (content !== null) {
         setSelectedFile({
           path,
           content,
           volume,
         });
+        setEditContent(content);
       } else {
-        console.warn('[RobotWorkspace] Electron FS API not available');
+        console.warn(`[RobotWorkspace] File not found: ${volume}/${path}`);
       }
     } catch (error) {
       console.error('[RobotWorkspace] Failed to load file content:', error);
     }
+  }, []);
+
+  // Load agents from artifact manager
+  const loadAgents = useCallback(async () => {
+    setIsLoadingAgents(true);
+    try {
+      // Initialize artifact manager if not already done
+      await artifactManager.initialize();
+
+      // Get agents filtered by volume
+      const allAgents = artifactManager.filter({ type: 'agent', volume: activeVolume });
+      setAgents(allAgents);
+      console.log(`[RobotWorkspace] Loaded ${allAgents.length} agents from ${activeVolume} volume`);
+    } catch (error) {
+      console.error('[RobotWorkspace] Failed to load agents:', error);
+      setAgents([]);
+    } finally {
+      setIsLoadingAgents(false);
+    }
+  }, [activeVolume]);
+
+  // Copy agent to another volume
+  const copyAgentToVolume = useCallback(async (agent: Artifact, targetVolume: ArtifactVolume) => {
+    try {
+      // Fork the artifact to the target volume
+      const forkedAgent = artifactManager.fork(agent.id, targetVolume);
+      if (forkedAgent) {
+        // Rename to remove "(fork)" suffix and update name
+        const newName = agent.name.replace(' (fork)', '');
+        artifactManager.update(forkedAgent.id, { name: newName });
+        console.log(`[RobotWorkspace] Copied agent "${agent.name}" to ${targetVolume} volume`);
+
+        // Reload agents if we're viewing the target volume
+        if (activeVolume === targetVolume) {
+          loadAgents();
+        }
+      }
+    } catch (error) {
+      console.error('[RobotWorkspace] Failed to copy agent:', error);
+    }
+    setContextMenu(null);
+  }, [activeVolume, loadAgents]);
+
+  // Save edited agent content
+  const saveAgentContent = useCallback(() => {
+    if (!selectedFile || !selectedFile.artifactId) return;
+
+    try {
+      artifactManager.update(selectedFile.artifactId, {
+        codeView: editContent,
+      });
+      setSelectedFile({ ...selectedFile, content: editContent, isEditing: false });
+      console.log(`[RobotWorkspace] Saved agent content for ${selectedFile.path}`);
+
+      // Reload agents to reflect changes
+      loadAgents();
+    } catch (error) {
+      console.error('[RobotWorkspace] Failed to save agent:', error);
+    }
+  }, [selectedFile, editContent, loadAgents]);
+
+  // View/edit agent
+  const openAgentFile = useCallback((agent: Artifact) => {
+    setSelectedFile({
+      path: agent.filePath || agent.name,
+      content: agent.codeView || '',
+      volume: agent.volume,
+      isEditing: false,
+      artifactId: agent.id,
+    });
+    setEditContent(agent.codeView || '');
   }, []);
 
   // Load file tree when volume or view mode changes
@@ -213,6 +397,22 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
       loadFileTree(activeVolume);
     }
   }, [viewMode, activeVolume, loadFileTree]);
+
+  // Load agents when volume or view mode changes
+  useEffect(() => {
+    if (viewMode === 'agents') {
+      loadAgents();
+    }
+  }, [viewMode, activeVolume, loadAgents]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
 
   return (
     <div className="h-full flex bg-[#0d1117] overflow-hidden">
@@ -285,126 +485,78 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-2">
-            {/* AGENTS VIEW */}
-            {viewMode === 'agents' && activeVolume === 'user' && (
+            {/* AGENTS VIEW - Dynamic from Artifact Manager */}
+            {viewMode === 'agents' && (
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  My AI Agents
+                  {activeVolume === 'user' ? 'My AI Agents' : activeVolume === 'team' ? 'Shared AI Agents' : 'System Agent Templates'}
                 </div>
-                <AgentTreeItem
-                  name="Wall Avoider"
-                  description="Navigate without collisions"
-                  agentId="user-wall-avoider"
-                  capabilities={['distance-sensors', 'reactive-control', 'led-feedback']}
-                  onClick={() => handleProgramSelect('user/agents/wall-avoider')}
-                />
-                <AgentTreeItem
-                  name="Maze Solver"
-                  description="Path planning & navigation"
-                  agentId="user-maze-solver"
-                  capabilities={['mapping', 'path-finding', 'llm-reasoning']}
-                  onClick={() => handleProgramSelect('user/agents/maze-solver')}
-                />
-                <AgentTreeItem
-                  name="Line Follower"
-                  description="PID control with LLM tuning"
-                  agentId="user-line-follower"
-                  capabilities={['line-sensors', 'pid-control', 'adaptive-tuning']}
-                  onClick={() => handleProgramSelect('user/agents/line-follower')}
-                />
-                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
-                  Agent Logs
-                </div>
-                <FileTreeItem
-                  name="session-1.log"
-                  type="file"
-                  icon="📊"
-                  onClick={() => handleProgramSelect('user/logs/session-1.log')}
-                />
-              </div>
-            )}
 
-            {/* AGENTS VIEW - Team Volume */}
-            {viewMode === 'agents' && activeVolume === 'team' && (
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  Shared AI Agents
-                </div>
-                <AgentTreeItem
-                  name="Competition Winner"
-                  description="Multi-agent challenge solver"
-                  agentId="team-challenge-winner"
-                  capabilities={['multi-agent', 'llm-coordination', 'advanced-planning']}
-                  onClick={() => handleProgramSelect('team/agents/challenge-winner')}
-                />
-                <AgentTreeItem
-                  name="Swarm Coordinator"
-                  description="Multi-robot coordination"
-                  agentId="team-swarm-coordinator"
-                  capabilities={['swarm-intelligence', 'communication', 'distributed-ai']}
-                  onClick={() => handleProgramSelect('team/agents/swarm-coordinator')}
-                />
-              </div>
-            )}
+                {isLoadingAgents ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#58a6ff]"></div>
+                  </div>
+                ) : agents.length > 0 ? (
+                  agents.map((agent) => (
+                    <AgentTreeItemWithActions
+                      key={agent.id}
+                      agent={agent}
+                      activeVolume={activeVolume}
+                      onView={() => openAgentFile(agent)}
+                      onCopy={(targetVolume) => copyAgentToVolume(agent, targetVolume)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenu({ x: e.clientX, y: e.clientY, agent });
+                      }}
+                    />
+                  ))
+                ) : (
+                  <div className="text-xs text-[#8b949e] px-2 py-4 text-center">
+                    No agents in this volume
+                    {activeVolume !== 'system' && (
+                      <div className="mt-2 text-[10px]">
+                        Copy agents from the system volume to get started
+                      </div>
+                    )}
+                  </div>
+                )}
 
-            {/* AGENTS VIEW - System Volume */}
-            {viewMode === 'agents' && activeVolume === 'system' && (
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  Agent Templates
-                </div>
-                <AgentTreeItem
-                  name="Basic Navigator"
-                  description="Simple movement control"
-                  agentId="system-basic-navigator"
-                  capabilities={['motor-control', 'basic-sensors']}
-                  onClick={() => handleProgramSelect('system/templates/basic-navigator')}
-                />
-                <AgentTreeItem
-                  name="Reactive Agent"
-                  description="Sensor-based reactive behavior"
-                  agentId="system-reactive-agent"
-                  capabilities={['distance-sensors', 'reactive-control']}
-                  onClick={() => handleProgramSelect('system/templates/reactive-agent')}
-                />
-                <AgentTreeItem
-                  name="LLM-Powered Agent"
-                  description="Claude-driven decision making"
-                  agentId="system-llm-agent"
-                  capabilities={['llm-reasoning', 'tool-calling', 'adaptive-behavior']}
-                  onClick={() => handleProgramSelect('system/templates/llm-agent')}
-                />
-                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
-                  Standard Maps
-                </div>
-                <FileTreeItem
-                  name="5m × 5m Empty"
-                  type="map"
-                  icon="🗺️"
-                  isActive={currentMap === 'standard5x5Empty'}
-                  onClick={() => setCurrentMap('standard5x5Empty')}
-                />
-                <FileTreeItem
-                  name="5m × 5m Obstacles"
-                  type="map"
-                  icon="🗺️"
-                  isActive={currentMap === 'standard5x5Obstacles'}
-                  onClick={() => setCurrentMap('standard5x5Obstacles')}
-                />
-                <FileTreeItem
-                  name="5m × 5m Line Track"
-                  type="map"
-                  icon="🗺️"
-                  isActive={currentMap === 'standard5x5LineTrack'}
-                  onClick={() => setCurrentMap('standard5x5LineTrack')}
-                />
-                <FileTreeItem
-                  name="5m × 5m Maze"
-                  type="map"
-                  icon="🗺️"
-                  isActive={currentMap === 'standard5x5Maze'}
-                  onClick={() => setCurrentMap('standard5x5Maze')}
-                />
+                {/* Standard Maps (only for system volume) */}
+                {activeVolume === 'system' && (
+                  <>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
+                      Standard Maps
+                    </div>
+                    <FileTreeItem
+                      name="5m × 5m Empty"
+                      type="map"
+                      icon="🗺️"
+                      isActive={currentMap === 'standard5x5Empty'}
+                      onClick={() => setCurrentMap('standard5x5Empty')}
+                    />
+                    <FileTreeItem
+                      name="5m × 5m Obstacles"
+                      type="map"
+                      icon="🗺️"
+                      isActive={currentMap === 'standard5x5Obstacles'}
+                      onClick={() => setCurrentMap('standard5x5Obstacles')}
+                    />
+                    <FileTreeItem
+                      name="5m × 5m Line Track"
+                      type="map"
+                      icon="🗺️"
+                      isActive={currentMap === 'standard5x5LineTrack'}
+                      onClick={() => setCurrentMap('standard5x5LineTrack')}
+                    />
+                    <FileTreeItem
+                      name="5m × 5m Maze"
+                      type="map"
+                      icon="🗺️"
+                      isActive={currentMap === 'standard5x5Maze'}
+                      onClick={() => setCurrentMap('standard5x5Maze')}
+                    />
+                  </>
+                )}
               </div>
             )}
 
@@ -444,7 +596,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
         </div>
       )}
 
-      {/* File Content Modal */}
+      {/* File Content Modal with Edit Support */}
       {selectedFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-[#0d1117] border border-[#30363d] rounded-lg shadow-2xl w-[90%] max-w-4xl max-h-[80vh] flex flex-col">
@@ -456,33 +608,173 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 <span className="text-xs text-[#8b949e] px-2 py-0.5 rounded bg-[#21262d]">
                   {selectedFile.volume}
                 </span>
+                {selectedFile.isEditing && (
+                  <span className="text-xs text-[#f0883e] px-2 py-0.5 rounded bg-[#f0883e]/20">
+                    Editing
+                  </span>
+                )}
               </div>
-              <button
-                onClick={() => setSelectedFile(null)}
-                className="w-6 h-6 rounded hover:bg-[#21262d] flex items-center justify-center transition-colors"
-                title="Close"
-              >
-                <X className="w-4 h-4 text-[#8b949e]" />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Edit/View Toggle (only for user/team volumes with artifactId) */}
+                {selectedFile.artifactId && selectedFile.volume !== 'system' && (
+                  <button
+                    onClick={() => {
+                      if (selectedFile.isEditing) {
+                        // Cancel editing
+                        setEditContent(selectedFile.content);
+                      }
+                      setSelectedFile({ ...selectedFile, isEditing: !selectedFile.isEditing });
+                    }}
+                    className="w-6 h-6 rounded hover:bg-[#21262d] flex items-center justify-center transition-colors"
+                    title={selectedFile.isEditing ? 'Cancel editing' : 'Edit file'}
+                  >
+                    <Edit3 className={`w-4 h-4 ${selectedFile.isEditing ? 'text-[#f0883e]' : 'text-[#8b949e]'}`} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="w-6 h-6 rounded hover:bg-[#21262d] flex items-center justify-center transition-colors"
+                  title="Close"
+                >
+                  <X className="w-4 h-4 text-[#8b949e]" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}
             <div className="flex-1 overflow-auto p-4 bg-[#0d1117]">
-              <pre className="text-xs text-[#e6edf3] font-mono whitespace-pre-wrap break-words">
-                {selectedFile.content}
-              </pre>
+              {selectedFile.isEditing ? (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full h-full min-h-[400px] text-xs text-[#e6edf3] font-mono bg-[#161b22] border border-[#30363d] rounded p-3 focus:outline-none focus:border-[#58a6ff] resize-none"
+                  spellCheck={false}
+                />
+              ) : (
+                <pre className="text-xs text-[#e6edf3] font-mono whitespace-pre-wrap break-words">
+                  {selectedFile.content}
+                </pre>
+              )}
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-3 border-t border-[#30363d] bg-[#161b22] flex justify-end gap-2 rounded-b-lg">
-              <button
-                onClick={() => setSelectedFile(null)}
-                className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#21262d] hover:bg-[#30363d] rounded transition-colors"
-              >
-                Close
-              </button>
+            <div className="px-4 py-3 border-t border-[#30363d] bg-[#161b22] flex justify-between gap-2 rounded-b-lg">
+              {/* Copy to volume buttons (for system agents) */}
+              {selectedFile.artifactId && selectedFile.volume === 'system' && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const agent = agents.find(a => a.id === selectedFile.artifactId);
+                      if (agent) copyAgentToVolume(agent, 'user');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#238636] hover:bg-[#2ea043] rounded transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy to User
+                  </button>
+                  <button
+                    onClick={() => {
+                      const agent = agents.find(a => a.id === selectedFile.artifactId);
+                      if (agent) copyAgentToVolume(agent, 'team');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#1f6feb] hover:bg-[#388bfd] rounded transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy to Team
+                  </button>
+                </div>
+              )}
+
+              {/* Copy between user/team */}
+              {selectedFile.artifactId && (selectedFile.volume === 'user' || selectedFile.volume === 'team') && !selectedFile.isEditing && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const agent = agents.find(a => a.id === selectedFile.artifactId);
+                      if (agent) copyAgentToVolume(agent, selectedFile.volume === 'user' ? 'team' : 'user');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#21262d] hover:bg-[#30363d] rounded transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy to {selectedFile.volume === 'user' ? 'Team' : 'User'}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-2 ml-auto">
+                {selectedFile.isEditing && (
+                  <button
+                    onClick={saveAgentContent}
+                    className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#238636] hover:bg-[#2ea043] rounded transition-colors flex items-center gap-1"
+                  >
+                    <Save className="w-3 h-3" />
+                    Save
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="px-3 py-1.5 text-xs font-medium text-[#e6edf3] bg-[#21262d] hover:bg-[#30363d] rounded transition-colors"
+                >
+                  {selectedFile.isEditing ? 'Cancel' : 'Close'}
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Context Menu for Agents */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl py-1 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              openAgentFile(contextMenu.agent);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-2 text-xs text-[#e6edf3] hover:bg-[#21262d] flex items-center gap-2 text-left"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            View / Edit
+          </button>
+          {contextMenu.agent.volume === 'system' && (
+            <>
+              <button
+                onClick={() => copyAgentToVolume(contextMenu.agent, 'user')}
+                className="w-full px-3 py-2 text-xs text-[#e6edf3] hover:bg-[#21262d] flex items-center gap-2 text-left"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy to User
+              </button>
+              <button
+                onClick={() => copyAgentToVolume(contextMenu.agent, 'team')}
+                className="w-full px-3 py-2 text-xs text-[#e6edf3] hover:bg-[#21262d] flex items-center gap-2 text-left"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy to Team
+              </button>
+            </>
+          )}
+          {contextMenu.agent.volume === 'user' && (
+            <button
+              onClick={() => copyAgentToVolume(contextMenu.agent, 'team')}
+              className="w-full px-3 py-2 text-xs text-[#e6edf3] hover:bg-[#21262d] flex items-center gap-2 text-left"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copy to Team
+            </button>
+          )}
+          {contextMenu.agent.volume === 'team' && (
+            <button
+              onClick={() => copyAgentToVolume(contextMenu.agent, 'user')}
+              className="w-full px-3 py-2 text-xs text-[#e6edf3] hover:bg-[#21262d] flex items-center gap-2 text-left"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copy to User
+            </button>
+          )}
         </div>
       )}
 
@@ -586,7 +878,111 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   );
 }
 
-// AI Agent tree item component
+// AI Agent tree item component with actions (for artifact-based agents)
+interface AgentTreeItemWithActionsProps {
+  agent: Artifact;
+  activeVolume: ArtifactVolume;
+  onView: () => void;
+  onCopy: (targetVolume: ArtifactVolume) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}
+
+function AgentTreeItemWithActions({ agent, activeVolume, onView, onCopy, onContextMenu }: AgentTreeItemWithActionsProps) {
+  // Generate unique robot icon based on agent ID
+  const robotConfig = generateRobotConfig(agent.id);
+  const iconDataUrl = robotIconToDataURL(robotConfig, 24);
+
+  // Extract tags for capabilities display
+  const capabilities = agent.tags || [];
+
+  return (
+    <div
+      className="w-full text-left px-2 py-2 rounded-md text-xs flex flex-col gap-1 transition-colors bg-[#161b22] border border-[#30363d] hover:border-[#58a6ff]/50 hover:bg-[#21262d] cursor-pointer group"
+      onClick={onView}
+      onContextMenu={onContextMenu}
+    >
+      <div className="flex items-center gap-2">
+        <img
+          src={iconDataUrl}
+          alt={agent.name}
+          className="w-5 h-5 flex-shrink-0"
+          style={{ imageRendering: 'pixelated' }}
+        />
+        <span className="font-medium flex-1 text-[#e6edf3] truncate">{agent.name}</span>
+        <span className="text-[10px] text-[#8b949e] px-1.5 py-0.5 rounded bg-[#21262d]">AI</span>
+        {/* Quick action buttons on hover */}
+        <div className="hidden group-hover:flex items-center gap-1">
+          {activeVolume === 'system' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('user');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#238636]/30 flex items-center justify-center"
+              title="Copy to User"
+            >
+              <Copy className="w-3 h-3 text-[#3fb950]" />
+            </button>
+          )}
+          {activeVolume === 'user' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('team');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#1f6feb]/30 flex items-center justify-center"
+              title="Copy to Team"
+            >
+              <Copy className="w-3 h-3 text-[#58a6ff]" />
+            </button>
+          )}
+          {activeVolume === 'team' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('user');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#238636]/30 flex items-center justify-center"
+              title="Copy to User"
+            >
+              <Copy className="w-3 h-3 text-[#3fb950]" />
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onContextMenu(e);
+            }}
+            className="w-5 h-5 rounded hover:bg-[#21262d] flex items-center justify-center"
+            title="More options"
+          >
+            <MoreVertical className="w-3 h-3 text-[#8b949e]" />
+          </button>
+        </div>
+      </div>
+      {agent.description && (
+        <p className="text-[10px] text-[#8b949e] pl-7 truncate">{agent.description}</p>
+      )}
+      {capabilities.length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-7">
+          {capabilities.slice(0, 2).map((cap) => (
+            <span
+              key={cap}
+              className="text-[9px] px-1.5 py-0.5 rounded bg-[#238636]/20 text-[#3fb950] border border-[#238636]/30"
+            >
+              {cap}
+            </span>
+          ))}
+          {capabilities.length > 2 && (
+            <span className="text-[9px] px-1 py-0.5 text-[#8b949e]">+{capabilities.length - 2}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Legacy AI Agent tree item component (kept for compatibility)
 interface AgentTreeItemProps {
   name: string;
   description: string;
@@ -674,7 +1070,7 @@ interface TreeNodeProps {
   expandedFolders: Set<string>;
   loadingFolders: Set<string>;
   onToggleFolder: (path: string, volume: 'user' | 'team' | 'system') => void;
-  onFileClick: (path: string, volume: 'user' | 'team' | 'system') => void;
+  onFileClick: (path: string, volume: 'user' | 'team' | 'system', artifactId?: string) => void;
 }
 
 function TreeNode({ node, volume, depth, expandedFolders, loadingFolders, onToggleFolder, onFileClick }: TreeNodeProps) {
@@ -684,7 +1080,7 @@ function TreeNode({ node, volume, depth, expandedFolders, loadingFolders, onTogg
     if (node.type === 'directory') {
       onToggleFolder(node.path, volume);
     } else {
-      onFileClick(node.path, volume);
+      onFileClick(node.path, volume, node.artifactId);
     }
   };
 
