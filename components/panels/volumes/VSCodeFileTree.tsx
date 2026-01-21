@@ -10,6 +10,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import {
   ChevronRightIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
+  HomeIcon,
   FolderIcon,
   FileIcon,
   DriveIcon,
@@ -87,12 +89,75 @@ export default function VSCodeFileTree({
   const [treeData, setTreeData] = useState<TreeNode[]>(INITIAL_TREE);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Current path for folder navigation (e.g., "/volumes/system/agents")
+  const [currentPath, setCurrentPath] = useState<string>(`/volumes/${activeVolume}`);
+
   // Check if a file is a code file based on extension
   const isCodeFile = (filename: string): boolean => {
     const codeExtensions = ['py', 'js', 'ts', 'tsx', 'jsx', 'json', 'yaml', 'yml', 'css', 'html', 'md'];
     const ext = filename.split('.').pop()?.toLowerCase() || '';
     return codeExtensions.includes(ext);
   };
+
+  // Navigation functions for folder browsing
+  const navigateToPath = useCallback((path: string) => {
+    setCurrentPath(path);
+    // Auto-expand the path in the tree
+    const pathParts = path.split('/').filter(Boolean);
+    const newExpanded = new Set(expandedNodes);
+    let currentPathBuild = '';
+    pathParts.forEach((part, index) => {
+      if (index === 0) return; // Skip 'volumes'
+      if (index === 1) {
+        // This is the volume level (system, team, user)
+        newExpanded.add(part);
+        currentPathBuild = `/volumes/${part}`;
+      } else {
+        // This is a subfolder
+        currentPathBuild += `/${part}`;
+        // Find the node ID for this path
+        const nodeId = `vfs-dir-${pathParts[1]}-${pathParts.slice(2, index + 1).join('/')}`;
+        newExpanded.add(nodeId);
+      }
+    });
+    setExpandedNodes(newExpanded);
+  }, [expandedNodes]);
+
+  const navigateUp = useCallback(() => {
+    const pathParts = currentPath.split('/').filter(Boolean);
+    if (pathParts.length > 2) {
+      // Go up one level (but stay within /volumes/[volume]/)
+      const newPath = '/' + pathParts.slice(0, -1).join('/');
+      navigateToPath(newPath);
+    }
+  }, [currentPath, navigateToPath]);
+
+  const navigateToRoot = useCallback(() => {
+    const volumeRoot = `/volumes/${activeVolume}`;
+    setCurrentPath(volumeRoot);
+  }, [activeVolume]);
+
+  // Get breadcrumb segments from current path
+  const getPathSegments = useCallback((): { name: string; path: string }[] => {
+    const pathParts = currentPath.split('/').filter(Boolean);
+    const segments: { name: string; path: string }[] = [];
+
+    pathParts.forEach((part, index) => {
+      if (index === 0) return; // Skip 'volumes'
+      const pathUpTo = '/' + pathParts.slice(0, index + 1).join('/');
+      segments.push({
+        name: index === 1 ? part.charAt(0).toUpperCase() + part.slice(1) : part,
+        path: pathUpTo,
+      });
+    });
+
+    return segments;
+  }, [currentPath]);
+
+  // Update currentPath when activeVolume changes
+  useEffect(() => {
+    setCurrentPath(`/volumes/${activeVolume}`);
+  }, [activeVolume]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -533,10 +598,17 @@ export default function VSCodeFileTree({
 
       if (node.type === 'folder' || node.type === 'volume') {
         toggleNode(node.id, node.metadata?.volume as 'system' | 'team' | 'user' | undefined);
+        // Update current path when navigating to a folder or volume
+        setCurrentPath(node.path);
         return;
       }
 
       if (node.type === 'file') {
+        // Update current path to the file's parent folder
+        const parentPath = node.path.split('/').slice(0, -1).join('/');
+        if (parentPath) {
+          setCurrentPath(parentPath);
+        }
         if (isCodeFile(node.name) && onCodeFileSelect) {
           onCodeFileSelect(node.path);
         } else if (onFileSelect) {
@@ -642,6 +714,9 @@ export default function VSCodeFileTree({
   const activeVolumeNode = treeData.find(v => v.id === activeVolume);
   const activeVolumeItemCount = activeVolumeNode ? countItems(activeVolumeNode.children || []) : 0;
 
+  const pathSegments = getPathSegments();
+  const canNavigateUp = currentPath.split('/').filter(Boolean).length > 2;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
@@ -662,6 +737,57 @@ export default function VSCodeFileTree({
         </div>
       </div>
 
+      {/* Navigation Bar */}
+      <div className="px-2 py-1.5 border-b border-border-primary/30 bg-bg-secondary/20 flex items-center gap-1">
+        {/* Home button */}
+        <button
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary transition-colors text-fg-tertiary hover:text-fg-secondary"
+          onClick={navigateToRoot}
+          title="Go to root"
+        >
+          <HomeIcon className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Up button */}
+        <button
+          className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+            canNavigateUp
+              ? 'hover:bg-bg-tertiary text-fg-tertiary hover:text-fg-secondary cursor-pointer'
+              : 'text-fg-tertiary/30 cursor-not-allowed'
+          }`}
+          onClick={canNavigateUp ? navigateUp : undefined}
+          disabled={!canNavigateUp}
+          title="Go up one level"
+        >
+          <ChevronUpIcon className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Separator */}
+        <div className="w-px h-4 bg-border-primary/50 mx-1" />
+
+        {/* Breadcrumb path */}
+        <div className="flex-1 flex items-center gap-0.5 overflow-x-auto scrollbar-none">
+          {pathSegments.map((segment, index) => (
+            <div key={segment.path} className="flex items-center">
+              {index > 0 && (
+                <ChevronRightIcon className="w-3 h-3 text-fg-tertiary/50 flex-shrink-0" />
+              )}
+              <button
+                className={`text-[11px] px-1.5 py-0.5 rounded transition-colors truncate max-w-[100px] ${
+                  index === pathSegments.length - 1
+                    ? 'text-fg-primary font-medium bg-bg-tertiary/50'
+                    : 'text-fg-secondary hover:text-fg-primary hover:bg-bg-tertiary'
+                }`}
+                onClick={() => navigateToPath(segment.path)}
+                title={segment.path}
+              >
+                {segment.name}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* File tree */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 py-2 scrollbar-thin">
         {treeData.map((volumeNode) => renderTreeNode(volumeNode, 0))}
@@ -669,7 +795,7 @@ export default function VSCodeFileTree({
 
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-border-primary/50 bg-bg-secondary/30">
-        <div className="text-[10px] text-fg-tertiary flex items-center gap-3">
+        <div className="text-[10px] text-fg-tertiary flex items-center gap-2">
           {isLoading ? (
             <span className="flex items-center gap-1">
               <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse"></span>
@@ -681,8 +807,10 @@ export default function VSCodeFileTree({
                 <span className="w-1 h-1 rounded-full bg-accent-success"></span>
                 {activeVolumeItemCount} items
               </span>
-              <span>•</span>
-              <span>{activeVolume}</span>
+              <span className="text-fg-tertiary/50">|</span>
+              <span className="truncate font-mono" title={currentPath}>
+                {currentPath}
+              </span>
             </>
           )}
         </div>

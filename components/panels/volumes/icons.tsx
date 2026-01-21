@@ -22,6 +22,18 @@ export const ChevronDownIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+export const ChevronUpIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 16 16" fill="currentColor">
+    <path d="M4 10l4-4 4 4H4z"/>
+  </svg>
+);
+
+export const HomeIcon = ({ className }: { className?: string }) => (
+  <svg className={className || "w-4 h-4"} viewBox="0 0 16 16" fill="currentColor">
+    <path d="M8 1L1 7h2v7h4v-4h2v4h4V7h2L8 1zm0 2.5L12 7v6h-2v-4H6v4H4V7l4-3.5z"/>
+  </svg>
+);
+
 // ============================================================================
 // FILE & FOLDER ICONS
 // ============================================================================
