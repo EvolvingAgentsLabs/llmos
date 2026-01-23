@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings } from 'lucide-react';
+import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot } from 'lucide-react';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
@@ -55,6 +55,7 @@ interface RobotWorldPanelProps {
   onRobotClick?: () => void;
   onArenaClick?: (x: number, y: number) => void;
   agentActivity?: AgentActivity;
+  robotAgentName?: string; // Name of the selected/created robot agent to display
 }
 
 export default function RobotWorldPanel({
@@ -63,7 +64,10 @@ export default function RobotWorldPanel({
   onRobotClick,
   onArenaClick,
   agentActivity,
+  robotAgentName,
 }: RobotWorldPanelProps) {
+  // Unified robot color
+  const ROBOT_COLOR = '#58a6ff';
   const canvasRef = useRef<HTMLDivElement>(null);
   const simulatorRef = useRef<ReturnType<typeof createCubeRobotSimulator> | null>(null);
   const animationFrameRef = useRef<number>();
@@ -366,6 +370,21 @@ export default function RobotWorldPanel({
           )}
         </div>
 
+        {/* Robot Agent Name Overlay */}
+        {robotAgentName && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#0d1117]/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-xl flex items-center gap-2"
+            style={{ borderColor: `${ROBOT_COLOR}50` }}
+          >
+            <Cpu className="w-4 h-4" style={{ color: ROBOT_COLOR }} />
+            <span className="text-sm font-semibold" style={{ color: ROBOT_COLOR }}>
+              {robotAgentName}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3fb950]/20 text-[#3fb950] border border-[#3fb950]/30">
+              Active
+            </span>
+          </div>
+        )}
+
         {/* Statistics Overlay */}
         {showStats && robotState && (
           <div className="absolute top-4 left-4 bg-[#0d1117]/90 backdrop-blur-sm border border-[#30363d] rounded-lg p-3 shadow-xl">
@@ -421,6 +440,12 @@ export default function RobotWorldPanel({
       {/* Bottom Info Bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-t border-[#30363d] text-xs">
         <div className="flex items-center gap-4">
+          {robotAgentName && (
+            <span className="flex items-center gap-1.5" style={{ color: ROBOT_COLOR }}>
+              <Cpu className="w-3 h-3" />
+              <span className="font-medium">{robotAgentName}</span>
+            </span>
+          )}
           <span className="text-[#8b949e]">
             Map: <span className="text-[#e6edf3] font-medium">{currentMap}</span>
           </span>
