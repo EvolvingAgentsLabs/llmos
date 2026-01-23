@@ -25,6 +25,9 @@ import {
   SensorReadings,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
+import { Artifact } from '@/lib/artifacts/types';
+import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
+import { Cpu, ChevronDown, Plus } from 'lucide-react';
 
 interface AgentMessage {
   id: string;
@@ -37,9 +40,18 @@ interface AgentMessage {
 interface RobotAgentPanelProps {
   deviceId?: string;
   onDeviceCreated?: (deviceId: string) => void;
+  selectedAgent?: Artifact | null;
+  availableAgents?: Artifact[];
+  onAgentSelect?: (agent: Artifact | null) => void;
 }
 
-export default function RobotAgentPanel({ deviceId: initialDeviceId, onDeviceCreated }: RobotAgentPanelProps) {
+export default function RobotAgentPanel({
+  deviceId: initialDeviceId,
+  onDeviceCreated,
+  selectedAgent,
+  availableAgents = [],
+  onAgentSelect
+}: RobotAgentPanelProps) {
   const [deviceId, setDeviceId] = useState<string | null>(initialDeviceId || null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<ESP32AgentState | null>(null);
@@ -48,8 +60,12 @@ export default function RobotAgentPanel({ deviceId: initialDeviceId, onDeviceCre
   const [selectedPrompt, setSelectedPrompt] = useState<keyof typeof DEFAULT_AGENT_PROMPTS>('explorer');
   const [customPrompt, setCustomPrompt] = useState('');
   const [loopInterval, setLoopInterval] = useState(1000);
+  const [showAgentSelector, setShowAgentSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
+
+  // Unified robot color
+  const ROBOT_COLOR = '#58a6ff';
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -227,13 +243,29 @@ export default function RobotAgentPanel({ deviceId: initialDeviceId, onDeviceCre
     }
   };
 
+  // Generate icon for selected agent
+  const selectedAgentIcon = selectedAgent
+    ? robotIconToDataURL(generateRobotConfig(selectedAgent.id), 24)
+    : null;
+
   return (
     <div className="flex flex-col h-full bg-bg-primary text-fg-primary">
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-border-primary bg-bg-secondary">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🤖</span>
-          <h2 className="font-semibold">Robot AI Agent</h2>
+          {selectedAgentIcon ? (
+            <img
+              src={selectedAgentIcon}
+              alt={selectedAgent?.name || 'Robot'}
+              className="w-6 h-6"
+              style={{ imageRendering: 'pixelated' }}
+            />
+          ) : (
+            <Cpu className="w-5 h-5" style={{ color: ROBOT_COLOR }} />
+          )}
+          <h2 className="font-semibold text-sm">
+            {selectedAgent?.name || 'Robot AI Agent'}
+          </h2>
           {isRunning && (
             <span className="px-2 py-0.5 text-xs bg-green-600 rounded-full animate-pulse">
               Running
@@ -245,6 +277,101 @@ export default function RobotAgentPanel({ deviceId: initialDeviceId, onDeviceCre
             <span className="text-xs text-fg-secondary">
               Iter: {agentState.iteration} | Tools: {agentState.stats.totalToolCalls}
             </span>
+          )}
+        </div>
+      </div>
+
+      {/* Agent Selector */}
+      <div className="p-3 border-b border-border-primary bg-bg-secondary/50">
+        <div className="relative">
+          <button
+            onClick={() => setShowAgentSelector(!showAgentSelector)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all"
+            style={{
+              backgroundColor: selectedAgent ? `${ROBOT_COLOR}15` : '#21262d',
+              borderColor: selectedAgent ? `${ROBOT_COLOR}50` : '#30363d'
+            }}
+          >
+            <div className="flex items-center gap-2">
+              {selectedAgent ? (
+                <>
+                  <img
+                    src={selectedAgentIcon!}
+                    alt={selectedAgent.name}
+                    className="w-5 h-5"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                  <span className="text-sm font-medium" style={{ color: ROBOT_COLOR }}>
+                    {selectedAgent.name}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${ROBOT_COLOR}20`, color: ROBOT_COLOR }}>
+                    Selected
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 text-[#8b949e]" />
+                  <span className="text-sm text-[#8b949e]">Select or Create Robot Agent</span>
+                </>
+              )}
+            </div>
+            <ChevronDown className={`w-4 h-4 text-[#8b949e] transition-transform ${showAgentSelector ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Dropdown */}
+          {showAgentSelector && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
+              {/* Create new option */}
+              <button
+                onClick={() => {
+                  onAgentSelect?.(null);
+                  setShowAgentSelector(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] transition-colors border-b border-[#30363d]"
+              >
+                <Plus className="w-4 h-4" />
+                Create New (Use Preset Behavior)
+              </button>
+
+              {/* Available agents */}
+              {availableAgents.length > 0 ? (
+                availableAgents.map((agent) => {
+                  const agentIcon = robotIconToDataURL(generateRobotConfig(agent.id), 20);
+                  const isSelected = selectedAgent?.id === agent.id;
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => {
+                        onAgentSelect?.(agent);
+                        setShowAgentSelector(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                        isSelected
+                          ? 'bg-[#58a6ff]/20 text-[#58a6ff]'
+                          : 'text-[#e6edf3] hover:bg-[#21262d]'
+                      }`}
+                    >
+                      <img
+                        src={agentIcon}
+                        alt={agent.name}
+                        className="w-5 h-5"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
+                      <span className="flex-1 text-left truncate">{agent.name}</span>
+                      {isSelected && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#58a6ff]/20">Active</span>
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-4 text-xs text-center text-[#8b949e]">
+                  No robot agents available.
+                  <br />
+                  <span className="text-[10px]">Copy from system volume or create a new one.</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

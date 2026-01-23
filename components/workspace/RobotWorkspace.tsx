@@ -5,7 +5,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu } from 'lucide-react';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
@@ -65,9 +65,13 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
   // Agent artifacts state
   const [agents, setAgents] = useState<Artifact[]>([]);
+  const [robotAgents, setRobotAgents] = useState<Artifact[]>([]); // Filtered robot-only agents
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; agent: Artifact } | null>(null);
+
+  // Selected robot agent for simulation
+  const [selectedRobotAgent, setSelectedRobotAgent] = useState<Artifact | null>(null);
 
   // Extract agent activity from workspace state
   // Map the simple agentState string to the AgentActivity interface expected by RobotWorldPanel
@@ -396,13 +400,25 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
       // Initialize artifact manager if not already done
       await artifactManager.initialize();
 
-      // Get agents filtered by volume
+      // Get all agents filtered by volume
       const allAgents = artifactManager.filter({ type: 'agent', volume: activeVolume });
       setAgents(allAgents);
-      console.log(`[RobotWorkspace] Loaded ${allAgents.length} agents from ${activeVolume} volume`);
+
+      // Filter robot agents (those with 'robot' or 'hardware' tags, or containing 'robot' in name)
+      const robotOnlyAgents = allAgents.filter(agent => {
+        const hasRobotTag = agent.tags?.some(tag =>
+          tag.toLowerCase() === 'robot' || tag.toLowerCase() === 'hardware'
+        );
+        const hasRobotInName = agent.name.toLowerCase().includes('robot');
+        return hasRobotTag || hasRobotInName;
+      });
+      setRobotAgents(robotOnlyAgents);
+
+      console.log(`[RobotWorkspace] Loaded ${allAgents.length} agents (${robotOnlyAgents.length} robot agents) from ${activeVolume} volume`);
     } catch (error) {
       console.error('[RobotWorkspace] Failed to load agents:', error);
       setAgents([]);
+      setRobotAgents([]);
     } finally {
       setIsLoadingAgents(false);
     }
@@ -460,6 +476,14 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     setEditContent(agent.codeView || '');
   }, []);
 
+  // Select robot agent for simulation
+  const selectRobotAgentForSimulation = useCallback((agent: Artifact) => {
+    setSelectedRobotAgent(agent);
+    // Switch to agent panel mode to run the selected agent
+    setRightPanelMode('agent');
+    console.log(`[RobotWorkspace] Selected robot agent for simulation: ${agent.name}`);
+  }, []);
+
   // Load file tree when volume or view mode changes
   useEffect(() => {
     if (viewMode === 'files') {
@@ -492,7 +516,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           <div className="px-3 py-2 border-b border-[#30363d] bg-[#161b22] flex items-center justify-between">
             <div className="flex items-center gap-2">
               {viewMode === 'agents' ? (
-                <FolderTree className="w-4 h-4 text-[#58a6ff]" />
+                <Cpu className="w-4 h-4 text-[#58a6ff]" />
               ) : (
                 <FileText className="w-4 h-4 text-[#3fb950]" />
               )}
@@ -519,8 +543,8 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                   : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
               }`}
             >
-              <FolderTree className="w-3.5 h-3.5" />
-              Agents
+              <Cpu className="w-3.5 h-3.5" />
+              Robot Agents
             </button>
             <button
               onClick={() => setViewMode('files')}
@@ -629,23 +653,26 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-2">
-            {/* AGENTS VIEW - Dynamic from Artifact Manager */}
+            {/* AGENTS VIEW - Robot Agents Only */}
             {viewMode === 'agents' && (
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1">
-                  {activeVolume === 'user' ? 'My AI Agents' : activeVolume === 'team' ? 'Shared AI Agents' : 'System Agent Templates'}
+                <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 flex items-center gap-1.5">
+                  <Cpu className="w-3 h-3 text-[#58a6ff]" />
+                  {activeVolume === 'user' ? 'My Robot Agents' : activeVolume === 'team' ? 'Shared Robot Agents' : 'Robot Agent Templates'}
                 </div>
 
                 {isLoadingAgents ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#58a6ff]"></div>
                   </div>
-                ) : agents.length > 0 ? (
-                  agents.map((agent) => (
-                    <AgentTreeItemWithActions
+                ) : robotAgents.length > 0 ? (
+                  robotAgents.map((agent) => (
+                    <RobotAgentTreeItem
                       key={agent.id}
                       agent={agent}
                       activeVolume={activeVolume}
+                      isSelected={selectedRobotAgent?.id === agent.id}
+                      onSelect={() => selectRobotAgentForSimulation(agent)}
                       onView={() => openAgentFile(agent)}
                       onCopy={(targetVolume) => copyAgentToVolume(agent, targetVolume)}
                       onContextMenu={(e) => {
@@ -656,10 +683,11 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                   ))
                 ) : (
                   <div className="text-xs text-[#8b949e] px-2 py-4 text-center">
-                    No agents in this volume
+                    <Cpu className="w-8 h-8 mx-auto mb-2 text-[#30363d]" />
+                    No robot agents in this volume
                     {activeVolume !== 'system' && (
                       <div className="mt-2 text-[10px]">
-                        Copy agents from the system volume to get started
+                        Copy robot agents from the system volume to get started
                       </div>
                     )}
                   </div>
@@ -957,6 +985,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           onRobotClick={handleRobotClick}
           onArenaClick={handleArenaClick}
           agentActivity={agentActivity}
+          robotAgentName={selectedRobotAgent?.name}
         />
       </div>
 
@@ -969,11 +998,16 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
               {rightPanelMode === 'chat' ? (
                 <FileCode className="w-4 h-4 text-[#3fb950]" />
               ) : (
-                <Bot className="w-4 h-4 text-[#58a6ff]" />
+                <Cpu className="w-4 h-4 text-[#58a6ff]" />
               )}
               <span className="text-xs font-semibold text-[#e6edf3]">
-                {rightPanelMode === 'chat' ? 'AI Agent Creator' : 'Robot AI Agent'}
+                {rightPanelMode === 'chat' ? 'AI Agent Creator' : (selectedRobotAgent?.name || 'Robot AI Agent')}
               </span>
+              {rightPanelMode === 'agent' && selectedRobotAgent && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#58a6ff]/20 text-[#58a6ff] border border-[#58a6ff]/30">
+                  Selected
+                </span>
+              )}
             </div>
             <button
               onClick={toggleChat}
@@ -994,8 +1028,8 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                   : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
               }`}
             >
-              <Bot className="w-3.5 h-3.5" />
-              Run Agent
+              <Cpu className="w-3.5 h-3.5" />
+              Run Robot
             </button>
             <button
               onClick={() => setRightPanelMode('chat')}
@@ -1018,6 +1052,9 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
               <RobotAgentPanel
                 deviceId={activeDeviceId || undefined}
                 onDeviceCreated={(deviceId) => setActiveDeviceId(deviceId)}
+                selectedAgent={selectedRobotAgent}
+                availableAgents={robotAgents}
+                onAgentSelect={setSelectedRobotAgent}
               />
             )}
           </div>
@@ -1135,6 +1172,168 @@ function AgentTreeItemWithActions({ agent, activeVolume, onView, onCopy, onConte
           ))}
           {capabilities.length > 2 && (
             <span className="text-[9px] px-1 py-0.5 text-[#8b949e]">+{capabilities.length - 2}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Robot Agent tree item component with simulate action
+interface RobotAgentTreeItemProps {
+  agent: Artifact;
+  activeVolume: ArtifactVolume;
+  isSelected?: boolean;
+  onSelect: () => void;
+  onView: () => void;
+  onCopy: (targetVolume: ArtifactVolume) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}
+
+function RobotAgentTreeItem({ agent, activeVolume, isSelected, onSelect, onView, onCopy, onContextMenu }: RobotAgentTreeItemProps) {
+  // Generate unique robot icon based on agent ID
+  const robotConfig = generateRobotConfig(agent.id);
+  const iconDataUrl = robotIconToDataURL(robotConfig, 24);
+
+  // Extract tags for capabilities display
+  const capabilities = agent.tags || [];
+
+  // Unified robot agent color
+  const robotColor = '#58a6ff';
+
+  return (
+    <div
+      className={`w-full text-left px-2 py-2 rounded-md text-xs flex flex-col gap-1.5 transition-all duration-200 cursor-pointer group ${
+        isSelected
+          ? 'bg-[#58a6ff]/20 border-2 border-[#58a6ff] shadow-lg shadow-[#58a6ff]/20'
+          : 'bg-[#161b22] border border-[#30363d] hover:border-[#58a6ff]/50 hover:bg-[#21262d]'
+      }`}
+      onClick={onSelect}
+      onContextMenu={onContextMenu}
+    >
+      <div className="flex items-center gap-2">
+        <div className={`relative ${isSelected ? 'animate-pulse' : ''}`}>
+          <img
+            src={iconDataUrl}
+            alt={agent.name}
+            className="w-6 h-6 flex-shrink-0"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          {isSelected && (
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#3fb950] rounded-full border border-[#0d1117]" />
+          )}
+        </div>
+        <span className={`font-medium flex-1 truncate ${isSelected ? 'text-[#58a6ff]' : 'text-[#e6edf3]'}`}>
+          {agent.name}
+        </span>
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1"
+          style={{
+            backgroundColor: `${robotColor}20`,
+            borderColor: `${robotColor}50`,
+            color: robotColor
+          }}
+        >
+          <Cpu className="w-2.5 h-2.5" />
+          Robot
+        </span>
+      </div>
+
+      {agent.description && (
+        <p className="text-[10px] text-[#8b949e] pl-8 truncate">{agent.description}</p>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-1.5 pl-8 mt-0.5">
+        {/* Simulate button - always visible for robot agents */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+            isSelected
+              ? 'bg-[#3fb950] text-white'
+              : 'bg-[#238636]/20 text-[#3fb950] border border-[#238636]/30 hover:bg-[#238636]/40'
+          }`}
+          title="Select & Simulate"
+        >
+          <Play className="w-3 h-3" />
+          {isSelected ? 'Selected' : 'Simulate'}
+        </button>
+
+        {/* View/Edit button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-[#21262d] text-[#8b949e] border border-[#30363d] hover:text-[#e6edf3] hover:bg-[#30363d] transition-colors"
+          title="View/Edit"
+        >
+          <Edit3 className="w-3 h-3" />
+          View
+        </button>
+
+        {/* Copy button (on hover) */}
+        <div className="hidden group-hover:flex items-center gap-1">
+          {activeVolume === 'system' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('user');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#238636]/30 flex items-center justify-center"
+              title="Copy to User"
+            >
+              <Copy className="w-3 h-3 text-[#3fb950]" />
+            </button>
+          )}
+          {activeVolume === 'user' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('team');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#1f6feb]/30 flex items-center justify-center"
+              title="Copy to Team"
+            >
+              <Copy className="w-3 h-3 text-[#58a6ff]" />
+            </button>
+          )}
+          {activeVolume === 'team' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy('user');
+              }}
+              className="w-5 h-5 rounded hover:bg-[#238636]/30 flex items-center justify-center"
+              title="Copy to User"
+            >
+              <Copy className="w-3 h-3 text-[#3fb950]" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Capabilities tags */}
+      {capabilities.length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-8">
+          {capabilities.slice(0, 3).map((cap) => (
+            <span
+              key={cap}
+              className="text-[9px] px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: `${robotColor}15`,
+                color: robotColor,
+                border: `1px solid ${robotColor}30`
+              }}
+            >
+              {cap}
+            </span>
+          ))}
+          {capabilities.length > 3 && (
+            <span className="text-[9px] px-1 py-0.5 text-[#8b949e]">+{capabilities.length - 3}</span>
           )}
         </div>
       )}
