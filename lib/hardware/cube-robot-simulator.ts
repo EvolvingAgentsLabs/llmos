@@ -45,6 +45,28 @@ export const ROBOT_SPECS = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHYSICS ENGINE CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const PHYSICS_CONSTANTS = {
+  // Collision response
+  WALL_RESTITUTION: 0.3,       // Bounce coefficient for walls (0 = no bounce, 1 = full bounce)
+  OBSTACLE_RESTITUTION: 0.4,   // Bounce coefficient for obstacles
+  WALL_FRICTION: 0.7,          // Friction when sliding along walls
+
+  // Movement physics
+  LINEAR_DAMPING: 0.95,        // Velocity decay per frame (1 = no decay)
+  ANGULAR_DAMPING: 0.9,        // Angular velocity decay per frame
+
+  // Collision detection
+  COLLISION_MARGIN: 0.005,     // Extra margin for collision detection (5mm)
+  PUSH_STRENGTH: 0.8,          // How strongly robot is pushed away from obstacles
+
+  // Wall properties
+  WALL_THICKNESS: 0.05,        // Visual wall thickness (5cm)
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // TYPES AND INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -161,6 +183,26 @@ export interface CubeRobotConfig {
   onCheckpoint?: (index: number) => void;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PHYSICS COLLISION TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CollisionInfo {
+  collided: boolean;
+  front: boolean;
+  back: boolean;
+  penetrationDepth: number;
+  normal: Vector2D;           // Collision normal (direction to push robot)
+  contactPoint: Vector2D;     // Where collision occurred
+  type: 'wall' | 'obstacle' | 'none';
+}
+
+export interface PhysicsState {
+  velocityX: number;          // World velocity X (m/s)
+  velocityY: number;          // World velocity Y (m/s)
+  angularVelocity: number;    // Angular velocity (rad/s)
+}
+
 export interface CubeRobotState {
   pose: RobotPose;
   velocity: RobotVelocity;
@@ -184,6 +226,9 @@ export class CubeRobotSimulator {
   private velocity: RobotVelocity = { linear: 0, angular: 0 };
   private motors: MotorState = { leftPWM: 0, rightPWM: 0, leftRPM: 0, rightRPM: 0 };
   private led: LEDState = { r: 88, g: 166, b: 255, brightness: 100 }; // Default blue (#58a6ff)
+
+  // Physics state (world-space velocities for collision response)
+  private physicsState: PhysicsState = { velocityX: 0, velocityY: 0, angularVelocity: 0 };
 
   // Sensors
   private encoders = { left: 0, right: 0 };
@@ -279,6 +324,7 @@ export class CubeRobotSimulator {
     this.pose = { ...this.map.startPosition };
     this.velocity = { linear: 0, angular: 0 };
     this.motors = { leftPWM: 0, rightPWM: 0, leftRPM: 0, rightRPM: 0 };
+    this.physicsState = { velocityX: 0, velocityY: 0, angularVelocity: 0 };
     this.encoders = { left: 0, right: 0 };
     this.prevEncoders = { left: 0, right: 0 };
     this.bumperState = { front: false, back: false };
@@ -401,37 +447,80 @@ export class CubeRobotSimulator {
     this.motors.leftRPM = (leftVel / (2 * Math.PI * ROBOT_SPECS.WHEEL_RADIUS)) * 60;
     this.motors.rightRPM = (rightVel / (2 * Math.PI * ROBOT_SPECS.WHEEL_RADIUS)) * 60;
 
-    // Differential drive kinematics
+    // Differential drive kinematics - motor-driven velocity
     this.velocity.linear = (leftVel + rightVel) / 2;
     this.velocity.angular = (rightVel - leftVel) / ROBOT_SPECS.WHEEL_BASE;
 
+    // Compute motor-driven world velocity
+    const motorVelX = this.velocity.linear * Math.cos(this.pose.rotation);
+    const motorVelY = this.velocity.linear * Math.sin(this.pose.rotation);
+
+    // Combine motor velocity with physics velocity (from collisions)
+    // Motor velocity dominates but physics velocity adds collision response
+    this.physicsState.velocityX = motorVelX + this.physicsState.velocityX * 0.3;
+    this.physicsState.velocityY = motorVelY + this.physicsState.velocityY * 0.3;
+
+    // Apply linear damping to physics state
+    this.physicsState.velocityX *= PHYSICS_CONSTANTS.LINEAR_DAMPING;
+    this.physicsState.velocityY *= PHYSICS_CONSTANTS.LINEAR_DAMPING;
+    this.physicsState.angularVelocity *= PHYSICS_CONSTANTS.ANGULAR_DAMPING;
+
     // Calculate new position
-    const newRotation = this.normalizeAngle(this.pose.rotation + this.velocity.angular * dt);
-    const newX = this.pose.x + this.velocity.linear * Math.cos(this.pose.rotation) * dt;
-    const newY = this.pose.y + this.velocity.linear * Math.sin(this.pose.rotation) * dt;
+    const newRotation = this.normalizeAngle(
+      this.pose.rotation + this.velocity.angular * dt + this.physicsState.angularVelocity * dt
+    );
+    let newX = this.pose.x + this.physicsState.velocityX * dt;
+    let newY = this.pose.y + this.physicsState.velocityY * dt;
 
-    // Collision detection
-    const collision = this.checkCollision(newX, newY);
-    this.bumperState = collision;
+    // Collision detection and response
+    const collision = this.checkCollisionDetailed(newX, newY);
+    this.bumperState = { front: collision.front, back: collision.back };
 
-    if (!collision.front && !collision.back) {
-      this.pose.x = newX;
-      this.pose.y = newY;
-      this.pose.rotation = newRotation;
-    } else {
-      // Collision - notify and stop movement
+    if (collision.collided) {
+      // Apply collision response based on type
+      const restitution = collision.type === 'wall'
+        ? PHYSICS_CONSTANTS.WALL_RESTITUTION
+        : PHYSICS_CONSTANTS.OBSTACLE_RESTITUTION;
+
+      // Calculate velocity along collision normal
+      const velDotNormal = this.physicsState.velocityX * collision.normal.x +
+                          this.physicsState.velocityY * collision.normal.y;
+
+      // Only respond if moving toward the collision
+      if (velDotNormal < 0) {
+        // Reflect velocity with restitution
+        this.physicsState.velocityX -= (1 + restitution) * velDotNormal * collision.normal.x;
+        this.physicsState.velocityY -= (1 + restitution) * velDotNormal * collision.normal.y;
+
+        // Apply friction along the tangent
+        const tangentX = -collision.normal.y;
+        const tangentY = collision.normal.x;
+        const velDotTangent = this.physicsState.velocityX * tangentX +
+                             this.physicsState.velocityY * tangentY;
+
+        this.physicsState.velocityX -= velDotTangent * tangentX * (1 - PHYSICS_CONSTANTS.WALL_FRICTION);
+        this.physicsState.velocityY -= velDotTangent * tangentY * (1 - PHYSICS_CONSTANTS.WALL_FRICTION);
+
+        // Add slight angular perturbation on collision
+        this.physicsState.angularVelocity += (Math.random() - 0.5) * 0.5;
+      }
+
+      // Push robot out of collision (resolve penetration)
+      const pushDistance = collision.penetrationDepth + PHYSICS_CONSTANTS.COLLISION_MARGIN;
+      newX = this.pose.x + collision.normal.x * pushDistance * PHYSICS_CONSTANTS.PUSH_STRENGTH;
+      newY = this.pose.y + collision.normal.y * pushDistance * PHYSICS_CONSTANTS.PUSH_STRENGTH;
+
+      // Notify collision
       this.config.onCollision({ x: newX, y: newY });
     }
 
-    // Clamp to bounds
-    this.pose.x = Math.max(
-      this.map.bounds.minX + ROBOT_SPECS.BODY_SIZE / 2,
-      Math.min(this.map.bounds.maxX - ROBOT_SPECS.BODY_SIZE / 2, this.pose.x)
-    );
-    this.pose.y = Math.max(
-      this.map.bounds.minY + ROBOT_SPECS.BODY_SIZE / 2,
-      Math.min(this.map.bounds.maxY - ROBOT_SPECS.BODY_SIZE / 2, this.pose.y)
-    );
+    // Update position
+    this.pose.x = newX;
+    this.pose.y = newY;
+    this.pose.rotation = newRotation;
+
+    // Enforce arena bounds with bounce
+    this.enforceArenaBounds();
 
     // Update encoders
     const leftDist = leftVel * dt;
@@ -451,6 +540,49 @@ export class CubeRobotSimulator {
     this.config.onStateChange(this.getState());
   }
 
+  /**
+   * Enforce arena bounds with collision response
+   */
+  private enforceArenaBounds(): void {
+    const robotRadius = ROBOT_SPECS.BODY_SIZE / 2 + PHYSICS_CONSTANTS.COLLISION_MARGIN;
+    const minX = this.map.bounds.minX + robotRadius;
+    const maxX = this.map.bounds.maxX - robotRadius;
+    const minY = this.map.bounds.minY + robotRadius;
+    const maxY = this.map.bounds.maxY - robotRadius;
+
+    // Left bound
+    if (this.pose.x < minX) {
+      this.pose.x = minX;
+      this.physicsState.velocityX = Math.abs(this.physicsState.velocityX) * PHYSICS_CONSTANTS.WALL_RESTITUTION;
+      this.bumperState.front = this.pose.rotation > Math.PI / 2 || this.pose.rotation < -Math.PI / 2;
+      this.bumperState.back = !this.bumperState.front;
+    }
+
+    // Right bound
+    if (this.pose.x > maxX) {
+      this.pose.x = maxX;
+      this.physicsState.velocityX = -Math.abs(this.physicsState.velocityX) * PHYSICS_CONSTANTS.WALL_RESTITUTION;
+      this.bumperState.front = this.pose.rotation < Math.PI / 2 && this.pose.rotation > -Math.PI / 2;
+      this.bumperState.back = !this.bumperState.front;
+    }
+
+    // Bottom bound
+    if (this.pose.y < minY) {
+      this.pose.y = minY;
+      this.physicsState.velocityY = Math.abs(this.physicsState.velocityY) * PHYSICS_CONSTANTS.WALL_RESTITUTION;
+      this.bumperState.front = this.pose.rotation < 0;
+      this.bumperState.back = !this.bumperState.front;
+    }
+
+    // Top bound
+    if (this.pose.y > maxY) {
+      this.pose.y = maxY;
+      this.physicsState.velocityY = -Math.abs(this.physicsState.velocityY) * PHYSICS_CONSTANTS.WALL_RESTITUTION;
+      this.bumperState.front = this.pose.rotation > 0;
+      this.bumperState.back = !this.bumperState.front;
+    }
+  }
+
   private pwmToVelocity(pwm: number): number {
     // Max velocity at PWM 255
     const maxVelocity = (ROBOT_SPECS.MAX_RPM / 60) * 2 * Math.PI * ROBOT_SPECS.WHEEL_RADIUS;
@@ -464,42 +596,174 @@ export class CubeRobotSimulator {
   }
 
   private checkCollision(x: number, y: number): { front: boolean; back: boolean } {
+    const collision = this.checkCollisionDetailed(x, y);
+    return { front: collision.front, back: collision.back };
+  }
+
+  /**
+   * Detailed collision detection with physics response information
+   */
+  private checkCollisionDetailed(x: number, y: number): CollisionInfo {
     const robotRadius = ROBOT_SPECS.BODY_SIZE / 2;
-    let frontCollision = false;
-    let backCollision = false;
+    let closestCollision: CollisionInfo = {
+      collided: false,
+      front: false,
+      back: false,
+      penetrationDepth: 0,
+      normal: { x: 0, y: 0 },
+      contactPoint: { x: 0, y: 0 },
+      type: 'none',
+    };
+
+    let minPenetration = Infinity;
 
     // Check walls
     for (const wall of this.map.walls) {
-      const dist = this.pointToLineDistance(x, y, wall.x1, wall.y1, wall.x2, wall.y2);
-      if (dist < robotRadius) {
-        // Determine if front or back collision
-        const wallAngle = Math.atan2(wall.y2 - wall.y1, wall.x2 - wall.x1);
-        const angleDiff = Math.abs(this.normalizeAngle(this.pose.rotation - wallAngle));
-
-        if (angleDiff < Math.PI / 2) {
-          frontCollision = true;
-        } else {
-          backCollision = true;
-        }
+      const result = this.getWallCollision(x, y, robotRadius, wall);
+      if (result.collided && result.penetrationDepth < minPenetration) {
+        minPenetration = result.penetrationDepth;
+        closestCollision = result;
       }
     }
 
     // Check obstacles
     for (const obs of this.map.obstacles) {
-      const dist = Math.sqrt((x - obs.x) ** 2 + (y - obs.y) ** 2);
-      if (dist < robotRadius + obs.radius) {
-        const obstacleAngle = Math.atan2(obs.y - y, obs.x - x);
-        const angleDiff = Math.abs(this.normalizeAngle(this.pose.rotation - obstacleAngle));
-
-        if (angleDiff < Math.PI / 2) {
-          frontCollision = true;
-        } else {
-          backCollision = true;
-        }
+      const result = this.getObstacleCollision(x, y, robotRadius, obs);
+      if (result.collided && result.penetrationDepth < minPenetration) {
+        minPenetration = result.penetrationDepth;
+        closestCollision = result;
       }
     }
 
-    return { front: frontCollision, back: backCollision };
+    // Determine front/back collision based on robot heading
+    if (closestCollision.collided) {
+      const collisionAngle = Math.atan2(closestCollision.normal.y, closestCollision.normal.x);
+      const angleDiff = Math.abs(this.normalizeAngle(this.pose.rotation - collisionAngle));
+
+      // If collision normal points roughly opposite to heading, it's a front collision
+      if (angleDiff > Math.PI / 2) {
+        closestCollision.front = true;
+      } else {
+        closestCollision.back = true;
+      }
+    }
+
+    return closestCollision;
+  }
+
+  /**
+   * Get collision info for a wall
+   */
+  private getWallCollision(
+    x: number, y: number, robotRadius: number, wall: Wall
+  ): CollisionInfo {
+    // Find closest point on wall segment to robot
+    const dx = wall.x2 - wall.x1;
+    const dy = wall.y2 - wall.y1;
+    const lengthSq = dx * dx + dy * dy;
+
+    let t = 0;
+    if (lengthSq > 0) {
+      t = Math.max(0, Math.min(1, ((x - wall.x1) * dx + (y - wall.y1) * dy) / lengthSq));
+    }
+
+    const closestX = wall.x1 + t * dx;
+    const closestY = wall.y1 + t * dy;
+
+    const distX = x - closestX;
+    const distY = y - closestY;
+    const distance = Math.sqrt(distX * distX + distY * distY);
+
+    if (distance < robotRadius) {
+      // Normalize the collision normal
+      let normalX = distX;
+      let normalY = distY;
+
+      if (distance > 0.0001) {
+        normalX /= distance;
+        normalY /= distance;
+      } else {
+        // Robot is exactly on the wall, use wall perpendicular
+        normalX = -dy;
+        normalY = dx;
+        const perpLen = Math.sqrt(normalX * normalX + normalY * normalY);
+        if (perpLen > 0) {
+          normalX /= perpLen;
+          normalY /= perpLen;
+        }
+      }
+
+      return {
+        collided: true,
+        front: false,
+        back: false,
+        penetrationDepth: robotRadius - distance,
+        normal: { x: normalX, y: normalY },
+        contactPoint: { x: closestX, y: closestY },
+        type: 'wall',
+      };
+    }
+
+    return {
+      collided: false,
+      front: false,
+      back: false,
+      penetrationDepth: 0,
+      normal: { x: 0, y: 0 },
+      contactPoint: { x: 0, y: 0 },
+      type: 'none',
+    };
+  }
+
+  /**
+   * Get collision info for an obstacle
+   */
+  private getObstacleCollision(
+    x: number, y: number, robotRadius: number, obstacle: Obstacle
+  ): CollisionInfo {
+    const dx = x - obstacle.x;
+    const dy = y - obstacle.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const minDistance = robotRadius + obstacle.radius;
+
+    if (distance < minDistance) {
+      // Normalize the collision normal
+      let normalX = dx;
+      let normalY = dy;
+
+      if (distance > 0.0001) {
+        normalX /= distance;
+        normalY /= distance;
+      } else {
+        // Robot is exactly at obstacle center, push in random direction
+        const angle = Math.random() * Math.PI * 2;
+        normalX = Math.cos(angle);
+        normalY = Math.sin(angle);
+      }
+
+      return {
+        collided: true,
+        front: false,
+        back: false,
+        penetrationDepth: minDistance - distance,
+        normal: { x: normalX, y: normalY },
+        contactPoint: {
+          x: obstacle.x + normalX * obstacle.radius,
+          y: obstacle.y + normalY * obstacle.radius,
+        },
+        type: 'obstacle',
+      };
+    }
+
+    return {
+      collided: false,
+      front: false,
+      back: false,
+      penetrationDepth: 0,
+      normal: { x: 0, y: 0 },
+      contactPoint: { x: 0, y: 0 },
+      type: 'none',
+    };
   }
 
   private updateBattery(dt: number): void {

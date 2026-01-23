@@ -243,7 +243,44 @@ function RobotCube({
           <meshBasicMaterial color="#3fb950" transparent opacity={0.6} side={THREE.DoubleSide} />
         </mesh>
       )}
+
+      {/* Collision indicator - front bumper */}
+      {state && state.sensors.bumper.front && (
+        <CollisionFlash position={[0, 0.04, 0.05]} />
+      )}
+
+      {/* Collision indicator - back bumper */}
+      {state && state.sensors.bumper.back && (
+        <CollisionFlash position={[0, 0.04, -0.05]} />
+      )}
     </group>
+  );
+}
+
+// Collision flash effect component
+function CollisionFlash({ position }: { position: [number, number, number] }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [opacity, setOpacity] = useState(1);
+
+  useFrame((state, delta) => {
+    if (meshRef.current) {
+      // Pulsing effect
+      const pulse = Math.sin(state.clock.elapsedTime * 20) * 0.3 + 0.7;
+      meshRef.current.scale.setScalar(pulse);
+    }
+    // Fade out over time
+    setOpacity((prev) => Math.max(0.3, prev - delta * 2));
+  });
+
+  return (
+    <mesh ref={meshRef} position={position}>
+      <sphereGeometry args={[0.03, 8, 8]} />
+      <meshBasicMaterial
+        color="#ff4444"
+        transparent
+        opacity={opacity}
+      />
+    </mesh>
   );
 }
 
@@ -370,7 +407,7 @@ function ArenaFloor({
   );
 }
 
-// Wall components
+// Wall components - Physical barriers with collision visualization
 function Walls({
   walls,
   selectedIndex,
@@ -380,6 +417,9 @@ function Walls({
   selectedIndex: number | null;
   onSelect: (index: number, wall: FloorMap['walls'][0]) => void;
 }) {
+  const WALL_HEIGHT = 0.25;  // 25cm tall walls
+  const WALL_THICKNESS = 0.05;  // 5cm thick walls
+
   return (
     <group>
       {walls.map((wall, idx) => {
@@ -393,27 +433,46 @@ function Walls({
 
         return (
           <group key={idx}>
+            {/* Main wall body */}
             <mesh
-              position={[centerX, 0.15, centerY]}
+              position={[centerX, WALL_HEIGHT / 2, centerY]}
               rotation={[0, angle, 0]}
               castShadow
+              receiveShadow
               onClick={(e) => { e.stopPropagation(); onSelect(idx, wall); }}
               onPointerOver={() => document.body.style.cursor = 'pointer'}
               onPointerOut={() => document.body.style.cursor = 'auto'}
               userData={{ type: 'wall', name: `Wall ${idx + 1}` }}
             >
-              <boxGeometry args={[length, 0.3, 0.05]} />
+              <boxGeometry args={[length, WALL_HEIGHT, WALL_THICKNESS]} />
               <meshStandardMaterial
-                color={isSelected ? '#58a6ff' : '#30363d'}
-                emissive={isSelected ? '#58a6ff' : '#000000'}
-                emissiveIntensity={isSelected ? 0.3 : 0}
-                metalness={0.8}
-                roughness={0.2}
+                color={isSelected ? '#58a6ff' : '#3d4450'}
+                emissive={isSelected ? '#58a6ff' : '#1a1a2e'}
+                emissiveIntensity={isSelected ? 0.4 : 0.1}
+                metalness={0.7}
+                roughness={0.3}
               />
             </mesh>
+
+            {/* Wall top edge highlight */}
+            <mesh
+              position={[centerX, WALL_HEIGHT, centerY]}
+              rotation={[0, angle, 0]}
+            >
+              <boxGeometry args={[length, 0.01, WALL_THICKNESS + 0.01]} />
+              <meshStandardMaterial
+                color={isSelected ? '#79c0ff' : '#58a6ff'}
+                emissive={isSelected ? '#79c0ff' : '#58a6ff'}
+                emissiveIntensity={0.5}
+                metalness={0.9}
+                roughness={0.1}
+              />
+            </mesh>
+
+            {/* Selection glow */}
             {isSelected && (
-              <mesh position={[centerX, 0.15, centerY]} rotation={[0, angle, 0]}>
-                <boxGeometry args={[length + 0.02, 0.32, 0.07]} />
+              <mesh position={[centerX, WALL_HEIGHT / 2, centerY]} rotation={[0, angle, 0]}>
+                <boxGeometry args={[length + 0.02, WALL_HEIGHT + 0.02, WALL_THICKNESS + 0.02]} />
                 <meshBasicMaterial color="#58a6ff" transparent opacity={0.2} side={THREE.BackSide} />
               </mesh>
             )}
@@ -424,7 +483,7 @@ function Walls({
   );
 }
 
-// Obstacle components
+// Obstacle components - Physical cylindrical barriers
 function Obstacles({
   obstacles,
   selectedIndex,
@@ -434,14 +493,19 @@ function Obstacles({
   selectedIndex: number | null;
   onSelect: (index: number, obstacle: FloorMap['obstacles'][0]) => void;
 }) {
+  const OBSTACLE_HEIGHT = 0.2;  // 20cm tall obstacles
+
   return (
     <group>
       {obstacles.map((obstacle, idx) => {
         const isSelected = selectedIndex === idx;
+        const height = Math.max(OBSTACLE_HEIGHT, obstacle.radius * 1.5);
+
         return (
           <group key={idx}>
+            {/* Main obstacle body */}
             <mesh
-              position={[obstacle.x, obstacle.radius / 2, obstacle.y]}
+              position={[obstacle.x, height / 2, obstacle.y]}
               castShadow
               receiveShadow
               onClick={(e) => { e.stopPropagation(); onSelect(idx, obstacle); }}
@@ -449,19 +513,44 @@ function Obstacles({
               onPointerOut={() => document.body.style.cursor = 'auto'}
               userData={{ type: 'obstacle', name: `Obstacle ${idx + 1}` }}
             >
-              <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
+              <cylinderGeometry args={[obstacle.radius, obstacle.radius, height, 24]} />
               <meshStandardMaterial
-                color={isSelected ? '#ff7b72' : '#f85149'}
-                emissive={isSelected ? '#f85149' : '#000000'}
-                emissiveIntensity={isSelected ? 0.5 : 0}
-                metalness={0.5}
-                roughness={0.5}
+                color={isSelected ? '#ff7b72' : '#d63031'}
+                emissive={isSelected ? '#f85149' : '#a00'}
+                emissiveIntensity={isSelected ? 0.5 : 0.15}
+                metalness={0.6}
+                roughness={0.4}
               />
             </mesh>
+
+            {/* Top cap with warning stripe pattern */}
+            <mesh position={[obstacle.x, height, obstacle.y]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[obstacle.radius, 24]} />
+              <meshStandardMaterial
+                color={isSelected ? '#ffcc00' : '#e17055'}
+                emissive={isSelected ? '#ffcc00' : '#e17055'}
+                emissiveIntensity={0.3}
+                metalness={0.8}
+                roughness={0.2}
+              />
+            </mesh>
+
+            {/* Base ring for grounding effect */}
+            <mesh position={[obstacle.x, 0.005, obstacle.y]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[obstacle.radius, obstacle.radius + 0.02, 24]} />
+              <meshBasicMaterial
+                color="#f85149"
+                transparent
+                opacity={0.6}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+
+            {/* Selection glow */}
             {isSelected && (
-              <mesh position={[obstacle.x, obstacle.radius / 2, obstacle.y]}>
-                <cylinderGeometry args={[obstacle.radius + 0.02, obstacle.radius + 0.02, obstacle.radius + 0.02, 16]} />
-                <meshBasicMaterial color="#f85149" transparent opacity={0.2} side={THREE.BackSide} />
+              <mesh position={[obstacle.x, height / 2, obstacle.y]}>
+                <cylinderGeometry args={[obstacle.radius + 0.03, obstacle.radius + 0.03, height + 0.03, 24]} />
+                <meshBasicMaterial color="#f85149" transparent opacity={0.25} side={THREE.BackSide} />
               </mesh>
             )}
           </group>
