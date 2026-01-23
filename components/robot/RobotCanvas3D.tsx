@@ -404,11 +404,11 @@ function Walls({
             >
               <boxGeometry args={[length, 0.3, 0.05]} />
               <meshStandardMaterial
-                color={isSelected ? '#58a6ff' : '#30363d'}
-                emissive={isSelected ? '#58a6ff' : '#000000'}
-                emissiveIntensity={isSelected ? 0.3 : 0}
-                metalness={0.8}
-                roughness={0.2}
+                color={isSelected ? '#58a6ff' : '#4a9eff'}
+                emissive={isSelected ? '#58a6ff' : '#4a9eff'}
+                emissiveIntensity={isSelected ? 0.4 : 0.15}
+                metalness={0.3}
+                roughness={0.4}
               />
             </mesh>
             {isSelected && (
