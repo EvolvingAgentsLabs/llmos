@@ -22,10 +22,13 @@ import {
   getESP32Agent,
   listActiveESP32Agents,
   DEFAULT_AGENT_PROMPTS,
+  BEHAVIOR_TO_MAP,
+  BEHAVIOR_DESCRIPTIONS,
   SensorReadings,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
-import { Artifact } from '@/lib/artifacts/types';
+import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
+import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { Cpu, ChevronDown, Plus } from 'lucide-react';
 
@@ -43,6 +46,8 @@ interface RobotAgentPanelProps {
   selectedAgent?: Artifact | null;
   availableAgents?: Artifact[];
   onAgentSelect?: (agent: Artifact | null) => void;
+  onBehaviorChange?: (behavior: string, recommendedMap: string) => void;
+  activeVolume?: ArtifactVolume;
 }
 
 export default function RobotAgentPanel({
@@ -50,7 +55,9 @@ export default function RobotAgentPanel({
   onDeviceCreated,
   selectedAgent,
   availableAgents = [],
-  onAgentSelect
+  onAgentSelect,
+  onBehaviorChange,
+  activeVolume = 'user',
 }: RobotAgentPanelProps) {
   const [deviceId, setDeviceId] = useState<string | null>(initialDeviceId || null);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -71,6 +78,14 @@ export default function RobotAgentPanel({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Notify parent when behavior changes (for map synchronization)
+  useEffect(() => {
+    const recommendedMap = BEHAVIOR_TO_MAP[selectedPrompt];
+    if (recommendedMap && onBehaviorChange) {
+      onBehaviorChange(selectedPrompt, recommendedMap);
+    }
+  }, [selectedPrompt, onBehaviorChange]);
 
   // Add message to the conversation
   const addMessage = useCallback((type: AgentMessage['type'], content: string, data?: any) => {
@@ -100,6 +115,112 @@ export default function RobotAgentPanel({
       addMessage('error', `Failed to create device: ${error.message}`);
     }
   }, [addMessage, onDeviceCreated]);
+
+  // Register robot agent in user volume
+  const registerAgentInVolume = useCallback(async (agentId: string, behavior: string, prompt: string) => {
+    try {
+      const behaviorInfo = BEHAVIOR_DESCRIPTIONS[behavior] || {
+        name: behavior,
+        description: 'Custom robot behavior',
+        mapName: 'Unknown',
+      };
+
+      // Check if agent already exists with this name in user volume
+      const existingAgents = artifactManager.filter({
+        type: 'agent',
+        volume: activeVolume
+      });
+      const agentName = selectedAgent?.name || `Robot-${behaviorInfo.name}`;
+      const existingAgent = existingAgents.find(a => a.name === agentName);
+
+      if (existingAgent) {
+        // Update existing agent
+        artifactManager.update(existingAgent.id, {
+          metadata: {
+            ...existingAgent.metadata,
+            lastRun: Date.now(),
+            behavior,
+            deviceId,
+            loopInterval,
+          },
+        });
+        addMessage('system', `Updated existing agent "${agentName}" in ${activeVolume} volume`);
+        return existingAgent.id;
+      }
+
+      // Create new agent artifact in user volume
+      const artifactId = `robot-agent-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const codeView = `---
+name: ${agentName}
+type: specialist
+id: ${artifactId}
+category: hardware
+description: ${behaviorInfo.description}
+version: "1.0"
+origin: created
+model: anthropic/claude-sonnet-4.5
+behavior: ${behavior}
+recommendedMap: ${BEHAVIOR_TO_MAP[behavior] || 'standard5x5Empty'}
+tools:
+  - control_left_wheel
+  - control_right_wheel
+  - drive
+  - stop
+  - set_led
+  - read_sensors
+  - use_camera
+tags:
+  - robot
+  - hardware
+  - ${behavior}
+---
+
+# ${agentName}
+
+Autonomous robot agent with **${behaviorInfo.name}** behavior.
+
+## Behavior
+${behaviorInfo.description}
+
+## Recommended Map
+${behaviorInfo.mapName}
+
+## System Prompt
+\`\`\`
+${prompt}
+\`\`\`
+
+## Configuration
+- Loop Interval: ${loopInterval}ms
+- Max Iterations: 100
+- Created: ${new Date().toISOString()}
+`;
+
+      const newArtifact = artifactManager.create({
+        id: artifactId,
+        name: agentName,
+        type: 'agent',
+        volume: activeVolume,
+        description: behaviorInfo.description,
+        codeView,
+        tags: ['robot', 'hardware', behavior],
+        metadata: {
+          behavior,
+          recommendedMap: BEHAVIOR_TO_MAP[behavior],
+          loopInterval,
+          deviceId,
+          createdAt: Date.now(),
+          lastRun: Date.now(),
+        },
+      });
+
+      addMessage('system', `Registered agent "${agentName}" in ${activeVolume} volume`);
+      return newArtifact?.id;
+    } catch (error: any) {
+      addMessage('error', `Failed to register agent: ${error.message}`);
+      return null;
+    }
+  }, [activeVolume, selectedAgent, deviceId, loopInterval, addMessage]);
 
   // Start the agent
   const startAgent = useCallback(async () => {
@@ -168,10 +289,13 @@ export default function RobotAgentPanel({
       setAgentId(newAgentId);
       setIsRunning(true);
       addMessage('system', `Agent started (ID: ${newAgentId})`);
+
+      // Register the agent in user volume
+      await registerAgentInVolume(newAgentId, selectedPrompt, prompt);
     } catch (error: any) {
       addMessage('error', `Failed to start agent: ${error.message}`);
     }
-  }, [deviceId, selectedPrompt, customPrompt, loopInterval, addMessage]);
+  }, [deviceId, selectedPrompt, customPrompt, loopInterval, addMessage, registerAgentInVolume]);
 
   // Stop the agent
   const stopAgent = useCallback(() => {
@@ -409,6 +533,15 @@ export default function RobotAgentPanel({
             <option value="lineFollower">Line Follower</option>
             <option value="patroller">Patroller (rectangle pattern)</option>
           </select>
+        </div>
+
+        {/* Map indicator - shows which map will be used */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-fg-secondary w-16">3D World:</span>
+          <span className="text-xs px-2 py-1 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300">
+            {BEHAVIOR_DESCRIPTIONS[selectedPrompt]?.mapName || 'Unknown'}
+          </span>
+          <span className="text-[10px] text-fg-secondary">(auto-synced)</span>
         </div>
 
         {/* Loop interval */}

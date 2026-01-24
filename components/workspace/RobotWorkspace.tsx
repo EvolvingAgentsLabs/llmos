@@ -484,6 +484,17 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     console.log(`[RobotWorkspace] Selected robot agent for simulation: ${agent.name}`);
   }, []);
 
+  // Handle behavior change to sync 3D world map with selected behavior
+  const handleBehaviorChange = useCallback((behavior: string, recommendedMap: string) => {
+    console.log(`[RobotWorkspace] Behavior changed to "${behavior}", switching to map "${recommendedMap}"`);
+    setCurrentMap(recommendedMap);
+  }, []);
+
+  // Refresh robot agents list (called after agent registration)
+  const refreshRobotAgents = useCallback(() => {
+    loadAgents();
+  }, [loadAgents]);
+
   // Load file tree when volume or view mode changes
   useEffect(() => {
     if (viewMode === 'files') {
@@ -1055,6 +1066,8 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 selectedAgent={selectedRobotAgent}
                 availableAgents={robotAgents}
                 onAgentSelect={setSelectedRobotAgent}
+                onBehaviorChange={handleBehaviorChange}
+                activeVolume={activeVolume}
               />
             )}
           </div>
