@@ -134,26 +134,20 @@ export default function RobotAgentPanel({
       const existingAgent = existingAgents.find(a => a.name === agentName);
 
       if (existingAgent) {
-        // Update existing agent
+        // Update existing agent - just update the codeView with new run info
+        const updatedDescription = `${behaviorInfo.description} (Last run: ${new Date().toLocaleString()})`;
         artifactManager.update(existingAgent.id, {
-          metadata: {
-            ...existingAgent.metadata,
-            lastRun: Date.now(),
-            behavior,
-            deviceId,
-            loopInterval,
-          },
+          description: updatedDescription,
+          tags: ['robot', 'hardware', behavior],
         });
         addMessage('system', `Updated existing agent "${agentName}" in ${activeVolume} volume`);
         return existingAgent.id;
       }
 
       // Create new agent artifact in user volume
-      const artifactId = `robot-agent-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
       const codeView = `---
 name: ${agentName}
 type: specialist
-id: ${artifactId}
 category: hardware
 description: ${behaviorInfo.description}
 version: "1.0"
@@ -161,6 +155,7 @@ origin: created
 model: anthropic/claude-sonnet-4.5
 behavior: ${behavior}
 recommendedMap: ${BEHAVIOR_TO_MAP[behavior] || 'standard5x5Empty'}
+loopInterval: ${loopInterval}
 tools:
   - control_left_wheel
   - control_right_wheel
@@ -197,21 +192,13 @@ ${prompt}
 `;
 
       const newArtifact = artifactManager.create({
-        id: artifactId,
         name: agentName,
         type: 'agent',
         volume: activeVolume,
+        createdBy: 'robot-agent-panel',
         description: behaviorInfo.description,
         codeView,
         tags: ['robot', 'hardware', behavior],
-        metadata: {
-          behavior,
-          recommendedMap: BEHAVIOR_TO_MAP[behavior],
-          loopInterval,
-          deviceId,
-          createdAt: Date.now(),
-          lastRun: Date.now(),
-        },
       });
 
       addMessage('system', `Registered agent "${agentName}" in ${activeVolume} volume`);
