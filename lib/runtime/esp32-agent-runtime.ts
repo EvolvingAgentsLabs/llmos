@@ -747,6 +747,43 @@ export function listActiveESP32Agents(): string[] {
 // DEFAULT AGENT PROMPTS
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Mapping of behavior types to their recommended floor maps.
+ * This ensures the 3D world matches the selected behavior.
+ */
+export const BEHAVIOR_TO_MAP: Record<string, string> = {
+  explorer: 'standard5x5Obstacles',      // Needs obstacles to explore around
+  wallFollower: 'standard5x5Maze',       // Needs walls to follow
+  lineFollower: 'standard5x5LineTrack',  // Needs line track to follow
+  patroller: 'standard5x5Empty',         // Needs open space for patrol pattern
+};
+
+/**
+ * Human-readable descriptions for each behavior
+ */
+export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = {
+  explorer: {
+    name: 'Explorer',
+    description: 'Explores environment while avoiding obstacles',
+    mapName: '5m × 5m Obstacles',
+  },
+  wallFollower: {
+    name: 'Wall Follower',
+    description: 'Follows walls using right-hand rule',
+    mapName: '5m × 5m Maze',
+  },
+  lineFollower: {
+    name: 'Line Follower',
+    description: 'Follows line track using IR sensors',
+    mapName: '5m × 5m Line Track',
+  },
+  patroller: {
+    name: 'Patroller',
+    description: 'Patrols in rectangular pattern',
+    mapName: '5m × 5m Empty',
+  },
+};
+
 export const DEFAULT_AGENT_PROMPTS = {
   explorer: `You are an autonomous exploration robot. Your goal is to explore the environment while avoiding obstacles.
 
