@@ -395,8 +395,11 @@ export function getActionInstruction(behaviorType?: BehaviorType): string {
 
 export {
   NavigationCalculator,
+  LinePositionDetector,
+} from '../navigation';
+
+export type {
   NavigationContext,
   NavigationDecision,
-  LinePositionDetector,
   LineFollowingContext,
 } from '../navigation';

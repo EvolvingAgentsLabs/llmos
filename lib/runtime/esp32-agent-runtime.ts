@@ -1092,14 +1092,21 @@ export function getAgentPrompt(behaviorId: string): string {
 }
 
 // Re-export navigation and behavior utilities for convenience
+// Use 'export type' for type-only exports (required with isolatedModules)
 export {
   NavigationCalculator,
   NavigationZone,
-  NavigationContext,
-  NavigationDecision,
   LinePositionDetector,
   STEERING_PRESETS,
   clampMotorPower,
+} from './navigation';
+
+export type {
+  NavigationContext,
+  NavigationDecision,
+  SpeedRange,
+  SteeringRecommendation,
+  LineFollowingContext,
 } from './navigation';
 
 export {
@@ -1109,6 +1116,12 @@ export {
   LED_COLORS,
   LED_PROTOCOLS,
   DISTANCE_ZONES,
+} from './behaviors';
+
+export type {
+  BehaviorTemplate,
+  LEDColor,
+  LEDProtocol,
 } from './behaviors';
 
 export {
