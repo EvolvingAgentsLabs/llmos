@@ -25,6 +25,7 @@ import {
   BEHAVIOR_TO_MAP,
   BEHAVIOR_DESCRIPTIONS,
   SensorReadings,
+  getAgentPrompt,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
@@ -254,7 +255,8 @@ ${prompt}
       return;
     }
 
-    const prompt = customPrompt || DEFAULT_AGENT_PROMPTS[selectedPrompt];
+    // Use the behavior registry to get the prompt (connects to the modular behavior system)
+    const prompt = customPrompt || getAgentPrompt(selectedPrompt);
     const newAgentId = `robot-agent-${Date.now()}`;
 
     addMessage('system', `Starting robot agent with ${selectedPrompt} behavior...`);

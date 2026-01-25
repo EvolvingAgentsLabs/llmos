@@ -151,9 +151,21 @@ export class NavigationZoneFormatter implements SensorFormatter {
   format(sensors: SensorReadings): string {
     const context = this.extractNavigationContext(sensors);
     const decision = this.calculator.getNavigationDecision(context);
+    const steering = decision.steeringRecommendation;
+
+    // Build a clear action recommendation with motor values
+    let steeringAdvice = '';
+    if (steering) {
+      const motorAdvice = `drive(left=${steering.leftMotor}, right=${steering.rightMotor})`;
+      steeringAdvice = `\n**Recommended Action:** ${steering.type.replace('_', ' ')} ${steering.direction !== 'none' ? steering.direction : ''} → ${motorAdvice}`;
+    }
+
+    // Add clear speed guidance
+    const speedAdvice = `\n**Speed Range:** ${decision.recommendedSpeed.min}-${decision.recommendedSpeed.max} (use lower values when turning)`;
 
     return `**Navigation Zone:** ${decision.zoneEmoji} ${decision.zone.toUpperCase()} - ${decision.suggestedAction}
-**Best Path:** ${decision.bestPath} (L=${context.leftDistance.toFixed(0)}cm, F=${context.frontDistance.toFixed(0)}cm, R=${context.rightDistance.toFixed(0)}cm)`;
+**Clearance:** L=${context.leftDistance.toFixed(0)}cm, FRONT=${context.frontDistance.toFixed(0)}cm, R=${context.rightDistance.toFixed(0)}cm
+**Best Path:** ${decision.bestPath}${speedAdvice}${steeringAdvice}`;
   }
 
   /**
@@ -379,6 +391,11 @@ export function getActionInstruction(behaviorType?: BehaviorType): string {
     case 'lineFollower':
       return 'Decide your action based on the line status above.';
     case 'explorer':
+      return `**ACTION REQUIRED:**
+1. Check the Navigation Zone (🟢 OPEN, 🟡 AWARE, 🟠 CAUTION, 🔴 CRITICAL)
+2. Compare distances: L vs FRONT vs R - turn toward the LARGEST value
+3. Use the Recommended Action motor values as a starting point
+4. Output your drive() command with appropriate speed for the zone`;
     case 'wallFollower':
       return 'Decide your action based on the navigation zone and best path above.';
     case 'collector':
