@@ -1,9 +1,11 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { type CubeRobotState as SimulatorState, type FloorMap, type Collectible } from '@/lib/hardware/cube-robot-simulator';
+import { cameraCaptureManager, type CameraCapture } from '@/lib/runtime/camera-capture';
+import { WorldModel, type WorldModelSnapshot } from '@/lib/runtime/world-model';
 import * as THREE from 'three';
 
 /**
@@ -43,6 +45,14 @@ interface RobotCanvas3DProps {
   agentActivity?: AgentActivity;
   onObjectSelected?: (info: SelectedObjectInfo | null) => void;
   collectedIds?: string[];  // IDs of already collected items (to hide them)
+  worldModel?: WorldModel | null;  // World model for mini-map
+  showMiniMap?: boolean;  // Whether to show the mini-map overlay
+  onCameraCapture?: (capture: CameraCapture) => void;  // Callback when a screenshot is captured
+}
+
+// Handle for external camera capture control
+export interface RobotCanvas3DHandle {
+  captureScreenshot: (type?: CameraCapture['type']) => CameraCapture | null;
 }
 
 // Camera positions for each preset
@@ -715,6 +725,131 @@ function CollectibleMesh({
   );
 }
 
+// Canvas capture registration component
+function CanvasCaptureRegistration() {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    if (gl.domElement) {
+      cameraCaptureManager.registerCanvas(gl.domElement);
+    }
+    return () => {
+      cameraCaptureManager.unregisterCanvas();
+    };
+  }, [gl]);
+
+  return null;
+}
+
+// Mini-map overlay component (rendered outside Canvas as HTML)
+function MiniMap({
+  worldModel,
+  robotState,
+  size = 150,
+}: {
+  worldModel: WorldModel | null;
+  robotState: SimulatorState | null;
+  size?: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !worldModel) return;
+
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, size, size);
+
+    // Get mini-map data
+    const mapData = worldModel.generateMiniMapData(size);
+
+    // Draw cells
+    for (const cell of mapData.cells) {
+      let color = '#1a1a2e';
+      switch (cell.state) {
+        case 'free': color = '#2d333b'; break;
+        case 'explored': color = '#3fb950'; break;
+        case 'obstacle': color = '#f85149'; break;
+        case 'wall': color = '#58a6ff'; break;
+        case 'collectible': color = '#ffd700'; break;
+        case 'collected': color = '#6e7681'; break;
+      }
+
+      const alpha = 0.3 + cell.confidence * 0.7;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.fillRect(cell.x, cell.y, 2, 2);
+    }
+
+    ctx.globalAlpha = 1;
+
+    // Draw robot position
+    if (mapData.robotPosition) {
+      const { x, y, rotation } = mapData.robotPosition;
+
+      // Draw robot as a triangle pointing in direction
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-rotation);
+
+      ctx.fillStyle = '#a371f7';
+      ctx.beginPath();
+      ctx.moveTo(0, -5);
+      ctx.lineTo(-3, 4);
+      ctx.lineTo(3, 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // Glow effect
+      ctx.strokeStyle = '#a371f7';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Draw border
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, size, size);
+
+  }, [worldModel, robotState, size]);
+
+  if (!worldModel) return null;
+
+  const progress = (worldModel.getExplorationProgress() * 100).toFixed(0);
+
+  return (
+    <div className="absolute top-4 right-4 bg-[#0d1117]/90 backdrop-blur-sm border border-[#30363d] rounded-lg p-2 shadow-xl">
+      <div className="text-[10px] text-[#8b949e] mb-1 flex items-center justify-between">
+        <span>World Model</span>
+        <span className="text-[#3fb950]">{progress}% explored</span>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={size}
+        height={size}
+        className="rounded"
+        style={{ imageRendering: 'pixelated' }}
+      />
+      <div className="mt-1 flex items-center gap-2 text-[8px] text-[#6e7681]">
+        <span className="flex items-center gap-0.5">
+          <span className="w-2 h-2 bg-[#3fb950] rounded-sm" /> Explored
+        </span>
+        <span className="flex items-center gap-0.5">
+          <span className="w-2 h-2 bg-[#f85149] rounded-sm" /> Obstacle
+        </span>
+        <span className="flex items-center gap-0.5">
+          <span className="w-2 h-2 bg-[#a371f7] rounded-sm" /> Robot
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Planning animation - particles and effects when agent is planning
 function PlanningAnimation({ agentActivity, robotState }: { agentActivity?: AgentActivity; robotState: SimulatorState | null }) {
   const particlesRef = useRef<THREE.Points>(null);
@@ -929,7 +1064,7 @@ function SelectionInfoPanel({ selectedObject }: { selectedObject: SelectedObject
   );
 }
 
-export default function RobotCanvas3D({
+const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(function RobotCanvas3D({
   robotState,
   floorMap,
   cameraPreset,
@@ -937,12 +1072,34 @@ export default function RobotCanvas3D({
   agentActivity,
   onObjectSelected,
   collectedIds = [],
-}: RobotCanvas3DProps) {
+  worldModel = null,
+  showMiniMap = false,
+  onCameraCapture,
+}, ref) {
   const controlsRef = useRef<any>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedObjectInfo | null>(null);
   const [selectedType, setSelectedType] = useState<{ type: string; index: number | null; id?: string }>({ type: '', index: null });
   const [presetChangeCount, setPresetChangeCount] = useState(0);
   const lastPresetRef = useRef(cameraPreset);
+
+  // Expose capture method via ref
+  useImperativeHandle(ref, () => ({
+    captureScreenshot: (type: CameraCapture['type'] = 'follower') => {
+      const capture = cameraCaptureManager.capture(
+        type,
+        robotState ? {
+          x: robotState.pose.x,
+          y: robotState.pose.y,
+          rotation: robotState.pose.rotation,
+        } : undefined,
+        { width: 320, height: 240, quality: 0.85 }
+      );
+      if (capture && onCameraCapture) {
+        onCameraCapture(capture);
+      }
+      return capture;
+    },
+  }), [robotState, onCameraCapture]);
 
   // Track preset changes to trigger camera reset
   useEffect(() => {
@@ -1153,6 +1310,9 @@ export default function RobotCanvas3D({
           enableDamping
         />
 
+        {/* Canvas capture registration */}
+        <CanvasCaptureRegistration />
+
         {/* Background */}
         <color attach="background" args={['#0d1117']} />
         <fog attach="fog" args={['#0d1117', 5, 20]} />
@@ -1160,6 +1320,13 @@ export default function RobotCanvas3D({
 
       {/* Selection info panel overlay */}
       <SelectionInfoPanel selectedObject={selectedObject} />
+
+      {/* Mini-map overlay showing world model */}
+      {showMiniMap && (
+        <MiniMap worldModel={worldModel} robotState={robotState} size={150} />
+      )}
     </div>
   );
-}
+});
+
+export default RobotCanvas3D;

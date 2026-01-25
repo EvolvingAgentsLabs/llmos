@@ -31,14 +31,17 @@ import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
-import { Cpu, ChevronDown, Plus } from 'lucide-react';
+import { WorldModel, getWorldModel, clearWorldModel } from '@/lib/runtime/world-model';
+import { type CameraCapture } from '@/lib/runtime/camera-capture';
+import { Cpu, ChevronDown, Plus, Camera, Map } from 'lucide-react';
 
 interface AgentMessage {
   id: string;
-  type: 'sensor' | 'llm-request' | 'llm-response' | 'tool-call' | 'tool-result' | 'system' | 'error';
+  type: 'sensor' | 'llm-request' | 'llm-response' | 'tool-call' | 'tool-result' | 'system' | 'error' | 'camera' | 'world-model';
   timestamp: number;
   content: string;
   data?: any;
+  imageUrl?: string;  // For camera captures
 }
 
 interface RobotAgentPanelProps {
@@ -49,6 +52,8 @@ interface RobotAgentPanelProps {
   onAgentSelect?: (agent: Artifact | null) => void;
   onBehaviorChange?: (behavior: string, recommendedMap: string) => void;
   activeVolume?: ArtifactVolume;
+  onWorldModelUpdate?: (worldModel: WorldModel) => void;
+  onCaptureScreenshot?: () => CameraCapture | null;
 }
 
 export default function RobotAgentPanel({
@@ -59,6 +64,8 @@ export default function RobotAgentPanel({
   onAgentSelect,
   onBehaviorChange,
   activeVolume = 'user',
+  onWorldModelUpdate,
+  onCaptureScreenshot,
 }: RobotAgentPanelProps) {
   const [deviceId, setDeviceId] = useState<string | null>(initialDeviceId || null);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -71,8 +78,11 @@ export default function RobotAgentPanel({
   const [loopInterval, setLoopInterval] = useState(1000);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+  const [showWorldModel, setShowWorldModel] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
+  const worldModelRef = useRef<WorldModel | null>(null);
+  const iterationCountRef = useRef(0);
 
   // Toggle message expansion
   const toggleMessageExpand = useCallback((messageId: string) => {
@@ -124,16 +134,44 @@ export default function RobotAgentPanel({
   }, [selectedPrompt, onBehaviorChange]);
 
   // Add message to the conversation
-  const addMessage = useCallback((type: AgentMessage['type'], content: string, data?: any) => {
+  const addMessage = useCallback((type: AgentMessage['type'], content: string, data?: any, imageUrl?: string) => {
     const message: AgentMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
       timestamp: Date.now(),
       content,
       data,
+      imageUrl,
     };
     setMessages((prev) => [...prev.slice(-100), message]); // Keep last 100 messages
   }, []);
+
+  // Capture camera screenshot and add to messages
+  const captureAndShowScreenshot = useCallback(() => {
+    if (onCaptureScreenshot) {
+      const capture = onCaptureScreenshot();
+      if (capture) {
+        addMessage('camera', 'Camera capture from robot view', capture, capture.dataUrl);
+      }
+    }
+  }, [onCaptureScreenshot, addMessage]);
+
+  // Show world model visualization
+  const showWorldModelVisualization = useCallback(() => {
+    if (!deviceId || !worldModelRef.current) return;
+
+    const wm = worldModelRef.current;
+    const manager = getDeviceManager();
+    const state = manager.getDeviceState(deviceId);
+
+    if (state) {
+      // Generate ASCII map
+      const asciiMap = wm.generateASCIIMap(state.robot.pose, 21);
+      const summary = wm.generateCompactSummary(state.robot.pose);
+
+      addMessage('world-model', `${summary}\n${asciiMap}`);
+    }
+  }, [deviceId, addMessage]);
 
   // Create virtual device
   const createDevice = useCallback(async () => {
@@ -255,11 +293,26 @@ ${prompt}
       return;
     }
 
+    // Initialize/reset world model for this device
+    clearWorldModel(deviceId);
+    worldModelRef.current = getWorldModel(deviceId, {
+      gridResolution: 10,  // 10cm per cell
+      worldWidth: 500,     // 5m
+      worldHeight: 500,    // 5m
+    });
+    iterationCountRef.current = 0;
+
+    // Notify parent of world model creation
+    if (onWorldModelUpdate && worldModelRef.current) {
+      onWorldModelUpdate(worldModelRef.current);
+    }
+
     // Use the behavior registry to get the prompt (connects to the modular behavior system)
     const prompt = customPrompt || getAgentPrompt(selectedPrompt);
     const newAgentId = `robot-agent-${Date.now()}`;
 
     addMessage('system', `Starting robot agent with ${selectedPrompt} behavior...`);
+    addMessage('system', `World Model initialized - robot will build understanding of environment`);
     if (agentGoal) {
       addMessage('system', `Goal: ${agentGoal}`);
     }
@@ -276,6 +329,22 @@ ${prompt}
         maxIterations: 100,
         onStateChange: (state) => {
           setAgentState(state);
+          iterationCountRef.current = state.iteration;
+
+          // Update world model with sensor data
+          if (state.lastSensorReading && worldModelRef.current) {
+            const sensors = state.lastSensorReading;
+            worldModelRef.current.updateFromSensors(
+              sensors.pose,
+              sensors.distance,
+              Date.now()
+            );
+
+            // Notify parent of world model update
+            if (onWorldModelUpdate && worldModelRef.current) {
+              onWorldModelUpdate(worldModelRef.current);
+            }
+          }
 
           // Log sensor readings
           if (state.lastSensorReading) {
@@ -288,6 +357,20 @@ ${prompt}
               `Line: [${lineVisual}] ${lineStatus} | Dist: F=${sensors.distance.front.toFixed(0)}cm L=${sensors.distance.left.toFixed(0)}cm R=${sensors.distance.right.toFixed(0)}cm`,
               sensors
             );
+          }
+
+          // Periodically show world model (every 10 iterations)
+          if (showWorldModel && state.iteration > 0 && state.iteration % 10 === 0 && worldModelRef.current && state.lastSensorReading) {
+            const summary = worldModelRef.current.generateCompactSummary(state.lastSensorReading.pose);
+            addMessage('world-model', summary);
+          }
+
+          // Capture camera screenshot every 5 iterations
+          if (onCaptureScreenshot && state.iteration > 0 && state.iteration % 5 === 0) {
+            const capture = onCaptureScreenshot();
+            if (capture) {
+              addMessage('camera', `Camera view (iteration ${state.iteration})`, capture, capture.dataUrl);
+            }
           }
 
           // Log LLM response
@@ -374,6 +457,10 @@ ${prompt}
         return 'bg-gray-800/50 border-gray-500/50 text-gray-300';
       case 'error':
         return 'bg-red-900/30 border-red-500/50 text-red-200';
+      case 'camera':
+        return 'bg-cyan-900/30 border-cyan-500/50 text-cyan-200';
+      case 'world-model':
+        return 'bg-violet-900/30 border-violet-500/50 text-violet-200';
       default:
         return 'bg-gray-800/50 border-gray-500/50 text-gray-300';
     }
@@ -396,6 +483,10 @@ ${prompt}
         return 'ℹ️';
       case 'error':
         return '❌';
+      case 'camera':
+        return '📷';
+      case 'world-model':
+        return '🗺️';
       default:
         return '💬';
     }
@@ -615,7 +706,7 @@ ${prompt}
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {!isRunning ? (
             <button
               onClick={startAgent}
@@ -633,11 +724,40 @@ ${prompt}
             </button>
           )}
           <button
+            onClick={captureAndShowScreenshot}
+            disabled={!isRunning || !onCaptureScreenshot}
+            className="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1"
+            title="Capture camera view"
+          >
+            <Camera className="w-3.5 h-3.5" /> Capture
+          </button>
+          <button
+            onClick={showWorldModelVisualization}
+            disabled={!isRunning || !worldModelRef.current}
+            className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1"
+            title="Show world model"
+          >
+            <Map className="w-3.5 h-3.5" /> World Map
+          </button>
+          <button
             onClick={clearMessages}
             className="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 rounded"
           >
             Clear Log
           </button>
+        </div>
+
+        {/* World model toggle */}
+        <div className="flex items-center gap-2 pt-1">
+          <label className="flex items-center gap-2 text-xs text-fg-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showWorldModel}
+              onChange={(e) => setShowWorldModel(e.target.checked)}
+              className="rounded"
+            />
+            Auto-show world model updates (every 10 iterations)
+          </label>
         </div>
       </div>
 
@@ -699,6 +819,17 @@ ${prompt}
                     <pre className="text-xs whitespace-pre-wrap break-words font-mono">
                       {formatted.content}
                     </pre>
+                    {/* Show image for camera captures */}
+                    {msg.imageUrl && (
+                      <div className="mt-2">
+                        <img
+                          src={msg.imageUrl}
+                          alt="Camera capture"
+                          className="rounded border border-white/20 max-w-full"
+                          style={{ maxHeight: '200px', imageRendering: 'auto' }}
+                        />
+                      </div>
+                    )}
                     {msg.data && msg.type === 'tool-call' && (
                       <div className="mt-1 text-xs opacity-80">
                         Args: {JSON.stringify(msg.data)}
@@ -726,7 +857,10 @@ ${prompt}
             <span>🔧</span> Tool Call
           </span>
           <span className="flex items-center gap-1">
-            <span>✅</span> Result
+            <span>📷</span> Camera
+          </span>
+          <span className="flex items-center gap-1">
+            <span>🗺️</span> World Model
           </span>
         </div>
       </div>
