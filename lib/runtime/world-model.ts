@@ -475,6 +475,92 @@ export class WorldModel {
   }
 
   /**
+   * Generate a full cognitive analysis for the AI robot
+   * This helps the robot "think" about its environment before acting
+   */
+  generateCognitiveAnalysis(
+    robotPose: { x: number; y: number; rotation: number },
+    sensorData: { front: number; frontLeft: number; frontRight: number; left: number; right: number; back: number }
+  ): string {
+    const progress = (this.getExplorationProgress() * 100).toFixed(1);
+    const unexplored = this.getUnexploredDirections(robotPose);
+    const directionName = this.getCompassDirection(robotPose.rotation);
+
+    // Analyze immediate surroundings
+    const immediateThreats = [];
+    const clearPaths = [];
+
+    if (sensorData.front < 30) immediateThreats.push('OBSTACLE AHEAD (CRITICAL)');
+    else if (sensorData.front < 50) immediateThreats.push('obstacle ahead (caution)');
+    else clearPaths.push(`front (${sensorData.front}cm)`);
+
+    if (sensorData.left < 30) immediateThreats.push('obstacle left');
+    else clearPaths.push(`left (${sensorData.left}cm)`);
+
+    if (sensorData.right < 30) immediateThreats.push('obstacle right');
+    else clearPaths.push(`right (${sensorData.right}cm)`);
+
+    // Determine best exploration direction
+    const bestDirection = clearPaths.length > 0
+      ? clearPaths.reduce((a, b) => {
+          const aNum = parseInt(a.match(/\d+/)?.[0] || '0');
+          const bNum = parseInt(b.match(/\d+/)?.[0] || '0');
+          return aNum > bNum ? a : b;
+        })
+      : 'none - surrounded!';
+
+    // Build cognitive analysis
+    let analysis = `╔══════════════════════════════════════════╗\n`;
+    analysis += `║     COGNITIVE WORLD MODEL ANALYSIS       ║\n`;
+    analysis += `╠══════════════════════════════════════════╣\n`;
+    analysis += `║ POSITION: (${robotPose.x.toFixed(2)}, ${robotPose.y.toFixed(2)}) facing ${directionName}\n`;
+    analysis += `║ EXPLORATION: ${progress}% complete\n`;
+    analysis += `╟──────────────────────────────────────────╢\n`;
+    analysis += `║ IMMEDIATE PERCEPTION:\n`;
+    analysis += `║   Front: ${sensorData.front}cm  Left: ${sensorData.left}cm  Right: ${sensorData.right}cm\n`;
+
+    if (immediateThreats.length > 0) {
+      analysis += `║ ⚠ THREATS: ${immediateThreats.join(', ')}\n`;
+    }
+    if (clearPaths.length > 0) {
+      analysis += `║ ✓ CLEAR: ${clearPaths.join(', ')}\n`;
+    }
+
+    analysis += `╟──────────────────────────────────────────╢\n`;
+    analysis += `║ WORLD UNDERSTANDING:\n`;
+
+    if (unexplored.length > 0) {
+      analysis += `║   Unexplored areas: ${unexplored.map(u => u.direction).slice(0, 3).join(', ')}\n`;
+      analysis += `║   → RECOMMENDATION: Explore toward ${unexplored[0].direction}\n`;
+    } else {
+      analysis += `║   All nearby areas mapped\n`;
+      analysis += `║   → RECOMMENDATION: Continue systematic sweep\n`;
+    }
+
+    analysis += `║   Best clear path: ${bestDirection}\n`;
+    analysis += `╚══════════════════════════════════════════╝`;
+
+    return analysis;
+  }
+
+  /**
+   * Get compass direction from rotation angle
+   */
+  private getCompassDirection(rotation: number): string {
+    const normalized = ((rotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+    const degrees = (normalized * 180) / Math.PI;
+
+    if (degrees < 22.5 || degrees >= 337.5) return 'North';
+    if (degrees < 67.5) return 'NE';
+    if (degrees < 112.5) return 'East';
+    if (degrees < 157.5) return 'SE';
+    if (degrees < 202.5) return 'South';
+    if (degrees < 247.5) return 'SW';
+    if (degrees < 292.5) return 'West';
+    return 'NW';
+  }
+
+  /**
    * Get ASCII character for a cell state
    */
   private getCellChar(cell: GridCell): string {

@@ -217,8 +217,37 @@ You have access to:
 - **Distance Sensors**: Front, Left, Right (plus frontLeft, frontRight, back sensors)
 - **Camera**: Use \`use_camera\` to get visual analysis of your surroundings
 - **Position/Heading**: Your current pose (x, y, rotation) in the arena
+- **World Model**: The system tracks your exploration and builds a map for you
 
-## Building Your World Model
+## COGNITIVE FIRST: Analyze Before Acting
+CRITICAL: You are an intelligent AI robot. EVERY cycle, you MUST:
+
+### STEP 1: OBSERVE (Read all sensors)
+- Distance: front, frontLeft, frontRight, left, right, back
+- Position: (x, y) coordinates and rotation angle
+- Camera: if needed for visual understanding
+
+### STEP 2: UPDATE WORLD MODEL (Mental map)
+Before taking ANY action, state your understanding:
+\`\`\`
+WORLD MODEL UPDATE:
+- My position: (x, y) facing [direction]
+- Obstacles detected: [describe locations]
+- Clear paths: [describe open directions]
+- Unexplored areas: [estimate what you haven't seen]
+- Confidence: [how sure are you about this model?]
+\`\`\`
+
+### STEP 3: REASON (Plan optimal action)
+- What's my goal right now?
+- Given my world model, what's the best action?
+- What will this action teach me about the world?
+
+### STEP 4: ACT (Execute with purpose)
+- Only NOW call the drive/steering tools
+- Choose actions that IMPROVE your world understanding
+
+## Progressive World Understanding
 As an intelligent robot, you must progressively build an internal model of your environment:
 - **Track explored vs unexplored areas** - prefer moving toward unexplored regions
 - **Remember obstacle locations** - use past sensor readings to inform future decisions
@@ -228,7 +257,19 @@ As an intelligent robot, you must progressively build an internal model of your 
 When you receive sensor data, mentally update your understanding:
 1. "I now know there's an obstacle approximately X cm in direction Y"
 2. "The area behind me is clear for at least Z cm"
-3. "I should explore toward the unexplored direction"`;
+3. "I should explore toward the unexplored direction"
+
+## ASCII World Visualization
+When asked or periodically, describe your world understanding as a simple ASCII map:
+\`\`\`
+     N
+  +--+--+
+W |..|??| E   Key: R=Robot, ??=Unknown, ..=Clear, ##=Obstacle
+  |R>|##|
+  +--+--+
+     S
+\`\`\`
+This helps you (and observers) understand your mental model.`;
   }
 
   private static buildDistanceZonesSection(zones: DistanceZoneConfig[]): string {
@@ -270,18 +311,41 @@ When you receive sensor data, mentally update your understanding:
   }
 
   private static buildResponseFormatSection(instructions?: string[]): string {
-    let content = `## Response Format
-Your response should reflect your world understanding:
-1. **OBSERVATION**: What do your sensors tell you right now?
-2. **WORLD UPDATE**: How does this change your understanding of the environment?
-3. **DECISION**: Based on your model, what's the optimal action?
+    let content = `## Response Format (COGNITIVE LOOP)
+Your response MUST follow this cognitive structure:
 
-Example format:
-"OBSERVATION: Front=65cm, L=120cm, R=45cm. Position (0.5, 0.8), heading NE.
-WORLD UPDATE: Obstacle detected ahead. Left path leads to unexplored area.
-DECISION: Turn left toward unexplored region at moderate speed."
+### 1. PERCEPTION (What do I see?)
+\`\`\`
+SENSORS: Front=XXcm, L=XXcm, R=XXcm | Pos: (X.X, Y.Y) @ Xdeg
+\`\`\`
 
-Then output tool calls.`;
+### 2. WORLD MODEL (What do I understand?)
+\`\`\`
+WORLD MODEL:
+- Zone: [OPEN/AWARE/CAUTION/CRITICAL]
+- Obstacles: [where are they relative to me?]
+- Open paths: [which directions are clear?]
+- My goal: [what am I trying to achieve?]
+\`\`\`
+
+### 3. REASONING (Why this action?)
+Briefly explain: "I choose [action] because [reason based on world model]"
+
+### 4. ACTION (What do I do?)
+Output the tool calls.
+
+Example Response:
+\`\`\`
+SENSORS: Front=65cm, L=120cm, R=45cm | Pos: (0.5, 0.8) @ 45deg
+WORLD MODEL:
+- Zone: AWARE (50-100cm range)
+- Obstacles: Wall or object ~65cm ahead, closer on right (~45cm)
+- Open paths: Left is clearest (120cm), good for exploration
+- My goal: Explore while avoiding obstacles
+I choose LEFT TURN because left has 75cm more clearance than right, leads to unexplored area.
+\`\`\`
+{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
+{"tool": "drive", "args": {"left": 70, "right": 110}}`;
 
     if (instructions && instructions.length > 0) {
       content += '\n\n' + instructions.join('\n');
