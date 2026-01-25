@@ -575,6 +575,18 @@ You can make multiple tool calls. Each tool executes immediately on the robot ha
    * Format sensor data for the LLM context
    */
   private formatSensorContext(sensors: SensorReadings): string {
+    // Build collectibles section if there are nearby collectibles
+    let collectiblesSection = '';
+    const nearbyCollectibles = (sensors as any).nearbyCollectibles;
+    if (nearbyCollectibles && nearbyCollectibles.length > 0) {
+      const items = nearbyCollectibles.map((c: any) =>
+        `- ${c.type} (${c.id}): ${c.distance}cm away, ${c.angle}° ${c.angle > 0 ? 'right' : c.angle < 0 ? 'left' : 'ahead'}, worth ${c.points} points`
+      ).join('\n');
+      collectiblesSection = `\n\n**Nearby Collectibles (within 2m):**\n${items}`;
+    } else if (this.config.goal && this.config.goal.toLowerCase().includes('collect')) {
+      collectiblesSection = '\n\n**Nearby Collectibles:** None detected within range. Explore to find more!';
+    }
+
     return `## Current Sensor Readings (Iteration ${this.state.iteration})
 
 **Distance Sensors (cm):**
@@ -586,7 +598,7 @@ You can make multiple tool calls. Each tool executes immediately on the robot ha
 **Line Sensors:** [${sensors.line.map((v) => v.toFixed(0)).join(', ')}]
 **Bumpers:** Front=${sensors.bumper.front ? 'TRIGGERED' : 'clear'}, Back=${sensors.bumper.back ? 'TRIGGERED' : 'clear'}
 **Battery:** ${sensors.battery.percentage.toFixed(0)}% (${sensors.battery.voltage.toFixed(2)}V)
-**Position:** (${sensors.pose.x.toFixed(2)}, ${sensors.pose.y.toFixed(2)}) heading ${((sensors.pose.rotation * 180) / Math.PI).toFixed(1)}°
+**Position:** (${sensors.pose.x.toFixed(2)}, ${sensors.pose.y.toFixed(2)}) heading ${((sensors.pose.rotation * 180) / Math.PI).toFixed(1)}°${collectiblesSection}
 
 Based on these readings, decide what action to take next.`;
   }
@@ -760,10 +772,12 @@ export function listActiveESP32Agents(): string[] {
  * This ensures the 3D world matches the selected behavior.
  */
 export const BEHAVIOR_TO_MAP: Record<string, string> = {
-  explorer: 'standard5x5Obstacles',      // Needs obstacles to explore around
-  wallFollower: 'standard5x5Maze',       // Needs walls to follow
-  lineFollower: 'standard5x5LineTrack',  // Needs line track to follow
-  patroller: 'standard5x5Empty',         // Needs open space for patrol pattern
+  explorer: 'standard5x5Obstacles',         // Needs obstacles to explore around
+  wallFollower: 'standard5x5Maze',          // Needs walls to follow
+  lineFollower: 'standard5x5LineTrack',     // Needs line track to follow
+  patroller: 'standard5x5Empty',            // Needs open space for patrol pattern
+  collector: 'standard5x5CoinCollection',   // Coin collection challenge
+  gemHunter: 'standard5x5GemHunt',          // Gem hunt with varied point values
 };
 
 /**
@@ -789,6 +803,16 @@ export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: 
     name: 'Patroller',
     description: 'Patrols in rectangular pattern',
     mapName: '5m × 5m Empty',
+  },
+  collector: {
+    name: 'Coin Collector',
+    description: 'Collects all coins scattered around the arena',
+    mapName: '5m × 5m Coin Collection',
+  },
+  gemHunter: {
+    name: 'Gem Hunter',
+    description: 'Hunts gems of different values while avoiding obstacles',
+    mapName: '5m × 5m Gem Hunt',
   },
 };
 
@@ -827,4 +851,35 @@ Behavior:
 3. Continue patrol pattern
 4. Return to start after N iterations
 5. LED: white=patrolling, purple=turning, red=returning`,
+
+  collector: `You are a coin collection robot. Your mission is to find and collect all coins in the arena.
+
+Behavior:
+1. Systematically explore the arena to find coins (gold circles on the floor)
+2. Navigate toward detected coins while avoiding obstacles
+3. Coins are collected automatically when you drive over them
+4. Use sensor data to detect nearby collectibles and plan efficient routes
+5. Track progress: remember which areas you've explored
+6. LED: gold=searching, green=collecting, blue=exploring, red=obstacle
+
+Strategy tips:
+- Start by exploring the perimeter
+- Work inward in a spiral pattern
+- Prioritize clusters of coins
+- Avoid revisiting empty areas`,
+
+  gemHunter: `You are a gem hunting robot. Your mission is to collect gems of different values scattered around the arena.
+
+Behavior:
+1. Search for gems: green (10pts), blue (25pts), purple (50pts), gold stars (100pts)
+2. Prioritize high-value gems when multiple are detected
+3. Navigate carefully around obstacles to reach gems
+4. Plan efficient routes between gem locations
+5. LED color indicates last gem collected value
+
+Strategy tips:
+- Gold stars are worth the most - prioritize them
+- Purple gems are near obstacles - approach carefully
+- Blue gems are in corners - sweep the perimeter
+- Green gems are scattered - collect opportunistically`,
 };

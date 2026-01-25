@@ -105,6 +105,15 @@ export interface SensorData {
     left: number;
     right: number;
   };
+
+  // Nearby collectibles (for goal-based scenarios)
+  nearbyCollectibles?: {
+    id: string;
+    type: string;
+    distance: number;    // Distance in cm
+    angle: number;       // Angle relative to robot heading (-180 to 180 degrees)
+    points: number;
+  }[];
 }
 
 export interface LEDState {
@@ -140,6 +149,16 @@ export interface LineTrack {
   color: string;
 }
 
+export interface Collectible {
+  id: string;
+  type: 'coin' | 'ball' | 'gem' | 'star';
+  x: number;
+  y: number;
+  radius: number;  // Collection radius (default ~0.08m = 8cm)
+  color?: string;  // Optional custom color
+  points?: number; // Points value (default: 10)
+}
+
 export interface FloorMap {
   bounds: {
     minX: number;
@@ -151,6 +170,7 @@ export interface FloorMap {
   obstacles: Obstacle[];
   lines: LineTrack[];
   checkpoints: Vector2D[];
+  collectibles?: Collectible[];  // Optional collectible items (coins, balls, etc.)
   startPosition: RobotPose;
 }
 
@@ -159,6 +179,7 @@ export interface CubeRobotConfig {
   onStateChange?: (state: CubeRobotState) => void;
   onCollision?: (position: Vector2D) => void;
   onCheckpoint?: (index: number) => void;
+  onCollectible?: (collectible: Collectible, totalCollected: number, totalPoints: number) => void;
 }
 
 export interface CubeRobotState {
@@ -169,6 +190,13 @@ export interface CubeRobotState {
   led: LEDState;
   battery: BatteryState;
   timestamp: number;
+  // Collectibles tracking
+  collectibles?: {
+    collected: string[];      // IDs of collected items
+    remaining: string[];      // IDs of remaining items
+    totalPoints: number;      // Total points scored
+    totalCount: number;       // Total items in map
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -202,12 +230,17 @@ export class CubeRobotSimulator {
   // Checkpoint tracking
   private checkpointsReached: Set<number> = new Set();
 
+  // Collectibles tracking
+  private collectedItems: Set<string> = new Set();
+  private totalPoints = 0;
+
   constructor(config: CubeRobotConfig = {}) {
     this.config = {
       physicsRate: config.physicsRate ?? 100,
       onStateChange: config.onStateChange ?? (() => {}),
       onCollision: config.onCollision ?? (() => {}),
       onCheckpoint: config.onCheckpoint ?? (() => {}),
+      onCollectible: config.onCollectible ?? (() => {}),
     };
 
     this.map = this.createDefaultMap();
@@ -286,6 +319,8 @@ export class CubeRobotSimulator {
     this.batteryMAh = ROBOT_SPECS.BATTERY_CAPACITY_MAH;
     this.batteryVoltage = ROBOT_SPECS.BATTERY_VOLTAGE;
     this.checkpointsReached.clear();
+    this.collectedItems.clear();
+    this.totalPoints = 0;
     this.startTime = Date.now();
   }
 
@@ -359,6 +394,12 @@ export class CubeRobotSimulator {
    * Get current state
    */
   getState(): CubeRobotState {
+    const collectibles = this.map.collectibles || [];
+    const collectedIds = Array.from(this.collectedItems);
+    const remainingIds = collectibles
+      .filter(c => !this.collectedItems.has(c.id))
+      .map(c => c.id);
+
     return {
       pose: { ...this.pose },
       velocity: { ...this.velocity },
@@ -367,6 +408,12 @@ export class CubeRobotSimulator {
       led: { ...this.led },
       battery: this.getBatteryState(),
       timestamp: Date.now() - this.startTime,
+      collectibles: collectibles.length > 0 ? {
+        collected: collectedIds,
+        remaining: remainingIds,
+        totalPoints: this.totalPoints,
+        totalCount: collectibles.length,
+      } : undefined,
     };
   }
 
@@ -446,6 +493,9 @@ export class CubeRobotSimulator {
 
     // Check checkpoints
     this.checkCheckpoints();
+
+    // Check collectibles
+    this.checkCollectibles();
 
     // Notify state change
     this.config.onStateChange(this.getState());
@@ -536,6 +586,53 @@ export class CubeRobotSimulator {
     }
   }
 
+  private checkCollectibles(): void {
+    if (!this.map.collectibles) return;
+
+    for (const collectible of this.map.collectibles) {
+      if (this.collectedItems.has(collectible.id)) continue;
+
+      const dist = Math.sqrt(
+        (this.pose.x - collectible.x) ** 2 +
+        (this.pose.y - collectible.y) ** 2
+      );
+
+      // Use collectible's radius or default to 8cm
+      const collectionRadius = collectible.radius || 0.08;
+
+      if (dist < collectionRadius + ROBOT_SPECS.BODY_SIZE / 2) {
+        this.collectedItems.add(collectible.id);
+        const points = collectible.points ?? 10;
+        this.totalPoints += points;
+        this.config.onCollectible(
+          collectible,
+          this.collectedItems.size,
+          this.totalPoints
+        );
+      }
+    }
+  }
+
+  /**
+   * Get remaining collectibles (not yet collected)
+   */
+  getRemainingCollectibles(): Collectible[] {
+    if (!this.map.collectibles) return [];
+    return this.map.collectibles.filter(c => !this.collectedItems.has(c.id));
+  }
+
+  /**
+   * Get collected items count and points
+   */
+  getCollectibleStats(): { collected: number; total: number; points: number } {
+    const total = this.map.collectibles?.length ?? 0;
+    return {
+      collected: this.collectedItems.size,
+      total,
+      points: this.totalPoints,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SENSOR SIMULATION
   // ═══════════════════════════════════════════════════════════════════════════
@@ -547,7 +644,54 @@ export class CubeRobotSimulator {
       imu: this.getIMUData(),
       bumper: { ...this.bumperState },
       encoders: { ...this.encoders },
+      nearbyCollectibles: this.getNearbyCollectibles(),
     };
+  }
+
+  /**
+   * Get nearby collectibles within sensor range (2m)
+   * Returns up to 5 closest uncollected items
+   */
+  private getNearbyCollectibles(): SensorData['nearbyCollectibles'] {
+    if (!this.map.collectibles) return undefined;
+
+    const maxRange = 2.0; // 2 meter detection range
+    const maxItems = 5;   // Return up to 5 items
+
+    const nearby: { id: string; type: string; distance: number; angle: number; points: number }[] = [];
+
+    for (const collectible of this.map.collectibles) {
+      // Skip already collected items
+      if (this.collectedItems.has(collectible.id)) continue;
+
+      // Calculate distance
+      const dx = collectible.x - this.pose.x;
+      const dy = collectible.y - this.pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Only include items within range
+      if (distance > maxRange) continue;
+
+      // Calculate angle relative to robot heading
+      const absoluteAngle = Math.atan2(dy, dx);
+      let relativeAngle = absoluteAngle - this.pose.rotation;
+
+      // Normalize to -PI to PI
+      while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+      while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+
+      nearby.push({
+        id: collectible.id,
+        type: collectible.type,
+        distance: Math.round(distance * 100), // Convert to cm
+        angle: Math.round(relativeAngle * 180 / Math.PI), // Convert to degrees
+        points: collectible.points ?? 10,
+      });
+    }
+
+    // Sort by distance and return top N
+    nearby.sort((a, b) => a.distance - b.distance);
+    return nearby.slice(0, maxItems);
   }
 
   private getDistanceSensors(): SensorData['distance'] {
@@ -1121,5 +1265,121 @@ export const FLOOR_MAPS = {
       { x: -2.0, y: -2.0 },  // Bottom-left (4th delivery)
     ],
     startPosition: { x: 0, y: 0, rotation: 0 },
+  }),
+
+  /**
+   * Standard 5m x 5m coin collection challenge
+   * Goal: Collect all coins scattered around the arena
+   * Features gold coins worth 10 points each
+   */
+  standard5x5CoinCollection: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+    ],
+    obstacles: [
+      // Some obstacles to make navigation interesting
+      { x: 0, y: 0, radius: 0.3 },
+      { x: -1.5, y: 0, radius: 0.2 },
+      { x: 1.5, y: 0, radius: 0.2 },
+      { x: 0, y: 1.5, radius: 0.2 },
+      { x: 0, y: -1.5, radius: 0.2 },
+    ],
+    lines: [],
+    checkpoints: [],
+    collectibles: [
+      // Corner coins (easy to find)
+      { id: 'coin-1', type: 'coin', x: 2.0, y: 2.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-2', type: 'coin', x: -2.0, y: 2.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-3', type: 'coin', x: 2.0, y: -2.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-4', type: 'coin', x: -2.0, y: -2.0, radius: 0.08, color: '#FFD700', points: 10 },
+      // Mid-edge coins
+      { id: 'coin-5', type: 'coin', x: 0, y: 2.2, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-6', type: 'coin', x: 0, y: -2.2, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-7', type: 'coin', x: 2.2, y: 0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-8', type: 'coin', x: -2.2, y: 0, radius: 0.08, color: '#FFD700', points: 10 },
+      // Inner ring coins (require navigation around obstacles)
+      { id: 'coin-9', type: 'coin', x: 1.0, y: 1.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-10', type: 'coin', x: -1.0, y: 1.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-11', type: 'coin', x: 1.0, y: -1.0, radius: 0.08, color: '#FFD700', points: 10 },
+      { id: 'coin-12', type: 'coin', x: -1.0, y: -1.0, radius: 0.08, color: '#FFD700', points: 10 },
+    ],
+    startPosition: { x: 0, y: -2.0, rotation: Math.PI / 2 },  // Start at bottom, facing up
+  }),
+
+  /**
+   * Standard 5m x 5m ball transport challenge
+   * Goal: Push the ball from start to the target zone
+   * Features a single ball that must be transported
+   */
+  standard5x5BallTransport: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+    ],
+    obstacles: [
+      // Obstacles creating a path challenge
+      { x: -1.0, y: 0, radius: 0.25 },
+      { x: 1.0, y: 0, radius: 0.25 },
+    ],
+    lines: [],
+    checkpoints: [
+      // Target zone for ball delivery
+      { x: 0, y: 2.0 },
+    ],
+    collectibles: [
+      // The ball to transport (larger radius, different type)
+      { id: 'ball-1', type: 'ball', x: 0, y: -1.5, radius: 0.12, color: '#FF6B6B', points: 100 },
+    ],
+    startPosition: { x: 0, y: -2.2, rotation: Math.PI / 2 },  // Start behind the ball
+  }),
+
+  /**
+   * Standard 5m x 5m gem hunt challenge
+   * Goal: Collect gems of different values while avoiding obstacles
+   * Features gems worth different point values
+   */
+  standard5x5GemHunt: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
+    ],
+    obstacles: [
+      // Scattered obstacles
+      { x: -0.8, y: -0.8, radius: 0.2 },
+      { x: 0.8, y: -0.8, radius: 0.2 },
+      { x: -0.8, y: 0.8, radius: 0.2 },
+      { x: 0.8, y: 0.8, radius: 0.2 },
+      { x: 0, y: 0, radius: 0.3 },
+    ],
+    lines: [],
+    checkpoints: [],
+    collectibles: [
+      // Common gems (green - 10 points)
+      { id: 'gem-g1', type: 'gem', x: 1.8, y: 0, radius: 0.06, color: '#50C878', points: 10 },
+      { id: 'gem-g2', type: 'gem', x: -1.8, y: 0, radius: 0.06, color: '#50C878', points: 10 },
+      { id: 'gem-g3', type: 'gem', x: 0, y: 1.8, radius: 0.06, color: '#50C878', points: 10 },
+      { id: 'gem-g4', type: 'gem', x: 0, y: -1.8, radius: 0.06, color: '#50C878', points: 10 },
+      // Rare gems (blue - 25 points)
+      { id: 'gem-b1', type: 'gem', x: 1.5, y: 1.5, radius: 0.07, color: '#4169E1', points: 25 },
+      { id: 'gem-b2', type: 'gem', x: -1.5, y: 1.5, radius: 0.07, color: '#4169E1', points: 25 },
+      { id: 'gem-b3', type: 'gem', x: 1.5, y: -1.5, radius: 0.07, color: '#4169E1', points: 25 },
+      { id: 'gem-b4', type: 'gem', x: -1.5, y: -1.5, radius: 0.07, color: '#4169E1', points: 25 },
+      // Epic gems (purple - 50 points, harder to reach)
+      { id: 'gem-p1', type: 'gem', x: 0.4, y: 0.4, radius: 0.08, color: '#9B59B6', points: 50 },
+      { id: 'gem-p2', type: 'gem', x: -0.4, y: -0.4, radius: 0.08, color: '#9B59B6', points: 50 },
+      // Legendary star (gold - 100 points, center challenge)
+      { id: 'star-1', type: 'star', x: 2.2, y: 2.2, radius: 0.1, color: '#FFD700', points: 100 },
+    ],
+    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },
   }),
 };

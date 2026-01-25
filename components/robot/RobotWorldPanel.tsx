@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot } from 'lucide-react';
+import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy } from 'lucide-react';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
@@ -357,6 +357,7 @@ export default function RobotWorldPanel({
               cameraPreset={cameraPreset}
               onArenaClick={handleArenaClick}
               agentActivity={agentActivity}
+              collectedIds={robotState?.collectibles?.collected || []}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -382,6 +383,48 @@ export default function RobotWorldPanel({
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3fb950]/20 text-[#3fb950] border border-[#3fb950]/30">
               Active
             </span>
+          </div>
+        )}
+
+        {/* Collectibles Score Overlay - shows when map has collectibles */}
+        {robotState?.collectibles && robotState.collectibles.totalCount > 0 && (
+          <div className="absolute top-4 right-4 bg-[#0d1117]/90 backdrop-blur-sm border border-[#FFD700]/30 rounded-lg p-3 shadow-xl min-w-[140px]">
+            <div className="flex items-center gap-2 mb-2">
+              <Coins className="w-4 h-4 text-[#FFD700]" />
+              <span className="text-[10px] uppercase tracking-wider text-[#FFD700] font-medium">Collectibles</span>
+            </div>
+            <div className="space-y-2">
+              {/* Score */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#8b949e]">Score:</span>
+                <span className="text-lg font-bold text-[#FFD700]">
+                  {robotState.collectibles.totalPoints}
+                </span>
+              </div>
+              {/* Items collected */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#8b949e]">Collected:</span>
+                <span className="text-sm font-medium text-[#e6edf3]">
+                  {robotState.collectibles.collected.length} / {robotState.collectibles.totalCount}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#FFD700] to-[#FFA500] transition-all duration-300"
+                  style={{
+                    width: `${(robotState.collectibles.collected.length / robotState.collectibles.totalCount) * 100}%`
+                  }}
+                />
+              </div>
+              {/* Completion badge */}
+              {robotState.collectibles.collected.length === robotState.collectibles.totalCount && (
+                <div className="flex items-center justify-center gap-1 pt-1">
+                  <Trophy className="w-3 h-3 text-[#FFD700]" />
+                  <span className="text-[10px] text-[#FFD700] font-semibold uppercase">Goal Complete!</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -527,6 +527,8 @@ ${prompt}
             <option value="wallFollower">Wall Follower (right-hand rule)</option>
             <option value="lineFollower">Line Follower</option>
             <option value="patroller">Patroller (rectangle pattern)</option>
+            <option value="collector">Coin Collector (collect all coins)</option>
+            <option value="gemHunter">Gem Hunter (find valuable gems)</option>
           </select>
         </div>
 
