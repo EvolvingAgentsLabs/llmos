@@ -211,6 +211,8 @@ export interface ESP32AgentConfig {
   deviceId: string;
   // The system prompt defining robot behavior (stored in user volume)
   systemPrompt: string;
+  // Optional goal for the agent to achieve (e.g., "collect all coins", "transport the ball to location X")
+  goal?: string;
   // Loop timing
   loopIntervalMs?: number; // How often to run the control loop (default: 500ms)
   maxIterations?: number; // Optional limit
@@ -225,6 +227,7 @@ export interface ESP32AgentConfig {
 interface ResolvedESP32AgentConfig extends ESP32AgentConfig {
   loopIntervalMs: number;
   hostUrl: string;
+  goal?: string;
 }
 
 export interface ESP32AgentState {
@@ -549,7 +552,12 @@ export class ESP32AgentRuntime {
         )}`
     ).join('\n');
 
-    return `${this.config.systemPrompt}
+    // Build goal section if a goal is specified
+    const goalSection = this.config.goal
+      ? `\n\n## Current Goal\n**${this.config.goal}**\n\nYou must work toward achieving this goal. Use your sensors and available tools to make progress. Report your observations and reasoning as you work toward the goal.`
+      : '';
+
+    return `${this.config.systemPrompt}${goalSection}
 
 ## Available Tools (executed locally on device)
 ${toolDocs}

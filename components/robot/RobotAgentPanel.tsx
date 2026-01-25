@@ -66,6 +66,7 @@ export default function RobotAgentPanel({
   const [isRunning, setIsRunning] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<keyof typeof DEFAULT_AGENT_PROMPTS>('explorer');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [agentGoal, setAgentGoal] = useState('');
   const [loopInterval, setLoopInterval] = useState(1000);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -117,7 +118,7 @@ export default function RobotAgentPanel({
   }, [addMessage, onDeviceCreated]);
 
   // Register robot agent in user volume
-  const registerAgentInVolume = useCallback(async (agentId: string, behavior: string, prompt: string) => {
+  const registerAgentInVolume = useCallback(async (agentId: string, behavior: string, prompt: string, goal?: string) => {
     try {
       const behaviorInfo = BEHAVIOR_DESCRIPTIONS[behavior] || {
         name: behavior,
@@ -145,6 +146,9 @@ export default function RobotAgentPanel({
       }
 
       // Create new agent artifact in user volume
+      const goalSection = goal ? `\n## Goal\n**${goal}**\n` : '';
+      const goalYaml = goal ? `\ngoal: "${goal.replace(/"/g, '\\"')}"` : '';
+
       const codeView = `---
 name: ${agentName}
 type: specialist
@@ -155,7 +159,7 @@ origin: created
 model: anthropic/claude-sonnet-4.5
 behavior: ${behavior}
 recommendedMap: ${BEHAVIOR_TO_MAP[behavior] || 'standard5x5Empty'}
-loopInterval: ${loopInterval}
+loopInterval: ${loopInterval}${goalYaml}
 tools:
   - control_left_wheel
   - control_right_wheel
@@ -173,7 +177,7 @@ tags:
 # ${agentName}
 
 Autonomous robot agent with **${behaviorInfo.name}** behavior.
-
+${goalSection}
 ## Behavior
 ${behaviorInfo.description}
 
@@ -220,6 +224,9 @@ ${prompt}
     const newAgentId = `robot-agent-${Date.now()}`;
 
     addMessage('system', `Starting robot agent with ${selectedPrompt} behavior...`);
+    if (agentGoal) {
+      addMessage('system', `Goal: ${agentGoal}`);
+    }
     addMessage('system', `System prompt:\n${prompt.substring(0, 200)}...`);
 
     try {
@@ -228,6 +235,7 @@ ${prompt}
         name: `Robot-${selectedPrompt}`,
         deviceId,
         systemPrompt: prompt,
+        goal: agentGoal || undefined,
         loopIntervalMs: loopInterval,
         maxIterations: 100,
         onStateChange: (state) => {
@@ -278,11 +286,11 @@ ${prompt}
       addMessage('system', `Agent started (ID: ${newAgentId})`);
 
       // Register the agent in user volume
-      await registerAgentInVolume(newAgentId, selectedPrompt, prompt);
+      await registerAgentInVolume(newAgentId, selectedPrompt, prompt, agentGoal || undefined);
     } catch (error: any) {
       addMessage('error', `Failed to start agent: ${error.message}`);
     }
-  }, [deviceId, selectedPrompt, customPrompt, loopInterval, addMessage, registerAgentInVolume]);
+  }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, addMessage, registerAgentInVolume]);
 
   // Stop the agent
   const stopAgent = useCallback(() => {
@@ -520,6 +528,24 @@ ${prompt}
             <option value="lineFollower">Line Follower</option>
             <option value="patroller">Patroller (rectangle pattern)</option>
           </select>
+        </div>
+
+        {/* Goal input - allows setting a specific goal for the agent */}
+        <div className="flex items-start gap-2">
+          <span className="text-xs text-fg-secondary w-16 pt-1">Goal:</span>
+          <div className="flex-1 space-y-1">
+            <input
+              type="text"
+              value={agentGoal}
+              onChange={(e) => setAgentGoal(e.target.value)}
+              disabled={isRunning}
+              placeholder="e.g., Collect all coins in the map"
+              className="w-full text-xs bg-bg-tertiary border border-border-primary rounded px-2 py-1.5 placeholder:text-fg-secondary/50 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="text-[10px] text-fg-secondary/70">
+              Optional: Set a specific goal for the AI agent to achieve during simulation
+            </p>
+          </div>
         </div>
 
         {/* Map indicator - shows which map will be used */}
