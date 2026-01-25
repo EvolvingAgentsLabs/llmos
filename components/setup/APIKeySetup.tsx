@@ -48,7 +48,7 @@ function SetupOrb({ step }: { step: SetupStep }) {
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('xiaomi/mimo-v2-flash:free');
+  const [modelName, setModelName] = useState('google/gemini-3-flash-preview');
   const [customModelName, setCustomModelName] = useState('');
 
   // UI state
@@ -211,18 +211,6 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
         </label>
         <div className="space-y-2">
           <button
-            onClick={() => setModelName('xiaomi/mimo-v2-flash:free')}
-            className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'xiaomi/mimo-v2-flash:free'
-                ? 'border-accent-primary bg-accent-primary/10'
-                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-            }`}
-          >
-            <code className="text-sm text-accent-info">xiaomi/mimo-v2-flash:free</code>
-            <p className="text-xs text-fg-tertiary mt-1">Free • Fast • Recommended</p>
-          </button>
-
-          <button
             onClick={() => setModelName('google/gemini-3-flash-preview')}
             className={`w-full text-left p-3 rounded border transition-colors ${
               modelName === 'google/gemini-3-flash-preview'
@@ -231,7 +219,7 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
             }`}
           >
             <code className="text-sm text-accent-info">google/gemini-3-flash-preview</code>
-            <p className="text-xs text-fg-tertiary mt-1">Google • 1M context window</p>
+            <p className="text-xs text-fg-tertiary mt-1">Google • 1M context • Recommended</p>
           </button>
 
           <button

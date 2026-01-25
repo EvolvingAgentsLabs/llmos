@@ -282,17 +282,17 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     supportsImages: false,
   },
 
-  // Xiaomi Models
-  'xiaomi/mimo-v2-flash:free': {
+  // Google Gemini 3 Flash Preview
+  'google/gemini-3-flash-preview': {
     markdownInstructionFollowing: 'good',
     structuredOutputReliability: 'good',
     toolUseAccuracy: 'good',
-    contextWindowSize: 128000,
+    contextWindowSize: 1000000,
     multiStepReasoning: 'good',
     agentDelegation: 'moderate',
     selfCorrection: 'good',
     recommendedStrategy: 'compiled',
-    provider: 'xiaomi',
+    provider: 'google',
     supportsStreaming: true,
     supportsImages: true,
   },
@@ -356,10 +356,6 @@ export function getModelCapabilities(modelId: string): ModelCapabilities {
 
   if (normalizedId.includes('qwen')) {
     return MODEL_CAPABILITIES['qwen/qwen-2.5-72b'];
-  }
-
-  if (normalizedId.includes('xiaomi') || normalizedId.includes('mimo')) {
-    return MODEL_CAPABILITIES['xiaomi/mimo-v2-flash:free'];
   }
 
   return DEFAULT_CAPABILITIES;

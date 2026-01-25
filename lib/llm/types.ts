@@ -79,14 +79,6 @@ export interface ModelInfo {
 }
 
 export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
-  'xiaomi/mimo-v2-flash:free': {
-    id: 'xiaomi/mimo-v2-flash:free',
-    name: 'Xiaomi Mimo v2 Flash',
-    provider: 'OpenRouter (Xiaomi)',
-    inputCost: 'Free',
-    outputCost: 'Free',
-    contextWindow: '128k tokens',
-  },
   'google/gemini-3-flash-preview': {
     id: 'google/gemini-3-flash-preview',
     name: 'Gemini 3 Flash Preview',
