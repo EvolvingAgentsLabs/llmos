@@ -243,14 +243,35 @@ Default: Explore the environment while avoiding obstacles.
 
 ### 1. Explorer (Default)
 ```
-Goal: Explore the environment while avoiding obstacles.
+Goal: Intelligently explore the environment with proactive obstacle avoidance.
 
-Strategy:
-- Drive forward when front distance > 40cm
-- Slow down when obstacles between 20-40cm
-- Stop and turn when obstacles < 20cm
-- Prefer turning toward more open direction
-- Use LED: green=exploring, yellow=caution, red=stopped
+Navigation Philosophy: Think like an autonomous vehicle - ANTICIPATE obstacles,
+PLAN trajectories, and ADJUST continuously. Don't wait until collision - navigate proactively.
+
+Distance Zones & Speed Control:
+- Open (>100cm): Full speed 150-200, cruise mode
+- Aware (50-100cm): Moderate speed 100-150, start planning turn
+- Caution (30-50cm): Slow speed 60-100, commit to turn direction
+- Critical (<30cm): Minimal speed 0-60, execute decisive turn
+
+Trajectory Planning:
+1. Analyze all three directions (front, left, right distances)
+2. Choose path with most clearance, not just "away from obstacle"
+3. Use differential steering for smooth curved paths
+4. Prefer gradual curves over sharp pivots
+
+Proactive Rules:
+- At 80cm+: If side has 30cm+ more clearance than front, start curving
+- At 50-80cm: Calculate best escape route, begin gentle turn
+- At 30-50cm: Commit to turn, reduce speed proportionally
+- Use camera periodically for visual obstacle validation
+
+LED Protocol:
+- Cyan (0,255,255): Open path, cruising
+- Green (0,255,0): Normal exploration
+- Yellow (255,200,0): Approaching obstacle, planning
+- Orange (255,100,0): Executing avoidance
+- Red (255,0,0): Critical, stopped/reversing
 ```
 
 ### 2. Wall Follower

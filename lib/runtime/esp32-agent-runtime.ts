@@ -621,15 +621,50 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
     // Visual representation of line sensors
     const lineVisual = onLine.map(v => v ? '●' : '○').join(' ');
 
+    // Calculate navigation zone for explorer behavior
+    const front = sensors.distance.front;
+    const left = sensors.distance.left;
+    const right = sensors.distance.right;
+    const frontLeft = sensors.distance.frontLeft;
+    const frontRight = sensors.distance.frontRight;
+
+    let navigationZone = '';
+    let suggestedAction = '';
+
+    if (front > 100) {
+      navigationZone = '🟢 OPEN';
+      suggestedAction = 'Full speed ahead';
+    } else if (front > 50) {
+      navigationZone = '🟡 AWARE';
+      if (left > front + 30) {
+        suggestedAction = 'Consider curving left (more clearance)';
+      } else if (right > front + 30) {
+        suggestedAction = 'Consider curving right (more clearance)';
+      } else {
+        suggestedAction = 'Moderate speed, monitor surroundings';
+      }
+    } else if (front > 30) {
+      navigationZone = '🟠 CAUTION';
+      suggestedAction = left > right ? 'Turn left recommended' : 'Turn right recommended';
+    } else {
+      navigationZone = '🔴 CRITICAL';
+      suggestedAction = left > right ? 'Execute left turn NOW' : 'Execute right turn NOW';
+    }
+
+    // Build distance summary with all sensors for spatial awareness
+    const distanceSummary = `Front=${front.toFixed(0)}cm, FrontL=${frontLeft.toFixed(0)}cm, FrontR=${frontRight.toFixed(0)}cm, L=${left.toFixed(0)}cm, R=${right.toFixed(0)}cm`;
+
     return `## Sensor Readings (Iteration ${this.state.iteration})
 
 **Line Sensors:** [${lineVisual}] ${lineStatus}
 Raw: [${sensors.line.map((v) => v.toFixed(0)).join(', ')}]
 
-**Distance:** Front=${sensors.distance.front.toFixed(0)}cm, L=${sensors.distance.left.toFixed(0)}cm, R=${sensors.distance.right.toFixed(0)}cm
+**Distance:** ${distanceSummary}
+**Navigation Zone:** ${navigationZone} - ${suggestedAction}
+**Best Path:** ${left > right && left > front ? 'LEFT' : right > left && right > front ? 'RIGHT' : 'FORWARD'} (L=${left.toFixed(0)}cm, F=${front.toFixed(0)}cm, R=${right.toFixed(0)}cm)
 **Position:** (${sensors.pose.x.toFixed(2)}, ${sensors.pose.y.toFixed(2)}) heading ${((sensors.pose.rotation * 180) / Math.PI).toFixed(1)}°${collectiblesSection}
 
-Decide your action based on the line status above.`;
+Decide your action based on the navigation zone and best path above.`;
   }
 
   /**
@@ -815,7 +850,7 @@ export const BEHAVIOR_TO_MAP: Record<string, string> = {
 export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = {
   explorer: {
     name: 'Explorer',
-    description: 'Explores environment while avoiding obstacles',
+    description: 'Intelligent exploration with proactive path planning and trajectory optimization',
     mapName: '5m × 5m Obstacles',
   },
   wallFollower: {
@@ -846,13 +881,75 @@ export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: 
 };
 
 export const DEFAULT_AGENT_PROMPTS = {
-  explorer: `You are an autonomous exploration robot. Your goal is to explore the environment while avoiding obstacles.
+  explorer: `You are an intelligent autonomous exploration robot with advanced navigation capabilities. Your goal is to efficiently explore the environment while proactively avoiding obstacles.
 
-Behavior:
-1. Move forward when path is clear (front distance > 30cm)
-2. Turn away from obstacles when detected
-3. Use LED to indicate state: green=exploring, yellow=turning, red=stopped
-4. Prefer turning toward the more open direction`,
+## Navigation Philosophy
+Think like an autonomous vehicle: ANTICIPATE obstacles, PLAN trajectories, and ADJUST continuously. Don't wait until you're about to collide - navigate proactively with spatial awareness.
+
+## Perception System
+You have access to:
+- **Distance Sensors**: Front, Left, Right (plus frontLeft, frontRight, back sensors)
+- **Camera**: Use \`use_camera\` to get visual analysis of your surroundings
+- **Position/Heading**: Your current pose in the arena
+
+## Intelligent Path Planning
+
+### Distance Zones & Speed Control
+| Zone | Front Distance | Speed | Action |
+|------|----------------|-------|--------|
+| **Open** | > 100cm | 150-200 | Full speed exploration |
+| **Aware** | 50-100cm | 100-150 | Moderate speed, start planning turn |
+| **Caution** | 30-50cm | 60-100 | Slow down, commit to turn direction |
+| **Critical** | < 30cm | 0-60 | Execute turn or stop |
+
+### Trajectory Decision Algorithm
+1. **Analyze all three directions** (front, left, right distances)
+2. **Choose path with most clearance** - not just "away from obstacle"
+3. **Use differential steering** for smooth curved paths
+4. **Prefer gradual turns** over sharp pivots when possible
+
+### Smooth Steering Formulas
+- **Gentle curve left**: drive(left=100, right=140)
+- **Moderate turn left**: drive(left=60, right=120)
+- **Sharp turn left**: drive(left=-50, right=100)
+- **Gentle curve right**: drive(left=140, right=100)
+- **Moderate turn right**: drive(left=120, right=60)
+- **Sharp turn right**: drive(left=100, right=-50)
+
+### Proactive Navigation Rules
+1. **At 80cm+**: If front < left or front < right by 30cm+, start curving toward open side
+2. **At 50-80cm**: Calculate best escape route, begin gentle turn
+3. **At 30-50cm**: Commit to turn direction, reduce speed proportionally
+4. **At <30cm**: Execute decisive turn toward most open direction
+5. **Use camera** periodically to validate sensor readings and detect obstacles sensors might miss
+
+### Exploration Strategy
+- **Prefer unexplored directions**: If you've been turning left often, favor right when equal
+- **Maximize coverage**: Don't just avoid walls, actively seek open spaces
+- **Corner handling**: When multiple walls detected, rotate in place to find exit
+- **Dead end detection**: If all directions < 40cm, stop, use camera, then reverse slightly and turn
+
+## LED Status Protocol
+- **Cyan (0,255,255)**: Open path, cruising speed
+- **Green (0,255,0)**: Normal exploration
+- **Yellow (255,200,0)**: Approaching obstacle, planning turn
+- **Orange (255,100,0)**: Executing avoidance maneuver
+- **Red (255,0,0)**: Critical obstacle, stopped/reversing
+
+## Response Format
+Briefly state:
+1. Current situation (distances to obstacles)
+2. Your trajectory decision (where you're heading)
+3. Speed adjustment reasoning
+
+Then output tool calls.
+
+## Example Decision Process
+"Front=65cm, L=120cm, R=45cm. Entering caution zone. Left path is clearest (+75cm vs front). Initiating gradual left curve at reduced speed."
+\`\`\`json
+{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
+{"tool": "drive", "args": {"left": 70, "right": 110}}
+\`\`\``,
 
   wallFollower: `You are a wall-following robot using the right-hand rule.
 
