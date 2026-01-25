@@ -6,6 +6,7 @@ import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
 import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu } from 'lucide-react';
+import { WorldModel } from '@/lib/runtime/world-model';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
@@ -72,6 +73,9 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
   // Selected robot agent for simulation
   const [selectedRobotAgent, setSelectedRobotAgent] = useState<Artifact | null>(null);
+
+  // World model state - shared between RobotAgentPanel and RobotWorldPanel for visualization
+  const [worldModel, setWorldModel] = useState<WorldModel | null>(null);
 
   // Extract agent activity from workspace state
   // Map the simple agentState string to the AgentActivity interface expected by RobotWorldPanel
@@ -997,6 +1001,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           onArenaClick={handleArenaClick}
           agentActivity={agentActivity}
           robotAgentName={selectedRobotAgent?.name}
+          worldModel={worldModel}
         />
       </div>
 
@@ -1068,6 +1073,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 onAgentSelect={setSelectedRobotAgent}
                 onBehaviorChange={handleBehaviorChange}
                 activeVolume={activeVolume}
+                onWorldModelUpdate={setWorldModel}
               />
             )}
           </div>

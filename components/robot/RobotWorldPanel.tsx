@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy, Layers, Move } from 'lucide-react';
+import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy, Layers, Move, Map, Eye, ChevronDown, Brain } from 'lucide-react';
+import { WorldModel, type CellState } from '@/lib/runtime/world-model';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
@@ -42,10 +43,13 @@ type ExecutionMode = 'simulation' | 'real-robot' | 'replay';
 type CameraPreset = 'top-down' | 'isometric' | 'follow' | 'side';
 
 // PiP (Picture-in-Picture) configuration
+type PiPViewType = 'top-down' | 'robot-camera' | 'world-model';
+
 interface PiPConfig {
   enabled: boolean;
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   size: 'small' | 'medium' | 'large';
+  view: PiPViewType;
 }
 
 type AgentPhase = 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed';
@@ -63,6 +67,7 @@ interface RobotWorldPanelProps {
   onArenaClick?: (x: number, y: number) => void;
   agentActivity?: AgentActivity;
   robotAgentName?: string; // Name of the selected/created robot agent to display
+  worldModel?: WorldModel | null; // Robot's cognitive world model for visualization
 }
 
 // PiP (Picture-in-Picture) Top-Down View Component
@@ -251,6 +256,419 @@ function PiPTopView({
   );
 }
 
+// PiP Robot Camera View Component - Shows robot's first-person perspective
+function PiPRobotCamera({
+  robotState,
+  floorMap,
+  position,
+  size,
+}: {
+  robotState: SimulatorState | null;
+  floorMap: FloorMap;
+  position: PiPConfig['position'];
+  size: PiPConfig['size'];
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Size mapping
+  const sizeMap = {
+    small: { width: 120, height: 90 },
+    medium: { width: 180, height: 135 },
+    large: { width: 240, height: 180 },
+  };
+  const { width, height } = sizeMap[size];
+
+  // Position mapping
+  const positionStyles: Record<PiPConfig['position'], string> = {
+    'top-left': 'top-4 left-4',
+    'top-right': 'top-4 right-4',
+    'bottom-left': 'bottom-16 left-4',
+    'bottom-right': 'bottom-16 right-4',
+  };
+
+  // Render robot's POV on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Background - simulate robot's "vision"
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#1a1a2e');
+    gradient.addColorStop(0.5, '#16213e');
+    gradient.addColorStop(1, '#0f3460');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    if (!robotState) {
+      // No robot data
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('No robot data', width / 2, height / 2);
+      return;
+    }
+
+    const pose = robotState.pose;
+    const rotation = pose.rotation;
+
+    // Draw floor grid from robot's perspective
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 0.5;
+    const horizonY = height * 0.4;
+
+    // Perspective floor lines
+    for (let i = 0; i <= 10; i++) {
+      const x = (i / 10) * width;
+      ctx.beginPath();
+      ctx.moveTo(width / 2, horizonY);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+
+    // Horizontal floor lines
+    for (let i = 0; i < 5; i++) {
+      const y = horizonY + ((height - horizonY) * (i + 1)) / 5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // Calculate what's in front of the robot
+    const viewDistance = 2.5; // meters
+    const fov = Math.PI / 2; // 90 degrees field of view
+
+    // Check for walls/obstacles in view
+    const obstacles: Array<{ angle: number; distance: number; type: string }> = [];
+
+    // Check walls
+    floorMap.walls.forEach(wall => {
+      // Calculate distance and angle to wall from robot
+      const midX = (wall.x1 + wall.x2) / 2;
+      const midY = (wall.y1 + wall.y2) / 2;
+      const dx = midX - pose.x;
+      const dy = midY - pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dx, -dy) - rotation;
+
+      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
+        obstacles.push({ angle, distance, type: 'wall' });
+      }
+    });
+
+    // Check obstacles
+    floorMap.obstacles?.forEach(obs => {
+      const dx = obs.x - pose.x;
+      const dy = obs.y - pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dx, -dy) - rotation;
+
+      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
+        obstacles.push({ angle, distance, type: 'obstacle' });
+      }
+    });
+
+    // Draw obstacles in view
+    obstacles.forEach(obs => {
+      const screenX = width / 2 + (obs.angle / (fov / 2)) * (width / 2);
+      const screenSize = Math.max(10, 50 * (1 - obs.distance / viewDistance));
+      const screenY = horizonY + (height - horizonY) * (1 - obs.distance / viewDistance) * 0.8;
+
+      if (obs.type === 'wall') {
+        ctx.fillStyle = '#58a6ff';
+        ctx.fillRect(screenX - screenSize / 2, screenY - screenSize, screenSize, screenSize * 2);
+      } else {
+        ctx.fillStyle = '#f85149';
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, screenSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Check collectibles
+    floorMap.collectibles?.forEach(col => {
+      if (robotState?.collectibles?.collected.includes(col.id)) return;
+      const dx = col.x - pose.x;
+      const dy = col.y - pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dx, -dy) - rotation;
+
+      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
+        const screenX = width / 2 + (angle / (fov / 2)) * (width / 2);
+        const screenSize = Math.max(8, 30 * (1 - distance / viewDistance));
+        const screenY = horizonY + (height - horizonY) * (1 - distance / viewDistance) * 0.8;
+
+        // Draw collectible as glowing star
+        ctx.fillStyle = col.color || '#FFD700';
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+          const r = i % 2 === 0 ? screenSize : screenSize / 2;
+          const x = screenX + Math.cos(angle) * r;
+          const y = screenY + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+    });
+
+    // Draw distance readings overlay
+    const sensors = ['F', 'L', 'R'];
+    const sensorColors = ['#3fb950', '#58a6ff', '#a371f7'];
+    ctx.font = '9px monospace';
+    sensors.forEach((label, i) => {
+      ctx.fillStyle = sensorColors[i];
+      ctx.textAlign = 'left';
+      ctx.fillText(`${label}:`, 4, 12 + i * 10);
+    });
+
+    // Draw HUD overlay
+    ctx.strokeStyle = '#58a6ff';
+    ctx.lineWidth = 1;
+
+    // Crosshair
+    ctx.beginPath();
+    ctx.moveTo(width / 2 - 10, horizonY);
+    ctx.lineTo(width / 2 + 10, horizonY);
+    ctx.moveTo(width / 2, horizonY - 10);
+    ctx.lineTo(width / 2, horizonY + 10);
+    ctx.stroke();
+
+    // Border
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+
+  }, [robotState, floorMap, width, height]);
+
+  return (
+    <div
+      className={`absolute ${positionStyles[position]} bg-[#0d1117]/95 backdrop-blur-sm border border-[#30363d] rounded-lg shadow-xl overflow-hidden group transition-all duration-200 hover:border-[#58a6ff]/50`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-2 py-1 bg-[#161b22] border-b border-[#30363d]">
+        <div className="flex items-center gap-1.5">
+          <Eye className="w-3 h-3 text-[#3fb950]" />
+          <span className="text-[9px] text-[#8b949e] font-medium uppercase tracking-wider">Robot View</span>
+        </div>
+        <Move className="w-3 h-3 text-[#6e7681] opacity-0 group-hover:opacity-100 transition-opacity cursor-move" />
+      </div>
+
+      {/* Canvas */}
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className="block"
+        style={{ imageRendering: 'auto' }}
+      />
+
+      {/* Rotation indicator */}
+      {robotState && (
+        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-[#0d1117]/80 rounded text-[8px] text-[#8b949e] font-mono">
+          {(robotState.pose.rotation * 180 / Math.PI).toFixed(0)}°
+        </div>
+      )}
+    </div>
+  );
+}
+
+// PiP World Model View Component - Shows robot's cognitive understanding of the environment
+function PiPWorldModel({
+  robotState,
+  worldModel,
+  position,
+  size,
+}: {
+  robotState: SimulatorState | null;
+  worldModel: WorldModel | null;
+  position: PiPConfig['position'];
+  size: PiPConfig['size'];
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Size mapping
+  const sizeMap = {
+    small: { width: 120, height: 120 },
+    medium: { width: 160, height: 160 },
+    large: { width: 200, height: 200 },
+  };
+  const { width, height } = sizeMap[size];
+
+  // Position mapping
+  const positionStyles: Record<PiPConfig['position'], string> = {
+    'top-left': 'top-4 left-4',
+    'top-right': 'top-4 right-4',
+    'bottom-left': 'bottom-16 left-4',
+    'bottom-right': 'bottom-16 right-4',
+  };
+
+  // Color mapping for cell states
+  const getCellColor = (state: CellState, confidence: number): string => {
+    const alpha = Math.max(0.3, confidence);
+    switch (state) {
+      case 'unknown': return `rgba(30, 30, 40, ${alpha})`;
+      case 'free': return `rgba(63, 185, 80, ${alpha * 0.5})`;
+      case 'explored': return `rgba(88, 166, 255, ${alpha * 0.6})`;
+      case 'obstacle': return `rgba(248, 81, 73, ${alpha})`;
+      case 'wall': return `rgba(88, 166, 255, ${alpha})`;
+      case 'collectible': return `rgba(255, 215, 0, ${alpha})`;
+      case 'collected': return `rgba(100, 100, 100, ${alpha * 0.5})`;
+      case 'path': return `rgba(163, 113, 247, ${alpha * 0.6})`;
+      default: return `rgba(50, 50, 50, ${alpha})`;
+    }
+  };
+
+  // Render world model on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Background
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, width, height);
+
+    if (!worldModel) {
+      // No world model data
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('No world model', width / 2, height / 2 - 8);
+      ctx.fillText('Start agent to build', width / 2, height / 2 + 8);
+      return;
+    }
+
+    // Get mini-map data from world model
+    const mapData = worldModel.generateMiniMapData(Math.min(width, height));
+    const cellSize = Math.max(2, Math.floor(width / 50));
+
+    // Draw cells
+    mapData.cells.forEach(cell => {
+      ctx.fillStyle = getCellColor(cell.state, cell.confidence);
+      ctx.fillRect(
+        cell.x * cellSize,
+        cell.y * cellSize,
+        cellSize,
+        cellSize
+      );
+    });
+
+    // Draw grid overlay (subtle)
+    ctx.strokeStyle = 'rgba(48, 54, 61, 0.3)';
+    ctx.lineWidth = 0.5;
+    const gridStep = cellSize * 5;
+    for (let x = 0; x < width; x += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // Draw robot position
+    if (mapData.robotPosition) {
+      const rx = mapData.robotPosition.x * cellSize;
+      const ry = mapData.robotPosition.y * cellSize;
+      const robotSize = Math.max(6, cellSize * 2);
+
+      ctx.save();
+      ctx.translate(rx, ry);
+      ctx.rotate(-mapData.robotPosition.rotation + Math.PI);
+
+      // Robot body (triangle)
+      ctx.fillStyle = '#58a6ff';
+      ctx.beginPath();
+      ctx.moveTo(0, -robotSize);
+      ctx.lineTo(-robotSize * 0.7, robotSize * 0.6);
+      ctx.lineTo(robotSize * 0.7, robotSize * 0.6);
+      ctx.closePath();
+      ctx.fill();
+
+      // Glow effect
+      ctx.shadowColor = '#58a6ff';
+      ctx.shadowBlur = 8;
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // Draw exploration progress bar
+    const progress = worldModel.getExplorationProgress();
+    const barWidth = width - 20;
+    const barHeight = 4;
+    const barY = height - 10;
+
+    // Background
+    ctx.fillStyle = '#21262d';
+    ctx.fillRect(10, barY, barWidth, barHeight);
+
+    // Progress
+    ctx.fillStyle = '#3fb950';
+    ctx.fillRect(10, barY, barWidth * progress, barHeight);
+
+    // Border
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+
+  }, [robotState, worldModel, width, height]);
+
+  // Get exploration percentage
+  const explorationProgress = worldModel?.getExplorationProgress() ?? 0;
+
+  return (
+    <div
+      className={`absolute ${positionStyles[position]} bg-[#0d1117]/95 backdrop-blur-sm border border-[#30363d] rounded-lg shadow-xl overflow-hidden group transition-all duration-200 hover:border-[#a371f7]/50`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-2 py-1 bg-[#161b22] border-b border-[#30363d]">
+        <div className="flex items-center gap-1.5">
+          <Brain className="w-3 h-3 text-[#a371f7]" />
+          <span className="text-[9px] text-[#8b949e] font-medium uppercase tracking-wider">World Model</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] text-[#3fb950] font-mono">{(explorationProgress * 100).toFixed(0)}%</span>
+          <Move className="w-3 h-3 text-[#6e7681] opacity-0 group-hover:opacity-100 transition-opacity cursor-move" />
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className="block"
+        style={{ imageRendering: 'pixelated' }}
+      />
+
+      {/* Legend */}
+      <div className="absolute bottom-2 left-1 flex gap-1 items-center">
+        <div className="flex items-center gap-0.5 px-1 py-0.5 bg-[#0d1117]/80 rounded">
+          <div className="w-2 h-2 rounded-sm bg-[#58a6ff]/60" />
+          <span className="text-[7px] text-[#8b949e]">explored</span>
+        </div>
+        <div className="flex items-center gap-0.5 px-1 py-0.5 bg-[#0d1117]/80 rounded">
+          <div className="w-2 h-2 rounded-sm bg-[#f85149]" />
+          <span className="text-[7px] text-[#8b949e]">obstacle</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RobotWorldPanel({
   currentMap = 'standard5x5Empty',
   deviceId,
@@ -258,6 +676,7 @@ export default function RobotWorldPanel({
   onArenaClick,
   agentActivity,
   robotAgentName,
+  worldModel,
 }: RobotWorldPanelProps) {
   // Unified robot color
   const ROBOT_COLOR = '#58a6ff';
@@ -276,7 +695,9 @@ export default function RobotWorldPanel({
     enabled: true,
     position: 'top-right',
     size: 'medium',
+    view: 'top-down',
   });
+  const [showPipMenu, setShowPipMenu] = useState(false);
 
   // Initialize simulator OR sync with Device Manager
   useEffect(() => {
@@ -342,6 +763,14 @@ export default function RobotWorldPanel({
       simulator.dispose();
     };
   }, [currentMap, deviceId]);
+
+  // Close PiP menu when clicking outside
+  useEffect(() => {
+    if (!showPipMenu) return;
+    const handleClickOutside = () => setShowPipMenu(false);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showPipMenu]);
 
   // Simulation loop - handle both local simulator and Device Manager modes
   useEffect(() => {
@@ -507,19 +936,136 @@ export default function RobotWorldPanel({
             <span className="text-[10px] text-[#58a6ff] font-medium">Follow Cam</span>
           </div>
 
-          {/* PiP Top View Toggle */}
-          <button
-            onClick={() => setPipConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all ${
-              pipConfig.enabled
-                ? 'bg-[#3fb950]/20 border-[#3fb950]/50 text-[#3fb950]'
-                : 'bg-[#21262d] border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]'
-            }`}
-            title={pipConfig.enabled ? 'Hide top-down mini view' : 'Show top-down mini view'}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-medium">PiP</span>
-          </button>
+          {/* PiP View Selector */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPipMenu(!showPipMenu);
+              }}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all ${
+                pipConfig.enabled
+                  ? pipConfig.view === 'world-model'
+                    ? 'bg-[#a371f7]/20 border-[#a371f7]/50 text-[#a371f7]'
+                    : pipConfig.view === 'robot-camera'
+                    ? 'bg-[#3fb950]/20 border-[#3fb950]/50 text-[#3fb950]'
+                    : 'bg-[#58a6ff]/20 border-[#58a6ff]/50 text-[#58a6ff]'
+                  : 'bg-[#21262d] border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]'
+              }`}
+              title="Picture-in-Picture view options"
+            >
+              {pipConfig.view === 'world-model' ? (
+                <Brain className="w-3.5 h-3.5" />
+              ) : pipConfig.view === 'robot-camera' ? (
+                <Eye className="w-3.5 h-3.5" />
+              ) : (
+                <Layers className="w-3.5 h-3.5" />
+              )}
+              <span className="text-[10px] font-medium">PiP</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {/* PiP Dropdown Menu */}
+            {showPipMenu && (
+              <div
+                className="absolute top-full right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl z-50 min-w-[180px] overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="px-3 py-2 border-b border-[#30363d] bg-[#0d1117]">
+                  <span className="text-[10px] uppercase tracking-wider text-[#8b949e] font-medium">PiP View Options</span>
+                </div>
+
+                {/* Toggle PiP */}
+                <button
+                  onClick={() => {
+                    setPipConfig(prev => ({ ...prev, enabled: !prev.enabled }));
+                  }}
+                  className="w-full px-3 py-2 text-xs text-left hover:bg-[#21262d] flex items-center justify-between"
+                >
+                  <span className={pipConfig.enabled ? 'text-[#3fb950]' : 'text-[#8b949e]'}>
+                    {pipConfig.enabled ? '● Enabled' : '○ Disabled'}
+                  </span>
+                </button>
+
+                <div className="border-t border-[#30363d]" />
+
+                {/* View Type Options */}
+                <button
+                  onClick={() => {
+                    setPipConfig(prev => ({ ...prev, view: 'top-down', enabled: true }));
+                    setShowPipMenu(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs text-left hover:bg-[#21262d] flex items-center gap-2 ${
+                    pipConfig.view === 'top-down' ? 'bg-[#58a6ff]/10 text-[#58a6ff]' : 'text-[#e6edf3]'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <div>
+                    <div className="font-medium">Top-Down View</div>
+                    <div className="text-[9px] text-[#8b949e]">Overhead map of the arena</div>
+                  </div>
+                  {pipConfig.view === 'top-down' && <span className="ml-auto text-[#58a6ff]">✓</span>}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPipConfig(prev => ({ ...prev, view: 'robot-camera', enabled: true }));
+                    setShowPipMenu(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs text-left hover:bg-[#21262d] flex items-center gap-2 ${
+                    pipConfig.view === 'robot-camera' ? 'bg-[#3fb950]/10 text-[#3fb950]' : 'text-[#e6edf3]'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <div>
+                    <div className="font-medium">Robot Camera</div>
+                    <div className="text-[9px] text-[#8b949e]">First-person robot perspective</div>
+                  </div>
+                  {pipConfig.view === 'robot-camera' && <span className="ml-auto text-[#3fb950]">✓</span>}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPipConfig(prev => ({ ...prev, view: 'world-model', enabled: true }));
+                    setShowPipMenu(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs text-left hover:bg-[#21262d] flex items-center gap-2 ${
+                    pipConfig.view === 'world-model' ? 'bg-[#a371f7]/10 text-[#a371f7]' : 'text-[#e6edf3]'
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5" />
+                  <div>
+                    <div className="font-medium">World Model</div>
+                    <div className="text-[9px] text-[#8b949e]">Robot's cognitive map understanding</div>
+                  </div>
+                  {pipConfig.view === 'world-model' && <span className="ml-auto text-[#a371f7]">✓</span>}
+                </button>
+
+                <div className="border-t border-[#30363d]" />
+
+                {/* Size Options */}
+                <div className="px-3 py-2">
+                  <span className="text-[9px] uppercase tracking-wider text-[#6e7681]">Size</span>
+                  <div className="flex gap-1 mt-1">
+                    {(['small', 'medium', 'large'] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setPipConfig(prev => ({ ...prev, size: s }))}
+                        className={`flex-1 px-2 py-1 text-[10px] rounded border transition-colors ${
+                          pipConfig.size === s
+                            ? 'bg-[#58a6ff]/20 border-[#58a6ff]/50 text-[#58a6ff]'
+                            : 'bg-[#21262d] border-[#30363d] text-[#8b949e] hover:text-[#e6edf3]'
+                        }`}
+                      >
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Stats Toggle */}
           <button
@@ -659,15 +1205,35 @@ export default function RobotWorldPanel({
           </div>
         )}
 
-        {/* PiP Top-Down View */}
+        {/* PiP Views - Conditionally render based on selected view */}
         {pipConfig.enabled && floorMap && (
-          <PiPTopView
-            robotState={robotState}
-            floorMap={floorMap}
-            position={pipConfig.position}
-            size={pipConfig.size}
-            onDrag={(pos) => setPipConfig(prev => ({ ...prev, position: pos }))}
-          />
+          <>
+            {pipConfig.view === 'top-down' && (
+              <PiPTopView
+                robotState={robotState}
+                floorMap={floorMap}
+                position={pipConfig.position}
+                size={pipConfig.size}
+                onDrag={(pos) => setPipConfig(prev => ({ ...prev, position: pos }))}
+              />
+            )}
+            {pipConfig.view === 'robot-camera' && (
+              <PiPRobotCamera
+                robotState={robotState}
+                floorMap={floorMap}
+                position={pipConfig.position}
+                size={pipConfig.size}
+              />
+            )}
+            {pipConfig.view === 'world-model' && (
+              <PiPWorldModel
+                robotState={robotState}
+                worldModel={worldModel || null}
+                position={pipConfig.position}
+                size={pipConfig.size}
+              />
+            )}
+          </>
         )}
 
         {/* Mode Badge */}
@@ -706,8 +1272,22 @@ export default function RobotWorldPanel({
             {pipConfig.enabled && (
               <>
                 <span className="text-[#6e7681]">+</span>
-                <Layers className="w-3 h-3 text-[#3fb950]" />
-                <span className="text-[#3fb950]">PiP</span>
+                {pipConfig.view === 'world-model' ? (
+                  <>
+                    <Brain className="w-3 h-3 text-[#a371f7]" />
+                    <span className="text-[#a371f7]">World Model</span>
+                  </>
+                ) : pipConfig.view === 'robot-camera' ? (
+                  <>
+                    <Eye className="w-3 h-3 text-[#3fb950]" />
+                    <span className="text-[#3fb950]">Robot Cam</span>
+                  </>
+                ) : (
+                  <>
+                    <Layers className="w-3 h-3 text-[#58a6ff]" />
+                    <span className="text-[#58a6ff]">Top View</span>
+                  </>
+                )}
               </>
             )}
           </span>
