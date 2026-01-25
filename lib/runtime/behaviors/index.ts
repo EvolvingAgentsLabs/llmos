@@ -295,29 +295,63 @@ export const BEHAVIOR_TEMPLATES: Record<string, BehaviorTemplate> = {
     name: 'Explorer',
     description: 'Intelligent exploration with proactive path planning and trajectory optimization',
     goal: 'Efficiently explore the environment while proactively avoiding obstacles',
-    philosophy: `Think like an autonomous vehicle: ANTICIPATE obstacles, PLAN trajectories, and ADJUST continuously. Don't wait until you're about to collide - navigate proactively with spatial awareness.`,
+    philosophy: `You are an autonomous robot with distance sensors. EVERY CYCLE you must:
+1. READ your sensor data carefully - the distances tell you EXACTLY where obstacles are
+2. COMPARE front, left, and right distances to find the clearest path
+3. ADJUST your speed based on how close obstacles are (closer = slower)
+4. STEER smoothly toward open space using differential wheel speeds
+
+CRITICAL: Your sensors are your EYES. If front distance is decreasing, you're approaching an obstacle - START TURNING NOW, don't wait until you're about to hit it!`,
     distanceZones: DISTANCE_ZONES,
     steeringPresets: STEERING_PRESETS,
     decisionRules: [
-      '**At 80cm+**: If front < left or front < right by 30cm+, start curving toward open side',
-      '**At 50-80cm**: Calculate best escape route, begin gentle turn',
-      '**At 30-50cm**: Commit to turn direction, reduce speed proportionally',
-      '**At <30cm**: Execute decisive turn toward most open direction',
-      '**Use camera** periodically to validate sensor readings and detect obstacles sensors might miss',
+      '**ALWAYS compare distances**: front vs left vs right - turn toward the LARGEST value',
+      '**OPEN zone (>100cm)**: Full speed (150-200). If one side has 30cm+ more space, curve gently toward it',
+      '**AWARE zone (50-100cm)**: Moderate speed (100-150). Begin turning toward clearer side NOW',
+      '**CAUTION zone (30-50cm)**: Slow down (60-100). Commit to turn direction, steer firmly',
+      '**CRITICAL zone (<30cm)**: Very slow or stop (0-60). Sharp turn or reverse if trapped',
+      '**Speed formula**: speed = min(200, frontDistance * 2). E.g., 50cm front = speed 100',
     ],
     sensorGuidelines: [
-      '**Prefer unexplored directions**: If you\'ve been turning left often, favor right when equal',
-      '**Maximize coverage**: Don\'t just avoid walls, actively seek open spaces',
-      '**Corner handling**: When multiple walls detected, rotate in place to find exit',
-      '**Dead end detection**: If all directions < 40cm, stop, use camera, then reverse slightly and turn',
+      '**READ EVERY SENSOR**: front, frontLeft, frontRight, left, right - they all matter!',
+      '**Obstacle on LEFT** (left < 50cm): Steer RIGHT by making left wheel faster than right',
+      '**Obstacle on RIGHT** (right < 50cm): Steer LEFT by making right wheel faster than left',
+      '**Obstacle AHEAD** (front < 50cm): Turn toward side with MORE clearance (compare left vs right)',
+      '**Corner detected** (front < 40cm AND left < 40cm AND right < 40cm): STOP, then rotate in place',
+      '**Smooth curves**: Small speed differences = gentle curves, big differences = sharp turns',
+      '**Example**: left=80, right=120 makes gentle right curve. left=-50, right=100 makes sharp left turn',
     ],
     ledProtocol: LED_PROTOCOLS.exploration,
     examples: [
       {
-        situation: 'Front=65cm, L=120cm, R=45cm. Entering caution zone. Left path is clearest (+75cm vs front). Initiating gradual left curve at reduced speed.',
-        reasoning: 'Left has most clearance',
+        situation: 'Front=150cm, L=180cm, R=90cm. OPEN zone, clear ahead. Right side closer, favoring slight left drift.',
+        reasoning: 'Wide open, slight left preference',
+        toolCalls: `{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 255}}
+{"tool": "drive", "args": {"left": 160, "right": 180}}`,
+      },
+      {
+        situation: 'Front=65cm, L=120cm, R=45cm. AWARE zone. Left has most space (+55cm vs right). Curving left at reduced speed.',
+        reasoning: 'Left is clearest, moderate turn',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
 {"tool": "drive", "args": {"left": 70, "right": 110}}`,
+      },
+      {
+        situation: 'Front=35cm, L=80cm, R=25cm. CAUTION zone! Obstacle close ahead and right. Turning left firmly.',
+        reasoning: 'Must turn left to avoid collision',
+        toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 100, "b": 0}}
+{"tool": "drive", "args": {"left": 40, "right": 90}}`,
+      },
+      {
+        situation: 'Front=20cm, L=60cm, R=30cm. CRITICAL! Very close to obstacle. Sharp left turn needed.',
+        reasoning: 'Emergency avoidance, sharp turn left',
+        toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
+{"tool": "drive", "args": {"left": -30, "right": 80}}`,
+      },
+      {
+        situation: 'Front=25cm, L=20cm, R=35cm. Nearly boxed in. Right has slightly more room. Rotating right.',
+        reasoning: 'Tight space, rotate toward best option',
+        toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
+{"tool": "drive", "args": {"left": 60, "right": -40}}`,
       },
     ],
     recommendedMap: '5m × 5m Obstacles',
