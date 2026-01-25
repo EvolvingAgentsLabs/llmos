@@ -211,19 +211,6 @@ export default function LLMSettings({ onClose }: LLMSettingsProps) {
             {editMode ? (
               <div className="space-y-2">
                 <button
-                  onClick={() => setModelName('xiaomi/mimo-v2-flash:free')}
-                  type="button"
-                  className={`w-full text-left p-3 rounded border transition-colors ${
-                    modelName === 'xiaomi/mimo-v2-flash:free'
-                      ? 'border-accent-primary bg-accent-primary/10'
-                      : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-                  }`}
-                >
-                  <code className="text-sm text-accent-info">xiaomi/mimo-v2-flash:free</code>
-                  <p className="text-xs text-fg-tertiary mt-1">Free • Fast • Recommended</p>
-                </button>
-
-                <button
                   onClick={() => setModelName('google/gemini-3-flash-preview')}
                   type="button"
                   className={`w-full text-left p-3 rounded border transition-colors ${
@@ -233,7 +220,7 @@ export default function LLMSettings({ onClose }: LLMSettingsProps) {
                   }`}
                 >
                   <code className="text-sm text-accent-info">google/gemini-3-flash-preview</code>
-                  <p className="text-xs text-fg-tertiary mt-1">Google • 1M context window</p>
+                  <p className="text-xs text-fg-tertiary mt-1">Google • 1M context • Recommended</p>
                 </button>
 
                 <button
