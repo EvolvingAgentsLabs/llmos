@@ -69,8 +69,42 @@ export default function RobotAgentPanel({
   const [agentGoal, setAgentGoal] = useState('');
   const [loopInterval, setLoopInterval] = useState(1000);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
+
+  // Toggle message expansion
+  const toggleMessageExpand = useCallback((messageId: string) => {
+    setExpandedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Truncate long content with expand option
+  const MAX_LINES = 4;
+  const formatMessageContent = useCallback((msg: AgentMessage) => {
+    const lines = msg.content.split('\n');
+    const isLong = lines.length > MAX_LINES || msg.content.length > 300;
+    const isExpanded = expandedMessages.has(msg.id);
+
+    if (!isLong || isExpanded) {
+      return { content: msg.content, isLong, isExpanded };
+    }
+
+    // Truncate to first few lines
+    const truncated = lines.slice(0, MAX_LINES).join('\n');
+    return {
+      content: truncated + (lines.length > MAX_LINES ? '\n...' : ''),
+      isLong,
+      isExpanded
+    };
+  }, [expandedMessages]);
 
   // Unified robot color
   const ROBOT_COLOR = '#58a6ff';
@@ -244,9 +278,12 @@ ${prompt}
           // Log sensor readings
           if (state.lastSensorReading) {
             const sensors = state.lastSensorReading;
+            // Create visual line sensor display: ● = on line, ○ = off line
+            const lineVisual = sensors.line.map(v => v > 127 ? '●' : '○').join(' ');
+            const lineStatus = sensors.line.some(v => v > 127) ? 'ON LINE' : 'LOST';
             addMessage(
               'sensor',
-              `Sensors: Front=${sensors.distance.front.toFixed(0)}cm, L=${sensors.distance.left.toFixed(0)}cm, R=${sensors.distance.right.toFixed(0)}cm`,
+              `Line: [${lineVisual}] ${lineStatus} | Dist: F=${sensors.distance.front.toFixed(0)}cm L=${sensors.distance.left.toFixed(0)}cm R=${sensors.distance.right.toFixed(0)}cm`,
               sensors
             );
           }
@@ -635,30 +672,41 @@ ${prompt}
             <p className="text-xs mt-2">Create a device and start the agent to see the interaction</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`p-2 rounded border ${getMessageStyle(msg.type)}`}
-            >
-              <div className="flex items-start gap-2">
-                <span className="text-sm">{getMessageIcon(msg.type)}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-semibold uppercase">{msg.type}</span>
-                    <span className="text-xs opacity-60">{formatTime(msg.timestamp)}</span>
-                  </div>
-                  <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                    {msg.content}
-                  </pre>
-                  {msg.data && msg.type === 'tool-call' && (
-                    <div className="mt-1 text-xs opacity-80">
-                      Args: {JSON.stringify(msg.data)}
+          messages.map((msg) => {
+            const formatted = formatMessageContent(msg);
+            return (
+              <div
+                key={msg.id}
+                className={`p-2 rounded border ${getMessageStyle(msg.type)}`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-sm">{getMessageIcon(msg.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold uppercase">{msg.type}</span>
+                      <span className="text-xs opacity-60">{formatTime(msg.timestamp)}</span>
+                      {formatted.isLong && (
+                        <button
+                          onClick={() => toggleMessageExpand(msg.id)}
+                          className="text-xs px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                        >
+                          {formatted.isExpanded ? '▲ Collapse' : '▼ Expand'}
+                        </button>
+                      )}
                     </div>
-                  )}
+                    <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+                      {formatted.content}
+                    </pre>
+                    {msg.data && msg.type === 'tool-call' && (
+                      <div className="mt-1 text-xs opacity-80">
+                        Args: {JSON.stringify(msg.data)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

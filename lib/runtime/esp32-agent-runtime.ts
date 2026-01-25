@@ -341,7 +341,7 @@ export class ESP32AgentRuntime {
             frontObstacleDistance: d.front,
             leftClear: d.left > 30 && d.frontLeft > 30,
             rightClear: d.right > 30 && d.frontRight > 30,
-            lineDetected: state.robot.sensors.line.some((v: number) => v > 500),
+            lineDetected: state.robot.sensors.line.some((v: number) => v > 127),
             linePosition: this.detectLinePosition(state.robot.sensors.line),
           },
         };
@@ -351,12 +351,13 @@ export class ESP32AgentRuntime {
 
   private detectLinePosition(lineSensors: number[]): 'left' | 'center' | 'right' | undefined {
     // 5 sensors: [far-left, left, center, right, far-right]
-    const threshold = 500;
+    // Line sensors return 0 (off line) or 255 (on line), threshold should be midpoint
+    const threshold = 127;
     const [fl, l, c, r, fr] = lineSensors;
 
     if (c > threshold) return 'center';
-    if ((l > threshold || fl > threshold) && r < threshold) return 'left';
-    if ((r > threshold || fr > threshold) && l < threshold) return 'right';
+    if ((l > threshold || fl > threshold) && r < threshold && fr < threshold) return 'left';
+    if ((r > threshold || fr > threshold) && l < threshold && fl < threshold) return 'right';
     return undefined;
   }
 
@@ -563,12 +564,20 @@ export class ESP32AgentRuntime {
 ${toolDocs}
 
 ## Response Format
-Respond with your reasoning, then tool calls in this JSON format:
+Keep responses BRIEF. State your observation (1 line), then tool calls.
+
+Format for tool calls:
 \`\`\`json
 {"tool": "tool_name", "args": {"param": value}}
 \`\`\`
 
-You can make multiple tool calls. Each tool executes immediately on the robot hardware.`;
+Example response:
+"Line centered, driving forward.
+\`\`\`json
+{"tool": "drive", "args": {"left": 120, "right": 120}}
+\`\`\`"
+
+IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!)`;
   }
 
   /**
@@ -587,20 +596,40 @@ You can make multiple tool calls. Each tool executes immediately on the robot ha
       collectiblesSection = '\n\n**Nearby Collectibles:** None detected within range. Explore to find more!';
     }
 
-    return `## Current Sensor Readings (Iteration ${this.state.iteration})
+    // Interpret line sensor position for easier LLM understanding
+    // Sensors: [far-left(0), left(1), center(2), right(3), far-right(4)]
+    const lineThreshold = 127;
+    const onLine = sensors.line.map(v => v > lineThreshold);
+    let lineStatus = '';
 
-**Distance Sensors (cm):**
-- Front: ${sensors.distance.front.toFixed(1)}
-- Front-Left: ${sensors.distance.frontLeft.toFixed(1)}, Front-Right: ${sensors.distance.frontRight.toFixed(1)}
-- Left: ${sensors.distance.left.toFixed(1)}, Right: ${sensors.distance.right.toFixed(1)}
-- Back: ${sensors.distance.back.toFixed(1)}
+    if (!onLine.some(v => v)) {
+      lineStatus = '⚠️ LINE LOST - search needed!';
+    } else if (onLine[2]) {
+      if (onLine[0] || onLine[1]) {
+        lineStatus = '↖️ Line drifting LEFT - turn left';
+      } else if (onLine[3] || onLine[4]) {
+        lineStatus = '↗️ Line drifting RIGHT - turn right';
+      } else {
+        lineStatus = '✓ CENTERED - drive straight';
+      }
+    } else if (onLine[0] || onLine[1]) {
+      lineStatus = '⬅️ Line is LEFT - turn left sharply';
+    } else if (onLine[3] || onLine[4]) {
+      lineStatus = '➡️ Line is RIGHT - turn right sharply';
+    }
 
-**Line Sensors:** [${sensors.line.map((v) => v.toFixed(0)).join(', ')}]
-**Bumpers:** Front=${sensors.bumper.front ? 'TRIGGERED' : 'clear'}, Back=${sensors.bumper.back ? 'TRIGGERED' : 'clear'}
-**Battery:** ${sensors.battery.percentage.toFixed(0)}% (${sensors.battery.voltage.toFixed(2)}V)
+    // Visual representation of line sensors
+    const lineVisual = onLine.map(v => v ? '●' : '○').join(' ');
+
+    return `## Sensor Readings (Iteration ${this.state.iteration})
+
+**Line Sensors:** [${lineVisual}] ${lineStatus}
+Raw: [${sensors.line.map((v) => v.toFixed(0)).join(', ')}]
+
+**Distance:** Front=${sensors.distance.front.toFixed(0)}cm, L=${sensors.distance.left.toFixed(0)}cm, R=${sensors.distance.right.toFixed(0)}cm
 **Position:** (${sensors.pose.x.toFixed(2)}, ${sensors.pose.y.toFixed(2)}) heading ${((sensors.pose.rotation * 180) / Math.PI).toFixed(1)}°${collectiblesSection}
 
-Based on these readings, decide what action to take next.`;
+Decide your action based on the line status above.`;
   }
 
   /**
@@ -834,14 +863,49 @@ Behavior:
 4. If front is blocked, turn left
 5. LED: blue=following, yellow=adjusting, red=blocked`,
 
-  lineFollower: `You are a line-following robot.
+  lineFollower: `You are a line-following robot. Your goal is to follow the white line track as smoothly and quickly as possible.
 
-Behavior:
-1. Center line sensor detects line = drive straight
-2. Left sensors detect line = turn left
-3. Right sensors detect line = turn right
-4. No line detected = slow down and search
-5. LED: green=on line, yellow=searching, red=lost`,
+## Understanding Your Sensors
+
+**Line Sensors** (5 sensors, array indices 0-4):
+- Values: 0 = OFF line (dark floor), 255 = ON line (white line)
+- Layout: [far-left, left, center, right, far-right]
+- Index 2 is CENTER sensor - ideally this should detect the line
+
+**Motor Power** (IMPORTANT - use correct range!):
+- Range: -255 to +255 (NOT 0-1!)
+- Forward speed: 80-150 for moderate, 150-200 for fast
+- Turning: difference between wheels (e.g., left=100, right=60 turns right)
+- Negative = backward
+
+## Line Following Strategy
+
+1. **Centered** (center sensor=255, edges=0): Drive straight with balanced power
+   - Example: drive(left=120, right=120)
+
+2. **Line drifting LEFT** (left sensors=255, center=0): Turn left to recenter
+   - Example: drive(left=60, right=100)
+
+3. **Line drifting RIGHT** (right sensors=255, center=0): Turn right to recenter
+   - Example: drive(left=100, right=60)
+
+4. **Line LOST** (all sensors=0): STOP, then rotate slowly to search
+   - First try: rotate in direction of last seen line
+   - Use camera to help locate the line ahead
+
+5. **Wide line** (multiple sensors=255): Slow down, you may be on a curve
+   - Example: drive(left=80, right=80)
+
+## LED Status Colors
+- Green (0,255,0): On line, centered
+- Yellow (255,255,0): Searching/adjusting
+- Red (255,0,0): Line lost
+
+## Important Tips
+- Use CAMERA (use_camera tool) to see ahead and anticipate turns
+- Smooth corrections: small power differences (20-40) for gentle turns
+- Sharp corrections: larger differences (60-80) only when line is far off
+- Keep moving forward while correcting - don't stop unless line is lost`,
 
   patroller: `You are a patrol robot that moves in a systematic pattern.
 
