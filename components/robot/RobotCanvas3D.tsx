@@ -3,7 +3,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
-import { type CubeRobotState as SimulatorState, type FloorMap } from '@/lib/hardware/cube-robot-simulator';
+import { type CubeRobotState as SimulatorState, type FloorMap, type Collectible } from '@/lib/hardware/cube-robot-simulator';
 import * as THREE from 'three';
 
 /**
@@ -29,7 +29,7 @@ interface AgentActivity {
 
 // Selected object information
 interface SelectedObjectInfo {
-  type: 'robot' | 'wall' | 'obstacle' | 'checkpoint' | 'floor';
+  type: 'robot' | 'wall' | 'obstacle' | 'checkpoint' | 'floor' | 'collectible';
   name: string;
   position: { x: number; y: number; z: number };
   data?: Record<string, unknown>;
@@ -42,6 +42,7 @@ interface RobotCanvas3DProps {
   onArenaClick?: (x: number, y: number) => void;
   agentActivity?: AgentActivity;
   onObjectSelected?: (info: SelectedObjectInfo | null) => void;
+  collectedIds?: string[];  // IDs of already collected items (to hide them)
 }
 
 // Camera positions for each preset
@@ -541,6 +542,179 @@ function LineTrackRenderer({ lines }: { lines: FloorMap['lines'] }) {
   );
 }
 
+// Collectibles rendering (coins, balls, gems, stars)
+function CollectiblesRenderer({
+  collectibles,
+  collectedIds,
+  selectedId,
+  onSelect
+}: {
+  collectibles: Collectible[];
+  collectedIds: string[];
+  selectedId: string | null;
+  onSelect: (collectible: Collectible) => void;
+}) {
+  if (!collectibles || collectibles.length === 0) return null;
+
+  // Filter out already collected items
+  const visibleCollectibles = collectibles.filter(c => !collectedIds.includes(c.id));
+
+  return (
+    <group>
+      {visibleCollectibles.map((collectible) => {
+        const isSelected = selectedId === collectible.id;
+        const color = collectible.color || getDefaultColor(collectible.type);
+        const height = getCollectibleHeight(collectible.type, collectible.radius);
+
+        return (
+          <group key={collectible.id}>
+            <CollectibleMesh
+              collectible={collectible}
+              color={color}
+              height={height}
+              isSelected={isSelected}
+              onSelect={onSelect}
+            />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+// Get default color based on collectible type
+function getDefaultColor(type: Collectible['type']): string {
+  switch (type) {
+    case 'coin': return '#FFD700';
+    case 'ball': return '#FF6B6B';
+    case 'gem': return '#9B59B6';
+    case 'star': return '#FFD700';
+    default: return '#FFD700';
+  }
+}
+
+// Get collectible display height
+function getCollectibleHeight(type: Collectible['type'], radius: number): number {
+  switch (type) {
+    case 'coin': return 0.02;
+    case 'ball': return radius;
+    case 'gem': return radius * 1.5;
+    case 'star': return 0.02;
+    default: return radius;
+  }
+}
+
+// Individual collectible mesh with animation
+function CollectibleMesh({
+  collectible,
+  color,
+  height,
+  isSelected,
+  onSelect
+}: {
+  collectible: Collectible;
+  color: string;
+  height: number;
+  isSelected: boolean;
+  onSelect: (collectible: Collectible) => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+
+  // Floating and rotating animation
+  useFrame((state) => {
+    if (meshRef.current) {
+      // Float up and down
+      meshRef.current.position.y = height + Math.sin(state.clock.elapsedTime * 2 + collectible.x * 10) * 0.02;
+
+      // Rotate coins and stars
+      if (collectible.type === 'coin' || collectible.type === 'star') {
+        meshRef.current.rotation.y += 0.02;
+      }
+      // Gems rotate slower
+      if (collectible.type === 'gem') {
+        meshRef.current.rotation.y += 0.01;
+      }
+    }
+  });
+
+  const renderGeometry = () => {
+    switch (collectible.type) {
+      case 'coin':
+        return <cylinderGeometry args={[collectible.radius, collectible.radius, 0.015, 16]} />;
+      case 'ball':
+        return <sphereGeometry args={[collectible.radius, 16, 16]} />;
+      case 'gem':
+        return <octahedronGeometry args={[collectible.radius]} />;
+      case 'star':
+        // Simplified star using a dodecahedron
+        return <dodecahedronGeometry args={[collectible.radius]} />;
+      default:
+        return <sphereGeometry args={[collectible.radius, 16, 16]} />;
+    }
+  };
+
+  return (
+    <group>
+      <mesh
+        ref={meshRef}
+        position={[collectible.x, height, collectible.y]}
+        onClick={(e) => { e.stopPropagation(); onSelect(collectible); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+        userData={{ type: 'collectible', name: `${collectible.type} (${collectible.id})` }}
+        castShadow
+      >
+        {renderGeometry()}
+        <meshStandardMaterial
+          color={isSelected || hovered ? '#ffffff' : color}
+          emissive={color}
+          emissiveIntensity={isSelected ? 0.8 : hovered ? 0.6 : 0.4}
+          metalness={collectible.type === 'coin' ? 0.8 : 0.3}
+          roughness={collectible.type === 'gem' ? 0.1 : 0.3}
+        />
+      </mesh>
+
+      {/* Glow effect underneath */}
+      <mesh
+        position={[collectible.x, 0.005, collectible.y]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <circleGeometry args={[collectible.radius * 1.5, 16]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={isSelected ? 0.5 : hovered ? 0.4 : 0.2}
+        />
+      </mesh>
+
+      {/* Selection ring */}
+      {(isSelected || hovered) && (
+        <mesh
+          position={[collectible.x, 0.006, collectible.y]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[collectible.radius * 1.6, collectible.radius * 1.8, 32]} />
+          <meshBasicMaterial
+            color={isSelected ? '#58a6ff' : '#8b949e'}
+            transparent
+            opacity={0.8}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
+      {/* Point light for glow */}
+      <pointLight
+        position={[collectible.x, height + 0.05, collectible.y]}
+        color={color}
+        intensity={isSelected ? 0.5 : 0.2}
+        distance={0.3}
+      />
+    </group>
+  );
+}
+
 // Planning animation - particles and effects when agent is planning
 function PlanningAnimation({ agentActivity, robotState }: { agentActivity?: AgentActivity; robotState: SimulatorState | null }) {
   const particlesRef = useRef<THREE.Points>(null);
@@ -723,6 +897,7 @@ function SelectionInfoPanel({ selectedObject }: { selectedObject: SelectedObject
     obstacle: 'bg-red-500/20 border-red-500/50 text-red-400',
     checkpoint: 'bg-green-500/20 border-green-500/50 text-green-400',
     floor: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
+    collectible: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
   };
 
   return (
@@ -761,10 +936,11 @@ export default function RobotCanvas3D({
   onArenaClick,
   agentActivity,
   onObjectSelected,
+  collectedIds = [],
 }: RobotCanvas3DProps) {
   const controlsRef = useRef<any>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedObjectInfo | null>(null);
-  const [selectedType, setSelectedType] = useState<{ type: string; index: number | null }>({ type: '', index: null });
+  const [selectedType, setSelectedType] = useState<{ type: string; index: number | null; id?: string }>({ type: '', index: null });
   const [presetChangeCount, setPresetChangeCount] = useState(0);
   const lastPresetRef = useRef(cameraPreset);
 
@@ -852,6 +1028,22 @@ export default function RobotCanvas3D({
     onObjectSelected?.(info);
   }, [onObjectSelected]);
 
+  const handleCollectibleClick = useCallback((collectible: Collectible) => {
+    const info: SelectedObjectInfo = {
+      type: 'collectible',
+      name: `${collectible.type.charAt(0).toUpperCase() + collectible.type.slice(1)} (${collectible.id})`,
+      position: { x: collectible.x, y: collectible.radius, z: collectible.y },
+      data: {
+        type: collectible.type,
+        points: collectible.points ?? 10,
+        radius: `${(collectible.radius * 100).toFixed(0)}cm`,
+      },
+    };
+    setSelectedObject(info);
+    setSelectedType({ type: 'collectible', index: null, id: collectible.id });
+    onObjectSelected?.(info);
+  }, [onObjectSelected]);
+
   const handleBackgroundClick = useCallback(() => {
     setSelectedObject(null);
     setSelectedType({ type: '', index: null });
@@ -927,6 +1119,16 @@ export default function RobotCanvas3D({
           />
         )}
         {floorMap.lines && <LineTrackRenderer lines={floorMap.lines} />}
+
+        {/* Collectibles (coins, balls, gems, stars) */}
+        {floorMap.collectibles && floorMap.collectibles.length > 0 && (
+          <CollectiblesRenderer
+            collectibles={floorMap.collectibles}
+            collectedIds={collectedIds}
+            selectedId={selectedType.type === 'collectible' ? selectedType.id || null : null}
+            onSelect={handleCollectibleClick}
+          />
+        )}
 
         <RobotCube
           state={robotState}
