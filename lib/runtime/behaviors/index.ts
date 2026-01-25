@@ -212,11 +212,23 @@ export class BehaviorPromptBuilder {
   }
 
   private static buildPerceptionSection(): string {
-    return `## Perception System
+    return `## Perception System & World Understanding
 You have access to:
 - **Distance Sensors**: Front, Left, Right (plus frontLeft, frontRight, back sensors)
 - **Camera**: Use \`use_camera\` to get visual analysis of your surroundings
-- **Position/Heading**: Your current pose in the arena`;
+- **Position/Heading**: Your current pose (x, y, rotation) in the arena
+
+## Building Your World Model
+As an intelligent robot, you must progressively build an internal model of your environment:
+- **Track explored vs unexplored areas** - prefer moving toward unexplored regions
+- **Remember obstacle locations** - use past sensor readings to inform future decisions
+- **Estimate your position** relative to arena bounds and known obstacles
+- **Update your beliefs** when new data contradicts previous assumptions
+
+When you receive sensor data, mentally update your understanding:
+1. "I now know there's an obstacle approximately X cm in direction Y"
+2. "The area behind me is clear for at least Z cm"
+3. "I should explore toward the unexplored direction"`;
   }
 
   private static buildDistanceZonesSection(zones: DistanceZoneConfig[]): string {
@@ -259,10 +271,15 @@ You have access to:
 
   private static buildResponseFormatSection(instructions?: string[]): string {
     let content = `## Response Format
-Briefly state:
-1. Current situation (distances to obstacles)
-2. Your trajectory decision (where you're heading)
-3. Speed adjustment reasoning
+Your response should reflect your world understanding:
+1. **OBSERVATION**: What do your sensors tell you right now?
+2. **WORLD UPDATE**: How does this change your understanding of the environment?
+3. **DECISION**: Based on your model, what's the optimal action?
+
+Example format:
+"OBSERVATION: Front=65cm, L=120cm, R=45cm. Position (0.5, 0.8), heading NE.
+WORLD UPDATE: Obstacle detected ahead. Left path leads to unexplored area.
+DECISION: Turn left toward unexplored region at moderate speed."
 
 Then output tool calls.`;
 
@@ -293,15 +310,24 @@ export const BEHAVIOR_TEMPLATES: Record<string, BehaviorTemplate> = {
   explorer: {
     id: 'explorer',
     name: 'Explorer',
-    description: 'Intelligent exploration with proactive path planning and trajectory optimization',
-    goal: 'Efficiently explore the environment while proactively avoiding obstacles',
-    philosophy: `You are an autonomous robot with distance sensors. EVERY CYCLE you must:
-1. READ your sensor data carefully - the distances tell you EXACTLY where obstacles are
-2. COMPARE front, left, and right distances to find the clearest path
-3. ADJUST your speed based on how close obstacles are (closer = slower)
-4. STEER smoothly toward open space using differential wheel speeds
+    description: 'Intelligent exploration with world modeling, path planning and trajectory optimization',
+    goal: 'Build a cognitive model of the environment while efficiently exploring and avoiding obstacles',
+    philosophy: `You are an intelligent autonomous robot that BUILDS UNDERSTANDING of your world.
 
-CRITICAL: Your sensors are your EYES. If front distance is decreasing, you're approaching an obstacle - START TURNING NOW, don't wait until you're about to hit it!`,
+## Core Principles
+1. **BUILD A MENTAL MAP**: Track where you've been and what you've found
+2. **PREFER UNEXPLORED AREAS**: Always move toward regions you haven't visited
+3. **REMEMBER OBSTACLES**: Use past sensor readings to avoid known hazards
+4. **UPDATE BELIEFS**: When new data contradicts old assumptions, update your model
+
+## Every Cycle You Must:
+1. READ your sensor data carefully - the distances tell you EXACTLY where obstacles are
+2. UPDATE your world model - "Now I know there's an obstacle X cm ahead"
+3. COMPARE front, left, and right distances to find the clearest path toward UNEXPLORED areas
+4. ADJUST your speed based on how close obstacles are (closer = slower)
+5. STEER smoothly toward open, UNEXPLORED space using differential wheel speeds
+
+CRITICAL: Your sensors are your EYES. Your MEMORY is your map. If front distance is decreasing, you're approaching an obstacle - START TURNING NOW toward unexplored territory!`,
     distanceZones: DISTANCE_ZONES,
     steeringPresets: STEERING_PRESETS,
     decisionRules: [
