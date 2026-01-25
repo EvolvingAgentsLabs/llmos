@@ -37,6 +37,40 @@
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
 
+// Import modular navigation, sensors, and behaviors
+import {
+  NavigationCalculator,
+  NavigationZone,
+  NavigationContext,
+  NavigationDecision,
+  LinePositionDetector,
+  defaultNavigationCalculator,
+  defaultLinePositionDetector,
+  clampMotorPower,
+  STEERING_PRESETS,
+} from './navigation';
+
+import {
+  CompositeSensorFormatter,
+  createExplorerFormatter,
+  createLineFollowerFormatter,
+  createWallFollowerFormatter,
+  createCollectorFormatter,
+  getActionInstruction,
+  SensorReadings as FormatterSensorReadings,
+} from './sensors';
+
+import {
+  behaviorRegistry,
+  getBehaviorPrompt,
+  getAllBehaviorDescriptions,
+  BEHAVIOR_TEMPLATES,
+  BehaviorPromptBuilder,
+  LED_COLORS,
+  LED_PROTOCOLS,
+  DISTANCE_ZONES,
+} from './behaviors';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DEVICE-SIDE TOOL DEFINITIONS
 // These represent the physical capabilities of the ESP32-S3 robot
@@ -112,7 +146,7 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       power: { type: 'number', description: 'Motor power from -255 to 255', required: true },
     },
     execute: async (args, ctx) => {
-      const power = Math.max(-255, Math.min(255, Math.round(args.power)));
+      const power = clampMotorPower(args.power);
       ctx.setLeftWheel(power);
       return { success: true, data: { wheel: 'left', power } };
     },
@@ -124,7 +158,7 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       power: { type: 'number', description: 'Motor power from -255 to 255', required: true },
     },
     execute: async (args, ctx) => {
-      const power = Math.max(-255, Math.min(255, Math.round(args.power)));
+      const power = clampMotorPower(args.power);
       ctx.setRightWheel(power);
       return { success: true, data: { wheel: 'right', power } };
     },
@@ -137,8 +171,8 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       right: { type: 'number', description: 'Right motor power (-255 to 255)', required: true },
     },
     execute: async (args, ctx) => {
-      const left = Math.max(-255, Math.min(255, Math.round(args.left)));
-      const right = Math.max(-255, Math.min(255, Math.round(args.right)));
+      const left = clampMotorPower(args.left);
+      const right = clampMotorPower(args.right);
       ctx.setLeftWheel(left);
       ctx.setRightWheel(right);
       return { success: true, data: { left, right } };
@@ -350,15 +384,8 @@ export class ESP32AgentRuntime {
   }
 
   private detectLinePosition(lineSensors: number[]): 'left' | 'center' | 'right' | undefined {
-    // 5 sensors: [far-left, left, center, right, far-right]
-    // Line sensors return 0 (off line) or 255 (on line), threshold should be midpoint
-    const threshold = 127;
-    const [fl, l, c, r, fr] = lineSensors;
-
-    if (c > threshold) return 'center';
-    if ((l > threshold || fl > threshold) && r < threshold && fr < threshold) return 'left';
-    if ((r > threshold || fr > threshold) && l < threshold && fl < threshold) return 'right';
-    return undefined;
+    // Use the modular LinePositionDetector
+    return defaultLinePositionDetector.detectPosition(lineSensors);
   }
 
   /**
@@ -581,55 +608,76 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
   }
 
   /**
+   * Get the appropriate sensor formatter for the current behavior
+   */
+  private getSensorFormatter(): CompositeSensorFormatter {
+    // Determine behavior type from system prompt or config
+    const prompt = this.config.systemPrompt.toLowerCase();
+
+    if (prompt.includes('line-following') || prompt.includes('line follower')) {
+      return createLineFollowerFormatter();
+    } else if (prompt.includes('collect') || prompt.includes('gem')) {
+      return createCollectorFormatter();
+    } else {
+      // Default to explorer formatter
+      return createExplorerFormatter();
+    }
+  }
+
+  /**
    * Format sensor data for the LLM context
+   * Uses modular sensor formatters for cleaner, more maintainable code
    */
   private formatSensorContext(sensors: SensorReadings): string {
-    // Build collectibles section if there are nearby collectibles
-    let collectiblesSection = '';
-    const nearbyCollectibles = (sensors as any).nearbyCollectibles;
-    if (nearbyCollectibles && nearbyCollectibles.length > 0) {
-      const items = nearbyCollectibles.map((c: any) =>
-        `- ${c.type} (${c.id}): ${c.distance}cm away, ${c.angle}° ${c.angle > 0 ? 'right' : c.angle < 0 ? 'left' : 'ahead'}, worth ${c.points} points`
-      ).join('\n');
-      collectiblesSection = `\n\n**Nearby Collectibles (within 2m):**\n${items}`;
-    } else if (this.config.goal && this.config.goal.toLowerCase().includes('collect')) {
-      collectiblesSection = '\n\n**Nearby Collectibles:** None detected within range. Explore to find more!';
+    // Get the appropriate formatter for this behavior
+    const formatter = this.getSensorFormatter();
+
+    // Convert to formatter-compatible sensor readings
+    const formatterSensors: FormatterSensorReadings = {
+      distance: sensors.distance,
+      line: sensors.line,
+      bumper: sensors.bumper,
+      battery: sensors.battery,
+      imu: sensors.imu,
+      pose: sensors.pose,
+      nearbyCollectibles: (sensors as any).nearbyCollectibles,
+    };
+
+    // Format with context
+    const context = {
+      iteration: this.state.iteration,
+      goal: this.config.goal,
+    };
+
+    const formatted = formatter.format(formatterSensors, context);
+
+    // Add action instruction suffix
+    const behaviorType = this.detectBehaviorType();
+    const instruction = getActionInstruction(behaviorType);
+
+    return `${formatted}\n\n${instruction}`;
+  }
+
+  /**
+   * Detect the behavior type from the system prompt
+   */
+  private detectBehaviorType(): 'explorer' | 'lineFollower' | 'wallFollower' | 'collector' | 'patroller' | 'gemHunter' | undefined {
+    const prompt = this.config.systemPrompt.toLowerCase();
+
+    if (prompt.includes('line-following') || prompt.includes('line follower')) {
+      return 'lineFollower';
+    } else if (prompt.includes('wall-following') || prompt.includes('wall follower')) {
+      return 'wallFollower';
+    } else if (prompt.includes('gem hunt')) {
+      return 'gemHunter';
+    } else if (prompt.includes('coin collect') || prompt.includes('collect')) {
+      return 'collector';
+    } else if (prompt.includes('patrol')) {
+      return 'patroller';
+    } else if (prompt.includes('explor')) {
+      return 'explorer';
     }
-
-    // Interpret line sensor position for easier LLM understanding
-    // Sensors: [far-left(0), left(1), center(2), right(3), far-right(4)]
-    const lineThreshold = 127;
-    const onLine = sensors.line.map(v => v > lineThreshold);
-    let lineStatus = '';
-
-    if (!onLine.some(v => v)) {
-      lineStatus = '⚠️ LINE LOST - search needed!';
-    } else if (onLine[2]) {
-      if (onLine[0] || onLine[1]) {
-        lineStatus = '↖️ Line drifting LEFT - turn left';
-      } else if (onLine[3] || onLine[4]) {
-        lineStatus = '↗️ Line drifting RIGHT - turn right';
-      } else {
-        lineStatus = '✓ CENTERED - drive straight';
-      }
-    } else if (onLine[0] || onLine[1]) {
-      lineStatus = '⬅️ Line is LEFT - turn left sharply';
-    } else if (onLine[3] || onLine[4]) {
-      lineStatus = '➡️ Line is RIGHT - turn right sharply';
-    }
-
-    // Visual representation of line sensors
-    const lineVisual = onLine.map(v => v ? '●' : '○').join(' ');
-
-    return `## Sensor Readings (Iteration ${this.state.iteration})
-
-**Line Sensors:** [${lineVisual}] ${lineStatus}
-Raw: [${sensors.line.map((v) => v.toFixed(0)).join(', ')}]
-
-**Distance:** Front=${sensors.distance.front.toFixed(0)}cm, L=${sensors.distance.left.toFixed(0)}cm, R=${sensors.distance.right.toFixed(0)}cm
-**Position:** (${sensors.pose.x.toFixed(2)}, ${sensors.pose.y.toFixed(2)}) heading ${((sensors.pose.rotation * 180) / Math.PI).toFixed(1)}°${collectiblesSection}
-
-Decide your action based on the line status above.`;
+    return undefined;
   }
 
   /**
@@ -796,6 +844,12 @@ export function listActiveESP32Agents(): string[] {
 // DEFAULT AGENT PROMPTS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BEHAVIOR MAPPINGS
+// These are now powered by the behavior registry system.
+// See ./behaviors/index.ts for the full behavior template definitions.
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
  * Mapping of behavior types to their recommended floor maps.
  * This ensures the 3D world matches the selected behavior.
@@ -810,49 +864,81 @@ export const BEHAVIOR_TO_MAP: Record<string, string> = {
 };
 
 /**
- * Human-readable descriptions for each behavior
+ * Human-readable descriptions for each behavior.
+ * Now powered by behavior registry for consistency.
  */
-export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = {
-  explorer: {
-    name: 'Explorer',
-    description: 'Explores environment while avoiding obstacles',
-    mapName: '5m × 5m Obstacles',
-  },
-  wallFollower: {
-    name: 'Wall Follower',
-    description: 'Follows walls using right-hand rule',
-    mapName: '5m × 5m Maze',
-  },
-  lineFollower: {
-    name: 'Line Follower',
-    description: 'Follows line track using IR sensors',
-    mapName: '5m × 5m Line Track',
-  },
-  patroller: {
-    name: 'Patroller',
-    description: 'Patrols in rectangular pattern',
-    mapName: '5m × 5m Empty',
-  },
-  collector: {
-    name: 'Coin Collector',
-    description: 'Collects all coins scattered around the arena',
-    mapName: '5m × 5m Coin Collection',
-  },
-  gemHunter: {
-    name: 'Gem Hunter',
-    description: 'Hunts gems of different values while avoiding obstacles',
-    mapName: '5m × 5m Gem Hunt',
-  },
-};
+export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = getAllBehaviorDescriptions();
 
 export const DEFAULT_AGENT_PROMPTS = {
-  explorer: `You are an autonomous exploration robot. Your goal is to explore the environment while avoiding obstacles.
+  explorer: `You are an intelligent autonomous exploration robot with advanced navigation capabilities. Your goal is to efficiently explore the environment while proactively avoiding obstacles.
 
-Behavior:
-1. Move forward when path is clear (front distance > 30cm)
-2. Turn away from obstacles when detected
-3. Use LED to indicate state: green=exploring, yellow=turning, red=stopped
-4. Prefer turning toward the more open direction`,
+## Navigation Philosophy
+Think like an autonomous vehicle: ANTICIPATE obstacles, PLAN trajectories, and ADJUST continuously. Don't wait until you're about to collide - navigate proactively with spatial awareness.
+
+## Perception System
+You have access to:
+- **Distance Sensors**: Front, Left, Right (plus frontLeft, frontRight, back sensors)
+- **Camera**: Use \`use_camera\` to get visual analysis of your surroundings
+- **Position/Heading**: Your current pose in the arena
+
+## Intelligent Path Planning
+
+### Distance Zones & Speed Control
+| Zone | Front Distance | Speed | Action |
+|------|----------------|-------|--------|
+| **Open** | > 100cm | 150-200 | Full speed exploration |
+| **Aware** | 50-100cm | 100-150 | Moderate speed, start planning turn |
+| **Caution** | 30-50cm | 60-100 | Slow down, commit to turn direction |
+| **Critical** | < 30cm | 0-60 | Execute turn or stop |
+
+### Trajectory Decision Algorithm
+1. **Analyze all three directions** (front, left, right distances)
+2. **Choose path with most clearance** - not just "away from obstacle"
+3. **Use differential steering** for smooth curved paths
+4. **Prefer gradual turns** over sharp pivots when possible
+
+### Smooth Steering Formulas
+- **Gentle curve left**: drive(left=100, right=140)
+- **Moderate turn left**: drive(left=60, right=120)
+- **Sharp turn left**: drive(left=-50, right=100)
+- **Gentle curve right**: drive(left=140, right=100)
+- **Moderate turn right**: drive(left=120, right=60)
+- **Sharp turn right**: drive(left=100, right=-50)
+
+### Proactive Navigation Rules
+1. **At 80cm+**: If front < left or front < right by 30cm+, start curving toward open side
+2. **At 50-80cm**: Calculate best escape route, begin gentle turn
+3. **At 30-50cm**: Commit to turn direction, reduce speed proportionally
+4. **At <30cm**: Execute decisive turn toward most open direction
+5. **Use camera** periodically to validate sensor readings and detect obstacles sensors might miss
+
+### Exploration Strategy
+- **Prefer unexplored directions**: If you've been turning left often, favor right when equal
+- **Maximize coverage**: Don't just avoid walls, actively seek open spaces
+- **Corner handling**: When multiple walls detected, rotate in place to find exit
+- **Dead end detection**: If all directions < 40cm, stop, use camera, then reverse slightly and turn
+
+## LED Status Protocol
+- **Cyan (0,255,255)**: Open path, cruising speed
+- **Green (0,255,0)**: Normal exploration
+- **Yellow (255,200,0)**: Approaching obstacle, planning turn
+- **Orange (255,100,0)**: Executing avoidance maneuver
+- **Red (255,0,0)**: Critical obstacle, stopped/reversing
+
+## Response Format
+Briefly state:
+1. Current situation (distances to obstacles)
+2. Your trajectory decision (where you're heading)
+3. Speed adjustment reasoning
+
+Then output tool calls.
+
+## Example Decision Process
+"Front=65cm, L=120cm, R=45cm. Entering caution zone. Left path is clearest (+75cm vs front). Initiating gradual left curve at reduced speed."
+\`\`\`json
+{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
+{"tool": "drive", "args": {"left": 70, "right": 110}}
+\`\`\``,
 
   wallFollower: `You are a wall-following robot using the right-hand rule.
 
@@ -961,3 +1047,87 @@ Strategy tips:
 - Blue gems are in corners - sweep the perimeter
 - Green gems are scattered - collect opportunistically`,
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW MODULAR BEHAVIOR SYSTEM
+// The above DEFAULT_AGENT_PROMPTS are kept for backward compatibility.
+// For new behaviors, use the behavior registry system:
+//
+//   import { behaviorRegistry, getBehaviorPrompt } from './behaviors';
+//
+//   // Get a behavior prompt
+//   const prompt = getBehaviorPrompt('explorer');
+//
+//   // List all available behaviors
+//   const behaviors = behaviorRegistry.listAll();
+//
+//   // Register a custom behavior
+//   behaviorRegistry.register({
+//     id: 'myCustomBehavior',
+//     name: 'My Custom Robot',
+//     goal: 'Do something cool',
+//     // ... other options
+//   });
+//
+// See ./behaviors/index.ts for full documentation.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get behavior prompt from the registry (preferred) or fall back to DEFAULT_AGENT_PROMPTS
+ */
+export function getAgentPrompt(behaviorId: string): string {
+  // Try registry first
+  const registryPrompt = behaviorRegistry.getPrompt(behaviorId);
+  if (registryPrompt) {
+    return registryPrompt;
+  }
+
+  // Fall back to legacy prompts
+  const legacyPrompt = (DEFAULT_AGENT_PROMPTS as Record<string, string>)[behaviorId];
+  if (legacyPrompt) {
+    return legacyPrompt;
+  }
+
+  throw new Error(`Unknown behavior: ${behaviorId}`);
+}
+
+// Re-export navigation and behavior utilities for convenience
+// Use 'export type' for type-only exports (required with isolatedModules)
+export {
+  NavigationCalculator,
+  NavigationZone,
+  LinePositionDetector,
+  STEERING_PRESETS,
+  clampMotorPower,
+} from './navigation';
+
+export type {
+  NavigationContext,
+  NavigationDecision,
+  SpeedRange,
+  SteeringRecommendation,
+  LineFollowingContext,
+} from './navigation';
+
+export {
+  behaviorRegistry,
+  BehaviorPromptBuilder,
+  BEHAVIOR_TEMPLATES,
+  LED_COLORS,
+  LED_PROTOCOLS,
+  DISTANCE_ZONES,
+} from './behaviors';
+
+export type {
+  BehaviorTemplate,
+  LEDColor,
+  LEDProtocol,
+} from './behaviors';
+
+export {
+  CompositeSensorFormatter,
+  createExplorerFormatter,
+  createLineFollowerFormatter,
+  createWallFollowerFormatter,
+  createCollectorFormatter,
+} from './sensors';
