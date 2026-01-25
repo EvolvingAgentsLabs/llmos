@@ -714,6 +714,103 @@ device_extensions: [wheels, distance_sensors, camera]
 - return_home: Safe return protocol
 ```
 
+### Cognitive World Model: Analyze First, Act Second
+
+A key innovation in LLMos is the **cognitive-first approach** to robot AI. Unlike traditional reactive robots that simply respond to sensor inputs, LLMos AI agents build and maintain an **internal world model** before taking any action.
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="25%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="#58a6ff" opacity="0.2"/>
+  <circle cx="24" cy="24" r="8" fill="#58a6ff"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="12">1</text>
+</svg>
+<br/><b>PERCEIVE</b>
+<br/><sub>Read all sensors</sub>
+</td>
+<td align="center" width="25%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="#bc8cff" opacity="0.2"/>
+  <circle cx="24" cy="24" r="8" fill="#bc8cff"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="12">2</text>
+</svg>
+<br/><b>MODEL</b>
+<br/><sub>Update world understanding</sub>
+</td>
+<td align="center" width="25%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="#ffd43b" opacity="0.2"/>
+  <circle cx="24" cy="24" r="8" fill="#ffd43b"/>
+  <text x="24" y="28" text-anchor="middle" fill="#0d1117" font-size="12">3</text>
+</svg>
+<br/><b>REASON</b>
+<br/><sub>Plan optimal action</sub>
+</td>
+<td align="center" width="25%">
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="#3fb950" opacity="0.2"/>
+  <circle cx="24" cy="24" r="8" fill="#3fb950"/>
+  <text x="24" y="28" text-anchor="middle" fill="white" font-size="12">4</text>
+</svg>
+<br/><b>ACT</b>
+<br/><sub>Execute with purpose</sub>
+</td>
+</tr>
+</table>
+</div>
+
+**The Cognitive Loop:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    COGNITIVE WORLD MODEL                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   SENSORS → PERCEPTION → WORLD MODEL → REASONING → ACTION       │
+│      ↑                       ↓                                   │
+│      └───────────── FEEDBACK LOOP ───────────────┘               │
+│                                                                  │
+│   Key Innovation: Robot THINKS before acting!                    │
+│   - "Where am I?" → Position estimation                          │
+│   - "What do I see?" → Obstacle mapping                          │
+│   - "Where haven't I been?" → Exploration priority               │
+│   - "What's the best path?" → Decision making                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**World Model Features:**
+- **Grid-based representation**: 10cm resolution mapping of the environment
+- **Progressive exploration tracking**: Robot knows what areas it has/hasn't visited
+- **Obstacle memory**: Remembers where obstacles are located
+- **ASCII visualization**: Robot can "draw" its understanding for debugging
+- **Unexplored direction finding**: Prioritizes moving toward unknown areas
+
+**Example ASCII World Model (what the robot "sees" internally):**
+```
+┌─────────────────────────┐
+│ WORLD MODEL (Robot View)│
+├─────────────────────────┤
+│ ····█████·····░░░░░░░░░ │
+│ ····█████··*··░░░░░░░░░ │
+│ ·····...·▶R··░░░░░░░░░░ │
+│ ····....◆....░░░░░░░░░░ │
+│ ····█████·····░░░░░░░░░ │
+├─────────────────────────┤
+│ · unknown  █ obstacle   │
+│ . free     ◆ collectible│
+│ * explored ▶ robot      │
+└─────────────────────────┘
+```
+
+This cognitive approach makes robots significantly smarter because they:
+1. **Don't repeat mistakes** - Remember obstacle locations
+2. **Explore efficiently** - Prioritize unexplored areas
+3. **Make informed decisions** - Base actions on world understanding
+4. **Self-debug** - Can explain their reasoning via ASCII maps
+
 ### How AI Physical Agents Work
 
 AI Physical Agents operate through a **closed agentic loop** that connects your robot's hardware to the LLM running on the host:
@@ -942,10 +1039,30 @@ The **3D World Panel** serves dual purposes: **simulation** for virtual testing 
 
 **3D World Features:**
 - **Physics simulation** - Accurate differential drive, collisions, sensors
-- **Multiple camera views** - Top-down, isometric, follow-cam, side view
+- **Follow camera view** - Immersive robot-following perspective as default
+- **Picture-in-Picture top view** - Mini-map overlay showing arena from above
 - **Real-time telemetry** - Stream sensor data from physical robots
 - **Playback & replay** - Record sessions and analyze later
 - **Digital twin** - Mirror your real robot's position in the virtual world
+
+### Enhanced UI: Focus on What Matters
+
+The LLMos interface is designed for maximum clarity and focus:
+
+**3D World View:**
+- **Follow Camera Only**: See the world from your robot's perspective
+- **PiP Top View**: Small overlay showing the entire arena from above
+- **Clean toolbar**: Essential controls without clutter
+
+**Collapsible Panels:**
+- **Accordion-style controls**: Expand one panel at a time for maximum space
+- **Controls Panel**: Agent configuration, behavior selection, action buttons
+- **Messages Panel**: Real-time AI reasoning, sensor data, world model visualization
+
+**Debug & Understand:**
+- **Camera screenshots**: See what the robot "sees" with AI analysis
+- **ASCII world model**: Visualize the robot's internal understanding
+- **Cognitive loop logging**: PERCEIVE → MODEL → REASON → ACT
 
 ### Future: Markdown Subagents (Claude Code Style)
 

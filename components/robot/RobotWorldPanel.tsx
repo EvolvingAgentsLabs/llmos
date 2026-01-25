@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy } from 'lucide-react';
+import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy, Layers, Move } from 'lucide-react';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
@@ -41,6 +41,13 @@ const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
 type ExecutionMode = 'simulation' | 'real-robot' | 'replay';
 type CameraPreset = 'top-down' | 'isometric' | 'follow' | 'side';
 
+// PiP (Picture-in-Picture) configuration
+interface PiPConfig {
+  enabled: boolean;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  size: 'small' | 'medium' | 'large';
+}
+
 type AgentPhase = 'idle' | 'analyzing' | 'planning' | 'voting' | 'executing' | 'sub-agent-execution' | 'completed';
 
 interface AgentActivity {
@@ -56,6 +63,192 @@ interface RobotWorldPanelProps {
   onArenaClick?: (x: number, y: number) => void;
   agentActivity?: AgentActivity;
   robotAgentName?: string; // Name of the selected/created robot agent to display
+}
+
+// PiP (Picture-in-Picture) Top-Down View Component
+function PiPTopView({
+  robotState,
+  floorMap,
+  position,
+  size,
+  onDrag,
+}: {
+  robotState: SimulatorState | null;
+  floorMap: FloorMap;
+  position: PiPConfig['position'];
+  size: PiPConfig['size'];
+  onDrag?: (position: PiPConfig['position']) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Size mapping
+  const sizeMap = {
+    small: { width: 120, height: 120 },
+    medium: { width: 160, height: 160 },
+    large: { width: 200, height: 200 },
+  };
+  const { width, height } = sizeMap[size];
+
+  // Position mapping
+  const positionStyles: Record<PiPConfig['position'], string> = {
+    'top-left': 'top-4 left-4',
+    'top-right': 'top-4 right-4',
+    'bottom-left': 'bottom-16 left-4',
+    'bottom-right': 'bottom-16 right-4',
+  };
+
+  // Render top-down view on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, width, height);
+
+    // Calculate scale to fit arena in canvas
+    const bounds = floorMap.bounds;
+    const arenaWidth = bounds.maxX - bounds.minX;
+    const arenaHeight = bounds.maxY - bounds.minY;
+    const scale = Math.min((width - 20) / arenaWidth, (height - 20) / arenaHeight);
+    const offsetX = (width - arenaWidth * scale) / 2;
+    const offsetY = (height - arenaHeight * scale) / 2;
+
+    // Transform world coords to canvas coords
+    const toCanvas = (x: number, y: number) => ({
+      x: offsetX + (x - bounds.minX) * scale,
+      y: offsetY + (y - bounds.minY) * scale,
+    });
+
+    // Draw grid
+    ctx.strokeStyle = '#21262d';
+    ctx.lineWidth = 0.5;
+    const gridStep = 0.5; // 0.5m grid
+    for (let x = bounds.minX; x <= bounds.maxX; x += gridStep) {
+      const start = toCanvas(x, bounds.minY);
+      const end = toCanvas(x, bounds.maxY);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    }
+    for (let y = bounds.minY; y <= bounds.maxY; y += gridStep) {
+      const start = toCanvas(bounds.minX, y);
+      const end = toCanvas(bounds.maxX, y);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    }
+
+    // Draw arena border
+    ctx.strokeStyle = '#58a6ff';
+    ctx.lineWidth = 2;
+    const topLeft = toCanvas(bounds.minX, bounds.minY);
+    const bottomRight = toCanvas(bounds.maxX, bounds.maxY);
+    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+
+    // Draw walls
+    ctx.strokeStyle = '#58a6ff';
+    ctx.lineWidth = 3;
+    floorMap.walls.forEach(wall => {
+      const start = toCanvas(wall.x1, wall.y1);
+      const end = toCanvas(wall.x2, wall.y2);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    });
+
+    // Draw obstacles
+    ctx.fillStyle = '#f85149';
+    floorMap.obstacles?.forEach(obs => {
+      const pos = toCanvas(obs.x, obs.y);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, obs.radius * scale, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Draw collectibles
+    floorMap.collectibles?.forEach(col => {
+      if (robotState?.collectibles?.collected.includes(col.id)) return;
+      const pos = toCanvas(col.x, col.y);
+      ctx.fillStyle = col.color || '#FFD700';
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, col.radius * scale * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Draw robot
+    if (robotState) {
+      const robotPos = toCanvas(robotState.pose.x, robotState.pose.y);
+      const robotSize = 8;
+
+      // Robot body
+      ctx.save();
+      ctx.translate(robotPos.x, robotPos.y);
+      ctx.rotate(-robotState.pose.rotation + Math.PI);
+
+      // Triangle pointing in direction of travel
+      ctx.fillStyle = '#58a6ff';
+      ctx.beginPath();
+      ctx.moveTo(0, -robotSize);
+      ctx.lineTo(-robotSize * 0.7, robotSize * 0.6);
+      ctx.lineTo(robotSize * 0.7, robotSize * 0.6);
+      ctx.closePath();
+      ctx.fill();
+
+      // LED indicator
+      ctx.fillStyle = `rgb(${robotState.led.r}, ${robotState.led.g}, ${robotState.led.b})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      // Robot trail (last few positions could be shown)
+    }
+
+    // Draw border decoration
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+
+  }, [robotState, floorMap, width, height]);
+
+  return (
+    <div
+      className={`absolute ${positionStyles[position]} bg-[#0d1117]/95 backdrop-blur-sm border border-[#30363d] rounded-lg shadow-xl overflow-hidden group transition-all duration-200 hover:border-[#58a6ff]/50`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-2 py-1 bg-[#161b22] border-b border-[#30363d]">
+        <div className="flex items-center gap-1.5">
+          <Layers className="w-3 h-3 text-[#58a6ff]" />
+          <span className="text-[9px] text-[#8b949e] font-medium uppercase tracking-wider">Top View</span>
+        </div>
+        <Move className="w-3 h-3 text-[#6e7681] opacity-0 group-hover:opacity-100 transition-opacity cursor-move" />
+      </div>
+
+      {/* Canvas */}
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className="block"
+        style={{ imageRendering: 'auto' }}
+      />
+
+      {/* Position info */}
+      {robotState && (
+        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-[#0d1117]/80 rounded text-[8px] text-[#8b949e] font-mono">
+          ({robotState.pose.x.toFixed(1)}, {robotState.pose.y.toFixed(1)})
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function RobotWorldPanel({
@@ -75,10 +268,15 @@ export default function RobotWorldPanel({
   const [mode, setMode] = useState<ExecutionMode>('simulation');
   const [isRunning, setIsRunning] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [cameraPreset, setCameraPreset] = useState<CameraPreset>('isometric');
+  const [cameraPreset, setCameraPreset] = useState<CameraPreset>('follow'); // Default to follow camera
   const [robotState, setRobotState] = useState<SimulatorState | null>(null);
   const [showStats, setShowStats] = useState(true);
   const [floorMap, setFloorMap] = useState<FloorMap | null>(null);
+  const [pipConfig, setPipConfig] = useState<PiPConfig>({
+    enabled: true,
+    position: 'top-right',
+    size: 'medium',
+  });
 
   // Initialize simulator OR sync with Device Manager
   useEffect(() => {
@@ -301,40 +499,39 @@ export default function RobotWorldPanel({
           </button>
         </div>
 
-        {/* Right: Camera & Settings */}
+        {/* Right: View Controls & Settings */}
         <div className="flex items-center gap-2">
-          {/* Camera Presets - Click to reset camera to preset view */}
-          <div className="flex items-center gap-1 bg-[#21262d] rounded-lg p-0.5">
-            {(['top-down', 'isometric', 'follow', 'side'] as CameraPreset[]).map((preset) => {
-              const labels: Record<CameraPreset, string> = {
-                'top-down': 'Top',
-                'isometric': 'Iso',
-                'follow': 'Follow',
-                'side': 'Side',
-              };
-              return (
-                <button
-                  key={preset}
-                  onClick={() => handleCameraPreset(preset)}
-                  className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-                    cameraPreset === preset
-                      ? 'bg-[#58a6ff] text-white'
-                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]'
-                  }`}
-                  title={`Reset camera to ${preset} view (use mouse to orbit/pan/zoom)`}
-                >
-                  {labels[preset]}
-                </button>
-              );
-            })}
+          {/* Follow Camera indicator */}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#58a6ff]/20 border border-[#58a6ff]/50">
+            <Camera className="w-3 h-3 text-[#58a6ff]" />
+            <span className="text-[10px] text-[#58a6ff] font-medium">Follow Cam</span>
           </div>
 
+          {/* PiP Top View Toggle */}
+          <button
+            onClick={() => setPipConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all ${
+              pipConfig.enabled
+                ? 'bg-[#3fb950]/20 border-[#3fb950]/50 text-[#3fb950]'
+                : 'bg-[#21262d] border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]'
+            }`}
+            title={pipConfig.enabled ? 'Hide top-down mini view' : 'Show top-down mini view'}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-medium">PiP</span>
+          </button>
+
+          {/* Stats Toggle */}
           <button
             onClick={() => setShowStats(!showStats)}
-            className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#30363d] hover:border-[#58a6ff] flex items-center justify-center transition-colors"
+            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+              showStats
+                ? 'bg-[#58a6ff]/20 border-[#58a6ff]/50'
+                : 'bg-[#21262d] border-[#30363d] hover:border-[#58a6ff]'
+            }`}
             title="Toggle statistics"
           >
-            <Settings className="w-4 h-4 text-[#8b949e] hover:text-[#58a6ff]" />
+            <Settings className={`w-4 h-4 ${showStats ? 'text-[#58a6ff]' : 'text-[#8b949e] hover:text-[#58a6ff]'}`} />
           </button>
 
           <button
@@ -462,6 +659,17 @@ export default function RobotWorldPanel({
           </div>
         )}
 
+        {/* PiP Top-Down View */}
+        {pipConfig.enabled && floorMap && (
+          <PiPTopView
+            robotState={robotState}
+            floorMap={floorMap}
+            position={pipConfig.position}
+            size={pipConfig.size}
+            onDrag={(pos) => setPipConfig(prev => ({ ...prev, position: pos }))}
+          />
+        )}
+
         {/* Mode Badge */}
         <div className="absolute bottom-4 right-4">
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${currentModeConfig.bg} ${currentModeConfig.border} backdrop-blur-sm`}>
@@ -492,8 +700,16 @@ export default function RobotWorldPanel({
           <span className="text-[#8b949e]">
             Map: <span className="text-[#e6edf3] font-medium">{currentMap}</span>
           </span>
-          <span className="text-[#8b949e]">
-            Camera: <span className="text-[#e6edf3] font-medium">{cameraPreset}</span>
+          <span className="text-[#8b949e] flex items-center gap-1">
+            <Camera className="w-3 h-3" />
+            <span className="text-[#58a6ff] font-medium">Follow</span>
+            {pipConfig.enabled && (
+              <>
+                <span className="text-[#6e7681]">+</span>
+                <Layers className="w-3 h-3 text-[#3fb950]" />
+                <span className="text-[#3fb950]">PiP</span>
+              </>
+            )}
           </span>
         </div>
         <div className="text-[#6e7681]">
