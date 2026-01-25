@@ -893,7 +893,8 @@ export const FLOOR_MAPS = {
 
   /**
    * Standard 5m x 5m empty arena
-   * Perfect for testing basic navigation and motor control
+   * Patrol challenge - open space for rectangular patrol patterns
+   * Checkpoints at corners for 90-degree turn patrol behavior
    */
   standard5x5Empty: (): FloorMap => ({
     bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
@@ -906,17 +907,20 @@ export const FLOOR_MAPS = {
     obstacles: [],
     lines: [],
     checkpoints: [
-      { x: 2.0, y: 0 },    // Right
-      { x: 0, y: 2.0 },    // Top
-      { x: -2.0, y: 0 },   // Left
-      { x: 0, y: -2.0 },   // Bottom
+      // Corner checkpoints for rectangular patrol pattern
+      // Patrol sequence: start -> bottom-right -> top-right -> top-left -> bottom-left -> repeat
+      { x: 2.0, y: -2.0 },   // Bottom-right corner (1st waypoint)
+      { x: 2.0, y: 2.0 },    // Top-right corner (2nd waypoint)
+      { x: -2.0, y: 2.0 },   // Top-left corner (3rd waypoint)
+      { x: -2.0, y: -2.0 },  // Bottom-left corner (4th waypoint / return to start)
     ],
-    startPosition: { x: 0, y: 0, rotation: 0 },
+    startPosition: { x: -2.0, y: -2.0, rotation: 0 },  // Start at bottom-left, facing right
   }),
 
   /**
    * Standard 5m x 5m arena with obstacles
-   * Obstacle avoidance practice
+   * Exploration challenge - obstacles distributed to create interesting navigation paths
+   * Robot must explore while avoiding obstacles of varying sizes
    */
   standard5x5Obstacles: (): FloorMap => ({
     bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
@@ -927,26 +931,41 @@ export const FLOOR_MAPS = {
       { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
     ],
     obstacles: [
-      // Corner obstacles
-      { x: -1.5, y: -1.5, radius: 0.25 },
-      { x: 1.5, y: -1.5, radius: 0.20 },
-      { x: 1.5, y: 1.5, radius: 0.25 },
-      { x: -1.5, y: 1.5, radius: 0.20 },
-      // Center cluster
-      { x: 0, y: 0, radius: 0.30 },
-      { x: -0.6, y: 0.6, radius: 0.15 },
-      { x: 0.6, y: -0.6, radius: 0.15 },
-      // Edge obstacles
-      { x: 0, y: 1.8, radius: 0.18 },
-      { x: 0, y: -1.8, radius: 0.18 },
-      { x: 1.8, y: 0, radius: 0.18 },
-      { x: -1.8, y: 0, radius: 0.18 },
+      // Large central obstacle - forces navigation around
+      { x: 0, y: 0, radius: 0.35 },
+
+      // Quadrant obstacles - creates four exploration zones
+      // Bottom-left quadrant
+      { x: -1.2, y: -1.2, radius: 0.25 },
+      { x: -0.5, y: -1.8, radius: 0.15 },
+
+      // Bottom-right quadrant
+      { x: 1.2, y: -1.2, radius: 0.20 },
+      { x: 1.8, y: -0.5, radius: 0.18 },
+
+      // Top-right quadrant
+      { x: 1.2, y: 1.2, radius: 0.25 },
+      { x: 0.5, y: 1.8, radius: 0.15 },
+
+      // Top-left quadrant
+      { x: -1.2, y: 1.2, radius: 0.20 },
+      { x: -1.8, y: 0.5, radius: 0.18 },
+
+      // Mid-range obstacles - creates corridors between quadrants
+      { x: 0, y: 1.2, radius: 0.12 },
+      { x: 0, y: -1.2, radius: 0.12 },
+      { x: 1.2, y: 0, radius: 0.12 },
+      { x: -1.2, y: 0, radius: 0.12 },
     ],
     lines: [],
     checkpoints: [
-      { x: 2.0, y: 2.0 },    // Top-right goal
+      // Multiple exploration targets - one in each quadrant
+      { x: -1.8, y: -1.8 },   // Bottom-left
+      { x: 1.8, y: -1.8 },    // Bottom-right
+      { x: 1.8, y: 1.8 },     // Top-right (primary goal)
+      { x: -1.8, y: 1.8 },    // Top-left
     ],
-    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },
+    startPosition: { x: 0, y: -2.0, rotation: Math.PI / 2 },  // Start at bottom center, facing up
   }),
 
   /**
@@ -975,8 +994,8 @@ export const FLOOR_MAPS = {
       obstacles: [],
       lines: [{
         points,
-        width: 0.03,  // 3cm wide line
-        color: '#000000',
+        width: 0.05,  // 5cm wide line for better visibility and sensor detection
+        color: '#ffffff',  // White line for high contrast on dark floor
       }],
       checkpoints: [
         { x: 1.8, y: 0 },     // Right
@@ -984,45 +1003,53 @@ export const FLOOR_MAPS = {
         { x: -1.8, y: 0 },    // Left
         { x: 0, y: -1.2 },    // Bottom
       ],
-      startPosition: { x: 0, y: 0, rotation: 0 },
+      startPosition: { x: 1.8, y: 0, rotation: Math.PI / 2 },  // Start on the track, facing along it
     };
   },
 
   /**
    * Standard 5m x 5m maze
-   * Path planning and navigation challenge
+   * Wall-following challenge - designed for right-hand rule navigation
+   * All walls are connected to form proper corridors with a solvable path
+   * from start (bottom-left) to goal (top-right)
    */
   standard5x5Maze: (): FloorMap => ({
     bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
     walls: [
-      // Outer walls
-      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },
-      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },
-      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },
-      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },
-      // Inner maze walls (creating a solvable maze)
-      // Vertical walls
-      { x1: -1.5, y1: -2.5, x2: -1.5, y2: -0.5 },
-      { x1: -0.5, y1: -1.5, x2: -0.5, y2: 1.0 },
-      { x1: 0.5, y1: -1.0, x2: 0.5, y2: 2.0 },
-      { x1: 1.5, y1: -2.0, x2: 1.5, y2: 0.5 },
-      // Horizontal walls
-      { x1: -2.5, y1: -1.5, x2: 0, y2: -1.5 },
-      { x1: -1.0, y1: -0.5, x2: 2.0, y2: -0.5 },
-      { x1: -2.0, y1: 0.5, x2: 0.5, y2: 0.5 },
-      { x1: -0.5, y1: 1.5, x2: 2.5, y2: 1.5 },
+      // Outer walls (boundary)
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },   // Bottom
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },     // Right
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },     // Top
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },   // Left
+
+      // Inner maze walls - all connected to form proper corridors
+      // Row 1: Bottom section corridor walls
+      { x1: -1.5, y1: -2.5, x2: -1.5, y2: -1.5 },  // Vertical from bottom
+      { x1: -1.5, y1: -1.5, x2: 0.5, y2: -1.5 },   // Horizontal connector
+      { x1: 0.5, y1: -2.5, x2: 0.5, y2: -1.5 },    // Vertical from bottom
+
+      // Row 2: Middle-lower section
+      { x1: -2.5, y1: -0.5, x2: -0.5, y2: -0.5 },  // Horizontal from left wall
+      { x1: -0.5, y1: -0.5, x2: -0.5, y2: 0.5 },   // Vertical connector
+      { x1: 1.5, y1: -1.5, x2: 1.5, y2: 0.5 },     // Vertical barrier
+      { x1: 1.5, y1: -1.5, x2: 2.5, y2: -1.5 },    // Horizontal to right wall
+
+      // Row 3: Middle-upper section
+      { x1: -1.5, y1: 0.5, x2: 0.5, y2: 0.5 },     // Horizontal segment
+      { x1: -1.5, y1: 0.5, x2: -1.5, y2: 1.5 },    // Vertical up
+      { x1: 0.5, y1: 0.5, x2: 0.5, y2: 1.5 },      // Vertical up
+
+      // Row 4: Upper section
+      { x1: -2.5, y1: 1.5, x2: -1.5, y2: 1.5 },    // Horizontal from left
+      { x1: 0.5, y1: 1.5, x2: 1.5, y2: 1.5 },      // Horizontal middle
+      { x1: 1.5, y1: 1.5, x2: 1.5, y2: 2.5 },      // Vertical to top
     ],
-    obstacles: [
-      // Additional circular obstacles in open spaces
-      { x: -1.0, y: 1.0, radius: 0.15 },
-      { x: 1.0, y: -1.5, radius: 0.15 },
-      { x: 0.8, y: 0.8, radius: 0.12 },
-    ],
+    obstacles: [],  // No obstacles - pure maze navigation
     lines: [],
     checkpoints: [
       { x: 2.0, y: 2.0 },  // Top-right goal
     ],
-    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },
+    startPosition: { x: -2.0, y: -2.0, rotation: 0 },  // Start facing right (along the wall)
   }),
 
   /**
@@ -1052,8 +1079,8 @@ export const FLOOR_MAPS = {
       obstacles: [],
       lines: [{
         points,
-        width: 0.03,  // 3cm wide line
-        color: '#000000',
+        width: 0.05,  // 5cm wide line for better visibility
+        color: '#ffffff',  // White line for high contrast on dark floor
       }],
       checkpoints: [
         { x: 1.5, y: 0 },     // Right loop
@@ -1061,7 +1088,7 @@ export const FLOOR_MAPS = {
         { x: 0, y: 1.0 },     // Top crossing
         { x: 0, y: -1.0 },    // Bottom crossing
       ],
-      startPosition: { x: 0, y: 0, rotation: 0 },
+      startPosition: { x: 1.5, y: 0, rotation: Math.PI / 2 },  // Start on the track
     };
   },
 
