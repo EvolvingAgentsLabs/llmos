@@ -577,16 +577,21 @@ ${result.isError ? 'ERROR: ' : ''}${resultText}
       const msg = messages[i];
       const role = msg.role;
 
+      // Extract text content (handle both string and array formats)
+      const textContent = typeof msg.content === 'string'
+        ? msg.content
+        : msg.content.filter(c => c.type === 'text').map(c => (c as { type: 'text'; text: string }).text).join('\n');
+
       // Extract key information
       if (role === 'user') {
         // Look for task descriptions
-        const taskMatch = msg.content.match(/Task:\s*(.+?)(?:\n|$)/);
+        const taskMatch = textContent.match(/Task:\s*(.+?)(?:\n|$)/);
         if (taskMatch) {
           parts.push(`- User task: ${taskMatch[1]}`);
         }
       } else if (role === 'assistant') {
         // Look for tool calls
-        const toolMatch = msg.content.match(/```tool[\s\S]*?"name":\s*"(\w+)"[\s\S]*?```/);
+        const toolMatch = textContent.match(/```tool[\s\S]*?"name":\s*"(\w+)"[\s\S]*?```/);
         if (toolMatch) {
           parts.push(`- Assistant called: ${toolMatch[1]}`);
         }

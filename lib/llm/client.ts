@@ -11,6 +11,9 @@ import { llmMetrics } from '@/lib/debug/llm-metrics-store';
 import { getFileTools } from '@/lib/llm-tools/file-tools';
 import {
   Message,
+  MessageContent,
+  TextContent,
+  ImageContent,
   ToolCall,
   ToolResult,
   LLMConfig,
@@ -73,7 +76,15 @@ export class LLMClient {
     }
 
     // Calculate request payload size for metrics
-    const requestChars = finalMessages.reduce((acc, m) => acc + m.content.length, 0);
+    const requestChars = finalMessages.reduce((acc, m) => {
+      if (typeof m.content === 'string') {
+        return acc + m.content.length;
+      }
+      // For multimodal content, sum text lengths (images not counted)
+      return acc + m.content.reduce((sum, part) => {
+        return sum + (part.type === 'text' ? part.text.length : 0);
+      }, 0);
+    }, 0);
 
     // Start tracking this request
     const metricsId = llmMetrics.startRequest(
@@ -153,7 +164,14 @@ export class LLMClient {
     messages: Message[],
     options?: ChatCompletionOptions
   ): AsyncGenerator<StreamChunk> {
-    const requestChars = messages.reduce((acc, m) => acc + m.content.length, 0);
+    const requestChars = messages.reduce((acc, m) => {
+      if (typeof m.content === 'string') {
+        return acc + m.content.length;
+      }
+      return acc + m.content.reduce((sum, part) => {
+        return sum + (part.type === 'text' ? part.text.length : 0);
+      }, 0);
+    }, 0);
 
     // Start tracking this streaming request
     const metricsId = llmMetrics.startRequest(
@@ -271,12 +289,43 @@ Use these skills to provide better, more context-aware responses.`;
 
   /**
    * Format messages for OpenAI-compatible API
+   * Supports both text-only and multimodal (text + image) messages
    */
-  private formatMessages(messages: Message[]): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-    return messages.map(msg => ({
-      role: msg.role === 'tool' ? 'assistant' : msg.role as 'user' | 'assistant' | 'system',
-      content: msg.content
-    }));
+  private formatMessages(messages: Message[]): Array<OpenAI.Chat.ChatCompletionMessageParam> {
+    return messages.map(msg => {
+      const role = msg.role === 'tool' ? 'assistant' : msg.role as 'user' | 'assistant' | 'system';
+
+      // Handle multimodal content (array of text/image blocks)
+      if (Array.isArray(msg.content)) {
+        // Convert to OpenAI's multimodal format
+        const contentParts: OpenAI.Chat.ChatCompletionContentPart[] = msg.content.map(part => {
+          if (part.type === 'text') {
+            return { type: 'text' as const, text: part.text };
+          } else if (part.type === 'image_url') {
+            return {
+              type: 'image_url' as const,
+              image_url: {
+                url: part.image_url.url,
+                detail: part.image_url.detail || 'auto',
+              },
+            };
+          }
+          // Fallback for unknown types
+          return { type: 'text' as const, text: JSON.stringify(part) };
+        });
+
+        return {
+          role,
+          content: contentParts,
+        } as OpenAI.Chat.ChatCompletionMessageParam;
+      }
+
+      // Handle plain text content
+      return {
+        role,
+        content: msg.content,
+      } as OpenAI.Chat.ChatCompletionMessageParam;
+    });
   }
 
   setApiKey(apiKey: string): void {

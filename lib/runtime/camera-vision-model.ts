@@ -15,6 +15,7 @@
 import { cameraCaptureManager, CameraCapture } from './camera-capture';
 import { WorldModel, getWorldModel, CellState } from './world-model';
 import { LLMClient, createLLMClient } from '../llm/client';
+import { Message, TextContent, ImageContent } from '../llm/types';
 import { logger } from '../debug/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -273,20 +274,20 @@ export class CameraVisionModel {
     robotPose: { x: number; y: number; rotation: number }
   ): Promise<VisionObservation | null> {
     try {
-      // Build messages with image
-      // Note: OpenAI-compatible APIs support image content via data URLs
-      const messages = [
+      // Build multimodal messages with actual image content
+      // This uses the OpenAI-compatible vision format with image_url content blocks
+      const messages: Message[] = [
         {
-          role: 'system' as const,
+          role: 'system',
           content: VISION_ANALYSIS_PROMPT,
         },
         {
-          role: 'user' as const,
-          content: this.buildVisionPrompt(capture, robotPose),
+          role: 'user',
+          content: this.buildMultimodalVisionContent(capture, robotPose),
         },
       ];
 
-      // Call the LLM
+      // Call the LLM with multimodal content
       const response = await client.chatDirect(messages);
 
       // Parse the JSON response
@@ -298,7 +299,41 @@ export class CameraVisionModel {
   }
 
   /**
-   * Build the vision prompt with image context
+   * Build multimodal content with actual image for vision LLM
+   * Uses OpenAI-compatible format with image_url content blocks
+   */
+  private buildMultimodalVisionContent(
+    capture: CameraCapture,
+    robotPose: { x: number; y: number; rotation: number }
+  ): (TextContent | ImageContent)[] {
+    const poseInfo = `Robot position: (${robotPose.x.toFixed(2)}, ${robotPose.y.toFixed(2)}) facing ${this.getCompassDirection(robotPose.rotation)}`;
+
+    // Include previous context if enabled
+    let contextInfo = '';
+    if (this.config.useTemporalContext && this.observationHistory.length > 0) {
+      const lastObs = this.observationHistory[this.observationHistory.length - 1];
+      contextInfo = `\nPrevious observation: ${lastObs.sceneDescription}`;
+    }
+
+    // Return multimodal content array with text and image
+    return [
+      {
+        type: 'text',
+        text: `${poseInfo}${contextInfo}\n\nAnalyze the robot's camera view shown in the image. This is a first-person perspective from the robot. Provide your analysis as JSON:`,
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: capture.dataUrl,
+          detail: 'low',  // Use 'low' for faster processing, 'high' for more detail
+        },
+      },
+    ];
+  }
+
+  /**
+   * Build the vision prompt with image context (legacy text-only version)
+   * @deprecated Use buildMultimodalVisionContent instead
    */
   private buildVisionPrompt(
     capture: CameraCapture,
@@ -313,13 +348,9 @@ export class CameraVisionModel {
       contextInfo = `\nPrevious observation: ${lastObs.sceneDescription}`;
     }
 
-    // Include the image as a data URL reference
-    // Note: The actual image passing depends on the LLM's multimodal capabilities
-    // For now, we'll describe the image context and pass the data URL
     return `${poseInfo}${contextInfo}
 
 Analyze the robot's camera view. The image shows a first-person perspective from the robot.
-Image data: ${capture.dataUrl}
 
 Provide your analysis as JSON:`;
   }
