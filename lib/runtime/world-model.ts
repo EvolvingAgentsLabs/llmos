@@ -251,6 +251,128 @@ export class WorldModel {
   }
 
   /**
+   * Update a cell from vision data
+   * This is a public method for the camera vision model to update the world model
+   */
+  updateCellFromVision(
+    worldX: number,
+    worldY: number,
+    state: CellState,
+    confidence: number
+  ): void {
+    const { gx, gy } = this.worldToGrid(worldX, worldY);
+    if (this.isValidGridCoord(gx, gy)) {
+      this.updateCell(gx, gy, state, confidence, Date.now());
+    }
+  }
+
+  /**
+   * Update multiple cells along a ray from vision data
+   * Used to mark areas as free based on camera vision (what we can see through)
+   */
+  updateRayFromVision(
+    startX: number,
+    startY: number,
+    angle: number,
+    distance: number,
+    freeConfidence: number,
+    obstacleState: CellState | null,
+    obstacleConfidence: number
+  ): void {
+    const stepSize = this.config.gridResolution / 100; // Step in meters
+
+    // Mark intermediate cells as free
+    for (let d = stepSize; d < distance; d += stepSize) {
+      const wx = startX + Math.sin(angle) * d;
+      const wy = startY - Math.cos(angle) * d;
+      const { gx, gy } = this.worldToGrid(wx, wy);
+
+      if (this.isValidGridCoord(gx, gy)) {
+        const cell = this.grid[gy][gx];
+        // Only update if cell is unknown or if this is higher confidence
+        if (cell.state === 'unknown' || cell.confidence < freeConfidence) {
+          this.updateCell(gx, gy, 'free', freeConfidence * (1 - d / distance), Date.now());
+        }
+      }
+    }
+
+    // Mark endpoint as obstacle if specified
+    if (obstacleState !== null) {
+      const wx = startX + Math.sin(angle) * distance;
+      const wy = startY - Math.cos(angle) * distance;
+      const { gx, gy } = this.worldToGrid(wx, wy);
+
+      if (this.isValidGridCoord(gx, gy)) {
+        this.updateCell(gx, gy, obstacleState, obstacleConfidence, Date.now());
+      }
+    }
+  }
+
+  /**
+   * Get cells that appear unexplored in a given direction from a position
+   * Used for vision-based exploration planning
+   */
+  getUnexploredCellsInDirection(
+    pose: { x: number; y: number; rotation: number },
+    angleOffset: number,
+    maxDistance: number,
+    fovWidth: number
+  ): { x: number; y: number; distance: number }[] {
+    const unexplored: { x: number; y: number; distance: number }[] = [];
+    const angle = pose.rotation + angleOffset;
+    const stepSize = this.config.gridResolution / 100;
+    const halfFov = fovWidth / 2;
+
+    // Sample across the field of view
+    for (let fovOffset = -halfFov; fovOffset <= halfFov; fovOffset += halfFov / 2) {
+      const rayAngle = angle + fovOffset;
+
+      for (let d = stepSize; d < maxDistance; d += stepSize) {
+        const wx = pose.x + Math.sin(rayAngle) * d;
+        const wy = pose.y - Math.cos(rayAngle) * d;
+        const { gx, gy } = this.worldToGrid(wx, wy);
+
+        if (this.isValidGridCoord(gx, gy)) {
+          const cell = this.grid[gy][gx];
+          if (cell.state === 'unknown') {
+            unexplored.push({ x: wx, y: wy, distance: d });
+          } else if (cell.state === 'obstacle' || cell.state === 'wall') {
+            // Stop ray at obstacle
+            break;
+          }
+        }
+      }
+    }
+
+    return unexplored;
+  }
+
+  /**
+   * Calculate the exploration value of a viewpoint
+   * Higher values indicate better positions for gaining visual information
+   */
+  calculateViewpointValue(pose: { x: number; y: number; rotation: number }): number {
+    let value = 0;
+    const fov = Math.PI / 2; // 90 degrees
+    const maxRange = 2.0; // 2 meters
+
+    // Check multiple directions within FOV
+    const directions = [-fov / 3, 0, fov / 3];
+
+    for (const offset of directions) {
+      const cells = this.getUnexploredCellsInDirection(pose, offset, maxRange, fov / 3);
+      // More unexplored cells visible = higher value
+      value += cells.length;
+      // Closer unexplored cells are more valuable (easier to scan)
+      for (const cell of cells) {
+        value += (maxRange - cell.distance) / maxRange;
+      }
+    }
+
+    return value;
+  }
+
+  /**
    * Record a collectible at a position
    */
   recordCollectible(id: string, x: number, y: number): void {

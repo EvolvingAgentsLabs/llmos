@@ -18,6 +18,7 @@ import {
   BEHAVIOR_DESCRIPTIONS,
   getAgentPrompt,
 } from '@/lib/runtime/esp32-agent-runtime';
+import { VisionObservation } from '@/lib/runtime/camera-vision-model';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
@@ -55,6 +56,8 @@ export default function RobotAgentPanel({
   const [agentGoal, setAgentGoal] = useState('');
   const [loopInterval, setLoopInterval] = useState(1000);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
+  const [visionEnabled, setVisionEnabled] = useState(false);
+  const [lastVisionObservation, setLastVisionObservation] = useState<VisionObservation | null>(null);
 
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
   const worldModelRef = useRef<WorldModel | null>(null);
@@ -68,6 +71,10 @@ export default function RobotAgentPanel({
     const recommendedMap = BEHAVIOR_TO_MAP[selectedPrompt];
     if (recommendedMap && onBehaviorChange) {
       onBehaviorChange(selectedPrompt, recommendedMap);
+    }
+    // Auto-enable vision for visionExplorer behavior
+    if (selectedPrompt === 'visionExplorer') {
+      setVisionEnabled(true);
     }
   }, [selectedPrompt, onBehaviorChange]);
 
@@ -222,6 +229,11 @@ ${prompt}
         goal: agentGoal || undefined,
         loopIntervalMs: loopInterval,
         maxIterations: 100,
+        visionEnabled: visionEnabled,
+        visionInterval: 3000, // Process vision every 3 seconds
+        onVisionObservation: (observation) => {
+          setLastVisionObservation(observation);
+        },
         onStateChange: (state) => {
           // Throttle state updates to prevent UI freeze (max 2 updates per second)
           const now = Date.now();
@@ -446,12 +458,37 @@ ${prompt}
             className="text-xs bg-bg-tertiary border border-border-primary rounded px-2 py-1 flex-1"
           >
             <option value="explorer">Explorer (avoid obstacles)</option>
+            <option value="visionExplorer">Vision Explorer (camera-based)</option>
             <option value="wallFollower">Wall Follower (right-hand rule)</option>
             <option value="lineFollower">Line Follower</option>
             <option value="patroller">Patroller (rectangle pattern)</option>
             <option value="collector">Coin Collector (collect all coins)</option>
             <option value="gemHunter">Gem Hunter (find valuable gems)</option>
           </select>
+        </div>
+
+        {/* Vision mode toggle */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-fg-secondary w-16">Vision:</span>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visionEnabled}
+              onChange={(e) => setVisionEnabled(e.target.checked)}
+              disabled={isRunning}
+              className="w-4 h-4 rounded border-border-primary bg-bg-tertiary"
+            />
+            <span className="text-xs">
+              {visionEnabled ? (
+                <span className="text-purple-400">Camera vision enabled</span>
+              ) : (
+                <span className="text-fg-secondary">Sensors only</span>
+              )}
+            </span>
+          </label>
+          {selectedPrompt === 'visionExplorer' && !visionEnabled && (
+            <span className="text-[10px] text-yellow-500">(recommended for this behavior)</span>
+          )}
         </div>
 
         {/* Goal input */}
@@ -517,22 +554,62 @@ ${prompt}
           )}
         </div>
 
-        {/* Info message about PiP */}
+        {/* Info message about features */}
         <div className="mt-4 p-3 rounded-lg bg-[#161b22] border border-[#30363d]">
           <p className="text-xs text-[#8b949e]">
-            <span className="text-[#58a6ff] font-medium">Tip:</span> Use the PiP views in the 3D panel to see:
+            <span className="text-[#58a6ff] font-medium">Tips:</span>
           </p>
           <ul className="mt-2 text-xs text-[#8b949e] space-y-1 ml-4">
-            <li>• <span className="text-[#a371f7]">World Model</span> - Robot's cognitive map</li>
-            <li>• <span className="text-[#3fb950]">Robot Camera</span> - First-person view</li>
-            <li>• <span className="text-[#58a6ff]">Top View</span> - Overhead map</li>
+            <li>• <span className="text-[#a371f7]">Vision Explorer</span> - Uses camera to build world model</li>
+            <li>• <span className="text-[#3fb950]">Vision Mode</span> - LLM analyzes camera images to understand environment</li>
+            <li>• <span className="text-[#58a6ff]">World Model</span> - Updated from both sensors AND camera vision</li>
           </ul>
+          {visionEnabled && (
+            <p className="mt-2 text-[10px] text-purple-400">
+              Vision mode processes camera every ~3 seconds to update world model
+            </p>
+          )}
         </div>
       </div>
 
+      {/* Vision observation display */}
+      {visionEnabled && lastVisionObservation && isRunning && (
+        <div className="px-3 py-2 border-t border-border-primary bg-purple-900/20 flex-shrink-0">
+          <div className="text-xs">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-purple-400 font-medium">Vision:</span>
+              <span className="text-fg-secondary truncate">{lastVisionObservation.sceneDescription}</span>
+            </div>
+            <div className="flex gap-4 text-[10px]">
+              <span>
+                <span className="text-fg-secondary">L:</span>{' '}
+                <span className={lastVisionObservation.fieldOfView.leftRegion.appearsUnexplored ? 'text-green-400' : ''}>
+                  {lastVisionObservation.fieldOfView.leftRegion.content}
+                </span>
+              </span>
+              <span>
+                <span className="text-fg-secondary">C:</span>{' '}
+                <span className={lastVisionObservation.fieldOfView.centerRegion.appearsUnexplored ? 'text-green-400' : ''}>
+                  {lastVisionObservation.fieldOfView.centerRegion.content}
+                </span>
+              </span>
+              <span>
+                <span className="text-fg-secondary">R:</span>{' '}
+                <span className={lastVisionObservation.fieldOfView.rightRegion.appearsUnexplored ? 'text-green-400' : ''}>
+                  {lastVisionObservation.fieldOfView.rightRegion.content}
+                </span>
+              </span>
+              <span className="text-purple-300">
+                {lastVisionObservation.objects.length} objects
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats bar - Fixed at bottom */}
       {agentState && (
-        <div className="flex items-center gap-4 px-3 py-2 bg-bg-tertiary/50 text-xs border-t border-border-primary flex-shrink-0">
+        <div className="flex items-center gap-4 px-3 py-2 bg-bg-tertiary/50 text-xs border-t border-border-primary flex-shrink-0 flex-wrap">
           <div>
             <span className="text-fg-secondary">Loop:</span>{' '}
             <span className="font-mono">{agentState.stats.avgLoopTimeMs.toFixed(0)}ms</span>
@@ -545,6 +622,15 @@ ${prompt}
             <span className="text-fg-secondary">Calls:</span>{' '}
             <span className="font-mono">{agentState.stats.llmCallCount}</span>
           </div>
+          {agentState.visionEnabled && (
+            <div className="text-purple-400">
+              <span className="text-fg-secondary">Vision:</span>{' '}
+              <span className="font-mono">{agentState.stats.visionProcessCount}</span>
+              {agentState.stats.avgVisionLatencyMs > 0 && (
+                <span className="text-fg-secondary ml-1">({agentState.stats.avgVisionLatencyMs.toFixed(0)}ms)</span>
+              )}
+            </div>
+          )}
           {agentState.errors.length > 0 && (
             <div className="text-red-400">
               <span className="text-fg-secondary">Errors:</span>{' '}
