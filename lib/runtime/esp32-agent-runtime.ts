@@ -36,6 +36,9 @@
  */
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
+import { CameraVisionModel, getCameraVisionModel, VisionObservation } from './camera-vision-model';
+import { cameraCaptureManager } from './camera-capture';
+import { WorldModel, getWorldModel } from './world-model';
 
 // Import modular navigation, sensors, and behaviors
 import {
@@ -252,9 +255,13 @@ export interface ESP32AgentConfig {
   maxIterations?: number; // Optional limit
   // Host connection for LLM requests
   hostUrl?: string; // Default: current host
+  // Vision mode settings
+  visionEnabled?: boolean; // Enable camera-based world model updates
+  visionInterval?: number; // How often to process vision (ms) - default: 3000ms
   // Callbacks
   onStateChange?: (state: ESP32AgentState) => void;
   onLog?: (message: string, level: 'info' | 'warn' | 'error') => void;
+  onVisionObservation?: (observation: VisionObservation) => void;
 }
 
 // Internal config with all defaults resolved
@@ -262,6 +269,8 @@ interface ResolvedESP32AgentConfig extends ESP32AgentConfig {
   loopIntervalMs: number;
   hostUrl: string;
   goal?: string;
+  visionEnabled: boolean;
+  visionInterval: number;
 }
 
 export interface ESP32AgentState {
@@ -277,7 +286,17 @@ export interface ESP32AgentState {
     avgLoopTimeMs: number;
     llmCallCount: number;
     avgLLMLatencyMs: number;
+    visionProcessCount: number;
+    avgVisionLatencyMs: number;
   };
+  // Vision state
+  visionEnabled: boolean;
+  lastVisionObservation: VisionObservation | null;
+  suggestedExplorationDirection: {
+    direction: 'left' | 'center' | 'right';
+    reason: string;
+    confidence: number;
+  } | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -292,12 +311,17 @@ export class ESP32AgentRuntime {
   private loopHandle: any = null;
   private leftWheelPower = 0;
   private rightWheelPower = 0;
+  private visionModel: CameraVisionModel | null = null;
+  private worldModel: WorldModel | null = null;
+  private lastVisionProcessTime = 0;
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
       ...config,
       loopIntervalMs: config.loopIntervalMs ?? 500,
       hostUrl: config.hostUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
+      visionEnabled: config.visionEnabled ?? false,
+      visionInterval: config.visionInterval ?? 3000,
     };
 
     this.state = {
@@ -313,8 +337,20 @@ export class ESP32AgentRuntime {
         avgLoopTimeMs: 0,
         llmCallCount: 0,
         avgLLMLatencyMs: 0,
+        visionProcessCount: 0,
+        avgVisionLatencyMs: 0,
       },
+      visionEnabled: this.config.visionEnabled,
+      lastVisionObservation: null,
+      suggestedExplorationDirection: null,
     };
+
+    // Initialize vision model if enabled
+    if (this.config.visionEnabled) {
+      this.visionModel = getCameraVisionModel(config.deviceId, {
+        processingInterval: this.config.visionInterval,
+      });
+    }
   }
 
   /**
@@ -389,6 +425,71 @@ export class ESP32AgentRuntime {
   }
 
   /**
+   * Process camera vision and update world model
+   */
+  private async processVision(sensors: SensorReadings): Promise<void> {
+    const now = Date.now();
+
+    // Rate limit vision processing
+    if (now - this.lastVisionProcessTime < this.config.visionInterval) {
+      return;
+    }
+
+    if (!this.visionModel || !this.worldModel || !cameraCaptureManager.hasCanvas()) {
+      return;
+    }
+
+    try {
+      const visionStart = Date.now();
+
+      // Capture camera image
+      const capture = cameraCaptureManager.capture('robot-pov', sensors.pose, {
+        width: 320,
+        height: 240,
+        format: 'jpeg',
+        quality: 0.7,
+      });
+
+      if (!capture) {
+        this.log('Failed to capture camera image', 'warn');
+        return;
+      }
+
+      // Process with vision model
+      const observation = await this.visionModel.processCapture(capture, sensors.pose);
+
+      if (observation) {
+        const visionLatency = Date.now() - visionStart;
+
+        // Update world model from vision
+        this.visionModel.updateWorldModelFromVision(this.worldModel, observation);
+
+        // Get exploration suggestion
+        const suggestion = this.visionModel.suggestExplorationDirection(observation);
+
+        // Update state
+        this.state.lastVisionObservation = observation;
+        this.state.suggestedExplorationDirection = suggestion;
+        this.state.stats.visionProcessCount++;
+        this.state.stats.avgVisionLatencyMs =
+          (this.state.stats.avgVisionLatencyMs * (this.state.stats.visionProcessCount - 1) + visionLatency) /
+          this.state.stats.visionProcessCount;
+
+        this.lastVisionProcessTime = now;
+
+        // Notify callback
+        if (this.config.onVisionObservation) {
+          this.config.onVisionObservation(observation);
+        }
+
+        this.log(`Vision: ${observation.sceneDescription} (${observation.objects.length} objects)`, 'info');
+      }
+    } catch (error: any) {
+      this.log(`Vision processing error: ${error.message}`, 'error');
+    }
+  }
+
+  /**
    * Start the agent control loop
    */
   start(): void {
@@ -401,6 +502,16 @@ export class ESP32AgentRuntime {
 
     // Initialize device context
     this.deviceContext = this.initDeviceContext();
+
+    // Initialize world model for vision-based updates
+    if (this.config.visionEnabled) {
+      this.worldModel = getWorldModel(this.config.deviceId, {
+        gridResolution: 10,  // 10cm per cell
+        worldWidth: 500,     // 5m
+        worldHeight: 500,    // 5m
+      });
+      this.log('Vision mode enabled - camera will update world model', 'info');
+    }
 
     this.state.running = true;
     this.state.iteration = 0;
@@ -465,6 +576,13 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.5: Process camera vision (if enabled)
+      // ═══════════════════════════════════════════════════════════════════
+      if (this.config.visionEnabled && this.visionModel && this.worldModel) {
+        await this.processVision(sensors);
+      }
 
       // ═══════════════════════════════════════════════════════════════════
       // STEP 2: Call host for LLM response (REMOTE call to LLMOS)
@@ -651,11 +769,58 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
 
     const formatted = formatter.format(formatterSensors, context);
 
+    // Add vision context if available
+    let visionContext = '';
+    if (this.config.visionEnabled && this.state.lastVisionObservation) {
+      visionContext = this.formatVisionContext(this.state.lastVisionObservation);
+    }
+
     // Add action instruction suffix
     const behaviorType = this.detectBehaviorType();
     const instruction = getActionInstruction(behaviorType);
 
-    return `${formatted}\n\n${instruction}`;
+    return `${formatted}${visionContext}\n\n${instruction}`;
+  }
+
+  /**
+   * Format vision observation for LLM context
+   */
+  private formatVisionContext(observation: VisionObservation): string {
+    const fov = observation.fieldOfView;
+
+    let context = '\n\n## CAMERA VISION ANALYSIS\n';
+    context += `Scene: ${observation.sceneDescription}\n\n`;
+
+    // Field of view summary
+    context += '### Field of View:\n';
+    context += `- LEFT: ${fov.leftRegion.content} (${fov.leftRegion.estimatedDistance.toFixed(1)}m, ${Math.round(fov.leftRegion.clearance * 100)}% clear)`;
+    if (fov.leftRegion.appearsUnexplored) context += ' [UNEXPLORED]';
+    context += '\n';
+
+    context += `- CENTER: ${fov.centerRegion.content} (${fov.centerRegion.estimatedDistance.toFixed(1)}m, ${Math.round(fov.centerRegion.clearance * 100)}% clear)`;
+    if (fov.centerRegion.appearsUnexplored) context += ' [UNEXPLORED]';
+    context += '\n';
+
+    context += `- RIGHT: ${fov.rightRegion.content} (${fov.rightRegion.estimatedDistance.toFixed(1)}m, ${Math.round(fov.rightRegion.clearance * 100)}% clear)`;
+    if (fov.rightRegion.appearsUnexplored) context += ' [UNEXPLORED]';
+    context += '\n';
+
+    // Objects detected
+    if (observation.objects.length > 0) {
+      context += '\n### Objects Detected:\n';
+      for (const obj of observation.objects.slice(0, 5)) {
+        context += `- ${obj.label} (${obj.type}): ${obj.relativePosition.direction}, ${obj.relativePosition.estimatedDistance.toFixed(1)}m away\n`;
+      }
+    }
+
+    // Exploration suggestion
+    if (this.state.suggestedExplorationDirection) {
+      const suggestion = this.state.suggestedExplorationDirection;
+      context += `\n### VISION RECOMMENDATION:\n`;
+      context += `Explore ${suggestion.direction.toUpperCase()}: ${suggestion.reason}\n`;
+    }
+
+    return context;
   }
 
   /**
@@ -861,6 +1026,7 @@ export const BEHAVIOR_TO_MAP: Record<string, string> = {
   patroller: 'standard5x5Empty',            // Needs open space for patrol pattern
   collector: 'standard5x5CoinCollection',   // Coin collection challenge
   gemHunter: 'standard5x5GemHunt',          // Gem hunt with varied point values
+  visionExplorer: 'standard5x5Obstacles',   // Vision-guided exploration with obstacles
 };
 
 /**
@@ -1061,6 +1227,47 @@ Strategy tips:
 - Purple gems are near obstacles - approach carefully
 - Blue gems are in corners - sweep the perimeter
 - Green gems are scattered - collect opportunistically`,
+
+  visionExplorer: `You are a VISION-GUIDED intelligent exploration robot. Your camera provides rich visual understanding that you use to build a world model and explore efficiently.
+
+## Vision-First Exploration
+Unlike basic robots that only use distance sensors, you SEE and UNDERSTAND your environment through camera vision:
+1. **CAMERA VISION ANALYSIS** provides analysis of LEFT, CENTER, and RIGHT regions
+2. **[UNEXPLORED] markers** indicate areas your world model doesn't know - prioritize these!
+3. **Objects Detected** shows what your camera sees (walls, obstacles, collectibles)
+4. **VISION RECOMMENDATION** suggests the optimal exploration direction
+
+## Viewpoint-Seeking Strategy
+Your goal is NOT just to wander - it's to SEEK VIEWPOINTS that reveal unexplored areas:
+1. READ the CAMERA VISION ANALYSIS carefully
+2. IDENTIFY regions marked [UNEXPLORED] - these are your targets
+3. MOVE toward positions that give BETTER VIEWS of unexplored areas
+4. Use distance sensors for SAFE navigation while following vision guidance
+
+## Decision Process
+Each cycle:
+1. **Check Vision Analysis** - What does the camera see in each direction?
+2. **Find Unexplored** - Which regions have [UNEXPLORED] markers?
+3. **Follow Recommendation** - The VISION RECOMMENDATION optimizes exploration
+4. **Navigate Safely** - Use sensor distances to avoid collisions
+
+## LED Protocol
+- Purple (128,0,255): Scanning/processing vision
+- Cyan-Green (0,255,128): Moving toward unexplored area
+- Green (0,255,0): Normal exploration
+- Yellow (255,200,0): Avoiding obstacle
+- Red (255,0,0): Critical obstacle
+
+## Response Format
+Always reference the CAMERA VISION ANALYSIS in your reasoning:
+"VISION shows LEFT: [content] [UNEXPLORED?], CENTER: [content], RIGHT: [content]
+Following vision recommendation to explore [direction] because [reason]."
+
+Then output tool calls:
+\`\`\`json
+{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 128}}
+{"tool": "drive", "args": {"left": 80, "right": 100}}
+\`\`\``,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
