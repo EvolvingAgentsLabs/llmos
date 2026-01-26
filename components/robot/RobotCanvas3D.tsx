@@ -381,7 +381,39 @@ function ArenaFloor({
   );
 }
 
-// Wall components
+// Create hazard stripe texture (yellow and black diagonal lines)
+function createHazardStripeTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+
+  // Fill with yellow background
+  ctx.fillStyle = '#FFD700'; // Gold/yellow
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Draw black diagonal stripes
+  ctx.strokeStyle = '#1a1a1a'; // Near black
+  ctx.lineWidth = 12;
+
+  // Draw multiple diagonal lines to create stripe pattern
+  for (let i = -64; i < 128; i += 24) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + 64, 64);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 1); // Repeat pattern along wall length
+
+  return texture;
+}
+
+// Wall components with hazard stripe pattern (yellow/black diagonal lines)
+// This makes walls clearly distinguishable from the sky for robot vision
 function Walls({
   walls,
   selectedIndex,
@@ -391,6 +423,9 @@ function Walls({
   selectedIndex: number | null;
   onSelect: (index: number, wall: FloorMap['walls'][0]) => void;
 }) {
+  // Create hazard stripe texture once and reuse
+  const hazardTexture = useMemo(() => createHazardStripeTexture(), []);
+
   return (
     <group>
       {walls.map((wall, idx) => {
@@ -415,17 +450,18 @@ function Walls({
             >
               <boxGeometry args={[length, 0.3, 0.05]} />
               <meshStandardMaterial
-                color={isSelected ? '#58a6ff' : '#4a9eff'}
-                emissive={isSelected ? '#58a6ff' : '#4a9eff'}
+                map={hazardTexture}
+                color={isSelected ? '#ffffff' : '#eeeeee'}
+                emissive={isSelected ? '#FFD700' : '#aa8800'}
                 emissiveIntensity={isSelected ? 0.4 : 0.15}
-                metalness={0.3}
-                roughness={0.4}
+                metalness={0.2}
+                roughness={0.6}
               />
             </mesh>
             {isSelected && (
               <mesh position={[centerX, 0.15, centerY]} rotation={[0, angle, 0]}>
                 <boxGeometry args={[length + 0.02, 0.32, 0.07]} />
-                <meshBasicMaterial color="#58a6ff" transparent opacity={0.2} side={THREE.BackSide} />
+                <meshBasicMaterial color="#FFD700" transparent opacity={0.3} side={THREE.BackSide} />
               </mesh>
             )}
           </group>
@@ -773,7 +809,7 @@ function MiniMap({
         case 'free': color = '#2d333b'; break;
         case 'explored': color = '#3fb950'; break;
         case 'obstacle': color = '#f85149'; break;
-        case 'wall': color = '#58a6ff'; break;
+        case 'wall': color = '#FFD700'; break; // Yellow hazard color to match 3D walls
         case 'collectible': color = '#ffd700'; break;
         case 'collected': color = '#6e7681'; break;
       }
