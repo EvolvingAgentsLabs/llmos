@@ -10,6 +10,7 @@
 
 import { LLMClient, Message } from './llm-client';
 import { Tool, ToolContext, executeTool, parseToolFromMarkdown } from './tool-executor';
+import { getPromptContent } from './prompt-loader';
 
 export interface Agent {
   id: string;
@@ -173,10 +174,12 @@ export class AgentExecutor {
       });
 
       // Build initial conversation with system prompt and tool descriptions
+      // Use async version to load externalized prompts from markdown files
+      const systemPrompt = await this.buildSystemPromptAsync();
       const conversationHistory: Message[] = [
         {
           role: 'system',
-          content: this.buildSystemPrompt(),
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -275,29 +278,114 @@ export class AgentExecutor {
     }
   }
 
+  /**
+   * Build system prompt with runtime constraints and tool descriptions
+   * Runtime constraints are loaded from externalized prompts in /system/prompts/runtime/
+   */
+  private async buildSystemPromptAsync(): Promise<string> {
+    let prompt = this.agent.systemPrompt;
+
+    // Load runtime constraints from externalized prompts
+    prompt += '\n\n---\n\n';
+
+    // Try to load Python constraints from externalized prompt
+    try {
+      const pythonConstraints = await getPromptContent('runtime/python-constraints.md');
+      if (pythonConstraints) {
+        prompt += pythonConstraints;
+      } else {
+        prompt += this.getFallbackPythonConstraints();
+      }
+    } catch (error) {
+      console.warn('Could not load Python constraints prompt, using fallback');
+      prompt += this.getFallbackPythonConstraints();
+    }
+
+    // Try to load Quantum constraints from externalized prompt
+    try {
+      const quantumConstraints = await getPromptContent('runtime/quantum-constraints.md');
+      if (quantumConstraints) {
+        prompt += '\n\n' + quantumConstraints;
+      } else {
+        prompt += this.getFallbackQuantumConstraints();
+      }
+    } catch (error) {
+      // Fallback already included in Python constraints
+    }
+
+    // Add tool descriptions
+    if (this.agent.tools.length > 0) {
+      // Try to load tool call format from externalized prompt
+      let toolCallFormat = '\nTo use a tool, respond with:\n```tool\n{\n  "tool": "tool-id",\n  "inputs": { "param1": "value1", "param2": "value2" }\n}\n```\n';
+
+      try {
+        const toolFormatPrompt = await getPromptContent('guides/tool-call-format.md');
+        if (toolFormatPrompt) {
+          // Extract just the format section, not the entire guide
+          const formatMatch = toolFormatPrompt.match(/## Basic Format[\s\S]*?```tool[\s\S]*?```/);
+          if (formatMatch) {
+            toolCallFormat = '\n' + formatMatch[0] + '\n';
+          }
+        }
+      } catch (error) {
+        // Use fallback
+      }
+
+      prompt += '\n\n## Available Tools\n\n';
+      prompt += 'You can use these tools by including a tool call in your response:\n\n';
+
+      for (const toolId of this.agent.tools) {
+        const tool = this.toolContext.getTool(toolId);
+        if (tool) {
+          prompt += `- **${tool.name}** (\`${tool.id}\`): ${tool.description}\n`;
+          if (tool.inputs && tool.inputs.length > 0) {
+            prompt += `  Inputs: ${tool.inputs.map(i => `${i.name} (${i.type})`).join(', ')}\n`;
+          }
+        }
+      }
+
+      prompt += toolCallFormat;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Fallback Python constraints if externalized prompt fails to load
+   */
+  private getFallbackPythonConstraints(): string {
+    return `# IMPORTANT: Runtime Environment Constraints
+
+When generating Python code, you MUST respect these browser runtime limitations:
+
+**Available Packages:** numpy, scipy, matplotlib, pandas, scikit-learn, networkx, sympy
+**Quantum Computing:** MicroQiskit only (basic simulator, max 10 qubits)
+**NOT Available:** qiskit_aer, tensorflow, pytorch, opencv, requests, file I/O, network access`;
+  }
+
+  /**
+   * Fallback Quantum constraints if externalized prompt fails to load
+   */
+  private getFallbackQuantumConstraints(): string {
+    return `**For Quantum Code:**
+- Use \`from qiskit import QuantumCircuit, execute\` (NOT qiskit_aer)
+- Use \`execute(circuit, shots=1024)\` directly (no Aer backend)
+- Do NOT use qiskit.visualization.circuit_drawer
+- Keep circuits simple: < 10 qubits, < 20 gates
+- Create visualizations with matplotlib instead`;
+  }
+
+  /**
+   * Synchronous version for backward compatibility
+   * @deprecated Use buildSystemPromptAsync for full externalized prompt support
+   */
   private buildSystemPrompt(): string {
     let prompt = this.agent.systemPrompt;
 
-    // Add runtime capabilities constraints
-    // Dynamic import to avoid circular dependencies
-    try {
-      // Note: This should be imported at module level in production
-      // For now, we'll add it conditionally
-      prompt += '\n\n---\n\n';
-      prompt += '# IMPORTANT: Runtime Environment Constraints\n\n';
-      prompt += 'When generating Python code, you MUST respect these browser runtime limitations:\n\n';
-      prompt += '**Available Packages:** numpy, scipy, matplotlib, pandas, scikit-learn, networkx, sympy\n';
-      prompt += '**Quantum Computing:** MicroQiskit only (basic simulator, max 10 qubits)\n';
-      prompt += '**NOT Available:** qiskit_aer, tensorflow, pytorch, opencv, requests, file I/O, network access\n\n';
-      prompt += '**For Quantum Code:**\n';
-      prompt += '- Use `from qiskit import QuantumCircuit, execute` (NOT qiskit_aer)\n';
-      prompt += '- Use `execute(circuit, shots=1024)` directly (no Aer backend)\n';
-      prompt += '- Do NOT use qiskit.visualization.circuit_drawer\n';
-      prompt += '- Keep circuits simple: < 10 qubits, < 20 gates\n';
-      prompt += '- Create visualizations with matplotlib instead\n\n';
-    } catch (error) {
-      console.warn('Could not load runtime capabilities:', error);
-    }
+    // Use fallback constraints synchronously
+    prompt += '\n\n---\n\n';
+    prompt += this.getFallbackPythonConstraints();
+    prompt += '\n\n' + this.getFallbackQuantumConstraints();
 
     // Add tool descriptions
     if (this.agent.tools.length > 0) {

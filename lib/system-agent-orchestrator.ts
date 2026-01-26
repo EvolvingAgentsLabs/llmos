@@ -26,6 +26,7 @@ import {
   ExecutionTrace,
   SubAgentTrace,
 } from './agents/llm-pattern-matcher';
+import { loadPrompt, getPromptContent } from './prompt-loader';
 
 export interface SystemAgentResult {
   success: boolean;
@@ -275,13 +276,29 @@ export class SystemAgentOrchestrator {
 
   /**
    * Create LLM summarizer function for context management
+   * Uses externalized prompt from /system/prompts/core/context-summarization.md
    */
   private createSummarizer(llmClient: ReturnType<typeof createLLMClient>) {
     return async (prompt: string): Promise<string> => {
+      // Load summarization prompt from externalized markdown
+      // Falls back to inline prompt if loading fails
+      let systemContent = 'You are a context summarization assistant. Your task is to create concise but comprehensive summaries of workflow context, preserving key information relevant to the user\'s goal.';
+
+      try {
+        const loadedPrompt = await loadPrompt('core/context-summarization.md', {
+          maxLength: 2000,
+        });
+        if (loadedPrompt?.content) {
+          systemContent = loadedPrompt.content;
+        }
+      } catch (error) {
+        console.warn('[SystemAgent] Failed to load summarization prompt, using fallback');
+      }
+
       const messages: Message[] = [
         {
           role: 'system',
-          content: 'You are a context summarization assistant. Your task is to create concise but comprehensive summaries of workflow context, preserving key information relevant to the user\'s goal.',
+          content: systemContent,
         },
         {
           role: 'user',
@@ -466,16 +483,32 @@ export class SystemAgentOrchestrator {
               details: `No tools called yet (iteration ${iterations}/${minIterations}). Prompting for action.`,
             });
 
-            // Add a follow-up prompt to encourage tool usage
-            this.contextManager.addLLMResponse(llmResponse, iterations);
-            this.contextManager.addEntry({
-              role: 'user',
-              content: `You provided analysis but no tool calls. Please execute the required actions now using tool calls. Remember to:
+            // Load continuation prompt from externalized markdown
+            let continuationContent = `You provided analysis but no tool calls. Please execute the required actions now using tool calls. Remember to:
 1. Create sub-agent markdown files using write-file
 2. Execute code using invoke-subagent or execute-python
 3. Generate applets using generate-applet if interactive UI is needed
 
-Start with your first tool call NOW.`,
+Start with your first tool call NOW.`;
+
+            try {
+              const continuationPrompt = await loadPrompt('core/tool-execution-continuation.md', {
+                iteration: iterations,
+                minIterations: minIterations,
+                workspacePath: this.workspaceContext?.workspacePath || 'user',
+              });
+              if (continuationPrompt?.content) {
+                continuationContent = continuationPrompt.content;
+              }
+            } catch (error) {
+              // Use fallback content
+            }
+
+            // Add a follow-up prompt to encourage tool usage
+            this.contextManager.addLLMResponse(llmResponse, iterations);
+            this.contextManager.addEntry({
+              role: 'user',
+              content: continuationContent,
               type: 'context-note',
             });
             continue; // Continue the loop
