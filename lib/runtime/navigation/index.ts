@@ -75,10 +75,12 @@ export const DEFAULT_NAVIGATION_CONFIG: NavigationConfig = {
   awareThreshold: 70,      // Was 50cm - now 70cm to start planning earlier
   cautionThreshold: 40,    // Was 30cm - now 40cm to commit to turns earlier
 
-  openSpeed: { min: 150, max: 200 },
-  awareSpeed: { min: 100, max: 150 },
-  cautionSpeed: { min: 60, max: 100 },
-  criticalSpeed: { min: 0, max: 60 },
+  // REDUCED SPEEDS for controlled, deliberate movement
+  // Slow and steady = better results, fewer collisions
+  openSpeed: { min: 50, max: 70 },       // Was 150-200, now much slower
+  awareSpeed: { min: 35, max: 50 },      // Was 100-150, now cautious
+  cautionSpeed: { min: 20, max: 35 },    // Was 60-100, now very slow
+  criticalSpeed: { min: 0, max: 20 },    // Was 0-60, now minimal
 
   clearanceAdvantage: 30,
 };
@@ -208,12 +210,12 @@ export class NavigationCalculator {
 
       case NavigationZone.AWARE:
         if (clearanceDiff > this.config.clearanceAdvantage) {
-          // Gentle curve toward open side
+          // Gentle curve toward open side - SMALL differential for smooth turns
           return {
             type: 'gentle_curve',
             direction,
-            leftMotor: turnLeft ? baseSpeed - 30 : baseSpeed,
-            rightMotor: turnLeft ? baseSpeed : baseSpeed - 30,
+            leftMotor: turnLeft ? baseSpeed - 10 : baseSpeed + 5,
+            rightMotor: turnLeft ? baseSpeed + 5 : baseSpeed - 10,
           };
         }
         return {
@@ -224,30 +226,30 @@ export class NavigationCalculator {
         };
 
       case NavigationZone.CAUTION:
-        // Moderate turn
+        // Moderate turn - still gentle, controlled differential
         return {
           type: 'moderate_turn',
           direction,
-          leftMotor: turnLeft ? baseSpeed - 40 : baseSpeed,
-          rightMotor: turnLeft ? baseSpeed : baseSpeed - 40,
+          leftMotor: turnLeft ? baseSpeed - 15 : baseSpeed + 10,
+          rightMotor: turnLeft ? baseSpeed + 10 : baseSpeed - 15,
         };
 
       case NavigationZone.CRITICAL:
-        // Sharp turn or pivot
+        // Sharp turn or pivot - but still controlled, no wild swings
         if (frontDistance < 15) {
-          // Pivot in place
+          // Pivot in place - SLOW rotation, not aggressive
           return {
             type: 'pivot',
             direction,
-            leftMotor: turnLeft ? -50 : 80,
-            rightMotor: turnLeft ? 80 : -50,
+            leftMotor: turnLeft ? -20 : 25,
+            rightMotor: turnLeft ? 25 : -20,
           };
         }
         return {
           type: 'sharp_turn',
           direction,
-          leftMotor: turnLeft ? 30 : baseSpeed,
-          rightMotor: turnLeft ? baseSpeed : 30,
+          leftMotor: turnLeft ? 10 : baseSpeed,
+          rightMotor: turnLeft ? baseSpeed : 10,
         };
     }
   }
@@ -359,27 +361,27 @@ export class LinePositionDetector {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const STEERING_PRESETS = {
-  // Straight movement
+  // Straight movement - slow and steady
   straight: (speed: number) => ({ left: speed, right: speed }),
 
-  // Gentle curves (for AWARE zone)
-  gentleCurveLeft: (speed: number) => ({ left: speed - 30, right: speed + 10 }),
-  gentleCurveRight: (speed: number) => ({ left: speed + 10, right: speed - 30 }),
+  // Gentle curves (for AWARE zone) - SMALL differentials for smooth turns
+  gentleCurveLeft: (speed: number) => ({ left: speed - 10, right: speed + 5 }),
+  gentleCurveRight: (speed: number) => ({ left: speed + 5, right: speed - 10 }),
 
-  // Moderate turns (for CAUTION zone)
-  moderateTurnLeft: (speed: number) => ({ left: speed - 60, right: speed + 20 }),
-  moderateTurnRight: (speed: number) => ({ left: speed + 20, right: speed - 60 }),
+  // Moderate turns (for CAUTION zone) - controlled, not aggressive
+  moderateTurnLeft: (speed: number) => ({ left: speed - 20, right: speed + 10 }),
+  moderateTurnRight: (speed: number) => ({ left: speed + 10, right: speed - 20 }),
 
-  // Sharp turns (for CRITICAL zone)
-  sharpTurnLeft: () => ({ left: -50, right: 100 }),
-  sharpTurnRight: () => ({ left: 100, right: -50 }),
+  // Sharp turns (for CRITICAL zone) - still controlled, avoid wild swings
+  sharpTurnLeft: () => ({ left: 10, right: 40 }),
+  sharpTurnRight: () => ({ left: 40, right: 10 }),
 
-  // Pivot in place
-  pivotLeft: () => ({ left: -80, right: 80 }),
-  pivotRight: () => ({ left: 80, right: -80 }),
+  // Pivot in place - SLOW rotation for precision
+  pivotLeft: () => ({ left: -25, right: 25 }),
+  pivotRight: () => ({ left: 25, right: -25 }),
 
-  // Reverse
-  reverse: (speed: number) => ({ left: -speed, right: -speed }),
+  // Reverse - slow and controlled
+  reverse: (speed: number) => ({ left: -Math.min(speed, 30), right: -Math.min(speed, 30) }),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
