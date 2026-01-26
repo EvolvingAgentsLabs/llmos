@@ -261,6 +261,10 @@ function syncObstacles(bridge: WorldModelSceneGraphBridge): void {
 
 /**
  * Update world model with scene graph changes (reverse sync)
+ *
+ * Note: Only collectibles can be synced back to the world model.
+ * Obstacles are inferred from sensor readings in the world model,
+ * so we don't sync them back to avoid conflicts.
  */
 export function syncSceneGraphToWorldModel(
   bridge: WorldModelSceneGraphBridge
@@ -268,23 +272,18 @@ export function syncSceneGraphToWorldModel(
   const { worldModel, sceneGraphManager } = bridge;
   const sceneGraph = sceneGraphManager.getSceneGraph();
 
-  // Get all collectibles from scene graph
+  // Get all collectibles from scene graph and record them in world model
   const collectibles = sceneGraph.getNodesByCategory('collectible');
 
   for (const collectible of collectibles) {
     const pos = collectible.geometry.pose.position;
-    worldModel.markCollectible(`sg-${collectible.id}`, pos.x, pos.z);
+    // Use recordCollectible which is the public API
+    worldModel.recordCollectible(`sg-${collectible.id}`, pos.x, pos.z);
   }
 
-  // Get all obstacles from scene graph
-  const obstacles = sceneGraph.getNodesByCategory('obstacle');
-
-  for (const obstacle of obstacles) {
-    const pos = obstacle.geometry.pose.position;
-    const bbox = obstacle.geometry.boundingBox;
-    const radius = bbox ? Math.max(bbox.dimensions.x, bbox.dimensions.z) / 2 : 0.1;
-    worldModel.markObstacle(pos.x, pos.z, radius);
-  }
+  // Note: Obstacles are not synced back because the world model
+  // infers obstacles from sensor readings. The scene graph's obstacle
+  // tracking is for higher-level reasoning, not grid-level mapping.
 }
 
 // ============================================================================
