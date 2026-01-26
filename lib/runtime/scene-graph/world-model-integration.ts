@@ -299,8 +299,24 @@ export function getCombinedCognitiveAnalysis(deviceId: string): string {
 
   const { worldModel, sceneGraphManager } = bridge;
 
+  // Get robot state for world model analysis
+  const robotState = sceneGraphManager.getRobotState();
+  const robotPose = robotState
+    ? { x: robotState.position.x, y: robotState.position.z, rotation: robotState.rotation }
+    : { x: 0, y: 0, rotation: 0 };
+
+  // Default sensor data (no obstacles detected) for analysis context
+  const defaultSensorData = {
+    front: 200,
+    frontLeft: 200,
+    frontRight: 200,
+    left: 200,
+    right: 200,
+    back: 200,
+  };
+
   // Get world model analysis
-  const worldModelAnalysis = worldModel.generateCognitiveAnalysis(0, 0, 0);
+  const worldModelAnalysis = worldModel.generateCognitiveAnalysis(robotPose, defaultSensorData);
 
   // Get scene graph description
   const sceneDescription = sceneGraphManager.describeScene();
@@ -350,12 +366,22 @@ export function queryIntegratedSystem(
 
   // Get world model context for the query
   const robotState = sceneGraphManager.getRobotState();
-  const worldModelContext = robotState
-    ? worldModel.generateCognitiveAnalysis(
-        robotState.position.x,
-        robotState.position.z,
-        robotState.rotation
-      )
+  const robotPose = robotState
+    ? { x: robotState.position.x, y: robotState.position.z, rotation: robotState.rotation }
+    : null;
+
+  // Default sensor data for context generation
+  const defaultSensorData = {
+    front: 200,
+    frontLeft: 200,
+    frontRight: 200,
+    left: 200,
+    right: 200,
+    back: 200,
+  };
+
+  const worldModelContext = robotPose
+    ? worldModel.generateCognitiveAnalysis(robotPose, defaultSensorData)
     : 'Robot position unknown';
 
   return {
