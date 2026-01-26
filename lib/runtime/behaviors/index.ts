@@ -128,13 +128,13 @@ export const LED_PROTOCOLS = {
 } as const;
 
 /**
- * Standard distance zones
+ * Standard distance zones - adjusted for better reaction time
  */
 export const DISTANCE_ZONES: DistanceZoneConfig[] = [
-  { zoneName: 'OPEN', threshold: '> 100cm', speedRange: '150-200', action: 'Full speed exploration' },
-  { zoneName: 'AWARE', threshold: '50-100cm', speedRange: '100-150', action: 'Moderate speed, start planning turn' },
-  { zoneName: 'CAUTION', threshold: '30-50cm', speedRange: '60-100', action: 'Slow down, commit to turn direction' },
-  { zoneName: 'CRITICAL', threshold: '< 30cm', speedRange: '0-60', action: 'Execute turn or stop' },
+  { zoneName: 'OPEN', threshold: '> 120cm', speedRange: '150-200', action: 'Full speed exploration' },
+  { zoneName: 'AWARE', threshold: '70-120cm', speedRange: '100-150', action: 'Moderate speed, start planning turn NOW' },
+  { zoneName: 'CAUTION', threshold: '40-70cm', speedRange: '60-100', action: 'SLOW DOWN, commit to turn direction IMMEDIATELY' },
+  { zoneName: 'CRITICAL', threshold: '< 40cm', speedRange: '0-60', action: 'STOP AND TURN - collision imminent!' },
 ];
 
 /**
@@ -378,36 +378,50 @@ export const BEHAVIOR_TEMPLATES: Record<string, BehaviorTemplate> = {
     goal: 'Build a cognitive model of the environment while efficiently exploring and avoiding obstacles',
     philosophy: `You are an intelligent autonomous robot that BUILDS UNDERSTANDING of your world.
 
+## PRIORITY #1: NEVER COLLIDE WITH OBSTACLES
+Collision avoidance is your HIGHEST PRIORITY. An intelligent robot that hits obstacles is not intelligent.
+- When you see MANDATORY ACTION or REQUIRED ACTION warnings, execute them IMMEDIATELY
+- Do not reason, do not analyze further - JUST TURN
+- Your sensors give you perfect information - USE IT
+
 ## Core Principles
-1. **BUILD A MENTAL MAP**: Track where you've been and what you've found
-2. **PREFER UNEXPLORED AREAS**: Always move toward regions you haven't visited
-3. **REMEMBER OBSTACLES**: Use past sensor readings to avoid known hazards
-4. **UPDATE BELIEFS**: When new data contradicts old assumptions, update your model
+1. **AVOID OBSTACLES FIRST**: Check distances BEFORE deciding where to explore
+2. **BUILD A MENTAL MAP**: Track where you've been and what you've found
+3. **PREFER UNEXPLORED AREAS**: Move toward regions you haven't visited
+4. **REMEMBER OBSTACLES**: Use past sensor readings to avoid known hazards
 
 ## Every Cycle You Must:
-1. READ your sensor data carefully - the distances tell you EXACTLY where obstacles are
-2. UPDATE your world model - "Now I know there's an obstacle X cm ahead"
-3. COMPARE front, left, and right distances to find the clearest path toward UNEXPLORED areas
-4. ADJUST your speed based on how close obstacles are (closer = slower)
-5. STEER smoothly toward open, UNEXPLORED space using differential wheel speeds
+1. READ sensor data - if front < 70cm, you MUST start turning toward the clearer side
+2. CHECK for MANDATORY/REQUIRED ACTION warnings - if present, execute that exact command
+3. COMPARE front, left, and right distances - ALWAYS turn toward the LARGEST value
+4. ADJUST speed based on proximity: closer = slower. Use the speed formula!
+5. STEER toward open space - if front is closest, you MUST turn left or right
 
-CRITICAL: Your sensors are your EYES. Your MEMORY is your map. If front distance is decreasing, you're approaching an obstacle - START TURNING NOW toward unexplored territory!`,
+## CRITICAL RULES:
+- Front distance DECREASING = you're approaching obstacle = START TURNING NOW
+- Front < 40cm = STOP forward motion and TURN SHARPLY
+- All directions < 40cm = STOP and ROTATE in place
+- BUMPER triggered = you FAILED to avoid - REVERSE and turn immediately`,
     distanceZones: DISTANCE_ZONES,
     steeringPresets: STEERING_PRESETS,
     decisionRules: [
+      '**RULE #1 - COLLISION AVOIDANCE IS MANDATORY**: When zone is CRITICAL or CAUTION, you MUST execute the recommended turn. This is not optional.',
       '**ALWAYS compare distances**: front vs left vs right - turn toward the LARGEST value',
-      '**OPEN zone (>100cm)**: Full speed (150-200). If one side has 30cm+ more space, curve gently toward it',
-      '**AWARE zone (50-100cm)**: Moderate speed (100-150). Begin turning toward clearer side NOW',
-      '**CAUTION zone (30-50cm)**: Slow down (60-100). Commit to turn direction, steer firmly',
-      '**CRITICAL zone (<30cm)**: Very slow or stop (0-60). Sharp turn or reverse if trapped',
-      '**Speed formula**: speed = min(200, frontDistance * 2). E.g., 50cm front = speed 100',
+      '**OPEN zone (>120cm)**: Full speed (150-200). If one side has 30cm+ more space, curve gently toward it',
+      '**AWARE zone (70-120cm)**: Moderate speed (100-150). Begin turning toward clearer side NOW - don\'t wait!',
+      '**CAUTION zone (40-70cm)**: SLOW DOWN (60-100). Commit to turn direction IMMEDIATELY, steer firmly. DO NOT continue straight!',
+      '**CRITICAL zone (<40cm)**: STOP forward motion! Sharp turn or reverse. YOU MUST TURN - going straight will cause collision!',
+      '**Speed formula**: speed = min(200, frontDistance * 2). E.g., 50cm front = speed 100, 30cm = speed 60',
+      '**NEVER ignore warnings**: If sensor shows MANDATORY ACTION or COLLISION IMMINENT, execute that exact command',
     ],
     sensorGuidelines: [
-      '**READ EVERY SENSOR**: front, frontLeft, frontRight, left, right - they all matter!',
+      '**READ EVERY SENSOR EVERY CYCLE**: front, frontLeft, frontRight, left, right - your life depends on them!',
+      '**MANDATORY RESPONSE TO WARNINGS**: When you see ⚠️ MANDATORY ACTION or 🔴 REQUIRED ACTION, execute that exact command. No exceptions.',
+      '**Obstacle AHEAD** (front < 70cm): START TURNING NOW toward the side with MORE clearance (compare left vs right). Do not wait until closer!',
       '**Obstacle on LEFT** (left < 50cm): Steer RIGHT by making left wheel faster than right',
       '**Obstacle on RIGHT** (right < 50cm): Steer LEFT by making right wheel faster than left',
-      '**Obstacle AHEAD** (front < 50cm): Turn toward side with MORE clearance (compare left vs right)',
-      '**Corner detected** (front < 40cm AND left < 40cm AND right < 40cm): STOP, then rotate in place',
+      '**Corner detected** (front < 40cm AND left < 40cm AND right < 40cm): STOP immediately, then rotate in place using drive(left=-70, right=70)',
+      '**BUMPER CONTACT**: If bumper triggered, you already hit something! REVERSE and turn: drive(left=-80, right=-40) then turn',
       '**Smooth curves**: Small speed differences = gentle curves, big differences = sharp turns',
       '**Example**: left=80, right=120 makes gentle right curve. left=-50, right=100 makes sharp left turn',
     ],

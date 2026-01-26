@@ -153,19 +153,50 @@ export class NavigationZoneFormatter implements SensorFormatter {
     const decision = this.calculator.getNavigationDecision(context);
     const steering = decision.steeringRecommendation;
 
-    // Build a clear action recommendation with motor values
+    // Check for imminent collision conditions
+    const isCollisionImminent = context.frontDistance < 25;
+    const isCornerTrap = context.frontDistance < 40 && context.leftDistance < 40 && context.rightDistance < 40;
+    const hasBumperContact = sensors.bumper.front || sensors.bumper.back;
+
+    // Build imperative action guidance based on urgency level
     let steeringAdvice = '';
     if (steering) {
       const motorAdvice = `drive(left=${steering.leftMotor}, right=${steering.rightMotor})`;
-      steeringAdvice = `\n**Recommended Action:** ${steering.type.replace('_', ' ')} ${steering.direction !== 'none' ? steering.direction : ''} → ${motorAdvice}`;
+
+      // More forceful language for dangerous situations
+      if (isCollisionImminent || hasBumperContact) {
+        steeringAdvice = `\n**⚠️ MANDATORY ACTION - COLLISION IMMINENT:** ${motorAdvice}
+YOU MUST execute this command NOW. Do not reason further - ACT IMMEDIATELY.`;
+      } else if (decision.zone === 'critical') {
+        steeringAdvice = `\n**🔴 REQUIRED ACTION:** ${steering.type.replace('_', ' ')} ${steering.direction !== 'none' ? steering.direction : ''} → ${motorAdvice}
+Execute this turn immediately to avoid collision.`;
+      } else if (decision.zone === 'caution') {
+        steeringAdvice = `\n**🟠 RECOMMENDED ACTION:** ${steering.type.replace('_', ' ')} ${steering.direction !== 'none' ? steering.direction : ''} → ${motorAdvice}
+Begin turning now - obstacle is close.`;
+      } else {
+        steeringAdvice = `\n**Suggested Action:** ${steering.type.replace('_', ' ')} ${steering.direction !== 'none' ? steering.direction : ''} → ${motorAdvice}`;
+      }
+    }
+
+    // Add corner trap warning
+    let cornerWarning = '';
+    if (isCornerTrap) {
+      cornerWarning = `\n**⚠️ CORNER DETECTED:** All directions blocked! STOP and ROTATE in place.
+Use: drive(left=-70, right=70) or drive(left=70, right=-70) to rotate toward most open direction.`;
     }
 
     // Add clear speed guidance
     const speedAdvice = `\n**Speed Range:** ${decision.recommendedSpeed.min}-${decision.recommendedSpeed.max} (use lower values when turning)`;
 
-    return `**Navigation Zone:** ${decision.zoneEmoji} ${decision.zone.toUpperCase()} - ${decision.suggestedAction}
+    // Build zone indicator with urgency
+    let zoneIndicator = `**Navigation Zone:** ${decision.zoneEmoji} ${decision.zone.toUpperCase()} - ${decision.suggestedAction}`;
+    if (hasBumperContact) {
+      zoneIndicator = `**⚠️ BUMPER CONTACT DETECTED!** ${sensors.bumper.front ? 'FRONT' : 'BACK'} collision!\n` + zoneIndicator;
+    }
+
+    return `${zoneIndicator}
 **Clearance:** L=${context.leftDistance.toFixed(0)}cm, FRONT=${context.frontDistance.toFixed(0)}cm, R=${context.rightDistance.toFixed(0)}cm
-**Best Path:** ${decision.bestPath}${speedAdvice}${steeringAdvice}`;
+**Best Path:** ${decision.bestPath}${speedAdvice}${cornerWarning}${steeringAdvice}`;
   }
 
   /**
@@ -391,11 +422,14 @@ export function getActionInstruction(behaviorType?: BehaviorType): string {
     case 'lineFollower':
       return 'Decide your action based on the line status above.';
     case 'explorer':
-      return `**ACTION REQUIRED:**
-1. Check the Navigation Zone (🟢 OPEN, 🟡 AWARE, 🟠 CAUTION, 🔴 CRITICAL)
-2. Compare distances: L vs FRONT vs R - turn toward the LARGEST value
-3. Use the Recommended Action motor values as a starting point
-4. Output your drive() command with appropriate speed for the zone`;
+      return `**⚡ IMMEDIATE ACTION REQUIRED:**
+1. Check for ⚠️ MANDATORY ACTION or 🔴 REQUIRED ACTION warnings above
+2. If present: Execute EXACTLY that command. Do not modify it. Do not reason further.
+3. If no warnings: Check the Navigation Zone:
+   - 🔴 CRITICAL/🟠 CAUTION: You MUST turn away from the obstacle NOW
+   - 🟡 AWARE/🟢 OPEN: Explore toward unexplored areas
+4. ALWAYS turn toward the direction with LARGEST clearance value
+5. Output your drive() command - remember: collision = failure!`;
     case 'wallFollower':
       return 'Decide your action based on the navigation zone and best path above.';
     case 'collector':
