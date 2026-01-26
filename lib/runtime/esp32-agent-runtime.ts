@@ -59,6 +59,7 @@ import {
   createLineFollowerFormatter,
   createWallFollowerFormatter,
   createCollectorFormatter,
+  WallProximityFormatter,
   getActionInstruction,
   SensorReadings as FormatterSensorReadings,
 } from './sensors';
@@ -258,6 +259,9 @@ export interface ESP32AgentConfig {
   // Vision mode settings
   visionEnabled?: boolean; // Enable camera-based world model updates
   visionInterval?: number; // How often to process vision (ms) - default: 3000ms
+  // Arena configuration for world model initialization
+  arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+  arenaWalls?: Array<{ x1: number; y1: number; x2: number; y2: number }>;
   // Callbacks
   onStateChange?: (state: ESP32AgentState) => void;
   onLog?: (message: string, level: 'info' | 'warn' | 'error') => void;
@@ -510,6 +514,17 @@ export class ESP32AgentRuntime {
         worldWidth: 500,     // 5m
         worldHeight: 500,    // 5m
       });
+
+      // Pre-populate world model with arena boundaries if provided
+      // This gives the robot knowledge of walls BEFORE it collides with them
+      if (this.config.arenaWalls && this.config.arenaWalls.length > 0) {
+        this.worldModel.initializeWallsFromMap(this.config.arenaWalls);
+        this.log(`Initialized world model with ${this.config.arenaWalls.length} arena walls`, 'info');
+      } else if (this.config.arenaBounds) {
+        this.worldModel.initializeArenaBoundaries(this.config.arenaBounds);
+        this.log('Initialized world model with arena boundaries', 'info');
+      }
+
       this.log('Vision mode enabled - camera will update world model', 'info');
     }
 
@@ -732,13 +747,18 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
     // Determine behavior type from system prompt or config
     const prompt = this.config.systemPrompt.toLowerCase();
 
+    // Pass arena bounds to formatters for wall proximity awareness
+    const arenaBounds = this.config.arenaBounds;
+
     if (prompt.includes('line-following') || prompt.includes('line follower')) {
       return createLineFollowerFormatter();
     } else if (prompt.includes('collect') || prompt.includes('gem')) {
-      return createCollectorFormatter();
+      return createCollectorFormatter(arenaBounds);
+    } else if (prompt.includes('wall-following') || prompt.includes('wall follower')) {
+      return createWallFollowerFormatter(arenaBounds);
     } else {
       // Default to explorer formatter
-      return createExplorerFormatter();
+      return createExplorerFormatter(arenaBounds);
     }
   }
 

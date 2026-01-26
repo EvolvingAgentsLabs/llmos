@@ -35,6 +35,9 @@ interface RobotAgentPanelProps {
   onBehaviorChange?: (behavior: string, recommendedMap: string) => void;
   activeVolume?: ArtifactVolume;
   onWorldModelUpdate?: (worldModel: WorldModel) => void;
+  // Arena configuration for wall awareness
+  arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+  arenaWalls?: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }
 
 export default function RobotAgentPanel({
@@ -46,6 +49,8 @@ export default function RobotAgentPanel({
   onBehaviorChange,
   activeVolume = 'user',
   onWorldModelUpdate,
+  arenaBounds,
+  arenaWalls,
 }: RobotAgentPanelProps) {
   const [deviceId, setDeviceId] = useState<string | null>(initialDeviceId || null);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -206,6 +211,18 @@ ${prompt}
       worldHeight: 500,    // 5m
     });
 
+    // CRITICAL: Pre-populate world model with arena boundaries if available
+    // This gives the robot knowledge of walls BEFORE it collides with them
+    if (worldModelRef.current) {
+      if (arenaWalls && arenaWalls.length > 0) {
+        worldModelRef.current.initializeWallsFromMap(arenaWalls);
+        console.log(`[RobotAgentPanel] World model initialized with ${arenaWalls.length} arena walls`);
+      } else if (arenaBounds) {
+        worldModelRef.current.initializeArenaBoundaries(arenaBounds);
+        console.log('[RobotAgentPanel] World model initialized with arena boundaries');
+      }
+    }
+
     // Notify parent of world model creation
     if (onWorldModelUpdate && worldModelRef.current) {
       onWorldModelUpdate(worldModelRef.current);
@@ -231,6 +248,9 @@ ${prompt}
         maxIterations: 100,
         visionEnabled: visionEnabled,
         visionInterval: 3000, // Process vision every 3 seconds
+        // Pass arena configuration for wall awareness - critical for collision avoidance!
+        arenaBounds: arenaBounds,
+        arenaWalls: arenaWalls,
         onVisionObservation: (observation) => {
           setLastVisionObservation(observation);
         },
@@ -283,7 +303,7 @@ ${prompt}
     } catch (error: any) {
       console.error('[RobotAgentPanel] Failed to start agent:', error.message);
     }
-  }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, onWorldModelUpdate, registerAgentInVolume]);
+  }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, onWorldModelUpdate, registerAgentInVolume, visionEnabled, arenaBounds, arenaWalls]);
 
   // Stop the agent
   const stopAgent = useCallback(() => {

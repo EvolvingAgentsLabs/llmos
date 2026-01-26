@@ -233,6 +233,91 @@ export class CollectiblesFormatter implements SensorFormatter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// WALL PROXIMITY WARNING FORMATTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface WallProximityOptions {
+  arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+  warningDistance?: number;  // cm, default 50
+  criticalDistance?: number; // cm, default 30
+}
+
+export class WallProximityFormatter implements SensorFormatter {
+  private options: Required<WallProximityOptions>;
+
+  constructor(options: WallProximityOptions = {}) {
+    this.options = {
+      arenaBounds: options.arenaBounds ?? { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+      warningDistance: options.warningDistance ?? 50,
+      criticalDistance: options.criticalDistance ?? 30,
+    };
+  }
+
+  getSectionTitle(): string {
+    return 'Wall Proximity';
+  }
+
+  format(sensors: SensorReadings): string {
+    const pose = sensors.pose;
+    const bounds = this.options.arenaBounds;
+    const warnings: string[] = [];
+
+    // Calculate distances to each wall boundary (in cm)
+    const distToMinX = Math.abs(pose.x - bounds.minX) * 100;
+    const distToMaxX = Math.abs(pose.x - bounds.maxX) * 100;
+    const distToMinY = Math.abs(pose.y - bounds.minY) * 100;
+    const distToMaxY = Math.abs(pose.y - bounds.maxY) * 100;
+
+    // Check proximity to each wall
+    const checkWall = (dist: number, wallName: string) => {
+      if (dist <= this.options.criticalDistance) {
+        warnings.push(`🔴 CRITICAL: ${wallName} wall only ${dist.toFixed(0)}cm away - TURN AWAY IMMEDIATELY!`);
+      } else if (dist <= this.options.warningDistance) {
+        warnings.push(`🟠 WARNING: ${wallName} wall ${dist.toFixed(0)}cm away`);
+      }
+    };
+
+    // Robot heading in degrees (0 = North/+Y, 90 = East/+X, etc.)
+    const headingDeg = (pose.rotation * 180 / Math.PI + 360) % 360;
+
+    // Determine which wall robot is facing
+    const facingDirection = this.getHeadingDirection(headingDeg);
+
+    // Check all walls
+    checkWall(distToMinX, 'LEFT (West)');
+    checkWall(distToMaxX, 'RIGHT (East)');
+    checkWall(distToMinY, 'BOTTOM (South)');
+    checkWall(distToMaxY, 'TOP (North)');
+
+    if (warnings.length > 0) {
+      // Add directional awareness
+      let output = `\n**⚠️ ARENA BOUNDARY WARNINGS:**\n${warnings.join('\n')}`;
+      output += `\n**Facing:** ${facingDirection}`;
+
+      // Provide escape suggestion
+      if (warnings.some(w => w.includes('CRITICAL'))) {
+        output += `\n**SUGGESTION:** Turn away from the nearest wall before moving forward!`;
+      }
+
+      return output;
+    }
+
+    return '';
+  }
+
+  private getHeadingDirection(headingDeg: number): string {
+    if (headingDeg >= 337.5 || headingDeg < 22.5) return 'North (+Y direction)';
+    if (headingDeg >= 22.5 && headingDeg < 67.5) return 'Northeast';
+    if (headingDeg >= 67.5 && headingDeg < 112.5) return 'East (+X direction)';
+    if (headingDeg >= 112.5 && headingDeg < 157.5) return 'Southeast';
+    if (headingDeg >= 157.5 && headingDeg < 202.5) return 'South (-Y direction)';
+    if (headingDeg >= 202.5 && headingDeg < 247.5) return 'Southwest';
+    if (headingDeg >= 247.5 && headingDeg < 292.5) return 'West (-X direction)';
+    return 'Northwest';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // BUMPER FORMATTER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -328,11 +413,12 @@ export class CompositeSensorFormatter implements SensorFormatter {
 /**
  * Create formatter for Explorer behavior
  */
-export function createExplorerFormatter(): CompositeSensorFormatter {
+export function createExplorerFormatter(arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number }): CompositeSensorFormatter {
   return new CompositeSensorFormatter([
     new LineSensorFormatter(),
     new DistanceSensorFormatter({ includeAllSensors: true }),
     new NavigationZoneFormatter(),
+    new WallProximityFormatter({ arenaBounds }),
     new PositionFormatter(),
     new BumperFormatter(),
     new BatteryFormatter(),
@@ -354,10 +440,11 @@ export function createLineFollowerFormatter(): CompositeSensorFormatter {
 /**
  * Create formatter for Wall Follower behavior
  */
-export function createWallFollowerFormatter(): CompositeSensorFormatter {
+export function createWallFollowerFormatter(arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number }): CompositeSensorFormatter {
   return new CompositeSensorFormatter([
     new DistanceSensorFormatter({ includeAllSensors: true }),
     new NavigationZoneFormatter(),
+    new WallProximityFormatter({ arenaBounds }),
     new PositionFormatter(),
     new BumperFormatter(),
   ]);
@@ -366,10 +453,11 @@ export function createWallFollowerFormatter(): CompositeSensorFormatter {
 /**
  * Create formatter for Collector/GemHunter behavior
  */
-export function createCollectorFormatter(): CompositeSensorFormatter {
+export function createCollectorFormatter(arenaBounds?: { minX: number; maxX: number; minY: number; maxY: number }): CompositeSensorFormatter {
   return new CompositeSensorFormatter([
     new DistanceSensorFormatter({ includeAllSensors: true }),
     new NavigationZoneFormatter(),
+    new WallProximityFormatter({ arenaBounds }),
     new CollectiblesFormatter(),
     new PositionFormatter(),
     new BumperFormatter(),

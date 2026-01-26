@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
 import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu } from 'lucide-react';
 import { WorldModel } from '@/lib/runtime/world-model';
+import { FLOOR_MAPS, type FloorMap } from '@/lib/hardware/cube-robot-simulator';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
@@ -86,6 +87,17 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     activeAgents: state.agentState !== 'idle' ? 1 : 0,
     isLoading: state.agentState === 'thinking' || state.agentState === 'executing',
   };
+
+  // Get current floor map configuration for wall awareness
+  // This is critical for the robot AI agent to know arena boundaries before collision
+  const currentFloorMap = useMemo((): FloorMap | null => {
+    const mapFactory = FLOOR_MAPS[currentMap as keyof typeof FLOOR_MAPS];
+    return mapFactory ? mapFactory() : null;
+  }, [currentMap]);
+
+  // Extract arena bounds and walls for passing to RobotAgentPanel
+  const arenaBounds = useMemo(() => currentFloorMap?.bounds, [currentFloorMap]);
+  const arenaWalls = useMemo(() => currentFloorMap?.walls, [currentFloorMap]);
 
   // Toggle sidebars
   const toggleFileBrowser = useCallback(() => {
@@ -1074,6 +1086,8 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                 onBehaviorChange={handleBehaviorChange}
                 activeVolume={activeVolume}
                 onWorldModelUpdate={setWorldModel}
+                arenaBounds={arenaBounds}
+                arenaWalls={arenaWalls}
               />
             )}
           </div>

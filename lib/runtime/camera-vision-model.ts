@@ -145,10 +145,26 @@ const DEFAULT_CONFIG: VisionModelConfig = {
 // VISION ANALYSIS PROMPT
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VISION_ANALYSIS_PROMPT = `You are a robot vision system analyzing a first-person camera view. Analyze this image to help the robot understand its environment and update its world model.
+const VISION_ANALYSIS_PROMPT = `You are a robot vision system analyzing a first-person camera view from inside a 3D arena. Your PRIMARY task is to help the robot understand its environment and AVOID COLLISIONS with walls and obstacles.
+
+## CRITICAL: Arena Boundary Wall Detection
+The arena has BOUNDARY WALLS that appear as:
+- **Blue glowing vertical bars** at the edges of the arena
+- They run along all four sides of the rectangular arena
+- They are approximately 30cm tall with a bright blue emissive glow (#4a9eff color)
+- When you see these blue walls, they are HARD BOUNDARIES - the robot CANNOT pass through them
+- Distance to walls should be estimated carefully - if a wall fills a significant portion of the view, it is CLOSE (< 1 meter)
+
+## Other Visual Elements
+- **Red cylindrical obstacles**: Round obstacles the robot must navigate around
+- **Green circular markers**: Checkpoints on the floor
+- **Gold/colored floating objects**: Collectible items (coins, gems, stars)
+- **Grid lines on floor**: Blue grid pattern on dark floor for spatial reference
+- **Dark floor**: The arena floor is dark gray/black
 
 IMPORTANT: Respond ONLY with valid JSON. No explanations or additional text.
 
+## Analysis Instructions
 Analyze the image and identify:
 1. What's in the LEFT third of the image (robot's left side)
 2. What's in the CENTER third of the image (straight ahead)
@@ -156,11 +172,19 @@ Analyze the image and identify:
 
 For each region, determine:
 - content: "open_space" | "obstacle" | "wall" | "partially_blocked" | "unknown"
-- estimatedDistance: distance in meters to nearest obstacle (use 3.0 for open space)
+  - Use "wall" specifically when you see the BLUE BOUNDARY WALLS
+  - Use "obstacle" for red cylindrical obstacles
+- estimatedDistance: distance in meters to nearest obstacle/wall
+  - If blue wall is prominent/close in view: 0.3 to 1.0 meters
+  - If wall is visible but further: 1.0 to 2.0 meters
+  - If no obstacles/walls visible: 2.0 to 3.0 meters
 - clearance: 0.0 to 1.0 (how clear/passable is this direction)
+  - 0.0-0.3 = wall or obstacle very close, DO NOT GO THIS WAY
+  - 0.3-0.6 = obstacle present, proceed with caution
+  - 0.6-1.0 = relatively clear path
 - appearsUnexplored: true if this area looks like somewhere the robot hasn't been
 
-Also identify any distinct objects you can see.
+Also identify any distinct objects you can see, especially WALLS.
 
 Respond with this exact JSON structure:
 {

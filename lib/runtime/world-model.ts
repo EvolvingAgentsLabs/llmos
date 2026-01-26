@@ -148,6 +148,110 @@ export class WorldModel {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ARENA BOUNDARY INITIALIZATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Initialize the world model with known arena boundaries (walls)
+   * This should be called when starting with a known arena to pre-populate
+   * the world model with wall locations so the robot knows its limits.
+   *
+   * @param bounds The arena bounds in meters
+   */
+  initializeArenaBoundaries(bounds: { minX: number; maxX: number; minY: number; maxY: number }): void {
+    const timestamp = Date.now();
+    const wallConfidence = 0.95; // High confidence for known arena boundaries
+
+    // Mark all cells along the boundaries as walls
+    // We'll mark a few cells thick to ensure the robot sees them
+    const wallThickness = 2; // cells
+
+    // Bottom wall (minY)
+    for (let x = bounds.minX; x <= bounds.maxX; x += this.config.gridResolution / 100) {
+      for (let thickness = 0; thickness < wallThickness; thickness++) {
+        const y = bounds.minY + (thickness * this.config.gridResolution / 100);
+        const { gx, gy } = this.worldToGrid(x, y);
+        if (this.isValidGridCoord(gx, gy)) {
+          this.updateCell(gx, gy, 'wall', wallConfidence, timestamp);
+        }
+      }
+    }
+
+    // Top wall (maxY)
+    for (let x = bounds.minX; x <= bounds.maxX; x += this.config.gridResolution / 100) {
+      for (let thickness = 0; thickness < wallThickness; thickness++) {
+        const y = bounds.maxY - (thickness * this.config.gridResolution / 100);
+        const { gx, gy } = this.worldToGrid(x, y);
+        if (this.isValidGridCoord(gx, gy)) {
+          this.updateCell(gx, gy, 'wall', wallConfidence, timestamp);
+        }
+      }
+    }
+
+    // Left wall (minX)
+    for (let y = bounds.minY; y <= bounds.maxY; y += this.config.gridResolution / 100) {
+      for (let thickness = 0; thickness < wallThickness; thickness++) {
+        const x = bounds.minX + (thickness * this.config.gridResolution / 100);
+        const { gx, gy } = this.worldToGrid(x, y);
+        if (this.isValidGridCoord(gx, gy)) {
+          this.updateCell(gx, gy, 'wall', wallConfidence, timestamp);
+        }
+      }
+    }
+
+    // Right wall (maxX)
+    for (let y = bounds.minY; y <= bounds.maxY; y += this.config.gridResolution / 100) {
+      for (let thickness = 0; thickness < wallThickness; thickness++) {
+        const x = bounds.maxX - (thickness * this.config.gridResolution / 100);
+        const { gx, gy } = this.worldToGrid(x, y);
+        if (this.isValidGridCoord(gx, gy)) {
+          this.updateCell(gx, gy, 'wall', wallConfidence, timestamp);
+        }
+      }
+    }
+  }
+
+  /**
+   * Initialize arena boundaries from a wall array (from FloorMap)
+   * This marks all wall segments in the world model
+   */
+  initializeWallsFromMap(walls: Array<{ x1: number; y1: number; x2: number; y2: number }>): void {
+    const timestamp = Date.now();
+    const wallConfidence = 0.95;
+    const stepSize = this.config.gridResolution / 100; // Step in meters
+
+    for (const wall of walls) {
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const steps = Math.ceil(length / stepSize);
+
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = wall.x1 + dx * t;
+        const y = wall.y1 + dy * t;
+
+        const { gx, gy } = this.worldToGrid(x, y);
+        if (this.isValidGridCoord(gx, gy)) {
+          this.updateCell(gx, gy, 'wall', wallConfidence, timestamp);
+        }
+
+        // Also mark adjacent cells to make walls more visible
+        const perpX = -dy / length;
+        const perpY = dx / length;
+        for (const offset of [-1, 1]) {
+          const adjX = x + perpX * stepSize * offset;
+          const adjY = y + perpY * stepSize * offset;
+          const adj = this.worldToGrid(adjX, adjY);
+          if (this.isValidGridCoord(adj.gx, adj.gy)) {
+            this.updateCell(adj.gx, adj.gy, 'wall', wallConfidence * 0.8, timestamp);
+          }
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // WORLD MODEL UPDATES
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -242,8 +346,28 @@ export class WorldModel {
       return;
     }
 
+    // IMPORTANT: Don't downgrade walls to obstacles or free
+    // Walls are known boundaries and should be protected
+    if (cell.state === 'wall' && (state === 'free' || state === 'obstacle')) {
+      // Only allow upgrading wall confidence, not changing the state
+      if (state === 'obstacle' && confidence > cell.confidence) {
+        // Keep it as wall but boost confidence since obstacle detection confirms it
+        cell.confidence = Math.max(cell.confidence, confidence);
+        cell.lastUpdated = timestamp;
+      }
+      return;
+    }
+
+    // Walls have priority over obstacles (they're both barriers, but walls are known)
+    if (cell.state === 'obstacle' && state === 'wall') {
+      cell.state = 'wall';
+      cell.confidence = Math.max(cell.confidence, confidence);
+      cell.lastUpdated = timestamp;
+      return;
+    }
+
     // Update with highest confidence observation
-    if (confidence >= cell.confidence || state === 'obstacle' || state === 'explored') {
+    if (confidence >= cell.confidence || state === 'obstacle' || state === 'wall' || state === 'explored') {
       cell.state = state;
       cell.confidence = Math.max(cell.confidence, confidence);
       cell.lastUpdated = timestamp;
