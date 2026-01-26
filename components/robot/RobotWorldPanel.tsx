@@ -350,8 +350,75 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
   );
 }
 
-// 3D Walls for PiP view
+// Create hazard stripe texture (yellow and black diagonal lines) for walls
+// This makes walls clearly distinguishable for robot vision/AI detection
+function createHazardStripeTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+
+  // Fill with yellow background
+  ctx.fillStyle = '#FFD700'; // Gold/yellow
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Draw black diagonal stripes
+  ctx.strokeStyle = '#1a1a1a'; // Near black
+  ctx.lineWidth = 12;
+
+  // Draw multiple diagonal lines to create stripe pattern
+  for (let i = -64; i < 128; i += 24) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + 64, 64);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 1); // Repeat pattern along wall length
+
+  return texture;
+}
+
+// Create obstacle hazard texture (red and white diagonal lines)
+// Uses contrasting colors to distinguish obstacles from walls for AI detection
+function createObstacleHazardTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+
+  // Fill with red background
+  ctx.fillStyle = '#e53935'; // Bright red
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Draw white diagonal stripes (opposite direction from walls for distinction)
+  ctx.strokeStyle = '#ffffff'; // White
+  ctx.lineWidth = 10;
+
+  // Draw diagonal lines in opposite direction (right-to-left instead of left-to-right)
+  for (let i = -64; i < 128; i += 20) {
+    ctx.beginPath();
+    ctx.moveTo(64 - i, 0);
+    ctx.lineTo(-i, 64);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3); // Repeat pattern around cylinder
+
+  return texture;
+}
+
+// 3D Walls for PiP view with hazard stripe pattern
 function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
+  // Create hazard stripe texture once and reuse
+  const hazardTexture = useMemo(() => createHazardStripeTexture(), []);
+
   return (
     <group>
       {walls.map((wall, idx) => {
@@ -371,11 +438,12 @@ function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
           >
             <boxGeometry args={[length, 0.3, 0.05]} />
             <meshStandardMaterial
-              color="#4a9eff"
-              emissive="#4a9eff"
+              map={hazardTexture}
+              color="#eeeeee"
+              emissive="#aa8800"
               emissiveIntensity={0.15}
-              metalness={0.3}
-              roughness={0.4}
+              metalness={0.2}
+              roughness={0.6}
             />
           </mesh>
         );
@@ -384,8 +452,11 @@ function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
   );
 }
 
-// 3D Obstacles for PiP view
+// 3D Obstacles for PiP view with hazard stripe pattern
 function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
+  // Create obstacle hazard texture once and reuse
+  const obstacleTexture = useMemo(() => createObstacleHazardTexture(), []);
+
   return (
     <group>
       {obstacles.map((obstacle, idx) => (
@@ -397,8 +468,11 @@ function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
         >
           <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
           <meshStandardMaterial
-            color="#f85149"
-            metalness={0.5}
+            map={obstacleTexture}
+            color="#ffffff"
+            emissive="#cc0000"
+            emissiveIntensity={0.2}
+            metalness={0.3}
             roughness={0.5}
           />
         </mesh>

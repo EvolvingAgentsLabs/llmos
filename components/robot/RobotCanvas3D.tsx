@@ -471,7 +471,40 @@ function Walls({
   );
 }
 
-// Obstacle components
+// Create obstacle hazard texture (red and white diagonal lines)
+// Uses contrasting colors to distinguish obstacles from walls for AI detection
+function createObstacleHazardTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+
+  // Fill with red background
+  ctx.fillStyle = '#e53935'; // Bright red
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Draw white diagonal stripes (opposite direction from walls for distinction)
+  ctx.strokeStyle = '#ffffff'; // White
+  ctx.lineWidth = 10;
+
+  // Draw diagonal lines in opposite direction (right-to-left instead of left-to-right)
+  for (let i = -64; i < 128; i += 20) {
+    ctx.beginPath();
+    ctx.moveTo(64 - i, 0);
+    ctx.lineTo(-i, 64);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3); // Repeat pattern around cylinder
+
+  return texture;
+}
+
+// Obstacle components with hazard stripe pattern (red/white diagonal lines)
+// This makes obstacles clearly distinguishable from walls for robot vision
 function Obstacles({
   obstacles,
   selectedIndex,
@@ -481,6 +514,9 @@ function Obstacles({
   selectedIndex: number | null;
   onSelect: (index: number, obstacle: FloorMap['obstacles'][0]) => void;
 }) {
+  // Create obstacle hazard texture once and reuse
+  const obstacleTexture = useMemo(() => createObstacleHazardTexture(), []);
+
   return (
     <group>
       {obstacles.map((obstacle, idx) => {
@@ -498,10 +534,11 @@ function Obstacles({
             >
               <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
               <meshStandardMaterial
-                color={isSelected ? '#ff7b72' : '#f85149'}
-                emissive={isSelected ? '#f85149' : '#000000'}
-                emissiveIntensity={isSelected ? 0.5 : 0}
-                metalness={0.5}
+                map={obstacleTexture}
+                color={isSelected ? '#ffffff' : '#eeeeee'}
+                emissive={isSelected ? '#ff4444' : '#cc0000'}
+                emissiveIntensity={isSelected ? 0.4 : 0.2}
+                metalness={0.3}
                 roughness={0.5}
               />
             </mesh>
