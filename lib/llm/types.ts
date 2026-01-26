@@ -4,9 +4,27 @@
  * Shared types for LLM client implementations
  */
 
+/**
+ * Content block for multimodal messages
+ */
+export interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageContent {
+  type: 'image_url';
+  image_url: {
+    url: string;  // Can be a data URL (base64) or http URL
+    detail?: 'low' | 'high' | 'auto';  // Optional detail level for OpenAI
+  };
+}
+
+export type MessageContent = string | (TextContent | ImageContent)[];
+
 export interface Message {
   role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string;
+  content: MessageContent;
   tool_call_id?: string;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
