@@ -3,28 +3,19 @@
 /**
  * Robot Agent Panel
  *
- * Shows real-time interaction between the robot AI agent and the LLM:
- * - Sensor readings sent to LLM
- * - LLM responses with reasoning
- * - Tool calls with parameters
- * - Execution results
- *
- * The panel displays the "conversation" as if the robot is chatting with the LLM.
+ * Simplified control panel for robot AI agents.
+ * Visualization is now handled by PiP views in RobotWorldPanel.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ESP32AgentRuntime,
   ESP32AgentState,
-  ESP32AgentConfig,
   createESP32Agent,
   stopESP32Agent,
-  getESP32Agent,
-  listActiveESP32Agents,
   DEFAULT_AGENT_PROMPTS,
   BEHAVIOR_TO_MAP,
   BEHAVIOR_DESCRIPTIONS,
-  SensorReadings,
   getAgentPrompt,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
@@ -32,17 +23,7 @@ import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { WorldModel, getWorldModel, clearWorldModel } from '@/lib/runtime/world-model';
-import { type CameraCapture } from '@/lib/runtime/camera-capture';
-import { Cpu, ChevronDown, ChevronRight, Plus, Camera, Map, Settings, MessageSquare, Eye, Maximize2, Minimize2 } from 'lucide-react';
-
-interface AgentMessage {
-  id: string;
-  type: 'sensor' | 'llm-request' | 'llm-response' | 'tool-call' | 'tool-result' | 'system' | 'error' | 'camera' | 'world-model';
-  timestamp: number;
-  content: string;
-  data?: any;
-  imageUrl?: string;  // For camera captures
-}
+import { Cpu, ChevronDown, Plus } from 'lucide-react';
 
 interface RobotAgentPanelProps {
   deviceId?: string;
@@ -53,7 +34,6 @@ interface RobotAgentPanelProps {
   onBehaviorChange?: (behavior: string, recommendedMap: string) => void;
   activeVolume?: ArtifactVolume;
   onWorldModelUpdate?: (worldModel: WorldModel) => void;
-  onCaptureScreenshot?: () => CameraCapture | null;
 }
 
 export default function RobotAgentPanel({
@@ -65,70 +45,23 @@ export default function RobotAgentPanel({
   onBehaviorChange,
   activeVolume = 'user',
   onWorldModelUpdate,
-  onCaptureScreenshot,
 }: RobotAgentPanelProps) {
   const [deviceId, setDeviceId] = useState<string | null>(initialDeviceId || null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<ESP32AgentState | null>(null);
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<keyof typeof DEFAULT_AGENT_PROMPTS>('explorer');
   const [customPrompt, setCustomPrompt] = useState('');
   const [agentGoal, setAgentGoal] = useState('');
   const [loopInterval, setLoopInterval] = useState(1000);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
-  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
-  const [showWorldModel, setShowWorldModel] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Accordion panel state - 'controls', 'messages', or 'both'
-  const [activePanel, setActivePanel] = useState<'controls' | 'messages' | 'both'>('both');
-  const [panelHeights, setPanelHeights] = useState({ controls: 300, messages: 400 });
-  const [isResizing, setIsResizing] = useState(false);
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
   const worldModelRef = useRef<WorldModel | null>(null);
-  const iterationCountRef = useRef(0);
-
-  // Toggle message expansion
-  const toggleMessageExpand = useCallback((messageId: string) => {
-    setExpandedMessages(prev => {
-      const next = new Set(prev);
-      if (next.has(messageId)) {
-        next.delete(messageId);
-      } else {
-        next.add(messageId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Truncate long content with expand option
-  const MAX_LINES = 4;
-  const formatMessageContent = useCallback((msg: AgentMessage) => {
-    const lines = msg.content.split('\n');
-    const isLong = lines.length > MAX_LINES || msg.content.length > 300;
-    const isExpanded = expandedMessages.has(msg.id);
-
-    if (!isLong || isExpanded) {
-      return { content: msg.content, isLong, isExpanded };
-    }
-
-    // Truncate to first few lines
-    const truncated = lines.slice(0, MAX_LINES).join('\n');
-    return {
-      content: truncated + (lines.length > MAX_LINES ? '\n...' : ''),
-      isLong,
-      isExpanded
-    };
-  }, [expandedMessages]);
+  const lastUpdateRef = useRef<number>(0);
 
   // Unified robot color
   const ROBOT_COLOR = '#58a6ff';
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   // Notify parent when behavior changes (for map synchronization)
   useEffect(() => {
@@ -138,62 +71,22 @@ export default function RobotAgentPanel({
     }
   }, [selectedPrompt, onBehaviorChange]);
 
-  // Add message to the conversation
-  const addMessage = useCallback((type: AgentMessage['type'], content: string, data?: any, imageUrl?: string) => {
-    const message: AgentMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      timestamp: Date.now(),
-      content,
-      data,
-      imageUrl,
-    };
-    setMessages((prev) => [...prev.slice(-100), message]); // Keep last 100 messages
-  }, []);
-
-  // Capture camera screenshot and add to messages
-  const captureAndShowScreenshot = useCallback(() => {
-    if (onCaptureScreenshot) {
-      const capture = onCaptureScreenshot();
-      if (capture) {
-        addMessage('camera', 'Camera capture from robot view', capture, capture.dataUrl);
-      }
-    }
-  }, [onCaptureScreenshot, addMessage]);
-
-  // Show world model visualization
-  const showWorldModelVisualization = useCallback(() => {
-    if (!deviceId || !worldModelRef.current) return;
-
-    const wm = worldModelRef.current;
-    const manager = getDeviceManager();
-    const state = manager.getDeviceState(deviceId);
-
-    if (state) {
-      // Generate ASCII map
-      const asciiMap = wm.generateASCIIMap(state.robot.pose, 21);
-      const summary = wm.generateCompactSummary(state.robot.pose);
-
-      addMessage('world-model', `${summary}\n${asciiMap}`);
-    }
-  }, [deviceId, addMessage]);
-
   // Create virtual device
   const createDevice = useCallback(async () => {
     try {
       const manager = getDeviceManager();
       const newDeviceId = await manager.createVirtualDevice('AI Robot');
       setDeviceId(newDeviceId);
-      addMessage('system', `Virtual device created: ${newDeviceId}`);
+      console.log('[RobotAgentPanel] Virtual device created:', newDeviceId);
       onDeviceCreated?.(newDeviceId);
 
       // Start the simulation
       await manager.sendCommand(newDeviceId, { type: 'start' });
-      addMessage('system', 'Device simulation started');
+      console.log('[RobotAgentPanel] Device simulation started');
     } catch (error: any) {
-      addMessage('error', `Failed to create device: ${error.message}`);
+      console.error('[RobotAgentPanel] Failed to create device:', error.message);
     }
-  }, [addMessage, onDeviceCreated]);
+  }, [onDeviceCreated]);
 
   // Register robot agent in user volume
   const registerAgentInVolume = useCallback(async (agentId: string, behavior: string, prompt: string, goal?: string) => {
@@ -219,7 +112,7 @@ export default function RobotAgentPanel({
           description: updatedDescription,
           tags: ['robot', 'hardware', behavior],
         });
-        addMessage('system', `Updated existing agent "${agentName}" in ${activeVolume} volume`);
+        console.log(`[RobotAgentPanel] Updated existing agent "${agentName}" in ${activeVolume} volume`);
         return existingAgent.id;
       }
 
@@ -283,18 +176,18 @@ ${prompt}
         tags: ['robot', 'hardware', behavior],
       });
 
-      addMessage('system', `Registered agent "${agentName}" in ${activeVolume} volume`);
+      console.log(`[RobotAgentPanel] Registered agent "${agentName}" in ${activeVolume} volume`);
       return newArtifact?.id;
     } catch (error: any) {
-      addMessage('error', `Failed to register agent: ${error.message}`);
+      console.error('[RobotAgentPanel] Failed to register agent:', error.message);
       return null;
     }
-  }, [activeVolume, selectedAgent, deviceId, loopInterval, addMessage]);
+  }, [activeVolume, selectedAgent, loopInterval]);
 
   // Start the agent
   const startAgent = useCallback(async () => {
     if (!deviceId) {
-      addMessage('error', 'No device selected. Create a virtual device first.');
+      console.error('[RobotAgentPanel] No device selected. Create a virtual device first.');
       return;
     }
 
@@ -305,7 +198,6 @@ ${prompt}
       worldWidth: 500,     // 5m
       worldHeight: 500,    // 5m
     });
-    iterationCountRef.current = 0;
 
     // Notify parent of world model creation
     if (onWorldModelUpdate && worldModelRef.current) {
@@ -316,12 +208,10 @@ ${prompt}
     const prompt = customPrompt || getAgentPrompt(selectedPrompt);
     const newAgentId = `robot-agent-${Date.now()}`;
 
-    addMessage('system', `Starting robot agent with ${selectedPrompt} behavior...`);
-    addMessage('system', `World Model initialized - robot will build understanding of environment`);
+    console.log(`[RobotAgentPanel] Starting robot agent with ${selectedPrompt} behavior...`);
     if (agentGoal) {
-      addMessage('system', `Goal: ${agentGoal}`);
+      console.log(`[RobotAgentPanel] Goal: ${agentGoal}`);
     }
-    addMessage('system', `System prompt:\n${prompt.substring(0, 200)}...`);
 
     try {
       const agent = createESP32Agent({
@@ -333,8 +223,14 @@ ${prompt}
         loopIntervalMs: loopInterval,
         maxIterations: 100,
         onStateChange: (state) => {
+          // Throttle state updates to prevent UI freeze (max 2 updates per second)
+          const now = Date.now();
+          if (now - lastUpdateRef.current < 500) {
+            return;
+          }
+          lastUpdateRef.current = now;
+
           setAgentState(state);
-          iterationCountRef.current = state.iteration;
 
           // Update world model with sensor data
           if (state.lastSensorReading && worldModelRef.current) {
@@ -345,63 +241,21 @@ ${prompt}
               Date.now()
             );
 
-            // Notify parent of world model update
+            // Notify parent of world model update (throttled)
             if (onWorldModelUpdate && worldModelRef.current) {
               onWorldModelUpdate(worldModelRef.current);
             }
           }
 
-          // Log sensor readings
-          if (state.lastSensorReading) {
-            const sensors = state.lastSensorReading;
-            // Create visual line sensor display: ● = on line, ○ = off line
-            const lineVisual = sensors.line.map(v => v > 127 ? '●' : '○').join(' ');
-            const lineStatus = sensors.line.some(v => v > 127) ? 'ON LINE' : 'LOST';
-            addMessage(
-              'sensor',
-              `Line: [${lineVisual}] ${lineStatus} | Dist: F=${sensors.distance.front.toFixed(0)}cm L=${sensors.distance.left.toFixed(0)}cm R=${sensors.distance.right.toFixed(0)}cm`,
-              sensors
-            );
-          }
-
-          // Periodically show world model (every 10 iterations)
-          if (showWorldModel && state.iteration > 0 && state.iteration % 10 === 0 && worldModelRef.current && state.lastSensorReading) {
-            const summary = worldModelRef.current.generateCompactSummary(state.lastSensorReading.pose);
-            addMessage('world-model', summary);
-          }
-
-          // Capture camera screenshot every 5 iterations
-          if (onCaptureScreenshot && state.iteration > 0 && state.iteration % 5 === 0) {
-            const capture = onCaptureScreenshot();
-            if (capture) {
-              addMessage('camera', `Camera view (iteration ${state.iteration})`, capture, capture.dataUrl);
-            }
-          }
-
-          // Log LLM response
-          if (state.lastLLMResponse) {
-            addMessage('llm-response', state.lastLLMResponse);
-          }
-
-          // Log tool calls
-          for (const tc of state.lastToolCalls) {
-            addMessage('tool-call', `Tool: ${tc.tool}`, tc.args);
-            addMessage(
-              'tool-result',
-              tc.result.success ? `Success: ${JSON.stringify(tc.result.data)}` : `Error: ${tc.result.error}`,
-              tc.result
-            );
-          }
-
-          // Log errors
+          // Log errors to console only
           if (state.errors.length > 0) {
             const lastError = state.errors[state.errors.length - 1];
-            addMessage('error', lastError);
+            console.error('[RobotAgentPanel] Agent error:', lastError);
           }
         },
         onLog: (msg, level) => {
           if (level === 'error') {
-            addMessage('error', msg);
+            console.error('[RobotAgentPanel]', msg);
           }
         },
       });
@@ -410,92 +264,25 @@ ${prompt}
       agent.start();
       setAgentId(newAgentId);
       setIsRunning(true);
-      addMessage('system', `Agent started (ID: ${newAgentId})`);
+      console.log(`[RobotAgentPanel] Agent started (ID: ${newAgentId})`);
 
       // Register the agent in user volume
       await registerAgentInVolume(newAgentId, selectedPrompt, prompt, agentGoal || undefined);
     } catch (error: any) {
-      addMessage('error', `Failed to start agent: ${error.message}`);
+      console.error('[RobotAgentPanel] Failed to start agent:', error.message);
     }
-  }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, addMessage, registerAgentInVolume]);
+  }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, onWorldModelUpdate, registerAgentInVolume]);
 
   // Stop the agent
   const stopAgent = useCallback(() => {
     if (agentId) {
       stopESP32Agent(agentId);
-      addMessage('system', 'Agent stopped');
+      console.log('[RobotAgentPanel] Agent stopped');
       setIsRunning(false);
       setAgentId(null);
       agentRef.current = null;
     }
-  }, [agentId, addMessage]);
-
-  // Clear messages
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
-
-  // Format timestamp
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  // Get message style based on type
-  const getMessageStyle = (type: AgentMessage['type']) => {
-    switch (type) {
-      case 'sensor':
-        return 'bg-blue-900/30 border-blue-500/50 text-blue-200';
-      case 'llm-request':
-        return 'bg-purple-900/30 border-purple-500/50 text-purple-200';
-      case 'llm-response':
-        return 'bg-green-900/30 border-green-500/50 text-green-200';
-      case 'tool-call':
-        return 'bg-orange-900/30 border-orange-500/50 text-orange-200';
-      case 'tool-result':
-        return 'bg-yellow-900/30 border-yellow-500/50 text-yellow-200';
-      case 'system':
-        return 'bg-gray-800/50 border-gray-500/50 text-gray-300';
-      case 'error':
-        return 'bg-red-900/30 border-red-500/50 text-red-200';
-      case 'camera':
-        return 'bg-cyan-900/30 border-cyan-500/50 text-cyan-200';
-      case 'world-model':
-        return 'bg-violet-900/30 border-violet-500/50 text-violet-200';
-      default:
-        return 'bg-gray-800/50 border-gray-500/50 text-gray-300';
-    }
-  };
-
-  // Get message icon
-  const getMessageIcon = (type: AgentMessage['type']) => {
-    switch (type) {
-      case 'sensor':
-        return '📡';
-      case 'llm-request':
-        return '🧠';
-      case 'llm-response':
-        return '🤖';
-      case 'tool-call':
-        return '🔧';
-      case 'tool-result':
-        return '✅';
-      case 'system':
-        return 'ℹ️';
-      case 'error':
-        return '❌';
-      case 'camera':
-        return '📷';
-      case 'world-model':
-        return '🗺️';
-      default:
-        return '💬';
-    }
-  };
+  }, [agentId]);
 
   // Generate icon for selected agent
   const selectedAgentIcon = selectedAgent
@@ -503,9 +290,9 @@ ${prompt}
     : null;
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary text-fg-primary">
+    <div className="flex flex-col h-full bg-bg-primary text-fg-primary overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border-primary bg-bg-secondary">
+      <div className="flex items-center justify-between p-3 border-b border-border-primary bg-bg-secondary flex-shrink-0">
         <div className="flex items-center gap-2">
           {selectedAgentIcon ? (
             <img
@@ -536,7 +323,7 @@ ${prompt}
       </div>
 
       {/* Agent Selector */}
-      <div className="p-3 border-b border-border-primary bg-bg-secondary/50">
+      <div className="p-3 border-b border-border-primary bg-bg-secondary/50 flex-shrink-0">
         <div className="relative">
           <button
             onClick={() => setShowAgentSelector(!showAgentSelector)}
@@ -630,35 +417,8 @@ ${prompt}
         </div>
       </div>
 
-      {/* Controls Panel - Collapsible */}
-      <div className={`border-b border-border-primary bg-bg-secondary/50 transition-all duration-200 ${
-        activePanel === 'messages' ? 'flex-shrink-0' : activePanel === 'controls' ? 'flex-1 overflow-hidden' : ''
-      }`}>
-        {/* Panel Header */}
-        <button
-          onClick={() => setActivePanel(activePanel === 'controls' ? 'both' : activePanel === 'messages' ? 'controls' : 'messages')}
-          className="w-full flex items-center justify-between px-3 py-2 bg-[#161b22] hover:bg-[#21262d] transition-colors border-b border-border-primary"
-        >
-          <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-[#58a6ff]" />
-            <span className="text-xs font-semibold text-[#e6edf3]">Controls & Configuration</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {activePanel === 'messages' && (
-              <span className="text-[9px] text-[#8b949e] px-1.5 py-0.5 rounded bg-[#21262d]">Collapsed</span>
-            )}
-            {activePanel === 'controls' ? (
-              <Minimize2 className="w-3.5 h-3.5 text-[#58a6ff]" />
-            ) : (
-              <Maximize2 className="w-3.5 h-3.5 text-[#8b949e]" />
-            )}
-          </div>
-        </button>
-
-        {/* Panel Content */}
-        <div className={`p-3 space-y-3 overflow-y-auto transition-all duration-200 ${
-          activePanel === 'messages' ? 'hidden' : activePanel === 'controls' ? 'flex-1' : 'max-h-[280px]'
-        }`}>
+      {/* Controls Panel - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {/* Device controls */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-fg-secondary w-16">Device:</span>
@@ -683,7 +443,7 @@ ${prompt}
             value={selectedPrompt}
             onChange={(e) => setSelectedPrompt(e.target.value as keyof typeof DEFAULT_AGENT_PROMPTS)}
             disabled={isRunning}
-            className="text-xs bg-bg-tertiary border border-border-primary rounded px-2 py-1"
+            className="text-xs bg-bg-tertiary border border-border-primary rounded px-2 py-1 flex-1"
           >
             <option value="explorer">Explorer (avoid obstacles)</option>
             <option value="wallFollower">Wall Follower (right-hand rule)</option>
@@ -694,7 +454,7 @@ ${prompt}
           </select>
         </div>
 
-        {/* Goal input - allows setting a specific goal for the agent */}
+        {/* Goal input */}
         <div className="flex items-start gap-2">
           <span className="text-xs text-fg-secondary w-16 pt-1">Goal:</span>
           <div className="flex-1 space-y-1">
@@ -707,12 +467,12 @@ ${prompt}
               className="w-full text-xs bg-bg-tertiary border border-border-primary rounded px-2 py-1.5 placeholder:text-fg-secondary/50 focus:border-blue-500 focus:outline-none"
             />
             <p className="text-[10px] text-fg-secondary/70">
-              Optional: Set a specific goal for the AI agent to achieve during simulation
+              Optional: Set a specific goal for the AI agent
             </p>
           </div>
         </div>
 
-        {/* Map indicator - shows which map will be used */}
+        {/* Map indicator */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-fg-secondary w-16">3D World:</span>
           <span className="text-xs px-2 py-1 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300">
@@ -738,65 +498,41 @@ ${prompt}
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap pt-2">
           {!isRunning ? (
             <button
               onClick={startAgent}
               disabled={!deviceId}
-              className="px-4 py-1.5 text-sm bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1"
+              className="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1 font-medium"
             >
               <span>▶</span> Start Agent
             </button>
           ) : (
             <button
               onClick={stopAgent}
-              className="px-4 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded flex items-center gap-1"
+              className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 rounded flex items-center gap-1 font-medium"
             >
               <span>⏹</span> Stop Agent
             </button>
           )}
-          <button
-            onClick={captureAndShowScreenshot}
-            disabled={!isRunning || !onCaptureScreenshot}
-            className="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1"
-            title="Capture camera view"
-          >
-            <Camera className="w-3.5 h-3.5" /> Capture
-          </button>
-          <button
-            onClick={showWorldModelVisualization}
-            disabled={!isRunning || !worldModelRef.current}
-            className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded flex items-center gap-1"
-            title="Show world model"
-          >
-            <Map className="w-3.5 h-3.5" /> World Map
-          </button>
-          <button
-            onClick={clearMessages}
-            className="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 rounded"
-          >
-            Clear Log
-          </button>
         </div>
 
-        {/* World model toggle */}
-        <div className="flex items-center gap-2 pt-1">
-          <label className="flex items-center gap-2 text-xs text-fg-secondary cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showWorldModel}
-              onChange={(e) => setShowWorldModel(e.target.checked)}
-              className="rounded"
-            />
-            Auto-show world model updates (every 10 iterations)
-          </label>
-        </div>
+        {/* Info message about PiP */}
+        <div className="mt-4 p-3 rounded-lg bg-[#161b22] border border-[#30363d]">
+          <p className="text-xs text-[#8b949e]">
+            <span className="text-[#58a6ff] font-medium">Tip:</span> Use the PiP views in the 3D panel to see:
+          </p>
+          <ul className="mt-2 text-xs text-[#8b949e] space-y-1 ml-4">
+            <li>• <span className="text-[#a371f7]">World Model</span> - Robot's cognitive map</li>
+            <li>• <span className="text-[#3fb950]">Robot Camera</span> - First-person view</li>
+            <li>• <span className="text-[#58a6ff]">Top View</span> - Overhead map</li>
+          </ul>
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats bar - Fixed at bottom */}
       {agentState && (
-        <div className="flex items-center gap-4 px-3 py-2 bg-bg-tertiary/50 text-xs border-b border-border-primary">
+        <div className="flex items-center gap-4 px-3 py-2 bg-bg-tertiary/50 text-xs border-t border-border-primary flex-shrink-0">
           <div>
             <span className="text-fg-secondary">Loop:</span>{' '}
             <span className="font-mono">{agentState.stats.avgLoopTimeMs.toFixed(0)}ms</span>
@@ -817,119 +553,6 @@ ${prompt}
           )}
         </div>
       )}
-
-      {/* Messages Panel - Collapsible */}
-      <div className={`flex flex-col transition-all duration-200 ${
-        activePanel === 'controls' ? 'flex-shrink-0' : 'flex-1'
-      }`}>
-        {/* Panel Header */}
-        <button
-          onClick={() => setActivePanel(activePanel === 'messages' ? 'both' : activePanel === 'controls' ? 'messages' : 'controls')}
-          className="w-full flex items-center justify-between px-3 py-2 bg-[#161b22] hover:bg-[#21262d] transition-colors border-b border-border-primary flex-shrink-0"
-        >
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-[#3fb950]" />
-            <span className="text-xs font-semibold text-[#e6edf3]">Agent Messages & World Model</span>
-            {messages.length > 0 && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3fb950]/20 text-[#3fb950]">
-                {messages.length}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {activePanel === 'controls' && (
-              <span className="text-[9px] text-[#8b949e] px-1.5 py-0.5 rounded bg-[#21262d]">Collapsed</span>
-            )}
-            {activePanel === 'messages' ? (
-              <Minimize2 className="w-3.5 h-3.5 text-[#3fb950]" />
-            ) : (
-              <Maximize2 className="w-3.5 h-3.5 text-[#8b949e]" />
-            )}
-          </div>
-        </button>
-
-        {/* Messages Content */}
-        <div className={`overflow-y-auto p-3 space-y-2 transition-all duration-200 ${
-          activePanel === 'controls' ? 'hidden' : 'flex-1'
-        }`}>
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-fg-secondary">
-            <span className="text-4xl mb-4">🤖</span>
-            <p className="text-sm">No messages yet</p>
-            <p className="text-xs mt-2">Create a device and start the agent to see the interaction</p>
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const formatted = formatMessageContent(msg);
-            return (
-              <div
-                key={msg.id}
-                className={`p-2 rounded border ${getMessageStyle(msg.type)}`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className="text-sm">{getMessageIcon(msg.type)}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold uppercase">{msg.type}</span>
-                      <span className="text-xs opacity-60">{formatTime(msg.timestamp)}</span>
-                      {formatted.isLong && (
-                        <button
-                          onClick={() => toggleMessageExpand(msg.id)}
-                          className="text-xs px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                        >
-                          {formatted.isExpanded ? '▲ Collapse' : '▼ Expand'}
-                        </button>
-                      )}
-                    </div>
-                    <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                      {formatted.content}
-                    </pre>
-                    {/* Show image for camera captures */}
-                    {msg.imageUrl && (
-                      <div className="mt-2">
-                        <img
-                          src={msg.imageUrl}
-                          alt="Camera capture"
-                          className="rounded border border-white/20 max-w-full"
-                          style={{ maxHeight: '200px', imageRendering: 'auto' }}
-                        />
-                      </div>
-                    )}
-                    {msg.data && msg.type === 'tool-call' && (
-                      <div className="mt-1 text-xs opacity-80">
-                        Args: {JSON.stringify(msg.data)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="p-2 border-t border-border-primary bg-bg-secondary/50">
-        <div className="flex flex-wrap gap-3 text-xs">
-          <span className="flex items-center gap-1">
-            <span>📡</span> Sensor
-          </span>
-          <span className="flex items-center gap-1">
-            <span>🤖</span> LLM Response
-          </span>
-          <span className="flex items-center gap-1">
-            <span>🔧</span> Tool Call
-          </span>
-          <span className="flex items-center gap-1">
-            <span>📷</span> Camera
-          </span>
-          <span className="flex items-center gap-1">
-            <span>🗺️</span> World Model
-          </span>
-        </div>
-      </div>
     </div>
   );
 }
