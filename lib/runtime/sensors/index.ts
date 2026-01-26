@@ -155,8 +155,24 @@ export class NavigationZoneFormatter implements SensorFormatter {
 
     // Check for imminent collision conditions
     const isCollisionImminent = context.frontDistance < 25;
-    const isCornerTrap = context.frontDistance < 40 && context.leftDistance < 40 && context.rightDistance < 40;
+    // Improved corner detection: check front AND diagonals, with back as escape route
+    const backDist = context.backDistance ?? 200;  // Default to open if no back sensor
+    const isCornerTrap = context.frontDistance < 40 &&
+                         context.leftDistance < 40 &&
+                         context.rightDistance < 40 &&
+                         context.frontLeftDistance < 50 &&
+                         context.frontRightDistance < 50;
+    const canReverseOut = backDist > 60;  // Check if backing up is an option
     const hasBumperContact = sensors.bumper.front || sensors.bumper.back;
+
+    // Determine the most open direction for smart escape
+    const directions = [
+      { name: 'left', distance: context.leftDistance, pivot: 'drive(left=-25, right=25)' },
+      { name: 'right', distance: context.rightDistance, pivot: 'drive(left=25, right=-25)' },
+      { name: 'back-left', distance: (context.leftDistance + backDist) / 2, pivot: 'drive(left=-20, right=30)' },
+      { name: 'back-right', distance: (context.rightDistance + backDist) / 2, pivot: 'drive(left=30, right=-20)' },
+    ];
+    const bestEscape = directions.reduce((a, b) => a.distance > b.distance ? a : b);
 
     // Build imperative action guidance based on urgency level
     let steeringAdvice = '';
@@ -178,11 +194,19 @@ Begin turning now - obstacle is close.`;
       }
     }
 
-    // Add corner trap warning
+    // Add corner trap warning with CONTROLLED rotation values (not aggressive!)
     let cornerWarning = '';
     if (isCornerTrap) {
-      cornerWarning = `\n**⚠️ CORNER DETECTED:** All directions blocked! STOP and ROTATE in place.
-Use: drive(left=-70, right=70) or drive(left=70, right=-70) to rotate toward most open direction.`;
+      if (canReverseOut) {
+        // Prefer backing out over spinning in place
+        cornerWarning = `\n**⚠️ MANDATORY ACTION - CORNER TRAP:** Front blocked! REVERSE first, then turn.
+Step 1: drive(left=-30, right=-30) to back up
+Step 2: ${bestEscape.pivot} to turn toward ${bestEscape.name} (most open: ${bestEscape.distance.toFixed(0)}cm)`;
+      } else {
+        // Must pivot in place - use CONTROLLED values matching behavior philosophy
+        cornerWarning = `\n**⚠️ MANDATORY ACTION - CORNER TRAP:** All directions tight! GENTLE pivot toward ${bestEscape.name}.
+Use: ${bestEscape.pivot} (controlled rotation - DO NOT use aggressive values!)`;
+      }
     }
 
     // Add clear speed guidance

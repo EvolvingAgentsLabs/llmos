@@ -297,6 +297,13 @@ export interface ESP32AgentState {
     reason: string;
     confidence: number;
   } | null;
+  // Stuck detection state
+  stuckDetection: {
+    recentPositions: Array<{ x: number; y: number; rotation: number; timestamp: number }>;
+    stuckCount: number;        // How many iterations we've been stuck
+    lastRecoveryAction: string | null;
+    recoveryAttempts: number;  // How many recovery attempts in current stuck episode
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -343,6 +350,12 @@ export class ESP32AgentRuntime {
       visionEnabled: this.config.visionEnabled,
       lastVisionObservation: null,
       suggestedExplorationDirection: null,
+      stuckDetection: {
+        recentPositions: [],
+        stuckCount: 0,
+        lastRecoveryAction: null,
+        recoveryAttempts: 0,
+      },
     };
 
     // Initialize vision model if enabled
@@ -578,6 +591,22 @@ export class ESP32AgentRuntime {
       this.state.lastSensorReading = sensors;
 
       // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.2: Stuck Detection - Check if robot is making progress
+      // ═══════════════════════════════════════════════════════════════════
+      const stuckRecoveryAction = this.checkAndHandleStuck(sensors);
+      if (stuckRecoveryAction) {
+        // Execute recovery action directly, bypass LLM
+        this.log(`STUCK DETECTED - Executing recovery: ${stuckRecoveryAction}`, 'warn');
+        await this.executeRecoveryAction(stuckRecoveryAction);
+        this.emitStateChange();
+        // Schedule next iteration and return early
+        if (this.state.running) {
+          this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
+        }
+        return;
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
       // STEP 1.5: Process camera vision (if enabled)
       // ═══════════════════════════════════════════════════════════════════
       if (this.config.visionEnabled && this.visionModel && this.worldModel) {
@@ -636,6 +665,217 @@ export class ESP32AgentRuntime {
     if (this.state.running) {
       this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STUCK DETECTION AND RECOVERY
+  // Prevents infinite rotation loops and provides smart escape strategies
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private static readonly STUCK_DETECTION = {
+    POSITION_HISTORY_SIZE: 5,        // Keep last N positions
+    MIN_MOVEMENT_THRESHOLD: 0.05,    // Minimum movement in meters to be considered "moving"
+    MIN_ROTATION_THRESHOLD: 0.15,    // Minimum rotation in radians (~8.5 degrees)
+    STUCK_ITERATIONS_THRESHOLD: 3,   // Consider stuck after N iterations with no progress
+    MAX_RECOVERY_ATTEMPTS: 5,        // Try different strategies before giving up
+  };
+
+  /**
+   * Check if robot is stuck and return a recovery action if needed
+   */
+  private checkAndHandleStuck(sensors: SensorReadings): string | null {
+    const { pose } = sensors;
+    const now = Date.now();
+    const detection = this.state.stuckDetection;
+
+    // Add current position to history
+    detection.recentPositions.push({
+      x: pose.x,
+      y: pose.y,
+      rotation: pose.rotation,
+      timestamp: now,
+    });
+
+    // Keep only recent positions
+    while (detection.recentPositions.length > ESP32AgentRuntime.STUCK_DETECTION.POSITION_HISTORY_SIZE) {
+      detection.recentPositions.shift();
+    }
+
+    // Need enough history to detect being stuck
+    if (detection.recentPositions.length < ESP32AgentRuntime.STUCK_DETECTION.POSITION_HISTORY_SIZE) {
+      return null;
+    }
+
+    // Check if robot has moved significantly
+    const oldest = detection.recentPositions[0];
+    const newest = detection.recentPositions[detection.recentPositions.length - 1];
+
+    const distanceMoved = Math.sqrt(
+      Math.pow(newest.x - oldest.x, 2) + Math.pow(newest.y - oldest.y, 2)
+    );
+
+    // Normalize rotation difference to handle wrap-around
+    let rotationChange = Math.abs(newest.rotation - oldest.rotation);
+    if (rotationChange > Math.PI) rotationChange = 2 * Math.PI - rotationChange;
+
+    const isMoving = distanceMoved > ESP32AgentRuntime.STUCK_DETECTION.MIN_MOVEMENT_THRESHOLD;
+    const isRotatingSignificantly = rotationChange > ESP32AgentRuntime.STUCK_DETECTION.MIN_ROTATION_THRESHOLD;
+
+    // Robot is stuck if it's neither moving nor rotating significantly
+    // (or just rotating in place without progress)
+    const pureRotationStuck = !isMoving && isRotatingSignificantly && detection.stuckCount >= 2;
+    const noProgressStuck = !isMoving && !isRotatingSignificantly;
+
+    if (noProgressStuck || pureRotationStuck) {
+      detection.stuckCount++;
+      this.log(`Stuck detection: count=${detection.stuckCount}, dist=${distanceMoved.toFixed(3)}, rot=${rotationChange.toFixed(2)}`, 'warn');
+
+      if (detection.stuckCount >= ESP32AgentRuntime.STUCK_DETECTION.STUCK_ITERATIONS_THRESHOLD) {
+        // Robot is stuck! Generate a recovery action
+        detection.recoveryAttempts++;
+
+        if (detection.recoveryAttempts > ESP32AgentRuntime.STUCK_DETECTION.MAX_RECOVERY_ATTEMPTS) {
+          // Give up and let LLM figure it out - reset stuck state
+          this.log('Max recovery attempts reached, resetting stuck detection', 'warn');
+          detection.stuckCount = 0;
+          detection.recoveryAttempts = 0;
+          detection.lastRecoveryAction = null;
+          return null;
+        }
+
+        return this.generateRecoveryAction(sensors, detection.recoveryAttempts);
+      }
+    } else {
+      // Robot is making progress - reset stuck detection
+      if (detection.stuckCount > 0) {
+        this.log('Robot making progress, resetting stuck detection', 'info');
+      }
+      detection.stuckCount = 0;
+      detection.recoveryAttempts = 0;
+      detection.lastRecoveryAction = null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate a smart recovery action based on sensor readings
+   */
+  private generateRecoveryAction(sensors: SensorReadings, attempt: number): string {
+    const { distance, bumper } = sensors;
+
+    // Different recovery strategies based on attempt number
+    const strategies = [
+      // Strategy 1: Back up and turn toward most open direction
+      () => {
+        const bestDirection = distance.left > distance.right ? 'left' : 'right';
+        return bestDirection === 'left' ? 'reverse_turn_left' : 'reverse_turn_right';
+      },
+      // Strategy 2: Back up straight
+      () => 'reverse_straight',
+      // Strategy 3: Turn opposite to last attempt
+      () => {
+        if (this.state.stuckDetection.lastRecoveryAction?.includes('left')) {
+          return 'pivot_right';
+        }
+        return 'pivot_left';
+      },
+      // Strategy 4: Random direction turn
+      () => Math.random() > 0.5 ? 'pivot_left' : 'pivot_right',
+      // Strategy 5: Back up and rotate 180 degrees
+      () => 'reverse_180',
+    ];
+
+    const strategyIndex = Math.min(attempt - 1, strategies.length - 1);
+    const action = strategies[strategyIndex]();
+
+    this.state.stuckDetection.lastRecoveryAction = action;
+    return action;
+  }
+
+  /**
+   * Execute a recovery action directly without LLM
+   */
+  private async executeRecoveryAction(action: string): Promise<void> {
+    if (!this.deviceContext) return;
+
+    const { setLeftWheel, setRightWheel } = this.deviceContext;
+
+    // All recovery actions use controlled, gentle values
+    const RECOVERY_SPEED = 35;      // Moderate speed
+    const PIVOT_DIFF = 25;          // Gentle pivot differential
+    const ACTION_DURATION = 500;    // Duration in ms
+
+    switch (action) {
+      case 'reverse_straight':
+        setLeftWheel(-RECOVERY_SPEED);
+        setRightWheel(-RECOVERY_SPEED);
+        await this.sleep(ACTION_DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'reverse_turn_left':
+        // Back up while turning left
+        setLeftWheel(-RECOVERY_SPEED + PIVOT_DIFF);
+        setRightWheel(-RECOVERY_SPEED - PIVOT_DIFF);
+        await this.sleep(ACTION_DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'reverse_turn_right':
+        // Back up while turning right
+        setLeftWheel(-RECOVERY_SPEED - PIVOT_DIFF);
+        setRightWheel(-RECOVERY_SPEED + PIVOT_DIFF);
+        await this.sleep(ACTION_DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'pivot_left':
+        setLeftWheel(-PIVOT_DIFF);
+        setRightWheel(PIVOT_DIFF);
+        await this.sleep(ACTION_DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'pivot_right':
+        setLeftWheel(PIVOT_DIFF);
+        setRightWheel(-PIVOT_DIFF);
+        await this.sleep(ACTION_DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'reverse_180':
+        // Back up
+        setLeftWheel(-RECOVERY_SPEED);
+        setRightWheel(-RECOVERY_SPEED);
+        await this.sleep(ACTION_DURATION);
+        // Then rotate
+        setLeftWheel(-PIVOT_DIFF);
+        setRightWheel(PIVOT_DIFF);
+        await this.sleep(ACTION_DURATION * 2); // Longer rotation
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      default:
+        this.log(`Unknown recovery action: ${action}`, 'error');
+    }
+
+    // Record recovery action in tool calls for visibility
+    this.state.lastToolCalls = [{
+      tool: 'recovery_action',
+      args: { action },
+      result: { success: true, data: { action, duration: ACTION_DURATION } },
+    }];
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
