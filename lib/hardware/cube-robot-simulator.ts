@@ -176,8 +176,6 @@ export interface FloorMap {
 
 export interface CubeRobotConfig {
   physicsRate?: number;      // Physics updates per second (default: 100)
-  collisionAvoidanceEnabled?: boolean;  // Enable automatic collision avoidance (default: true)
-  collisionAvoidanceThreshold?: number; // Distance in cm to trigger avoidance (default: 20)
   onStateChange?: (state: CubeRobotState) => void;
   onCollision?: (position: Vector2D) => void;
   onCheckpoint?: (index: number) => void;
@@ -192,12 +190,6 @@ export interface CubeRobotState {
   led: LEDState;
   battery: BatteryState;
   timestamp: number;
-  // Collision avoidance status
-  collisionAvoidance: {
-    enabled: boolean;
-    threshold: number;       // Distance threshold in cm
-    active: boolean;         // Currently modifying motor commands
-  };
   // Collectibles tracking
   collectibles?: {
     collected: string[];      // IDs of collected items
@@ -242,14 +234,9 @@ export class CubeRobotSimulator {
   private collectedItems: Set<string> = new Set();
   private totalPoints = 0;
 
-  // Collision avoidance state
-  private collisionAvoidanceActive = false;
-
   constructor(config: CubeRobotConfig = {}) {
     this.config = {
       physicsRate: config.physicsRate ?? 100,
-      collisionAvoidanceEnabled: config.collisionAvoidanceEnabled ?? true,
-      collisionAvoidanceThreshold: config.collisionAvoidanceThreshold ?? 20,
       onStateChange: config.onStateChange ?? (() => {}),
       onCollision: config.onCollision ?? (() => {}),
       onCheckpoint: config.onCheckpoint ?? (() => {}),
@@ -421,11 +408,6 @@ export class CubeRobotSimulator {
       led: { ...this.led },
       battery: this.getBatteryState(),
       timestamp: Date.now() - this.startTime,
-      collisionAvoidance: {
-        enabled: this.config.collisionAvoidanceEnabled,
-        threshold: this.config.collisionAvoidanceThreshold,
-        active: this.collisionAvoidanceActive,
-      },
       collectibles: collectibles.length > 0 ? {
         collected: collectedIds,
         remaining: remainingIds,
@@ -453,213 +435,14 @@ export class CubeRobotSimulator {
     return this.running;
   }
 
-  /**
-   * Enable or disable collision avoidance
-   */
-  setCollisionAvoidance(enabled: boolean): void {
-    this.config.collisionAvoidanceEnabled = enabled;
-    console.log(`[CubeRobot] Collision avoidance ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Set collision avoidance threshold (in cm)
-   */
-  setCollisionAvoidanceThreshold(threshold: number): void {
-    this.config.collisionAvoidanceThreshold = Math.max(5, Math.min(100, threshold));
-    console.log(`[CubeRobot] Collision avoidance threshold set to ${this.config.collisionAvoidanceThreshold}cm`);
-  }
-
-  /**
-   * Check if collision avoidance is currently active (modifying motor commands)
-   */
-  isCollisionAvoidanceActive(): boolean {
-    return this.collisionAvoidanceActive;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // COLLISION AVOIDANCE SAFETY LAYER
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Apply collision avoidance to motor commands.
-   * This is a hardware-level safety layer that works independently of the LLM.
-   * It modifies motor commands when the robot is too close to obstacles.
-   */
-  private applyCollisionAvoidance(): { leftPWM: number; rightPWM: number } {
-    const originalLeftPWM = this.motors.leftPWM;
-    const originalRightPWM = this.motors.rightPWM;
-    let leftPWM = originalLeftPWM;
-    let rightPWM = originalRightPWM;
-
-    // Reset active flag
-    this.collisionAvoidanceActive = false;
-
-    if (!this.config.collisionAvoidanceEnabled) {
-      return { leftPWM, rightPWM };
-    }
-
-    // Get current distance readings (in meters, convert to cm)
-    const distances = this.getDistanceSensors();
-    const threshold = this.config.collisionAvoidanceThreshold;
-    const criticalThreshold = threshold * 0.6; // Even more aggressive at 60% of threshold
-
-    // Check if robot is trying to move forward (positive average velocity)
-    const avgPWM = (leftPWM + rightPWM) / 2;
-    const isMovingForward = avgPWM > 0;
-
-    // Check if robot is trying to move backward
-    const isMovingBackward = avgPWM < 0;
-
-    // Front sensors
-    const frontDist = distances.front;
-    const frontLeftDist = distances.frontLeft;
-    const frontRightDist = distances.frontRight;
-    const leftDist = distances.left;
-    const rightDist = distances.right;
-
-    // Back sensors
-    const backDist = distances.back;
-    const backLeftDist = distances.backLeft;
-    const backRightDist = distances.backRight;
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // FORWARD COLLISION AVOIDANCE
-    // ═══════════════════════════════════════════════════════════════════════
-    if (isMovingForward) {
-      // Critical front obstacle - stop and turn
-      if (frontDist < criticalThreshold) {
-        // Stop forward motion completely
-        if (leftDist > rightDist) {
-          // Turn left in place
-          leftPWM = -60;
-          rightPWM = 80;
-        } else {
-          // Turn right in place
-          leftPWM = 80;
-          rightPWM = -60;
-        }
-      }
-      // Front obstacle within threshold - steer away
-      else if (frontDist < threshold) {
-        // Reduce forward speed proportionally to distance
-        const speedFactor = frontDist / threshold;
-
-        // Determine which direction to steer
-        if (leftDist > rightDist) {
-          // Steer left
-          leftPWM = Math.min(leftPWM, leftPWM * speedFactor * 0.3);
-          rightPWM = Math.max(rightPWM * speedFactor, 60);
-        } else {
-          // Steer right
-          leftPWM = Math.max(leftPWM * speedFactor, 60);
-          rightPWM = Math.min(rightPWM, rightPWM * speedFactor * 0.3);
-        }
-      }
-
-      // Front-left obstacle - steer right
-      if (frontLeftDist < threshold && leftPWM > 0) {
-        const steerFactor = frontLeftDist / threshold;
-        // Reduce left wheel speed to turn right
-        leftPWM = Math.max(leftPWM * steerFactor, rightPWM * 0.5);
-      }
-
-      // Front-right obstacle - steer left
-      if (frontRightDist < threshold && rightPWM > 0) {
-        const steerFactor = frontRightDist / threshold;
-        // Reduce right wheel speed to turn left
-        rightPWM = Math.max(rightPWM * steerFactor, leftPWM * 0.5);
-      }
-
-      // Side obstacle avoidance (prevent scraping walls)
-      if (leftDist < threshold * 0.7 && leftPWM > 0) {
-        // Too close to left wall, steer right
-        const steerFactor = leftDist / (threshold * 0.7);
-        leftPWM = Math.max(leftPWM, rightPWM * (1 - steerFactor) + leftPWM * steerFactor);
-      }
-      if (rightDist < threshold * 0.7 && rightPWM > 0) {
-        // Too close to right wall, steer left
-        const steerFactor = rightDist / (threshold * 0.7);
-        rightPWM = Math.max(rightPWM, leftPWM * (1 - steerFactor) + rightPWM * steerFactor);
-      }
-
-      // Corner detection - all front directions blocked
-      if (frontDist < threshold && frontLeftDist < threshold && frontRightDist < threshold) {
-        // Boxed in - need to back out and turn
-        if (backDist > threshold) {
-          // Back out while turning
-          if (leftDist > rightDist) {
-            leftPWM = -40;
-            rightPWM = -80;
-          } else {
-            leftPWM = -80;
-            rightPWM = -40;
-          }
-        } else {
-          // Completely boxed - rotate in place toward most open direction
-          if (leftDist > rightDist) {
-            leftPWM = -70;
-            rightPWM = 70;
-          } else {
-            leftPWM = 70;
-            rightPWM = -70;
-          }
-        }
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // BACKWARD COLLISION AVOIDANCE
-    // ═══════════════════════════════════════════════════════════════════════
-    if (isMovingBackward) {
-      // Back obstacle - stop backward motion
-      if (backDist < threshold) {
-        const speedFactor = backDist / threshold;
-        leftPWM = Math.max(leftPWM, leftPWM * speedFactor);
-        rightPWM = Math.max(rightPWM, rightPWM * speedFactor);
-
-        // If very close, stop completely
-        if (backDist < criticalThreshold) {
-          leftPWM = Math.max(leftPWM, 0);
-          rightPWM = Math.max(rightPWM, 0);
-        }
-      }
-
-      // Back-left obstacle
-      if (backLeftDist < threshold && leftPWM < 0) {
-        const steerFactor = backLeftDist / threshold;
-        leftPWM = Math.max(leftPWM, leftPWM * steerFactor);
-      }
-
-      // Back-right obstacle
-      if (backRightDist < threshold && rightPWM < 0) {
-        const steerFactor = backRightDist / threshold;
-        rightPWM = Math.max(rightPWM, rightPWM * steerFactor);
-      }
-    }
-
-    // Clamp final values
-    leftPWM = Math.max(-255, Math.min(255, leftPWM));
-    rightPWM = Math.max(-255, Math.min(255, rightPWM));
-
-    // Check if we modified the motor commands
-    if (Math.abs(leftPWM - originalLeftPWM) > 1 || Math.abs(rightPWM - originalRightPWM) > 1) {
-      this.collisionAvoidanceActive = true;
-    }
-
-    return { leftPWM, rightPWM };
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
   // PHYSICS SIMULATION
   // ═══════════════════════════════════════════════════════════════════════════
 
   private updatePhysics(dt: number): void {
-    // Apply collision avoidance safety layer to motor commands
-    const safeMotors = this.applyCollisionAvoidance();
-
-    // Convert PWM to wheel velocities (using safety-adjusted values)
-    const leftVel = this.pwmToVelocity(safeMotors.leftPWM);
-    const rightVel = this.pwmToVelocity(safeMotors.rightPWM);
+    // Convert PWM to wheel velocities
+    const leftVel = this.pwmToVelocity(this.motors.leftPWM);
+    const rightVel = this.pwmToVelocity(this.motors.rightPWM);
 
     // Update motor RPM
     this.motors.leftRPM = (leftVel / (2 * Math.PI * ROBOT_SPECS.WHEEL_RADIUS)) * 60;
@@ -679,30 +462,11 @@ export class CubeRobotSimulator {
     this.bumperState = collision;
 
     if (!collision.front && !collision.back) {
-      // No collision - update position and rotation normally
       this.pose.x = newX;
       this.pose.y = newY;
       this.pose.rotation = newRotation;
     } else {
-      // Collision detected - allow rotation but block position change
-      // This allows the robot to turn away from obstacles even when touching them
-      this.pose.rotation = newRotation;
-
-      // Try to allow sliding along walls (partial movement)
-      // Check if we can move in just X or just Y
-      const collisionX = this.checkCollision(newX, this.pose.y);
-      const collisionY = this.checkCollision(this.pose.x, newY);
-
-      if (!collisionX.front && !collisionX.back) {
-        // Can move in X direction
-        this.pose.x = newX;
-      }
-      if (!collisionY.front && !collisionY.back) {
-        // Can move in Y direction
-        this.pose.y = newY;
-      }
-
-      // Notify collision
+      // Collision - notify and stop movement
       this.config.onCollision({ x: newX, y: newY });
     }
 
