@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Play, Pause, RotateCcw, Radio, Wifi, Camera, Maximize2, Settings, Cpu, Bot, Coins, Star, Trophy, Layers, Move, Map, Eye, ChevronDown, Brain } from 'lucide-react';
 import { WorldModel, type CellState } from '@/lib/runtime/world-model';
-import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS } from '@/lib/hardware/cube-robot-simulator';
+import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS, type Collectible } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
 
 // Lazy load 3D canvas for better performance
 const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
@@ -256,7 +259,195 @@ function PiPTopView({
   );
 }
 
-// PiP Robot Camera View Component - Shows robot's first-person perspective
+// First-person camera controller for PiP view
+function FirstPersonCameraController({ robotState }: { robotState: SimulatorState | null }) {
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+
+  useFrame(() => {
+    if (!cameraRef.current || !robotState) return;
+
+    // Position camera at robot's eye level (slightly above the robot)
+    const eyeHeight = 0.08; // Robot cube is 0.08m, camera at top
+    cameraRef.current.position.set(
+      robotState.pose.x,
+      eyeHeight,
+      robotState.pose.y
+    );
+
+    // Calculate look direction based on robot's rotation
+    // Robot rotation is around Y axis, we need to look in that direction
+    const lookDistance = 1;
+    const lookX = robotState.pose.x + Math.sin(robotState.pose.rotation) * lookDistance;
+    const lookZ = robotState.pose.y - Math.cos(robotState.pose.rotation) * lookDistance;
+
+    cameraRef.current.lookAt(lookX, eyeHeight * 0.5, lookZ);
+  });
+
+  return (
+    <PerspectiveCamera
+      ref={cameraRef}
+      makeDefault
+      fov={75}
+      near={0.01}
+      far={50}
+      position={[0, 0.08, 0]}
+    />
+  );
+}
+
+// 3D Floor for PiP view
+function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+
+  const gridLines = useMemo(() => {
+    const lines: JSX.Element[] = [];
+    const step = 0.5;
+
+    for (let x = bounds.minX; x <= bounds.maxX; x += step) {
+      lines.push(
+        <line key={`v${x}`}>
+          <bufferGeometry attach="geometry">
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array([x, 0.001, bounds.minY, x, 0.001, bounds.maxY])}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#58a6ff" : "#30363d"} />
+        </line>
+      );
+    }
+
+    for (let z = bounds.minY; z <= bounds.maxY; z += step) {
+      lines.push(
+        <line key={`h${z}`}>
+          <bufferGeometry attach="geometry">
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array([bounds.minX, 0.001, z, bounds.maxX, 0.001, z])}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#58a6ff" : "#30363d"} />
+        </line>
+      );
+    }
+
+    return lines;
+  }, [bounds]);
+
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[width, height]} />
+        <meshStandardMaterial color="#1a1a2e" metalness={0.3} roughness={0.7} />
+      </mesh>
+      {gridLines}
+    </group>
+  );
+}
+
+// 3D Walls for PiP view
+function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
+  return (
+    <group>
+      {walls.map((wall, idx) => {
+        const dx = wall.x2 - wall.x1;
+        const dy = wall.y2 - wall.y1;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        const centerX = (wall.x1 + wall.x2) / 2;
+        const centerY = (wall.y1 + wall.y2) / 2;
+
+        return (
+          <mesh
+            key={idx}
+            position={[centerX, 0.15, centerY]}
+            rotation={[0, angle, 0]}
+            castShadow
+          >
+            <boxGeometry args={[length, 0.3, 0.05]} />
+            <meshStandardMaterial
+              color="#4a9eff"
+              emissive="#4a9eff"
+              emissiveIntensity={0.15}
+              metalness={0.3}
+              roughness={0.4}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 3D Obstacles for PiP view
+function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
+  return (
+    <group>
+      {obstacles.map((obstacle, idx) => (
+        <mesh
+          key={idx}
+          position={[obstacle.x, obstacle.radius / 2, obstacle.y]}
+          castShadow
+          receiveShadow
+        >
+          <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
+          <meshStandardMaterial
+            color="#f85149"
+            metalness={0.5}
+            roughness={0.5}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// 3D Collectibles for PiP view (simplified version)
+function PiPCollectibles({ collectibles, collectedIds }: { collectibles: Collectible[]; collectedIds: string[] }) {
+  const visibleCollectibles = collectibles.filter(c => !collectedIds.includes(c.id));
+
+  return (
+    <group>
+      {visibleCollectibles.map((collectible) => {
+        const color = collectible.color || '#FFD700';
+        const height = collectible.type === 'coin' ? 0.02 : collectible.radius;
+
+        return (
+          <group key={collectible.id}>
+            <mesh position={[collectible.x, height, collectible.y]} castShadow>
+              {collectible.type === 'coin' ? (
+                <cylinderGeometry args={[collectible.radius, collectible.radius, 0.015, 16]} />
+              ) : collectible.type === 'gem' ? (
+                <octahedronGeometry args={[collectible.radius]} />
+              ) : (
+                <sphereGeometry args={[collectible.radius, 16, 16]} />
+              )}
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={0.4}
+                metalness={collectible.type === 'coin' ? 0.8 : 0.3}
+                roughness={collectible.type === 'gem' ? 0.1 : 0.3}
+              />
+            </mesh>
+            {/* Glow effect underneath */}
+            <mesh position={[collectible.x, 0.005, collectible.y]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[collectible.radius * 1.5, 16]} />
+              <meshBasicMaterial color={color} transparent opacity={0.2} />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+// PiP Robot Camera View Component - Shows robot's first-person perspective using Three.js
 function PiPRobotCamera({
   robotState,
   floorMap,
@@ -268,8 +459,6 @@ function PiPRobotCamera({
   position: PiPConfig['position'];
   size: PiPConfig['size'];
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
   // Size mapping
   const sizeMap = {
     small: { width: 120, height: 90 },
@@ -286,165 +475,7 @@ function PiPRobotCamera({
     'bottom-right': 'bottom-16 right-4',
   };
 
-  // Render robot's POV on canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Background - simulate robot's "vision"
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#1a1a2e');
-    gradient.addColorStop(0.5, '#16213e');
-    gradient.addColorStop(1, '#0f3460');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    if (!robotState) {
-      // No robot data
-      ctx.fillStyle = '#8b949e';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('No robot data', width / 2, height / 2);
-      return;
-    }
-
-    const pose = robotState.pose;
-    const rotation = pose.rotation;
-
-    // Draw floor grid from robot's perspective
-    ctx.strokeStyle = '#30363d';
-    ctx.lineWidth = 0.5;
-    const horizonY = height * 0.4;
-
-    // Perspective floor lines
-    for (let i = 0; i <= 10; i++) {
-      const x = (i / 10) * width;
-      ctx.beginPath();
-      ctx.moveTo(width / 2, horizonY);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
-    // Horizontal floor lines
-    for (let i = 0; i < 5; i++) {
-      const y = horizonY + ((height - horizonY) * (i + 1)) / 5;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-
-    // Calculate what's in front of the robot
-    const viewDistance = 2.5; // meters
-    const fov = Math.PI / 2; // 90 degrees field of view
-
-    // Check for walls/obstacles in view
-    const obstacles: Array<{ angle: number; distance: number; type: string }> = [];
-
-    // Check walls
-    floorMap.walls.forEach(wall => {
-      // Calculate distance and angle to wall from robot
-      const midX = (wall.x1 + wall.x2) / 2;
-      const midY = (wall.y1 + wall.y2) / 2;
-      const dx = midX - pose.x;
-      const dy = midY - pose.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dx, -dy) - rotation;
-
-      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
-        obstacles.push({ angle, distance, type: 'wall' });
-      }
-    });
-
-    // Check obstacles
-    floorMap.obstacles?.forEach(obs => {
-      const dx = obs.x - pose.x;
-      const dy = obs.y - pose.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dx, -dy) - rotation;
-
-      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
-        obstacles.push({ angle, distance, type: 'obstacle' });
-      }
-    });
-
-    // Draw obstacles in view
-    obstacles.forEach(obs => {
-      const screenX = width / 2 + (obs.angle / (fov / 2)) * (width / 2);
-      const screenSize = Math.max(10, 50 * (1 - obs.distance / viewDistance));
-      const screenY = horizonY + (height - horizonY) * (1 - obs.distance / viewDistance) * 0.8;
-
-      if (obs.type === 'wall') {
-        ctx.fillStyle = '#58a6ff';
-        ctx.fillRect(screenX - screenSize / 2, screenY - screenSize, screenSize, screenSize * 2);
-      } else {
-        ctx.fillStyle = '#f85149';
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, screenSize / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    // Check collectibles
-    floorMap.collectibles?.forEach(col => {
-      if (robotState?.collectibles?.collected.includes(col.id)) return;
-      const dx = col.x - pose.x;
-      const dy = col.y - pose.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dx, -dy) - rotation;
-
-      if (distance < viewDistance && Math.abs(angle) < fov / 2) {
-        const screenX = width / 2 + (angle / (fov / 2)) * (width / 2);
-        const screenSize = Math.max(8, 30 * (1 - distance / viewDistance));
-        const screenY = horizonY + (height - horizonY) * (1 - distance / viewDistance) * 0.8;
-
-        // Draw collectible as glowing star
-        ctx.fillStyle = col.color || '#FFD700';
-        ctx.beginPath();
-        for (let i = 0; i < 5; i++) {
-          const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-          const r = i % 2 === 0 ? screenSize : screenSize / 2;
-          const x = screenX + Math.cos(angle) * r;
-          const y = screenY + Math.sin(angle) * r;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fill();
-      }
-    });
-
-    // Draw distance readings overlay
-    const sensors = ['F', 'L', 'R'];
-    const sensorColors = ['#3fb950', '#58a6ff', '#a371f7'];
-    ctx.font = '9px monospace';
-    sensors.forEach((label, i) => {
-      ctx.fillStyle = sensorColors[i];
-      ctx.textAlign = 'left';
-      ctx.fillText(`${label}:`, 4, 12 + i * 10);
-    });
-
-    // Draw HUD overlay
-    ctx.strokeStyle = '#58a6ff';
-    ctx.lineWidth = 1;
-
-    // Crosshair
-    ctx.beginPath();
-    ctx.moveTo(width / 2 - 10, horizonY);
-    ctx.lineTo(width / 2 + 10, horizonY);
-    ctx.moveTo(width / 2, horizonY - 10);
-    ctx.lineTo(width / 2, horizonY + 10);
-    ctx.stroke();
-
-    // Border
-    ctx.strokeStyle = '#30363d';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, width, height);
-
-  }, [robotState, floorMap, width, height]);
+  const collectedIds = robotState?.collectibles?.collected || [];
 
   return (
     <div
@@ -459,14 +490,40 @@ function PiPRobotCamera({
         <Move className="w-3 h-3 text-[#6e7681] opacity-0 group-hover:opacity-100 transition-opacity cursor-move" />
       </div>
 
-      {/* Canvas */}
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        className="block"
-        style={{ imageRendering: 'auto' }}
-      />
+      {/* 3D Canvas - First Person View */}
+      <div style={{ width, height }}>
+        {robotState ? (
+          <Canvas
+            gl={{ antialias: true, alpha: false }}
+            dpr={[1, 1.5]}
+            style={{ width, height }}
+          >
+            {/* First-person camera following robot */}
+            <FirstPersonCameraController robotState={robotState} />
+
+            {/* Lighting */}
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
+            <pointLight position={[-5, 5, -5]} intensity={0.3} />
+
+            {/* Scene elements (same as main view but without robot) */}
+            <PiPFloor bounds={floorMap.bounds} />
+            <PiPWalls walls={floorMap.walls} />
+            {floorMap.obstacles && <PiPObstacles obstacles={floorMap.obstacles} />}
+            {floorMap.collectibles && floorMap.collectibles.length > 0 && (
+              <PiPCollectibles collectibles={floorMap.collectibles} collectedIds={collectedIds} />
+            )}
+
+            {/* Background and fog */}
+            <color attach="background" args={['#0d1117']} />
+            <fog attach="fog" args={['#0d1117', 2, 8]} />
+          </Canvas>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-[#1a1a2e] to-[#0f3460]">
+            <span className="text-[10px] text-[#8b949e]">No robot data</span>
+          </div>
+        )}
+      </div>
 
       {/* Rotation indicator */}
       {robotState && (
