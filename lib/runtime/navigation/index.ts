@@ -70,9 +70,10 @@ export interface NavigationConfig {
 }
 
 export const DEFAULT_NAVIGATION_CONFIG: NavigationConfig = {
-  openThreshold: 100,
-  awareThreshold: 50,
-  cautionThreshold: 30,
+  // Increased thresholds to give more reaction time
+  openThreshold: 120,      // Was 100cm - now 120cm for earlier awareness
+  awareThreshold: 70,      // Was 50cm - now 70cm to start planning earlier
+  cautionThreshold: 40,    // Was 30cm - now 40cm to commit to turns earlier
 
   openSpeed: { min: 150, max: 200 },
   awareSpeed: { min: 100, max: 150 },
