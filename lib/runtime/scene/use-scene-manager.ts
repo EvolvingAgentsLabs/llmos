@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * React Hooks for SceneManager Integration
  *
@@ -5,7 +7,7 @@
  * Handles synchronization between SceneManager state and React rendering.
  */
 
-import { useEffect, useRef, useMemo, createContext, useContext, type ReactNode } from 'react';
+import React, { useEffect, useRef, useMemo, createContext, useContext, type ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
