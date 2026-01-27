@@ -129,12 +129,16 @@ function RobotCube({
   state,
   agentActivity,
   isSelected,
-  onClick
+  onClick,
+  rayNavigation,
+  showRayVisualization,
 }: {
   state: SimulatorState | null;
   agentActivity?: AgentActivity;
   isSelected: boolean;
   onClick: () => void;
+  rayNavigation?: PathExplorationResult | null;
+  showRayVisualization?: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const cubeRef = useRef<THREE.Mesh>(null);
@@ -298,6 +302,313 @@ function RobotCube({
           <ringGeometry args={[0.05, 0.053, 32]} />
           <meshBasicMaterial color="#3fb950" transparent opacity={0.6} side={THREE.DoubleSide} />
         </mesh>
+      )}
+
+      {/* LOCAL Ray Visualization - attached to robot as child, uses local coordinates */}
+      {showRayVisualization && state && (
+        <LocalRayVisualization rayNavigation={rayNavigation} velocity={state.velocity} motors={state.motors} />
+      )}
+    </group>
+  );
+}
+
+// Local ray visualization - renders rays in robot's local coordinate system
+// As a child of the robot group, rays automatically move and rotate with the robot
+function LocalRayVisualization({
+  rayNavigation,
+  velocity,
+  motors,
+}: {
+  rayNavigation?: PathExplorationResult | null;
+  velocity: { linear: number; angular: number };
+  motors: { leftPWM: number; rightPWM: number; leftRPM: number; rightRPM: number };
+}) {
+  const frontArrowRef = useRef<THREE.Mesh>(null);
+  const predictedArrowRef = useRef<THREE.Mesh>(null);
+  const bestPathRef = useRef<THREE.Mesh>(null);
+
+  // Animate the visualization
+  useFrame((state) => {
+    if (bestPathRef.current) {
+      const scale = 1.0 + Math.sin(state.clock.elapsedTime * 4) * 0.15;
+      bestPathRef.current.scale.set(scale, 1, scale);
+    }
+    if (frontArrowRef.current) {
+      const intensity = 0.8 + Math.sin(state.clock.elapsedTime * 2) * 0.2;
+      (frontArrowRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity;
+    }
+    if (predictedArrowRef.current) {
+      const intensity = 0.6 + Math.sin(state.clock.elapsedTime * 3) * 0.3;
+      (predictedArrowRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity;
+    }
+  });
+
+  const rayHeight = 0.05; // Height above ground for ray visualization
+  const maxRayLength = 2.0; // Max visualization length in meters
+
+  // In LOCAL coordinates: robot is at origin, +Z is forward
+  const linearVel = velocity.linear;
+  const angularVel = velocity.angular;
+  const predictedLength = Math.abs(linearVel) > 0.001 ? 0.3 : 0;
+
+  const rayFan = rayNavigation?.rayFan;
+  const prediction = rayNavigation?.prediction;
+  const recommendedSteering = rayNavigation?.recommendedSteering;
+
+  return (
+    <group>
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* FRONT DIRECTION VECTOR - Cyan arrow (LOCAL: points in +Z direction) */}
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      <group position={[0, rayHeight + 0.02, 0]}>
+        {/* Arrow shaft pointing forward (+Z) */}
+        <mesh position={[0, 0, 0.12]}>
+          <boxGeometry args={[0.015, 0.008, 0.2]} />
+          <meshStandardMaterial
+            color="#00ffff"
+            emissive="#00ffff"
+            emissiveIntensity={0.6}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+        {/* Arrow head */}
+        <mesh
+          ref={frontArrowRef}
+          position={[0, 0, 0.25]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <coneGeometry args={[0.025, 0.06, 8]} />
+          <meshStandardMaterial
+            color="#00ffff"
+            emissive="#00ffff"
+            emissiveIntensity={0.8}
+            transparent
+            opacity={0.95}
+          />
+        </mesh>
+        {/* "FRONT" label ring */}
+        <mesh position={[0, 0, 0.28]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.03, 0.04, 16]} />
+          <meshBasicMaterial color="#00ffff" transparent opacity={0.6} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* PREDICTED MOVEMENT VECTOR - Yellow/orange arrow showing actual movement */}
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {predictedLength > 0 && (
+        <group position={[0, rayHeight + 0.04, 0]}>
+          {/* Predicted direction arrow shaft */}
+          <mesh position={[0, 0, linearVel > 0 ? 0.08 : -0.08]}>
+            <boxGeometry args={[0.012, 0.006, predictedLength * 0.6]} />
+            <meshStandardMaterial
+              color={linearVel > 0 ? '#ffaa00' : '#ff6600'}
+              emissive={linearVel > 0 ? '#ffaa00' : '#ff6600'}
+              emissiveIntensity={0.5}
+              transparent
+              opacity={0.85}
+            />
+          </mesh>
+          {/* Predicted direction arrow head */}
+          <mesh
+            ref={predictedArrowRef}
+            position={[0, 0, linearVel > 0 ? 0.18 : -0.18]}
+            rotation={[linearVel > 0 ? Math.PI / 2 : -Math.PI / 2, 0, 0]}
+          >
+            <coneGeometry args={[0.02, 0.05, 6]} />
+            <meshStandardMaterial
+              color={linearVel > 0 ? '#ffaa00' : '#ff6600'}
+              emissive={linearVel > 0 ? '#ffaa00' : '#ff6600'}
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* ANGULAR VELOCITY INDICATOR - Shows turning direction */}
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {Math.abs(angularVel) > 0.05 && (
+        <group position={[0, rayHeight + 0.06, 0]}>
+          {/* Curved arrow indicating rotation direction - flat on XZ plane */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.06, 0.008, 8, 16, Math.PI * 0.7]} />
+            <meshStandardMaterial
+              color={angularVel > 0 ? '#00ff88' : '#ff8800'}
+              emissive={angularVel > 0 ? '#00ff88' : '#ff8800'}
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+          {/* Arrow tip on torus */}
+          <mesh
+            position={[
+              Math.cos(angularVel > 0 ? Math.PI * 0.35 : -Math.PI * 0.35) * 0.06,
+              0,
+              Math.sin(angularVel > 0 ? Math.PI * 0.35 : -Math.PI * 0.35) * 0.06
+            ]}
+            rotation={[0, angularVel > 0 ? -Math.PI * 0.15 : Math.PI * 0.15, -Math.PI / 2]}
+          >
+            <coneGeometry args={[0.015, 0.03, 6]} />
+            <meshStandardMaterial
+              color={angularVel > 0 ? '#00ff88' : '#ff8800'}
+              emissive={angularVel > 0 ? '#00ff88' : '#ff8800'}
+              emissiveIntensity={0.7}
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* RAY FAN VISUALIZATION - Distance sensor rays (LOCAL coordinates) */}
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {rayFan && rayFan.rays.map((ray, idx) => {
+        const rayLength = Math.min(ray.distance / 100, maxRayLength); // Convert cm to m
+        // LOCAL coordinates: use ray.angle directly (relative to robot front)
+        // Robot faces +Z, so sin gives X offset, cos gives Z offset
+        const endX = Math.sin(ray.angle) * rayLength;
+        const endZ = Math.cos(ray.angle) * rayLength;
+
+        // Color based on clearance: green = clear, red = blocked, yellow = close
+        let color = '#3fb950'; // Green - clear
+        if (!ray.clear) {
+          color = '#f85149'; // Red - blocked
+        } else if (ray.distance < 50) {
+          color = '#d29922'; // Yellow - caution
+        }
+
+        const points = new Float32Array([
+          0, rayHeight, 0,           // Start at robot center (local origin)
+          endX, rayHeight, endZ      // End at ray endpoint
+        ]);
+
+        return (
+          <line key={`ray-${idx}`}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                count={2}
+                array={points}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={color}
+              transparent
+              opacity={ray.clear ? 0.6 : 0.8}
+              linewidth={ray.clear ? 1 : 2}
+            />
+          </line>
+        );
+      })}
+
+      {/* Best path indicator - cone pointing in best direction (LOCAL) */}
+      {rayFan && rayFan.bestPath && (
+        <group
+          position={[
+            Math.sin(rayFan.bestPath.centerAngle) * 0.15,
+            rayHeight + 0.02,
+            Math.cos(rayFan.bestPath.centerAngle) * 0.15
+          ]}
+          rotation={[Math.PI / 2, 0, -rayFan.bestPath.centerAngle]}
+        >
+          <mesh ref={bestPathRef}>
+            <coneGeometry args={[0.03, 0.08, 8]} />
+            <meshStandardMaterial
+              color="#58a6ff"
+              emissive="#58a6ff"
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* Alternative paths visualization (dimmer) - LOCAL coordinates */}
+      {rayFan && rayFan.alternativePaths.slice(0, 2).map((path, idx) => {
+        const pathLength = Math.min(path.clearance / 100, maxRayLength * 0.7);
+        const endX = Math.sin(path.centerAngle) * pathLength;
+        const endZ = Math.cos(path.centerAngle) * pathLength;
+
+        return (
+          <line key={`alt-path-${idx}`}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                count={2}
+                array={new Float32Array([
+                  0, rayHeight - 0.01, 0,
+                  endX, rayHeight - 0.01, endZ
+                ])}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color="#a371f7"
+              transparent
+              opacity={0.3}
+            />
+          </line>
+        );
+      })}
+
+      {/* Steering direction indicator */}
+      {recommendedSteering && Math.abs(recommendedSteering.leftMotor - recommendedSteering.rightMotor) > 5 && (
+        <mesh
+          position={[0, rayHeight + 0.08, 0]}
+          rotation={[
+            0,
+            recommendedSteering.leftMotor > recommendedSteering.rightMotor ? Math.PI / 4 : -Math.PI / 4,
+            0
+          ]}
+        >
+          <boxGeometry args={[0.02, 0.01, 0.04]} />
+          <meshBasicMaterial
+            color={recommendedSteering.leftMotor > recommendedSteering.rightMotor ? '#3fb950' : '#58a6ff'}
+            transparent
+            opacity={0.8}
+          />
+        </mesh>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* WHEEL VELOCITY INDICATORS - Show wheel speeds */}
+      {/* ═══════════════════════════════════════════════════════════════════════════ */}
+      {(motors.leftPWM !== 0 || motors.rightPWM !== 0) && (
+        <group position={[0, 0.02, 0]}>
+          {/* Left wheel velocity bar */}
+          <mesh position={[-0.06, 0, 0]}>
+            <boxGeometry args={[0.015, 0.005, Math.abs(motors.leftPWM) / 255 * 0.1 + 0.01]} />
+            <meshStandardMaterial
+              color={motors.leftPWM >= 0 ? '#00ff00' : '#ff0000'}
+              emissive={motors.leftPWM >= 0 ? '#00ff00' : '#ff0000'}
+              emissiveIntensity={0.5}
+            />
+          </mesh>
+          {/* Right wheel velocity bar */}
+          <mesh position={[0.06, 0, 0]}>
+            <boxGeometry args={[0.015, 0.005, Math.abs(motors.rightPWM) / 255 * 0.1 + 0.01]} />
+            <meshStandardMaterial
+              color={motors.rightPWM >= 0 ? '#00ff00' : '#ff0000'}
+              emissive={motors.rightPWM >= 0 ? '#00ff00' : '#ff0000'}
+              emissiveIntensity={0.5}
+            />
+          </mesh>
+          {/* Labels */}
+          <mesh position={[-0.06, 0.015, 0]}>
+            <sphereGeometry args={[0.008, 8, 8]} />
+            <meshBasicMaterial color="#888888" />
+          </mesh>
+          <mesh position={[0.06, 0.015, 0]}>
+            <sphereGeometry args={[0.008, 8, 8]} />
+            <meshBasicMaterial color="#888888" />
+          </mesh>
+        </group>
       )}
     </group>
   );
@@ -1037,395 +1348,6 @@ function PlanningAnimation({ agentActivity, robotState }: { agentActivity?: Agen
   );
 }
 
-// Ray navigation visualization - shows ray fan, predicted trajectory, and best path
-function RayVisualization({
-  rayNavigation,
-  robotState,
-}: {
-  rayNavigation: PathExplorationResult | null;
-  robotState: SimulatorState | null;
-}) {
-  const groupRef = useRef<THREE.Group>(null);
-  const bestPathRef = useRef<THREE.Mesh>(null);
-  const frontArrowRef = useRef<THREE.Mesh>(null);
-  const predictedArrowRef = useRef<THREE.Mesh>(null);
-
-  // Animate the visualization
-  useFrame((state) => {
-    // Pulse effect for best path indicator
-    if (bestPathRef.current) {
-      const scale = 1.0 + Math.sin(state.clock.elapsedTime * 4) * 0.15;
-      bestPathRef.current.scale.set(scale, 1, scale);
-    }
-    // Subtle pulse for front arrow
-    if (frontArrowRef.current) {
-      const intensity = 0.8 + Math.sin(state.clock.elapsedTime * 2) * 0.2;
-      (frontArrowRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity;
-    }
-    // Pulse for predicted direction arrow
-    if (predictedArrowRef.current) {
-      const intensity = 0.6 + Math.sin(state.clock.elapsedTime * 3) * 0.3;
-      (predictedArrowRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity;
-    }
-  });
-
-  if (!robotState) return null;
-
-  const robotX = robotState.pose.x;
-  const robotY = robotState.pose.y;
-  const robotRotation = robotState.pose.rotation;
-  const rayHeight = 0.05; // Height above ground for ray visualization
-
-  // Calculate front direction vector (where robot is facing)
-  // In physics: forward is +Y at rotation=0, using sin for X, cos for Y
-  // In Three.js: Y maps to Z, so forward is +Z
-  const frontDirX = Math.sin(robotRotation);
-  const frontDirZ = Math.cos(robotRotation);
-
-  // Calculate predicted movement direction based on wheel velocities
-  // This shows where the robot will actually move based on differential drive
-  const linearVel = robotState.velocity.linear;
-  const angularVel = robotState.velocity.angular;
-
-  // Predicted direction accounts for both linear and angular velocity
-  // For visualization, show the instantaneous direction of travel
-  const predictedDirX = Math.sin(robotRotation) * linearVel;
-  const predictedDirZ = Math.cos(robotRotation) * linearVel;
-  const predictedLength = Math.abs(linearVel) > 0.001 ? 0.3 : 0;
-
-  // Convert ray distances from cm to meters
-  const maxRayLength = 2.0; // Max visualization length in meters
-
-  // Get ray navigation data if available
-  const rayFan = rayNavigation?.rayFan;
-  const prediction = rayNavigation?.prediction;
-  const recommendedSteering = rayNavigation?.recommendedSteering;
-
-  return (
-    <group ref={groupRef}>
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* FRONT DIRECTION VECTOR - Cyan arrow showing where robot is facing */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      <group
-        position={[robotX, rayHeight + 0.02, robotY]}
-        rotation={[0, -robotRotation, 0]}
-      >
-        {/* Arrow shaft */}
-        <mesh position={[0, 0, 0.12]}>
-          <boxGeometry args={[0.015, 0.008, 0.2]} />
-          <meshStandardMaterial
-            color="#00ffff"
-            emissive="#00ffff"
-            emissiveIntensity={0.6}
-            transparent
-            opacity={0.9}
-          />
-        </mesh>
-        {/* Arrow head */}
-        <mesh
-          ref={frontArrowRef}
-          position={[0, 0, 0.25]}
-          rotation={[Math.PI / 2, 0, 0]}
-        >
-          <coneGeometry args={[0.025, 0.06, 8]} />
-          <meshStandardMaterial
-            color="#00ffff"
-            emissive="#00ffff"
-            emissiveIntensity={0.8}
-            transparent
-            opacity={0.95}
-          />
-        </mesh>
-        {/* "FRONT" label ring */}
-        <mesh position={[0, 0, 0.28]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.03, 0.04, 16]} />
-          <meshBasicMaterial color="#00ffff" transparent opacity={0.6} side={THREE.DoubleSide} />
-        </mesh>
-      </group>
-
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* PREDICTED MOVEMENT VECTOR - Yellow/orange arrow showing actual movement */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {predictedLength > 0 && (
-        <group
-          position={[robotX, rayHeight + 0.04, robotY]}
-          rotation={[0, -robotRotation, 0]}
-        >
-          {/* Predicted direction arrow shaft */}
-          <mesh position={[0, 0, linearVel > 0 ? 0.08 : -0.08]}>
-            <boxGeometry args={[0.012, 0.006, predictedLength * 0.6]} />
-            <meshStandardMaterial
-              color={linearVel > 0 ? '#ffaa00' : '#ff6600'}
-              emissive={linearVel > 0 ? '#ffaa00' : '#ff6600'}
-              emissiveIntensity={0.5}
-              transparent
-              opacity={0.85}
-            />
-          </mesh>
-          {/* Predicted direction arrow head */}
-          <mesh
-            ref={predictedArrowRef}
-            position={[0, 0, linearVel > 0 ? 0.18 : -0.18]}
-            rotation={[linearVel > 0 ? Math.PI / 2 : -Math.PI / 2, 0, 0]}
-          >
-            <coneGeometry args={[0.02, 0.05, 6]} />
-            <meshStandardMaterial
-              color={linearVel > 0 ? '#ffaa00' : '#ff6600'}
-              emissive={linearVel > 0 ? '#ffaa00' : '#ff6600'}
-              emissiveIntensity={0.6}
-              transparent
-              opacity={0.9}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* ANGULAR VELOCITY INDICATOR - Shows turning direction */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {Math.abs(angularVel) > 0.05 && (
-        <group position={[robotX, rayHeight + 0.06, robotY]}>
-          {/* Curved arrow indicating rotation direction */}
-          <mesh rotation={[-Math.PI / 2, 0, -robotRotation]}>
-            <torusGeometry args={[0.06, 0.008, 8, 16, Math.PI * 0.7]} />
-            <meshStandardMaterial
-              color={angularVel > 0 ? '#00ff88' : '#ff8800'}
-              emissive={angularVel > 0 ? '#00ff88' : '#ff8800'}
-              emissiveIntensity={0.6}
-              transparent
-              opacity={0.8}
-            />
-          </mesh>
-          {/* Arrow tip on torus */}
-          <mesh
-            position={[
-              Math.cos(angularVel > 0 ? Math.PI * 0.35 : -Math.PI * 0.35) * 0.06,
-              0,
-              Math.sin(angularVel > 0 ? Math.PI * 0.35 : -Math.PI * 0.35) * 0.06
-            ]}
-            rotation={[0, angularVel > 0 ? -Math.PI * 0.15 : Math.PI * 0.15 - robotRotation, -Math.PI / 2]}
-          >
-            <coneGeometry args={[0.015, 0.03, 6]} />
-            <meshStandardMaterial
-              color={angularVel > 0 ? '#00ff88' : '#ff8800'}
-              emissive={angularVel > 0 ? '#00ff88' : '#ff8800'}
-              emissiveIntensity={0.7}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* RAY FAN VISUALIZATION - Distance sensor rays */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {rayFan && rayFan.rays.map((ray, idx) => {
-        const rayLength = Math.min(ray.distance / 100, maxRayLength); // Convert cm to m
-        const worldAngle = robotRotation + ray.angle;
-
-        // Calculate end point - FIXED: Use + for Z component (forward is +Y in physics, +Z in 3D)
-        const endX = robotX + Math.sin(worldAngle) * rayLength;
-        const endZ = robotY + Math.cos(worldAngle) * rayLength;
-
-        // Color based on clearance: green = clear, red = blocked, yellow = close
-        let color = '#3fb950'; // Green - clear
-        if (!ray.clear) {
-          color = '#f85149'; // Red - blocked
-        } else if (ray.distance < 50) {
-          color = '#d29922'; // Yellow - caution
-        }
-
-        const points = new Float32Array([
-          robotX, rayHeight, robotY,
-          endX, rayHeight, endZ
-        ]);
-
-        return (
-          <line key={`ray-${idx}`}>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={2}
-                array={points}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial
-              color={color}
-              transparent
-              opacity={ray.clear ? 0.6 : 0.8}
-              linewidth={ray.clear ? 1 : 2}
-            />
-          </line>
-        );
-      })}
-
-      {/* Best path indicator - cone pointing in best direction */}
-      {rayFan && rayFan.bestPath && (
-        <group
-          position={[
-            robotX + Math.sin(robotRotation + rayFan.bestPath.centerAngle) * 0.15,
-            rayHeight + 0.02,
-            robotY + Math.cos(robotRotation + rayFan.bestPath.centerAngle) * 0.15
-          ]}
-          rotation={[Math.PI / 2, 0, -(robotRotation + rayFan.bestPath.centerAngle)]}
-        >
-          <mesh ref={bestPathRef}>
-            <coneGeometry args={[0.03, 0.08, 8]} />
-            <meshStandardMaterial
-              color="#58a6ff"
-              emissive="#58a6ff"
-              emissiveIntensity={0.8}
-              transparent
-              opacity={0.9}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* TRAJECTORY PREDICTION - Collision warning */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {prediction && prediction.collisionPredicted && prediction.collisionPoint && (
-        <>
-          {/* Trajectory line to collision point */}
-          <line>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={2}
-                array={new Float32Array([
-                  robotX, rayHeight + 0.01, robotY,
-                  prediction.collisionPoint.x, rayHeight + 0.01, prediction.collisionPoint.y
-                ])}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial
-              color={
-                prediction.urgency === 'critical' ? '#f85149' :
-                prediction.urgency === 'high' ? '#d29922' :
-                '#ffa500'
-              }
-              transparent
-              opacity={0.8}
-            />
-          </line>
-
-          {/* Collision point marker - pulsing sphere */}
-          <mesh position={[prediction.collisionPoint.x, rayHeight + 0.03, prediction.collisionPoint.y]}>
-            <sphereGeometry args={[0.03, 16, 16]} />
-            <meshStandardMaterial
-              color={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
-              emissive={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
-              emissiveIntensity={1}
-              transparent
-              opacity={0.9}
-            />
-          </mesh>
-
-          {/* Warning ring around collision point */}
-          <mesh
-            position={[prediction.collisionPoint.x, 0.01, prediction.collisionPoint.y]}
-            rotation={[-Math.PI / 2, 0, 0]}
-          >
-            <ringGeometry args={[0.05, 0.08, 16]} />
-            <meshBasicMaterial
-              color={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
-              transparent
-              opacity={0.6}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        </>
-      )}
-
-      {/* Alternative paths visualization (dimmer) */}
-      {rayFan && rayFan.alternativePaths.slice(0, 2).map((path, idx) => {
-        const pathLength = Math.min(path.clearance / 100, maxRayLength * 0.7);
-        const worldAngle = robotRotation + path.centerAngle;
-        // FIXED: Use + for Z component
-        const endX = robotX + Math.sin(worldAngle) * pathLength;
-        const endZ = robotY + Math.cos(worldAngle) * pathLength;
-
-        return (
-          <line key={`alt-path-${idx}`}>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={2}
-                array={new Float32Array([
-                  robotX, rayHeight - 0.01, robotY,
-                  endX, rayHeight - 0.01, endZ
-                ])}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial
-              color="#a371f7"
-              transparent
-              opacity={0.3}
-            />
-          </line>
-        );
-      })}
-
-      {/* Steering direction indicator - shows which way robot will turn */}
-      {recommendedSteering && Math.abs(recommendedSteering.leftMotor - recommendedSteering.rightMotor) > 5 && (
-        <mesh
-          position={[robotX, rayHeight + 0.08, robotY]}
-          rotation={[
-            0,
-            -robotRotation + (recommendedSteering.leftMotor > recommendedSteering.rightMotor ? Math.PI / 4 : -Math.PI / 4),
-            0
-          ]}
-        >
-          <boxGeometry args={[0.02, 0.01, 0.04]} />
-          <meshBasicMaterial
-            color={recommendedSteering.leftMotor > recommendedSteering.rightMotor ? '#3fb950' : '#58a6ff'}
-            transparent
-            opacity={0.8}
-          />
-        </mesh>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {/* WHEEL VELOCITY INDICATORS - Show wheel speeds */}
-      {/* ═══════════════════════════════════════════════════════════════════════════ */}
-      {(robotState.motors.leftPWM !== 0 || robotState.motors.rightPWM !== 0) && (
-        <group position={[robotX, 0.02, robotY]} rotation={[0, -robotRotation, 0]}>
-          {/* Left wheel velocity bar */}
-          <mesh position={[-0.06, 0, 0]}>
-            <boxGeometry args={[0.015, 0.005, Math.abs(robotState.motors.leftPWM) / 255 * 0.1 + 0.01]} />
-            <meshStandardMaterial
-              color={robotState.motors.leftPWM >= 0 ? '#00ff00' : '#ff0000'}
-              emissive={robotState.motors.leftPWM >= 0 ? '#00ff00' : '#ff0000'}
-              emissiveIntensity={0.5}
-            />
-          </mesh>
-          {/* Right wheel velocity bar */}
-          <mesh position={[0.06, 0, 0]}>
-            <boxGeometry args={[0.015, 0.005, Math.abs(robotState.motors.rightPWM) / 255 * 0.1 + 0.01]} />
-            <meshStandardMaterial
-              color={robotState.motors.rightPWM >= 0 ? '#00ff00' : '#ff0000'}
-              emissive={robotState.motors.rightPWM >= 0 ? '#00ff00' : '#ff0000'}
-              emissiveIntensity={0.5}
-            />
-          </mesh>
-          {/* Labels */}
-          <mesh position={[-0.06, 0.015, 0]}>
-            <sphereGeometry args={[0.008, 8, 8]} />
-            <meshBasicMaterial color="#888888" />
-          </mesh>
-          <mesh position={[0.06, 0.015, 0]}>
-            <sphereGeometry args={[0.008, 8, 8]} />
-            <meshBasicMaterial color="#888888" />
-          </mesh>
-        </group>
-      )}
-    </group>
-  );
-}
-
 // Camera controller that responds to preset changes and allows OrbitControls
 function CameraController({
   preset,
@@ -1801,15 +1723,12 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
           agentActivity={agentActivity}
           isSelected={selectedType.type === 'robot'}
           onClick={handleRobotClick}
+          rayNavigation={rayNavigation}
+          showRayVisualization={showRayVisualization}
         />
 
         {/* Planning animation */}
         <PlanningAnimation agentActivity={agentActivity} robotState={robotState} />
-
-        {/* Ray navigation visualization - always show direction vectors when enabled */}
-        {showRayVisualization && (
-          <RayVisualization rayNavigation={rayNavigation} robotState={robotState} />
-        )}
 
         {/* Mouse controls - enabled for all views */}
         <OrbitControls
