@@ -154,13 +154,16 @@ export class NavigationCalculator {
     const { leftMotor, rightMotor, reason } = rayAnalysis.recommendedSteering;
 
     // Determine best path from ray analysis
-    const bestPath = rayAnalysis.rayFan.bestPath.direction.toUpperCase() as 'LEFT' | 'FORWARD' | 'RIGHT';
+    const direction = rayAnalysis.rayFan.bestPath.direction;
+    const bestPath: 'LEFT' | 'FORWARD' | 'RIGHT' =
+      direction === 'center' ? 'FORWARD' :
+      direction === 'left' ? 'LEFT' : 'RIGHT';
 
     return {
       zone,
       zoneEmoji,
       suggestedAction: reason,
-      bestPath: bestPath === 'CENTER' ? 'FORWARD' : bestPath,
+      bestPath,
       recommendedSpeed: this.getSpeedRange(zone),
       steeringRecommendation: {
         type: this.getSteeringType(rayAnalysis),
