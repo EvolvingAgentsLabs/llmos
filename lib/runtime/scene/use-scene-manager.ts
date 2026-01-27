@@ -5,8 +5,9 @@
  * Handles synchronization between SceneManager state and React rendering.
  */
 
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useMemo, createContext, useContext, type ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 import {
   SceneManager,
   SceneNode,
@@ -125,7 +126,7 @@ export function useSceneSync(
     // Update visual component (LED color)
     const visual = robot.getComponent<VisualComponent>('visual');
     if (visual && robotState.led) {
-      visual.color = `rgb(${robotState.led.r}, ${robotState.led.g}, ${robotState.led.b})`;
+      visual.setLedRGB(robotState.led.r, robotState.led.g, robotState.led.b);
     }
   }, [robotState, sceneManager]);
 
@@ -153,6 +154,17 @@ export function useSceneSync(
         nav.collisionPredicted = rayNavigation.prediction.collisionPredicted;
         nav.timeToCollision = rayNavigation.prediction.timeToCollision;
         nav.recommendedSteering = { ...rayNavigation.recommendedSteering };
+
+        // Set collision point if predicted
+        if (rayNavigation.prediction.collisionPoint) {
+          nav.collisionPoint = new THREE.Vector3(
+            rayNavigation.prediction.collisionPoint.x,
+            0,
+            rayNavigation.prediction.collisionPoint.y
+          );
+        } else {
+          nav.collisionPoint = null;
+        }
       }
     }
   }, [rayNavigation, sceneManager]);
@@ -172,16 +184,30 @@ export function useSceneSync(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK: useRobotNode
-// Get robot node with automatic updates
+// Get robot node state for rendering
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface RobotNodeState {
-  transform: Transform;
-  velocity: { linear: number; angular: number };
+  // Transform (world space)
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  scale: THREE.Vector3;
+
+  // Derived directions
+  forward: THREE.Vector3;
+  right: THREE.Vector3;
+
+  // Physics
+  linearVelocity: number;
+  angularVelocity: number;
   motors: { leftPWM: number; rightPWM: number; leftRPM: number; rightRPM: number };
+
+  // Navigation
   rays: RayData[];
   bestPathAngle: number;
+  bestPathDirection: THREE.Vector3;
   collisionPredicted: boolean;
+  collisionPoint: THREE.Vector3 | null;
 }
 
 export function useRobotNode(sceneManager: SceneManager): RobotNodeState | null {
@@ -197,17 +223,22 @@ export function useRobotNode(sceneManager: SceneManager): RobotNodeState | null 
 
     const physics = robot.getComponent<PhysicsComponent>('physics');
     const nav = robot.getComponent<NavigationComponent>('navigation');
+    const world = robot.worldTransform;
 
     stateRef.current = {
-      transform: robot.worldTransform,
-      velocity: {
-        linear: physics?.linearVelocity2D ?? 0,
-        angular: physics?.angularVelocity2D ?? 0,
-      },
+      position: world.position.clone(),
+      quaternion: world.quaternion.clone(),
+      scale: world.scale.clone(),
+      forward: robot.getForwardDirection(),
+      right: robot.getRightDirection(),
+      linearVelocity: physics?.linearVelocity2D ?? 0,
+      angularVelocity: physics?.angularVelocity2D ?? 0,
       motors: physics?.motors ?? { leftPWM: 0, rightPWM: 0, leftRPM: 0, rightRPM: 0 },
       rays: nav?.rays ?? [],
       bestPathAngle: nav?.bestPathAngle ?? 0,
+      bestPathDirection: nav?.bestPathDirection.clone() ?? new THREE.Vector3(0, 0, 1),
       collisionPredicted: nav?.collisionPredicted ?? false,
+      collisionPoint: nav?.collisionPoint?.clone() ?? null,
     };
   });
 
@@ -219,14 +250,18 @@ export function useRobotNode(sceneManager: SceneManager): RobotNodeState | null 
 // Get a node's transform for Three.js components
 // ═══════════════════════════════════════════════════════════════════════════
 
+export interface NodeTransform {
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  scale: [number, number, number];
+  matrix: THREE.Matrix4;
+}
+
 export function useNodeTransform(
   sceneManager: SceneManager,
   nodeId: string
-): { position: [number, number, number]; rotation: [number, number, number] } | null {
-  const transformRef = useRef<{
-    position: [number, number, number];
-    rotation: [number, number, number];
-  } | null>(null);
+): NodeTransform | null {
+  const transformRef = useRef<NodeTransform | null>(null);
 
   useFrame(() => {
     const node = sceneManager.getNode(nodeId);
@@ -238,7 +273,9 @@ export function useNodeTransform(
     const t = node.worldTransform;
     transformRef.current = {
       position: [t.position.x, t.position.y, t.position.z],
-      rotation: [t.rotation.x, t.rotation.y, t.rotation.z],
+      quaternion: [t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w],
+      scale: [t.scale.x, t.scale.y, t.scale.z],
+      matrix: node.worldMatrix.clone(),
     };
   });
 
@@ -247,12 +284,12 @@ export function useNodeTransform(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK: useSceneNodes
-// Get all nodes of a type with transforms
+// Get all nodes of a type
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function useSceneNodes(
   sceneManager: SceneManager,
-  type: 'obstacle' | 'wall' | 'collectible'
+  type: 'obstacle' | 'wall' | 'collectible' | 'waypoint'
 ): SceneNode[] {
   return useMemo(() => {
     return sceneManager.getNodesByType(type);
@@ -260,11 +297,60 @@ export function useSceneNodes(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENT HELPER: SceneManagerProvider
-// Context for sharing SceneManager across components
+// HOOK: useSceneUpdate
+// Trigger scene manager update each frame
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { createContext, useContext, type ReactNode } from 'react';
+export function useSceneUpdate(sceneManager: SceneManager): void {
+  useFrame((_, delta) => {
+    sceneManager.update(delta);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HOOK: useSyncThreeObject
+// Sync a Three.js object to a scene node
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function useSyncThreeObject(
+  sceneManager: SceneManager,
+  nodeId: string,
+  threeObject: THREE.Object3D | null
+): void {
+  useEffect(() => {
+    if (!threeObject) return;
+
+    const node = sceneManager.getNode(nodeId);
+    if (!node) return;
+
+    const visual = node.getComponent<VisualComponent>('visual');
+    if (visual) {
+      visual.threeObject = threeObject;
+    }
+
+    return () => {
+      if (visual) {
+        visual.threeObject = null;
+      }
+    };
+  }, [sceneManager, nodeId, threeObject]);
+
+  // Sync transform each frame
+  useFrame(() => {
+    const node = sceneManager.getNode(nodeId);
+    if (!node || !threeObject) return;
+
+    const world = node.worldTransform;
+    threeObject.position.copy(world.position);
+    threeObject.quaternion.copy(world.quaternion);
+    threeObject.scale.copy(world.scale);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTEXT: SceneManagerProvider
+// Share SceneManager across components
+// ═══════════════════════════════════════════════════════════════════════════
 
 const SceneManagerContext = createContext<SceneManager | null>(null);
 
@@ -290,4 +376,40 @@ export function useSceneManagerContext(): SceneManager {
     throw new Error('useSceneManagerContext must be used within SceneManagerProvider');
   }
   return context;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UTILITY: Convert between coordinate systems
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert physics coordinates (X, Y, rotation) to Three.js transform
+ */
+export function physicsToThreeJS(
+  x: number,
+  y: number,
+  rotation: number
+): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  return {
+    position: new THREE.Vector3(x, 0, y),
+    quaternion: new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      -rotation
+    ),
+  };
+}
+
+/**
+ * Convert Three.js transform to physics coordinates
+ */
+export function threeJSToPhysics(
+  position: THREE.Vector3,
+  quaternion: THREE.Quaternion
+): { x: number; y: number; rotation: number } {
+  const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
+  return {
+    x: position.x,
+    y: position.z,
+    rotation: -euler.y,
+  };
 }
