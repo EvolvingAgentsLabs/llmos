@@ -13,6 +13,12 @@ import {
   LineFollowingContext,
   defaultNavigationCalculator,
   defaultLinePositionDetector,
+  RayNavigationSystem,
+  PathExplorationResult,
+  RayFan,
+  TrajectoryPrediction,
+  UltrasoundReading,
+  createRayNavigationSystem,
 } from '../navigation';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -337,6 +343,252 @@ export class BatteryFormatter implements SensorFormatter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// RAY NAVIGATION FORMATTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class RayNavigationFormatter implements SensorFormatter {
+  private rayNavSystem: RayNavigationSystem;
+  private lastPose: { x: number; y: number; rotation: number } = { x: 0, y: 0, rotation: 0 };
+  private lastVelocity: { linear: number; angular: number } = { linear: 0, angular: 0 };
+
+  constructor(config?: Partial<import('../navigation/ray-navigation').RayNavigationConfig>) {
+    this.rayNavSystem = createRayNavigationSystem(config);
+  }
+
+  getSectionTitle(): string {
+    return 'Ray Navigation Analysis';
+  }
+
+  /**
+   * Update pose and velocity for trajectory prediction
+   */
+  updatePoseAndVelocity(
+    pose: { x: number; y: number; rotation: number },
+    velocity: { linear: number; angular: number }
+  ): void {
+    this.lastPose = pose;
+    this.lastVelocity = velocity;
+  }
+
+  format(sensors: SensorReadings, context?: FormatContext): string {
+    // Update pose from sensor data
+    if (sensors.pose) {
+      this.lastPose = sensors.pose;
+    }
+
+    // Build sensor distances
+    const sensorDistances = {
+      front: sensors.distance.front,
+      frontLeft: sensors.distance.frontLeft,
+      frontRight: sensors.distance.frontRight,
+      left: sensors.distance.left,
+      right: sensors.distance.right,
+      back: sensors.distance.back,
+      backLeft: sensors.distance.backLeft,
+      backRight: sensors.distance.backRight,
+    };
+
+    // Compute ray navigation
+    const result = this.rayNavSystem.computeNavigation(
+      sensorDistances,
+      this.lastPose,
+      this.lastVelocity
+    );
+
+    return this.formatResult(result);
+  }
+
+  /**
+   * Format the ray navigation result for LLM context
+   */
+  private formatResult(result: PathExplorationResult): string {
+    const { rayFan, prediction, ultrasound, recommendedSteering, explorationScore } = result;
+
+    let output = '\n## RAY-BASED PATH ANALYSIS\n';
+
+    // Ray fan visualization (simplified ASCII)
+    output += this.formatRayFanVisualization(rayFan);
+
+    // Best path info
+    const bestPath = rayFan.bestPath;
+    output += `\n**Best Path:** ${bestPath.direction.toUpperCase()}`;
+    output += ` | Clearance: ${bestPath.clearance.toFixed(0)}cm`;
+    output += ` | Width: ${(bestPath.width * 180 / Math.PI).toFixed(0)}°`;
+    output += ` | Score: ${(bestPath.score * 100).toFixed(0)}%\n`;
+
+    // Alternative paths
+    if (rayFan.alternativePaths.length > 0) {
+      output += '**Alternatives:** ';
+      output += rayFan.alternativePaths.map(p =>
+        `${p.direction}(${p.clearance.toFixed(0)}cm)`
+      ).join(', ');
+      output += '\n';
+    }
+
+    // Trajectory prediction
+    output += this.formatPrediction(prediction);
+
+    // Ultrasound reading
+    output += this.formatUltrasound(ultrasound);
+
+    // Recommended action
+    output += `\n**🎯 RECOMMENDED ACTION:** ${recommendedSteering.reason}`;
+    output += `\n→ drive(left=${recommendedSteering.leftMotor}, right=${recommendedSteering.rightMotor})`;
+
+    // Exploration score
+    output += `\n\n**Exploration Score:** ${(explorationScore * 100).toFixed(0)}%`;
+
+    return output;
+  }
+
+  /**
+   * Create ASCII visualization of ray fan
+   */
+  private formatRayFanVisualization(rayFan: RayFan): string {
+    const rays = rayFan.rays;
+    const maxDist = 200;
+
+    // Create a simple bar visualization
+    let viz = '\n**Ray Fan (180°):**\n```\n';
+
+    // Group rays into 5 sectors for compact display
+    const sectors = ['LEFT', 'FL', 'FRONT', 'FR', 'RIGHT'];
+    const sectorSize = Math.ceil(rays.length / 5);
+
+    for (let s = 0; s < 5; s++) {
+      const sectorRays = rays.slice(s * sectorSize, (s + 1) * sectorSize);
+      const avgDist = sectorRays.reduce((sum, r) => sum + r.distance, 0) / sectorRays.length;
+      const clearCount = sectorRays.filter(r => r.clear).length;
+      const allClear = clearCount === sectorRays.length;
+
+      // Bar length proportional to distance (max 10 chars)
+      const barLen = Math.round((avgDist / maxDist) * 10);
+      const bar = (allClear ? '█' : '▓').repeat(barLen) + '░'.repeat(10 - barLen);
+      const marker = allClear ? '✓' : '✗';
+
+      viz += `${sectors[s].padEnd(6)} ${bar} ${avgDist.toFixed(0).padStart(3)}cm ${marker}\n`;
+    }
+
+    viz += '```\n';
+    return viz;
+  }
+
+  /**
+   * Format trajectory prediction
+   */
+  private formatPrediction(prediction: TrajectoryPrediction): string {
+    if (!prediction.collisionPredicted) {
+      return '\n**Trajectory:** ✓ Clear path ahead\n';
+    }
+
+    const urgencyEmojis: Record<string, string> = {
+      low: '🟢',
+      medium: '🟡',
+      high: '🟠',
+      critical: '🔴',
+    };
+
+    let output = `\n**⚠️ COLLISION PREDICTED:** ${urgencyEmojis[prediction.urgency]} ${prediction.urgency.toUpperCase()}\n`;
+    output += `- Time to collision: ${prediction.timeToCollision.toFixed(1)}s\n`;
+    output += `- Recommended: ${prediction.recommendedAction.replace('_', ' ')}\n`;
+
+    return output;
+  }
+
+  /**
+   * Format ultrasound reading
+   */
+  private formatUltrasound(ultrasound: UltrasoundReading): string {
+    const confidenceBar = '█'.repeat(Math.round(ultrasound.confidence * 5)) +
+                          '░'.repeat(5 - Math.round(ultrasound.confidence * 5));
+
+    return `\n**Ultrasound:** ${ultrasound.distance.toFixed(0)}cm [${confidenceBar}] ` +
+           `(confidence: ${(ultrasound.confidence * 100).toFixed(0)}%)\n`;
+  }
+
+  /**
+   * Get the raw ray navigation result (for programmatic access)
+   */
+  getNavigationResult(sensors: SensorReadings): PathExplorationResult {
+    if (sensors.pose) {
+      this.lastPose = sensors.pose;
+    }
+
+    const sensorDistances = {
+      front: sensors.distance.front,
+      frontLeft: sensors.distance.frontLeft,
+      frontRight: sensors.distance.frontRight,
+      left: sensors.distance.left,
+      right: sensors.distance.right,
+      back: sensors.distance.back,
+      backLeft: sensors.distance.backLeft,
+      backRight: sensors.distance.backRight,
+    };
+
+    return this.rayNavSystem.computeNavigation(
+      sensorDistances,
+      this.lastPose,
+      this.lastVelocity
+    );
+  }
+
+  /**
+   * Get the underlying ray navigation system
+   */
+  getRayNavigationSystem(): RayNavigationSystem {
+    return this.rayNavSystem;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ULTRASOUND SENSOR FORMATTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class UltrasoundFormatter implements SensorFormatter {
+  private maxRange: number;
+
+  constructor(maxRange: number = 400) {
+    this.maxRange = maxRange;
+  }
+
+  getSectionTitle(): string {
+    return 'Ultrasound Sensor';
+  }
+
+  format(sensors: SensorReadings): string {
+    // Compute synthetic ultrasound from front sensors
+    const frontSensors = [
+      sensors.distance.front,
+      sensors.distance.frontLeft,
+      sensors.distance.frontRight,
+    ];
+
+    // Weighted average (center-biased for ultrasound cone)
+    const weights = [0.6, 0.2, 0.2];
+    let weightedDist = 0;
+    for (let i = 0; i < frontSensors.length; i++) {
+      weightedDist += frontSensors[i] * weights[i];
+    }
+
+    const minDist = Math.min(...frontSensors);
+    const variance = frontSensors.reduce((sum, d) => sum + Math.pow(d - weightedDist, 2), 0) / 3;
+    const confidence = Math.max(0, 1 - (weightedDist / this.maxRange) - (variance / 2000));
+
+    // Only show if there's something interesting
+    if (minDist > 150) {
+      return ''; // Skip if far from obstacles
+    }
+
+    const signalStrength = Math.max(0, 1 - (minDist / 100));
+    const signalBar = '▓'.repeat(Math.round(signalStrength * 5)) +
+                      '░'.repeat(5 - Math.round(signalStrength * 5));
+
+    return `**🔊 Ultrasound:** ${minDist.toFixed(0)}cm [${signalBar}] ` +
+           `(echo: ${(signalStrength * 100).toFixed(0)}%)`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPOSITE FORMATTER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -395,6 +647,21 @@ export function createExplorerFormatter(): CompositeSensorFormatter {
 }
 
 /**
+ * Create advanced formatter for Explorer with ray-based navigation
+ * This provides much better path exploration and collision avoidance
+ */
+export function createRayExplorerFormatter(): CompositeSensorFormatter {
+  return new CompositeSensorFormatter([
+    new DistanceSensorFormatter({ includeAllSensors: true, includeDiagonals: true }),
+    new RayNavigationFormatter(),
+    new UltrasoundFormatter(),
+    new PositionFormatter(),
+    new BumperFormatter(),
+    new BatteryFormatter(),
+  ]);
+}
+
+/**
  * Create formatter for Line Follower behavior
  */
 export function createLineFollowerFormatter(): CompositeSensorFormatter {
@@ -436,7 +703,7 @@ export function createCollectorFormatter(): CompositeSensorFormatter {
 // INSTRUCTION SUFFIX GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type BehaviorType = 'explorer' | 'lineFollower' | 'wallFollower' | 'collector' | 'patroller' | 'gemHunter';
+export type BehaviorType = 'explorer' | 'lineFollower' | 'wallFollower' | 'collector' | 'patroller' | 'gemHunter' | 'rayExplorer';
 
 /**
  * Generate appropriate action instruction suffix based on behavior type
@@ -445,6 +712,18 @@ export function getActionInstruction(behaviorType?: BehaviorType): string {
   switch (behaviorType) {
     case 'lineFollower':
       return 'Decide your action based on the line status above.';
+    case 'rayExplorer':
+      return `**🎯 RAY-BASED NAVIGATION PROTOCOL:**
+1. LOOK at the RAY FAN visualization - it shows clear paths (✓) vs blocked (✗)
+2. CHECK the "Best Path" recommendation - this is computed from 15 rays analyzing your surroundings
+3. READ the TRAJECTORY PREDICTION:
+   - If "Clear path ahead": Follow the recommended action
+   - If "COLLISION PREDICTED": Execute the avoidance action IMMEDIATELY
+4. FOLLOW the "🎯 RECOMMENDED ACTION" - this drive() command is pre-computed for optimal navigation
+5. The ULTRASOUND sensor provides precise forward distance - trust its readings
+
+**CRITICAL:** The ray system has already analyzed all paths. Trust its recommendation!
+Output the suggested drive() command unless you have a specific reason to deviate.`;
     case 'explorer':
       return `**⚡ IMMEDIATE ACTION REQUIRED:**
 1. Check for ⚠️ MANDATORY ACTION or 🔴 REQUIRED ACTION warnings above
@@ -471,10 +750,20 @@ export function getActionInstruction(behaviorType?: BehaviorType): string {
 export {
   NavigationCalculator,
   LinePositionDetector,
+  RayNavigationSystem,
+  createRayNavigationSystem,
+  getRayNavigationSystem,
 } from '../navigation';
 
 export type {
   NavigationContext,
   NavigationDecision,
   LineFollowingContext,
+  RayFan,
+  Ray,
+  RayPath,
+  TrajectoryPrediction,
+  UltrasoundReading,
+  PathExplorationResult,
+  RayNavigationConfig,
 } from '../navigation';

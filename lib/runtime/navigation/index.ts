@@ -6,7 +6,13 @@
  * - Path recommendation
  * - Speed control based on distance
  * - Trajectory planning utilities
+ * - Ray-based path exploration
+ * - Predictive collision avoidance
+ * - Ultrasound sensor support
  */
+
+// Re-export ray navigation system
+export * from './ray-navigation';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES AND INTERFACES
@@ -91,9 +97,110 @@ export const DEFAULT_NAVIGATION_CONFIG: NavigationConfig = {
 
 export class NavigationCalculator {
   private config: NavigationConfig;
+  private rayNavSystem: import('./ray-navigation').RayNavigationSystem | null = null;
 
   constructor(config: Partial<NavigationConfig> = {}) {
     this.config = { ...DEFAULT_NAVIGATION_CONFIG, ...config };
+  }
+
+  /**
+   * Get or create ray navigation system for advanced path exploration
+   */
+  getRayNavigationSystem(): import('./ray-navigation').RayNavigationSystem {
+    if (!this.rayNavSystem) {
+      const { createRayNavigationSystem } = require('./ray-navigation');
+      this.rayNavSystem = createRayNavigationSystem({
+        maxSpeed: this.config.openSpeed.max,
+        minSpeed: this.config.criticalSpeed.max,
+        clearanceThreshold: this.config.cautionThreshold,
+      });
+    }
+    return this.rayNavSystem!;
+  }
+
+  /**
+   * Advanced navigation using ray-based path exploration
+   * This is the preferred method for intelligent navigation
+   */
+  getAdvancedNavigation(
+    context: NavigationContext & { backLeft?: number; backRight?: number },
+    robotPose: { x: number; y: number; rotation: number },
+    velocity: { linear: number; angular: number } = { linear: 0, angular: 0 }
+  ): NavigationDecision & {
+    rayAnalysis: import('./ray-navigation').PathExplorationResult;
+  } {
+    const rayNav = this.getRayNavigationSystem();
+
+    // Build sensor distances object
+    const sensorDistances = {
+      front: context.frontDistance,
+      frontLeft: context.frontLeftDistance,
+      frontRight: context.frontRightDistance,
+      left: context.leftDistance,
+      right: context.rightDistance,
+      back: context.backDistance ?? 200,
+      backLeft: context.backLeft ?? 200,
+      backRight: context.backRight ?? 200,
+    };
+
+    // Compute ray-based navigation
+    const rayAnalysis = rayNav.computeNavigation(sensorDistances, robotPose, velocity);
+
+    // Get basic zone info
+    const zone = this.calculateZone(context.frontDistance);
+    const zoneEmoji = this.getZoneEmoji(zone);
+
+    // Use ray analysis for steering recommendation
+    const { leftMotor, rightMotor, reason } = rayAnalysis.recommendedSteering;
+
+    // Determine best path from ray analysis
+    const direction = rayAnalysis.rayFan.bestPath.direction;
+    const bestPath: 'LEFT' | 'FORWARD' | 'RIGHT' =
+      direction === 'center' ? 'FORWARD' :
+      direction === 'left' ? 'LEFT' : 'RIGHT';
+
+    return {
+      zone,
+      zoneEmoji,
+      suggestedAction: reason,
+      bestPath,
+      recommendedSpeed: this.getSpeedRange(zone),
+      steeringRecommendation: {
+        type: this.getSteeringType(rayAnalysis),
+        direction: rayAnalysis.rayFan.bestPath.direction === 'center' ? 'none' : rayAnalysis.rayFan.bestPath.direction,
+        leftMotor,
+        rightMotor,
+      },
+      rayAnalysis,
+    };
+  }
+
+  /**
+   * Determine steering type from ray analysis
+   */
+  private getSteeringType(
+    rayAnalysis: import('./ray-navigation').PathExplorationResult
+  ): SteeringRecommendation['type'] {
+    const { prediction, rayFan } = rayAnalysis;
+
+    if (prediction.urgency === 'critical') {
+      return 'pivot';
+    }
+    if (prediction.urgency === 'high') {
+      return 'sharp_turn';
+    }
+
+    const angleAbs = Math.abs(rayFan.bestPath.centerAngle);
+    if (angleAbs < Math.PI / 12) {
+      return 'straight';
+    }
+    if (angleAbs < Math.PI / 6) {
+      return 'gentle_curve';
+    }
+    if (angleAbs < Math.PI / 3) {
+      return 'moderate_turn';
+    }
+    return 'sharp_turn';
   }
 
   /**
