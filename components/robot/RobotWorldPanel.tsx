@@ -10,6 +10,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { cameraCaptureManager } from '@/lib/runtime/camera-capture';
+import { getRayNavigationSystem, type PathExplorationResult } from '@/lib/runtime/navigation/ray-navigation';
 
 // Lazy load 3D canvas for better performance
 const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
@@ -261,34 +262,57 @@ function PiPTopView({
 }
 
 // First-person camera controller for PiP view
+// Aligns camera with the physical camera position on the robot model
 function FirstPersonCameraController({ robotState }: { robotState: SimulatorState | null }) {
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
 
   useFrame(() => {
     if (!cameraRef.current || !robotState) return;
 
-    // Position camera at robot's eye level (slightly above the robot)
-    const eyeHeight = 0.08; // Robot cube is 0.08m, camera at top
+    // Robot physical parameters (must match RobotCanvas3D.tsx)
+    const tiltAngle = Math.PI / 6; // 30 degrees forward tilt
+    const cameraLocalOffset = { x: 0, y: 0.055, z: 0.045 }; // Camera position on robot body
+
+    // Calculate camera position in world space
+    // The camera is mounted on the tilted robot body, offset forward
+    const robotRotation = robotState.pose.rotation;
+
+    // Transform local camera offset to world coordinates
+    // Account for robot's Y rotation (heading)
+    const sinR = Math.sin(robotRotation);
+    const cosR = Math.cos(robotRotation);
+
+    // The camera's local Z offset (forward) rotates with the robot
+    const worldOffsetX = sinR * cameraLocalOffset.z;
+    const worldOffsetZ = -cosR * cameraLocalOffset.z;
+
+    // Camera height accounts for tilt - when tilted forward, camera moves forward and slightly down
+    const effectiveHeight = cameraLocalOffset.y * Math.cos(tiltAngle) + cameraLocalOffset.z * Math.sin(tiltAngle);
+
     cameraRef.current.position.set(
-      robotState.pose.x,
-      eyeHeight,
-      robotState.pose.y
+      robotState.pose.x + worldOffsetX,
+      effectiveHeight,
+      robotState.pose.y + worldOffsetZ
     );
 
-    // Calculate look direction based on robot's rotation
-    // Robot rotation is around Y axis, we need to look in that direction
+    // Calculate look direction - camera looks forward with the tilt
+    // The camera looks in the direction the robot is facing, tilted down by tiltAngle
     const lookDistance = 1;
-    const lookX = robotState.pose.x + Math.sin(robotState.pose.rotation) * lookDistance;
-    const lookZ = robotState.pose.y - Math.cos(robotState.pose.rotation) * lookDistance;
 
-    cameraRef.current.lookAt(lookX, eyeHeight * 0.5, lookZ);
+    // Look point is forward in robot direction, but lower due to tilt
+    const lookX = robotState.pose.x + sinR * lookDistance;
+    const lookZ = robotState.pose.y - cosR * lookDistance;
+    // Tilt the view downward - looking at ground level at distance accounts for 30deg tilt
+    const lookY = effectiveHeight - Math.tan(tiltAngle) * lookDistance;
+
+    cameraRef.current.lookAt(lookX, Math.max(0, lookY), lookZ);
   });
 
   return (
     <PerspectiveCamera
       ref={cameraRef}
       makeDefault
-      fov={75}
+      fov={60} // Match robot's sensor FOV (was 75, now 60 to match ray navigation)
       near={0.01}
       far={50}
       position={[0, 0.08, 0]}
@@ -851,6 +875,45 @@ export default function RobotWorldPanel({
     view: 'top-down',
   });
   const [showPipMenu, setShowPipMenu] = useState(false);
+  const [showRayVisualization, setShowRayVisualization] = useState(true); // Show ray trajectory by default
+
+  // Compute ray navigation from robot sensor data for visualization
+  const rayNavigation = useMemo((): PathExplorationResult | null => {
+    if (!robotState || !robotState.sensors) return null;
+
+    try {
+      const rayNavSystem = getRayNavigationSystem();
+      const sensors = robotState.sensors;
+
+      // Build sensor distances from robot state
+      const sensorDistances = {
+        front: sensors.distance?.front ?? 200,
+        frontLeft: sensors.distance?.frontLeft ?? 200,
+        frontRight: sensors.distance?.frontRight ?? 200,
+        left: sensors.distance?.left ?? 200,
+        right: sensors.distance?.right ?? 200,
+        back: sensors.distance?.back ?? 200,
+        backLeft: sensors.distance?.backLeft ?? 200,
+        backRight: sensors.distance?.backRight ?? 200,
+      };
+
+      const robotPose = {
+        x: robotState.pose.x,
+        y: robotState.pose.y,
+        rotation: robotState.pose.rotation,
+      };
+
+      const velocity = {
+        linear: robotState.velocity.linear,
+        angular: robotState.velocity.angular,
+      };
+
+      return rayNavSystem.computeNavigation(sensorDistances, robotPose, velocity);
+    } catch (e) {
+      console.error('Error computing ray navigation:', e);
+      return null;
+    }
+  }, [robotState]);
 
   // Initialize simulator OR sync with Device Manager
   useEffect(() => {
@@ -1254,6 +1317,8 @@ export default function RobotWorldPanel({
               onArenaClick={handleArenaClick}
               agentActivity={agentActivity}
               collectedIds={robotState?.collectibles?.collected || []}
+              rayNavigation={rayNavigation}
+              showRayVisualization={showRayVisualization}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
