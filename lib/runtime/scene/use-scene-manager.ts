@@ -69,7 +69,7 @@ export function useSceneSync(
     floorMap.walls.forEach((wall, idx) => {
       const id = `wall-${idx}`;
       if (!sceneManager.getNode(id)) {
-        sceneManager.createWall(id, wall.start.x, wall.start.y, wall.end.x, wall.end.y);
+        sceneManager.createWall(id, wall.x1, wall.y1, wall.x2, wall.y2);
       }
     });
 
