@@ -454,8 +454,9 @@ export class CubeRobotSimulator {
 
     // Calculate new position
     const newRotation = this.normalizeAngle(this.pose.rotation + this.velocity.angular * dt);
-    const newX = this.pose.x + this.velocity.linear * Math.cos(this.pose.rotation) * dt;
-    const newY = this.pose.y + this.velocity.linear * Math.sin(this.pose.rotation) * dt;
+    // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+    const newX = this.pose.x + this.velocity.linear * Math.sin(this.pose.rotation) * dt;
+    const newY = this.pose.y + this.velocity.linear * Math.cos(this.pose.rotation) * dt;
 
     // Collision detection
     const collision = this.checkCollision(newX, newY);
@@ -746,8 +747,9 @@ export class CubeRobotSimulator {
     rx: number, ry: number, angle: number,
     x1: number, y1: number, x2: number, y2: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const x3 = rx;
     const y3 = ry;
@@ -773,8 +775,9 @@ export class CubeRobotSimulator {
     rx: number, ry: number, angle: number,
     cx: number, cy: number, radius: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const fx = rx - cx;
     const fy = ry - cy;
@@ -825,11 +828,11 @@ export class CubeRobotSimulator {
       const localX = sensorOffset;
       const localY = (i - 2) * sensorSpacing; // Center sensor at index 2
 
-      // Transform to world coordinates
+      // Transform to world coordinates (sin for X, cos for Y so rotation=0 means facing +Y)
       const cos = Math.cos(this.pose.rotation);
       const sin = Math.sin(this.pose.rotation);
-      const worldX = this.pose.x + localX * cos - localY * sin;
-      const worldY = this.pose.y + localX * sin + localY * cos;
+      const worldX = this.pose.x + localX * sin + localY * cos;
+      const worldY = this.pose.y + localX * cos - localY * sin;
 
       // Check if on any line
       const onLine = this.isPointOnLine(worldX, worldY);
@@ -860,8 +863,9 @@ export class CubeRobotSimulator {
 
     return {
       accel: {
-        x: this.velocity.linear * Math.cos(this.pose.rotation) + accelNoise(),
-        y: this.velocity.linear * Math.sin(this.pose.rotation) + accelNoise(),
+        // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+        x: this.velocity.linear * Math.sin(this.pose.rotation) + accelNoise(),
+        y: this.velocity.linear * Math.cos(this.pose.rotation) + accelNoise(),
         z: 9.81 + accelNoise(), // Gravity
       },
       gyro: {
