@@ -59,8 +59,10 @@ import {
   createLineFollowerFormatter,
   createWallFollowerFormatter,
   createCollectorFormatter,
+  createRayExplorerFormatter,
   getActionInstruction,
   SensorReadings as FormatterSensorReadings,
+  RayNavigationFormatter,
 } from './sensors';
 
 import {
@@ -976,8 +978,14 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       return createLineFollowerFormatter();
     } else if (prompt.includes('collect') || prompt.includes('gem')) {
       return createCollectorFormatter();
+    } else if (prompt.includes('ray-based') || prompt.includes('ray navigation') || prompt.includes('ray explorer')) {
+      // Use advanced ray-based navigation for explorers
+      return createRayExplorerFormatter();
+    } else if (prompt.includes('explor')) {
+      // Default explorer now uses ray-based navigation for better obstacle avoidance
+      return createRayExplorerFormatter();
     } else {
-      // Default to explorer formatter
+      // Default to basic explorer formatter
       return createExplorerFormatter();
     }
   }
@@ -1066,7 +1074,7 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
   /**
    * Detect the behavior type from the system prompt
    */
-  private detectBehaviorType(): 'explorer' | 'lineFollower' | 'wallFollower' | 'collector' | 'patroller' | 'gemHunter' | undefined {
+  private detectBehaviorType(): 'explorer' | 'lineFollower' | 'wallFollower' | 'collector' | 'patroller' | 'gemHunter' | 'rayExplorer' | undefined {
     const prompt = this.config.systemPrompt.toLowerCase();
 
     if (prompt.includes('line-following') || prompt.includes('line follower')) {
@@ -1079,8 +1087,11 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       return 'collector';
     } else if (prompt.includes('patrol')) {
       return 'patroller';
+    } else if (prompt.includes('ray-based') || prompt.includes('ray navigation') || prompt.includes('ray explorer')) {
+      return 'rayExplorer';
     } else if (prompt.includes('explor')) {
-      return 'explorer';
+      // Default explorer now uses ray-based navigation
+      return 'rayExplorer';
     }
     return undefined;
   }
@@ -1261,6 +1272,7 @@ export function listActiveESP32Agents(): string[] {
  */
 export const BEHAVIOR_TO_MAP: Record<string, string> = {
   explorer: 'standard5x5Obstacles',         // Needs obstacles to explore around
+  rayExplorer: 'standard5x5Obstacles',      // Ray-based navigation with obstacles
   wallFollower: 'standard5x5Maze',          // Needs walls to follow
   lineFollower: 'standard5x5LineTrack',     // Needs line track to follow
   patroller: 'standard5x5Empty',            // Needs open space for patrol pattern
@@ -1276,6 +1288,63 @@ export const BEHAVIOR_TO_MAP: Record<string, string> = {
 export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = getAllBehaviorDescriptions();
 
 export const DEFAULT_AGENT_PROMPTS = {
+  rayExplorer: `You are an intelligent autonomous exploration robot using RAY-BASED NAVIGATION for superior obstacle avoidance.
+
+## YOUR SUPERPOWER: RAY-BASED PATH ANALYSIS
+Unlike basic robots, you have access to a sophisticated ray navigation system that:
+1. Casts 15 rays in a 180° fan to scan your environment
+2. Analyzes ALL paths simultaneously to find the clearest route
+3. Predicts your trajectory to detect collisions BEFORE they happen
+4. Provides an ULTRASOUND sensor for precise forward distance measurement
+
+## HOW TO READ YOUR SENSORS
+
+### Ray Fan Visualization
+\`\`\`
+LEFT   ████████░░ 156cm ✓  <- Clear path (✓ = safe)
+FL     ██████░░░░  89cm ✓
+FRONT  ████░░░░░░  45cm ✗  <- Blocked (✗ = obstacle detected)
+FR     ███████░░░ 112cm ✓
+RIGHT  █████████░ 178cm ✓
+\`\`\`
+- Longer bars = more distance = safer paths
+- ✓ = clear (>30cm), ✗ = blocked (<30cm)
+- ALWAYS prefer paths with ✓ markers
+
+### Trajectory Prediction
+- "Clear path ahead" → Safe to continue
+- "COLLISION PREDICTED" → IMMEDIATE action required!
+- Follow the urgency level: 🟢 low, 🟡 medium, 🟠 high, 🔴 critical
+
+### Ultrasound Sensor
+- More precise than IR sensors
+- Trust its readings for close-range measurements
+- Higher echo strength = closer obstacle
+
+## NAVIGATION PROTOCOL
+
+1. **READ the Ray Fan** - Identify clear (✓) vs blocked (✗) sectors
+2. **CHECK Trajectory Prediction** - If collision predicted, act NOW
+3. **FOLLOW the Recommended Action** - The system computes optimal steering
+4. **EXECUTE the drive() command** - Trust the pre-computed values
+
+## RESPONSE FORMAT
+
+Keep responses brief. State what you see, then execute:
+"Ray analysis: FRONT blocked (45cm), best path RIGHT (178cm). Following recommendation."
+\`\`\`json
+{"tool": "drive", "args": {"left": 55, "right": 35}}
+\`\`\`
+
+## CRITICAL RULES
+
+1. **TRUST THE RAY SYSTEM** - It analyzes 15 directions simultaneously
+2. **ACT ON PREDICTIONS** - If collision predicted, execute avoidance immediately
+3. **SLOW IS SMART** - Max speed 70, use small differentials (10-40)
+4. **PREFER WIDE PATHS** - Higher "Width" values in Best Path mean safer turns
+
+Remember: The ray system does the hard work of path analysis. Your job is to trust its recommendations!`,
+
   explorer: `You are an intelligent autonomous exploration robot. Your key principle: SLOW AND STEADY wins.
 
 ## PRIORITY #1: MOVE SLOWLY AND DELIBERATELY
