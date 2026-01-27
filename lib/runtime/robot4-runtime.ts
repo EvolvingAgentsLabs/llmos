@@ -436,8 +436,9 @@ export class Robot4Runtime {
 
     // Update pose
     const newRotation = this.pose.rotation + this.velocity.angular * dt;
-    const newX = this.pose.x + this.velocity.linear * Math.cos(this.pose.rotation) * dt;
-    const newY = this.pose.y + this.velocity.linear * Math.sin(this.pose.rotation) * dt;
+    // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+    const newX = this.pose.x + this.velocity.linear * Math.sin(this.pose.rotation) * dt;
+    const newY = this.pose.y + this.velocity.linear * Math.cos(this.pose.rotation) * dt;
 
     // Collision detection with walls
     const robotRadius = 0.08; // 8cm robot radius
@@ -511,10 +512,11 @@ export class Robot4Runtime {
     const lineWidth = 0.08; // 8cm sensor array width
     for (let i = 0; i < 5; i++) {
       const offset = (i - 2) * (lineWidth / 4);
-      const sensorX = this.pose.x + Math.cos(this.pose.rotation) * 0.05 +
-                      Math.cos(this.pose.rotation + Math.PI / 2) * offset;
-      const sensorY = this.pose.y + Math.sin(this.pose.rotation) * 0.05 +
+      // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+      const sensorX = this.pose.x + Math.sin(this.pose.rotation) * 0.05 +
                       Math.sin(this.pose.rotation + Math.PI / 2) * offset;
+      const sensorY = this.pose.y + Math.cos(this.pose.rotation) * 0.05 +
+                      Math.cos(this.pose.rotation + Math.PI / 2) * offset;
 
       const onLine = this.isPointOnLine(sensorX, sensorY);
       this.writeUint8(MEMORY_MAP.LINE + i, onLine ? 255 : 0);
@@ -557,8 +559,9 @@ export class Robot4Runtime {
     rx: number, ry: number, angle: number,
     x1: number, y1: number, x2: number, y2: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const x3 = rx;
     const y3 = ry;
@@ -587,8 +590,9 @@ export class Robot4Runtime {
     rx: number, ry: number, angle: number,
     cx: number, cy: number, radius: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const fx = rx - cx;
     const fy = ry - cy;

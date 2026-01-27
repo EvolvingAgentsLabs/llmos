@@ -210,8 +210,9 @@ export class VirtualESP32 {
     while (this.robotPose.rotation > Math.PI) this.robotPose.rotation -= 2 * Math.PI;
     while (this.robotPose.rotation < -Math.PI) this.robotPose.rotation += 2 * Math.PI;
 
-    this.robotPose.x += v * Math.cos(this.robotPose.rotation) * dt;
-    this.robotPose.y += v * Math.sin(this.robotPose.rotation) * dt;
+    // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+    this.robotPose.x += v * Math.sin(this.robotPose.rotation) * dt;
+    this.robotPose.y += v * Math.cos(this.robotPose.rotation) * dt;
 
     // Update encoders (simulate ticks based on wheel rotation)
     const TICKS_PER_METER = 1000;
@@ -1214,10 +1215,11 @@ export class VirtualESP32 {
     const lineWidth = 0.08;
     for (let i = 0; i < 5; i++) {
       const offset = (i - 2) * (lineWidth / 4);
-      const sensorX = this.robotPose.x + Math.cos(this.robotPose.rotation) * 0.05 +
-                      Math.cos(this.robotPose.rotation + Math.PI / 2) * offset;
-      const sensorY = this.robotPose.y + Math.sin(this.robotPose.rotation) * 0.05 +
+      // Use sin for X and cos for Y so rotation=0 means facing +Y (forward in Three.js +Z)
+      const sensorX = this.robotPose.x + Math.sin(this.robotPose.rotation) * 0.05 +
                       Math.sin(this.robotPose.rotation + Math.PI / 2) * offset;
+      const sensorY = this.robotPose.y + Math.cos(this.robotPose.rotation) * 0.05 +
+                      Math.cos(this.robotPose.rotation + Math.PI / 2) * offset;
 
       const onLine = this.isPointOnLineR4(sensorX, sensorY);
       this.lineSensors.values[i] = onLine ? 255 : 0;
@@ -1285,8 +1287,9 @@ export class VirtualESP32 {
     rx: number, ry: number, angle: number,
     x1: number, y1: number, x2: number, y2: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const x3 = rx;
     const y3 = ry;
@@ -1315,8 +1318,9 @@ export class VirtualESP32 {
     rx: number, ry: number, angle: number,
     cx: number, cy: number, radius: number
   ): number | null {
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+    // Use sin for X and cos for Y so angle=0 means facing +Y (forward in Three.js +Z)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
 
     const fx = rx - cx;
     const fy = ry - cy;

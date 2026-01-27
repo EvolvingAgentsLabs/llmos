@@ -1462,8 +1462,9 @@ void update(void) {
             {isRunning && [0, -45, 45].map((angle, i) => {
               const dist = sensors[i] / 100; // Convert cm to m
               const angleRad = pose.rotation + (angle * Math.PI / 180);
-              const endX = pose.x + Math.cos(angleRad) * Math.min(dist, 2);
-              const endY = pose.y + Math.sin(angleRad) * Math.min(dist, 2);
+              // Use sin for X and cos for Y so rotation=0 means facing +Y
+              const endX = pose.x + Math.sin(angleRad) * Math.min(dist, 2);
+              const endY = pose.y + Math.cos(angleRad) * Math.min(dist, 2);
               const start = worldToScreen(pose.x, pose.y);
               const end = worldToScreen(endX, endY);
               return (
