@@ -6,9 +6,10 @@ import { WorldModel, type CellState } from '@/lib/runtime/world-model';
 import { createCubeRobotSimulator, type CubeRobotState as SimulatorState, type FloorMap, FLOOR_MAPS, type Collectible } from '@/lib/hardware/cube-robot-simulator';
 import { getDeviceManager, type DeviceTelemetry } from '@/lib/hardware/esp32-device-manager';
 import dynamic from 'next/dynamic';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import { cameraCaptureManager } from '@/lib/runtime/camera-capture';
 
 // Lazy load 3D canvas for better performance
 const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
@@ -481,6 +482,24 @@ function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
   );
 }
 
+// Component to register PiP Robot Camera canvas with cameraCaptureManager
+// This enables the AI vision system to capture the robot's first-person view
+function PiPCanvasCaptureRegistration() {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    if (gl.domElement) {
+      // Register this canvas as the source for robot POV captures
+      cameraCaptureManager.registerCanvas(gl.domElement);
+    }
+    return () => {
+      // Don't unregister on cleanup - main canvas will take over
+    };
+  }, [gl]);
+
+  return null;
+}
+
 // 3D Collectibles for PiP view (simplified version)
 function PiPCollectibles({ collectibles, collectedIds }: { collectibles: Collectible[]; collectedIds: string[] }) {
   const visibleCollectibles = collectibles.filter(c => !collectedIds.includes(c.id));
@@ -568,12 +587,15 @@ function PiPRobotCamera({
       <div style={{ width, height }}>
         {robotState ? (
           <Canvas
-            gl={{ antialias: true, alpha: false }}
+            gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
             dpr={[1, 1.5]}
             style={{ width, height }}
           >
             {/* First-person camera following robot */}
             <FirstPersonCameraController robotState={robotState} />
+
+            {/* Register this canvas for AI vision capture */}
+            <PiPCanvasCaptureRegistration />
 
             {/* Lighting */}
             <ambientLight intensity={0.4} />

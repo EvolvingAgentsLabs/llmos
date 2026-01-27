@@ -6,6 +6,7 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { type CubeRobotState as SimulatorState, type FloorMap, type Collectible } from '@/lib/hardware/cube-robot-simulator';
 import { cameraCaptureManager, type CameraCapture } from '@/lib/runtime/camera-capture';
 import { WorldModel, type WorldModelSnapshot } from '@/lib/runtime/world-model';
+import { type RayFan, type TrajectoryPrediction, type PathExplorationResult } from '@/lib/runtime/navigation/ray-navigation';
 import * as THREE from 'three';
 
 /**
@@ -48,6 +49,8 @@ interface RobotCanvas3DProps {
   worldModel?: WorldModel | null;  // World model for mini-map
   showMiniMap?: boolean;  // Whether to show the mini-map overlay
   onCameraCapture?: (capture: CameraCapture) => void;  // Callback when a screenshot is captured
+  rayNavigation?: PathExplorationResult | null;  // Ray navigation data for visualization
+  showRayVisualization?: boolean;  // Whether to show ray fan and trajectory
 }
 
 // Handle for external camera capture control
@@ -992,6 +995,211 @@ function PlanningAnimation({ agentActivity, robotState }: { agentActivity?: Agen
   );
 }
 
+// Ray navigation visualization - shows ray fan, predicted trajectory, and best path
+function RayVisualization({
+  rayNavigation,
+  robotState,
+}: {
+  rayNavigation: PathExplorationResult | null;
+  robotState: SimulatorState | null;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const trajectoryRef = useRef<THREE.Line>(null);
+  const bestPathRef = useRef<THREE.Mesh>(null);
+
+  // Animate the visualization
+  useFrame((state) => {
+    // Pulse effect for best path indicator
+    if (bestPathRef.current) {
+      const scale = 1.0 + Math.sin(state.clock.elapsedTime * 4) * 0.15;
+      bestPathRef.current.scale.set(scale, 1, scale);
+    }
+  });
+
+  if (!rayNavigation || !robotState) return null;
+
+  const { rayFan, prediction, recommendedSteering } = rayNavigation;
+  const robotX = robotState.pose.x;
+  const robotY = robotState.pose.y;
+  const robotRotation = robotState.pose.rotation;
+  const rayHeight = 0.05; // Height above ground for ray visualization
+
+  // Convert ray distances from cm to meters
+  const maxRayLength = 2.0; // Max visualization length in meters
+
+  return (
+    <group ref={groupRef}>
+      {/* Ray fan visualization */}
+      {rayFan.rays.map((ray, idx) => {
+        const rayLength = Math.min(ray.distance / 100, maxRayLength); // Convert cm to m
+        const worldAngle = robotRotation + ray.angle;
+
+        // Calculate end point
+        const endX = robotX + Math.sin(worldAngle) * rayLength;
+        const endZ = robotY - Math.cos(worldAngle) * rayLength;
+
+        // Color based on clearance: green = clear, red = blocked, yellow = close
+        let color = '#3fb950'; // Green - clear
+        if (!ray.clear) {
+          color = '#f85149'; // Red - blocked
+        } else if (ray.distance < 50) {
+          color = '#d29922'; // Yellow - caution
+        }
+
+        const points = new Float32Array([
+          robotX, rayHeight, robotY,
+          endX, rayHeight, endZ
+        ]);
+
+        return (
+          <line key={`ray-${idx}`}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                count={2}
+                array={points}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={color}
+              transparent
+              opacity={ray.clear ? 0.6 : 0.8}
+              linewidth={ray.clear ? 1 : 2}
+            />
+          </line>
+        );
+      })}
+
+      {/* Best path indicator - cone pointing in best direction */}
+      {rayFan.bestPath && (
+        <group
+          position={[
+            robotX + Math.sin(robotRotation + rayFan.bestPath.centerAngle) * 0.15,
+            rayHeight + 0.02,
+            robotY - Math.cos(robotRotation + rayFan.bestPath.centerAngle) * 0.15
+          ]}
+          rotation={[Math.PI / 2, 0, -(robotRotation + rayFan.bestPath.centerAngle)]}
+        >
+          <mesh ref={bestPathRef}>
+            <coneGeometry args={[0.03, 0.08, 8]} />
+            <meshStandardMaterial
+              color="#58a6ff"
+              emissive="#58a6ff"
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* Predicted trajectory line */}
+      {prediction.collisionPredicted && prediction.collisionPoint && (
+        <>
+          {/* Trajectory line to collision point */}
+          <line>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                count={2}
+                array={new Float32Array([
+                  robotX, rayHeight + 0.01, robotY,
+                  prediction.collisionPoint.x, rayHeight + 0.01, prediction.collisionPoint.y
+                ])}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={
+                prediction.urgency === 'critical' ? '#f85149' :
+                prediction.urgency === 'high' ? '#d29922' :
+                '#ffa500'
+              }
+              transparent
+              opacity={0.8}
+            />
+          </line>
+
+          {/* Collision point marker - pulsing sphere */}
+          <mesh position={[prediction.collisionPoint.x, rayHeight + 0.03, prediction.collisionPoint.y]}>
+            <sphereGeometry args={[0.03, 16, 16]} />
+            <meshStandardMaterial
+              color={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
+              emissive={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
+              emissiveIntensity={1}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+
+          {/* Warning ring around collision point */}
+          <mesh
+            position={[prediction.collisionPoint.x, 0.01, prediction.collisionPoint.y]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.05, 0.08, 16]} />
+            <meshBasicMaterial
+              color={prediction.urgency === 'critical' ? '#f85149' : '#d29922'}
+              transparent
+              opacity={0.6}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* Alternative paths visualization (dimmer) */}
+      {rayFan.alternativePaths.slice(0, 2).map((path, idx) => {
+        const pathLength = Math.min(path.clearance / 100, maxRayLength * 0.7);
+        const worldAngle = robotRotation + path.centerAngle;
+        const endX = robotX + Math.sin(worldAngle) * pathLength;
+        const endZ = robotY - Math.cos(worldAngle) * pathLength;
+
+        return (
+          <line key={`alt-path-${idx}`}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                count={2}
+                array={new Float32Array([
+                  robotX, rayHeight - 0.01, robotY,
+                  endX, rayHeight - 0.01, endZ
+                ])}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color="#a371f7"
+              transparent
+              opacity={0.3}
+            />
+          </line>
+        );
+      })}
+
+      {/* Steering direction indicator - shows which way robot will turn */}
+      {Math.abs(recommendedSteering.leftMotor - recommendedSteering.rightMotor) > 5 && (
+        <mesh
+          position={[robotX, rayHeight + 0.08, robotY]}
+          rotation={[
+            0,
+            -robotRotation + (recommendedSteering.leftMotor > recommendedSteering.rightMotor ? Math.PI / 4 : -Math.PI / 4),
+            0
+          ]}
+        >
+          <boxGeometry args={[0.02, 0.01, 0.04]} />
+          <meshBasicMaterial
+            color={recommendedSteering.leftMotor > recommendedSteering.rightMotor ? '#3fb950' : '#58a6ff'}
+            transparent
+            opacity={0.8}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 // Camera controller that responds to preset changes and allows OrbitControls
 function CameraController({
   preset,
@@ -1148,6 +1356,8 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
   worldModel = null,
   showMiniMap = false,
   onCameraCapture,
+  rayNavigation = null,
+  showRayVisualization = false,
 }, ref) {
   const controlsRef = useRef<any>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedObjectInfo | null>(null);
@@ -1284,7 +1494,7 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
     <div className="w-full h-full relative">
       <Canvas
         shadows
-        gl={{ antialias: true, alpha: false }}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
         dpr={[1, 2]}
         className="w-full h-full"
         onPointerMissed={handleBackgroundClick}
@@ -1369,6 +1579,11 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
 
         {/* Planning animation */}
         <PlanningAnimation agentActivity={agentActivity} robotState={robotState} />
+
+        {/* Ray navigation visualization */}
+        {showRayVisualization && rayNavigation && (
+          <RayVisualization rayNavigation={rayNavigation} robotState={robotState} />
+        )}
 
         {/* Mouse controls - enabled for all views */}
         <OrbitControls
