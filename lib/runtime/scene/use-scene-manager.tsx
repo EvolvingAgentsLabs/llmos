@@ -386,6 +386,8 @@ export function useSceneManagerContext(): SceneManager {
 
 /**
  * Convert physics coordinates (X, Y, rotation) to Three.js transform
+ * Physics: rotation θ gives forward direction (sin(θ), cos(θ))
+ * Three.js: rotation.y = θ gives local +Z → world (sin(θ), 0, cos(θ))
  */
 export function physicsToThreeJS(
   x: number,
@@ -396,7 +398,7 @@ export function physicsToThreeJS(
     position: new THREE.Vector3(x, 0, y),
     quaternion: new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0),
-      -rotation
+      rotation
     ),
   };
 }
@@ -412,6 +414,6 @@ export function threeJSToPhysics(
   return {
     x: position.x,
     y: position.z,
-    rotation: -euler.y,
+    rotation: euler.y,
   };
 }

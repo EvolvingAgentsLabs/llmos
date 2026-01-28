@@ -275,8 +275,8 @@ function FirstPersonCameraController({ robotState }: { robotState: SimulatorStat
 
     // Calculate camera position in world space
     // The camera is mounted on the tilted robot body, offset forward
-    // Negate rotation to match Three.js coordinate system (same as RobotCanvas3D.tsx line 155)
-    const robotRotation = -robotState.pose.rotation;
+    // Physics rotation θ: forward direction = (sin(θ), cos(θ)) in physics = (sin(θ), 0, cos(θ)) in Three.js
+    const robotRotation = robotState.pose.rotation;
 
     // Transform local camera offset to world coordinates
     // Account for robot's Y rotation (heading)
@@ -284,8 +284,9 @@ function FirstPersonCameraController({ robotState }: { robotState: SimulatorStat
     const cosR = Math.cos(robotRotation);
 
     // The camera's local Z offset (forward) rotates with the robot
+    // Forward in world coords: (sin(θ), 0, cos(θ))
     const worldOffsetX = sinR * cameraLocalOffset.z;
-    const worldOffsetZ = -cosR * cameraLocalOffset.z;
+    const worldOffsetZ = cosR * cameraLocalOffset.z;
 
     // Camera height accounts for tilt - when tilted forward, camera moves forward and slightly down
     const effectiveHeight = cameraLocalOffset.y * Math.cos(tiltAngle) + cameraLocalOffset.z * Math.sin(tiltAngle);
@@ -301,8 +302,9 @@ function FirstPersonCameraController({ robotState }: { robotState: SimulatorStat
     const lookDistance = 1;
 
     // Look point is forward in robot direction, but lower due to tilt
+    // Forward direction in world: (sin(θ), 0, cos(θ))
     const lookX = robotState.pose.x + sinR * lookDistance;
-    const lookZ = robotState.pose.y - cosR * lookDistance;
+    const lookZ = robotState.pose.y + cosR * lookDistance;
     // Tilt the view downward - looking at ground level at distance accounts for 30deg tilt
     const lookY = effectiveHeight - Math.tan(tiltAngle) * lookDistance;
 

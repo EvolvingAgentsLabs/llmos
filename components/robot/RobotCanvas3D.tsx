@@ -152,7 +152,10 @@ function RobotCube({
   useEffect(() => {
     if (groupRef.current && state) {
       groupRef.current.position.set(state.pose.x, 0, state.pose.y);
-      groupRef.current.rotation.y = -state.pose.rotation;
+      // Physics rotation (CCW from +Y) maps directly to Three.js rotation.y
+      // sin(θ) gives X component, cos(θ) gives Z component for forward direction
+      // With rotation.y = θ, local +Z → world (sin(θ), 0, cos(θ)), matching physics forward
+      groupRef.current.rotation.y = state.pose.rotation;
     }
   }, [state]);
 
@@ -1407,12 +1410,14 @@ function CameraController({
       }
     }
 
-    // Follow mode - camera follows robot
+    // Follow mode - camera follows robot from behind
     if (preset === 'follow' && robotState && !isTransitioningRef.current) {
+      // Camera positioned behind robot: robot.pos - forward_direction * distance
+      // Forward direction = (sin(θ), 0, cos(θ))
       const targetPos = new THREE.Vector3(
         robotState.pose.x - Math.sin(robotState.pose.rotation) * 2.5,
         2.5,
-        robotState.pose.y + Math.cos(robotState.pose.rotation) * 2.5
+        robotState.pose.y - Math.cos(robotState.pose.rotation) * 2.5
       );
       camera.position.lerp(targetPos, 0.08);
 

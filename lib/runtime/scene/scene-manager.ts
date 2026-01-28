@@ -304,17 +304,18 @@ export class SceneNode extends EventEmitter {
    * Set 2D pose for ground robot
    * @param x Position X (left/right in both systems)
    * @param y Position Y in physics (forward) → maps to Z in Three.js
-   * @param rotation Rotation in physics (CCW from +Y) → maps to -Y rotation in Three.js
+   * @param rotation Rotation in physics: sin(θ) for X, cos(θ) for Y movement
    */
   setPose2D(x: number, y: number, rotation: number): this {
     // Physics Y → Three.js Z (forward on ground plane)
     this._localTransform.position.set(x, 0, y);
 
-    // Physics rotation (CCW from +Y) → Three.js rotation around Y axis
-    // Negate because Three.js Y rotation is CW when viewed from above
+    // Physics rotation maps directly to Three.js Y-axis rotation
+    // With rotation θ, local +Z transforms to world (sin(θ), 0, cos(θ))
+    // which matches physics forward direction (sin(θ), cos(θ))
     this._localTransform.quaternion.setFromAxisAngle(
       new THREE.Vector3(0, 1, 0),
-      -rotation
+      rotation
     );
 
     this._markDirty();
@@ -330,7 +331,7 @@ export class SceneNode extends EventEmitter {
     return {
       x: this._localTransform.position.x,
       y: this._localTransform.position.z, // Three.js Z → Physics Y
-      rotation: -euler.y, // Negate back to physics convention
+      rotation: euler.y, // Direct mapping - no negation needed
     };
   }
 
