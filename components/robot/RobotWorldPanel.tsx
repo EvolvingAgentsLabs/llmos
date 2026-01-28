@@ -275,7 +275,8 @@ function FirstPersonCameraController({ robotState }: { robotState: SimulatorStat
 
     // Calculate camera position in world space
     // The camera is mounted on the tilted robot body, offset forward
-    const robotRotation = robotState.pose.rotation;
+    // Negate rotation to match Three.js coordinate system (same as RobotCanvas3D.tsx line 155)
+    const robotRotation = -robotState.pose.rotation;
 
     // Transform local camera offset to world coordinates
     // Account for robot's Y rotation (heading)
