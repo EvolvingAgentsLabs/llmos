@@ -56,10 +56,88 @@ Make robotics accessible to everyone. No coding required, just describe what you
 
 ---
 
-### Phase 2: Plugin Architecture (Months 4-6) - Q2 2026
+### Phase 2: Adaptive Physical Intelligence - Q2 2026
+**Goal**: The "iPhone Moment" for Robotics - Gemini 2.0 Integration & Skill Cartridges
+
+> Moving beyond "Don't Hit the Wall" to downloadable physical skills.
+
+#### The Vision
+This is the **iPhone moment** for robotics:
+- **Feature Phones** (hard-coded robots) → **Smartphones** (generic hardware running apps)
+- **Markdown Skills** are the apps
+- **Gemini 2.0 Flash Thinking** is the kernel
+- **Hardware** (ESP32 + Camera + Arm) is just the peripheral
+
+#### Milestone 2.1: The Gemini Kernel (Weeks 7-8)
+- [ ] Integrate `gemini-2.0-flash-thinking` API
+- [ ] Implement Video Streaming Pipeline (ESP32 → Browser → Gemini)
+- [ ] Enable "Agentic Vision" prompts in the System Agent
+- [ ] Real-time multimodal reasoning (video + sensors + text)
+
+**Key Innovation: Agentic Vision**
+```
+Traditional: "That is a cup"
+Agentic:     "That cup is full of hot coffee and near the laptop edge;
+              I must move it carefully, keeping it level"
+```
+
+#### Milestone 2.2: Skill Cartridges (Weeks 9-10)
+Markdown Subagents that define physical capabilities:
+
+```markdown
+# gardener.md
+---
+name: PlantCare_Specialist
+base_model: gemini-2.0-flash-thinking
+---
+
+# Visual Cortex
+- Scan for: withered_leaves, dry_soil_texture
+- Ignore: Plastic pots, furniture
+
+# Motor Cortex
+- Use precision_mode for pouring
+- Stop if water reaches 1cm from rim
+```
+
+- [ ] Create `PhysicalAgentLoader` to hot-swap system prompts
+- [ ] Create skill templates (Gardener, Sorter, Inspector)
+- [ ] Implement "Context Switching" (Unload one skill, load another)
+- [ ] HAL interface: `hal.vision.scan()`, `hal.manipulator.move_to()`, etc.
+
+#### Milestone 2.3: The Dreaming Engine (Weeks 11-12)
+Parallel learning through simulation:
+
+```
+Live Instance fails to open sticky door
+        ↓
+BlackBox logs video + sensor data
+        ↓
+At night: Spin up 1000 simulations
+        ↓
+Find solution: "twist-and-pull" motion
+        ↓
+Patch skill in Team Volume
+        ↓
+Morning: ALL robots know how to open that door
+```
+
+- [ ] "BlackBox" recorder for failed physical interactions
+- [ ] Headless Three.js simulation for replaying failures
+- [ ] Evolutionary logic to patch Markdown skills based on sim results
+- [ ] Knowledge Cascade: User → Team → System volumes
+
+**Success Criteria**:
+- Same skill runs in simulation AND physical hardware
+- Hot-swap skills in < 1 second
+- Dreaming Engine patches skills automatically
+
+---
+
+### Phase 3: Plugin Architecture (Months 4-6)
 **Goal**: Extensible system where community can contribute
 
-#### Why Plugins First?
+#### Why Plugins?
 As a small team, we can't build support for every hardware platform. Plugins let the community extend LLMos to new hardware, sensors, and behaviors.
 
 #### Milestone 2.1: Plugin System (Weeks 7-8)
@@ -110,10 +188,10 @@ plugins/
 
 ---
 
-### Phase 3: Killer Features (Months 7-9) - Q3 2026
+### Phase 4: Killer Features (Months 7-9) - Q3 2026
 **Goal**: Build features no one else has
 
-#### Milestone 3.1: Visual Simulation (Weeks 11-12)
+#### Milestone 4.1: Visual Simulation (Weeks 13-14)
 **Problem**: Arduino IDE makes you flash → test → fail → repeat 50 times
 
 **Solution**: Preview behavior before flashing
@@ -124,7 +202,7 @@ plugins/
 - [ ] User approves before flashing to hardware
 - [ ] Reduces trial-and-error by 90%
 
-#### Milestone 3.2: Auto-Debug Loop (Weeks 13-14)
+#### Milestone 4.2: Auto-Debug Loop (Weeks 15-16)
 **Problem**: When robots fail, manual debugging is painful
 
 **Solution**: AI agent debugs and fixes automatically
@@ -153,7 +231,7 @@ Robot works!
 - [ ] User approval before re-flashing
 - [ ] Learning from common mistakes
 
-#### Milestone 3.3: One-Click Hardware Setup (Weeks 15-16)
+#### Milestone 4.3: One-Click Hardware Setup (Weeks 17-18)
 **Problem**: Arduino setup is 7 steps of driver/library hell
 
 **Solution**: Zero-configuration hardware detection
@@ -181,21 +259,21 @@ Done. Start building.
 
 ---
 
-### Phase 4: Community & Growth (Months 10-12) - Q4 2026
+### Phase 5: Community & Growth (Months 10-12) - Q4 2026
 
-#### Milestone 4.1: Cross-Platform Support
+#### Milestone 5.1: Cross-Platform Support
 - [ ] Windows support
 - [ ] Linux support (Debian/Ubuntu)
 - [ ] ARM builds (for Raspberry Pi desktop)
 
-#### Milestone 4.2: Documentation & Education
+#### Milestone 5.2: Documentation & Education
 - [ ] Complete API documentation
 - [ ] Plugin development guide
 - [ ] Video tutorials
 - [ ] Example projects gallery
 - [ ] Troubleshooting wiki
 
-#### Milestone 4.3: Community Features
+#### Milestone 5.3: Community Features
 - [ ] Built-in project sharing
 - [ ] Robot behavior gallery
 - [ ] Community showcase
@@ -212,18 +290,26 @@ Done. Start building.
 - Setup time: < 5 minutes
 
 ### Month 6 (End of Phase 2)
-- Plugin system proven
-- 5+ community plugins
+- Gemini 2.0 kernel integrated
+- 10+ Skill Cartridges available
+- Dreaming Engine operational
+- Same skills work in sim AND physical
 - 100+ GitHub stars
-- 50+ active users
 
 ### Month 9 (End of Phase 3)
+- Plugin system proven
+- 20+ community plugins
+- Skill marketplace active
+- 500+ GitHub stars
+- 100+ active users
+
+### Month 9 (End of Phase 4)
 - Auto-debug working reliably
 - Simulation accuracy: 90%+
 - Setup time: < 2 minutes
 - 1,000+ GitHub stars
 
-### Month 12 (End of Phase 4)
+### Month 12 (End of Phase 5)
 - All platforms supported
 - 20+ community plugins
 - 500+ active users
