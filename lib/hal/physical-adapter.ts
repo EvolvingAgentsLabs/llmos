@@ -107,7 +107,7 @@ class PhysicalConnection {
       // Start reading responses
       this.startReading();
 
-      logger.success('hal-physical', 'Serial connection established');
+      logger.success('hal', 'Serial connection established');
     } catch (error) {
       throw new Error(`Serial connection failed: ${error instanceof Error ? error.message : error}`);
     }
@@ -119,7 +119,7 @@ class PhysicalConnection {
       throw new Error('WiFi connection requires host address');
     }
 
-    logger.info('hal-physical', `Would connect to WiFi host: ${this.options.host}`);
+    logger.info('hal', `Would connect to WiFi host: ${this.options.host}`);
     this.connected = true;
   }
 
@@ -150,7 +150,7 @@ class PhysicalConnection {
         }
       }
     } catch (error) {
-      logger.error('hal-physical', 'Serial read error', { error });
+      logger.error('hal', 'Serial read error', { error });
     }
   }
 
@@ -208,7 +208,7 @@ class PhysicalConnection {
       await this.port.close();
     }
 
-    logger.info('hal-physical', 'Disconnected from device');
+    logger.info('hal', 'Disconnected from device');
   }
 
   isConnected(): boolean {
@@ -528,16 +528,16 @@ class PhysicalCommunication implements CommunicationInterface {
   log(message: string, level?: 'debug' | 'info' | 'warn' | 'error'): void {
     switch (level) {
       case 'debug':
-        logger.debug('hal-physical', message);
+        logger.debug('hal', message);
         break;
       case 'warn':
-        logger.warn('hal-physical', message);
+        logger.warn('hal', message);
         break;
       case 'error':
-        logger.error('hal-physical', message);
+        logger.error('hal', message);
         break;
       default:
-        logger.info('hal-physical', message);
+        logger.info('hal', message);
     }
   }
 }
@@ -561,7 +561,7 @@ class PhysicalSafety implements SafetyInterface {
         timestamp: Date.now(),
       });
 
-      logger.warn('hal-physical', `EMERGENCY STOP: ${reason || 'No reason'}`);
+      logger.warn('hal', `EMERGENCY STOP: ${reason || 'No reason'}`);
 
       return {
         success: response.success,
@@ -658,20 +658,20 @@ export class PhysicalHAL implements HardwareAbstractionLayer {
     this.communication = new PhysicalCommunication(this.connection);
     this.safety = new PhysicalSafety(this.connection);
 
-    logger.info('hal-physical', 'Physical HAL created', { deviceId: this.deviceId });
+    logger.info('hal', 'Physical HAL created', { deviceId: this.deviceId });
   }
 
   async initialize(): Promise<void> {
     await this.connection.connect();
     this.ready = true;
-    logger.success('hal-physical', 'Physical HAL initialized');
+    logger.success('hal', 'Physical HAL initialized');
   }
 
   async cleanup(): Promise<void> {
     await this.locomotion.stop();
     await this.connection.disconnect();
     this.ready = false;
-    logger.info('hal-physical', 'Physical HAL cleaned up');
+    logger.info('hal', 'Physical HAL cleaned up');
   }
 
   isReady(): boolean {

@@ -198,7 +198,7 @@ export class PhysicalSkillLoader {
       // Index keywords
       this.indexSkill(skill);
 
-      logger.success('skill-loader', `Loaded physical skill: ${skill.frontmatter.name}`, {
+      logger.success('skills', `Loaded physical skill: ${skill.frontmatter.name}`, {
         version: skill.frontmatter.version,
         agenticVision: skill.frontmatter.agentic_vision,
       });
@@ -256,7 +256,7 @@ export class PhysicalSkillLoader {
     const previousSkill = this.activeSkill;
     this.activeSkill = skill;
 
-    logger.info('skill-loader', 'Skill switched', {
+    logger.info('skills', 'Skill switched', {
       from: previousSkill?.frontmatter.name,
       to: skill.frontmatter.name,
     });
@@ -470,7 +470,7 @@ export class PhysicalSkillLoader {
         rawContent: content,
       };
     } catch (error) {
-      logger.error('skill-loader', 'Failed to parse skill', { path, error });
+      logger.error('skills', 'Failed to parse skill', { path, error });
       return null;
     }
   }

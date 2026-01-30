@@ -17,6 +17,7 @@ export type LogCategory =
   | 'plan'      // Plan creation and execution
   | 'agent'     // Agent execution and orchestration
   | 'hal'       // Hardware Abstraction Layer
+  | 'skills'    // Physical skill loading
   | 'blackbox'  // BlackBox recorder
   | 'replayer'  // Simulation replayer
   | 'evolution' // Evolutionary patcher
@@ -68,6 +69,7 @@ export const LOG_CATEGORY_COLORS: Record<LogCategory, string> = {
   plan: 'bg-indigo-500/20 text-indigo-400',
   agent: 'bg-emerald-500/20 text-emerald-400',
   hal: 'bg-rose-500/20 text-rose-400',
+  skills: 'bg-amber-500/20 text-amber-400',
   blackbox: 'bg-slate-500/20 text-slate-400',
   replayer: 'bg-sky-500/20 text-sky-400',
   evolution: 'bg-violet-500/20 text-violet-400',
@@ -85,6 +87,7 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   plan: 'PLAN',
   agent: 'AGENT',
   hal: 'HAL',
+  skills: 'SKILLS',
   blackbox: 'BLACKBOX',
   replayer: 'REPLAYER',
   evolution: 'EVOLUTION',

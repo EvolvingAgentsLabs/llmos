@@ -56,7 +56,7 @@ export class HALToolExecutor {
    */
   setHAL(hal: HardwareAbstractionLayer): void {
     this.hal = hal;
-    logger.info('hal-executor', 'HAL implementation set', {
+    logger.info('hal', 'HAL implementation set', {
       mode: hal.mode,
       deviceId: hal.getDeviceInfo().id,
     });
@@ -102,7 +102,7 @@ export class HALToolExecutor {
     this.stats.totalCalls++;
     this.stats.callsByTool[toolCall.name] = (this.stats.callsByTool[toolCall.name] || 0) + 1;
 
-    logger.debug('hal-executor', `Executing tool: ${toolCall.name}`, {
+    logger.debug('hal', `Executing tool: ${toolCall.name}`, {
       args: toolCall.args,
       mode: this.hal.mode,
     });
@@ -129,7 +129,7 @@ export class HALToolExecutor {
       this.stats.failedCalls++;
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      logger.error('hal-executor', `Tool execution failed: ${toolCall.name}`, {
+      logger.error('hal', `Tool execution failed: ${toolCall.name}`, {
         error: errorMessage,
         args: toolCall.args,
       });
@@ -156,13 +156,13 @@ export class HALToolExecutor {
 
       // Stop execution if emergency stop was triggered
       if (this.emergencyStopRequested) {
-        logger.warn('hal-executor', 'Stopping tool execution due to emergency stop');
+        logger.warn('hal', 'Stopping tool execution due to emergency stop');
         break;
       }
 
       // Stop execution if a critical tool failed
       if (!result.success && this.isCriticalTool(toolCall.name)) {
-        logger.warn('hal-executor', 'Stopping tool execution due to critical failure', {
+        logger.warn('hal', 'Stopping tool execution due to critical failure', {
           tool: toolCall.name,
           error: result.error,
         });

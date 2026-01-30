@@ -86,7 +86,7 @@ class SimulationLocomotion implements LocomotionInterface {
   async moveTo(x: number, y: number, z: number, speed?: number): Promise<HALToolResult> {
     // In simulation, this would use pathfinding
     // For now, log the target and return success
-    logger.debug('hal-sim', `moveTo requested: (${x}, ${y}, ${z}) at speed ${speed}`);
+    logger.debug('hal', `moveTo requested: (${x}, ${y}, ${z}) at speed ${speed}`);
 
     return {
       success: true,
@@ -246,7 +246,7 @@ class SimulationCommunication implements CommunicationInterface {
       window.speechSynthesis.speak(utterance);
     }
 
-    logger.info('hal-sim', `Robot speaks: "${text}" (${urgency || 'info'})`);
+    logger.info('hal', `Robot speaks: "${text}" (${urgency || 'info'})`);
 
     return {
       success: true,
@@ -301,7 +301,7 @@ class SimulationCommunication implements CommunicationInterface {
   }
 
   async playSound(soundId: string): Promise<HALToolResult> {
-    logger.info('hal-sim', `Playing sound: ${soundId}`);
+    logger.info('hal', `Playing sound: ${soundId}`);
 
     return {
       success: true,
@@ -314,16 +314,16 @@ class SimulationCommunication implements CommunicationInterface {
   log(message: string, level?: 'debug' | 'info' | 'warn' | 'error'): void {
     switch (level) {
       case 'debug':
-        logger.debug('hal-sim', message);
+        logger.debug('hal', message);
         break;
       case 'warn':
-        logger.warn('hal-sim', message);
+        logger.warn('hal', message);
         break;
       case 'error':
-        logger.error('hal-sim', message);
+        logger.error('hal', message);
         break;
       default:
-        logger.info('hal-sim', message);
+        logger.info('hal', message);
     }
   }
 }
@@ -350,7 +350,7 @@ class SimulationSafety implements SafetyInterface {
       this.errors.push(`Emergency stop: ${reason}`);
     }
 
-    logger.warn('hal-sim', `EMERGENCY STOP: ${reason || 'No reason provided'}`);
+    logger.warn('hal', `EMERGENCY STOP: ${reason || 'No reason provided'}`);
 
     return {
       success: true,
@@ -369,7 +369,7 @@ class SimulationSafety implements SafetyInterface {
     this.simulator.setLED(0, 255, 0); // Green LED
     this.onUpdate();
 
-    logger.info('hal-sim', 'Emergency stop reset');
+    logger.info('hal', 'Emergency stop reset');
 
     return {
       success: true,
@@ -429,18 +429,18 @@ export class SimulationHAL implements HardwareAbstractionLayer {
     this.communication = new SimulationCommunication(simulator, this.onUpdateCallback);
     this.safety = new SimulationSafety(simulator, this.onUpdateCallback);
 
-    logger.info('hal-sim', 'Simulation HAL created', { deviceId: this.deviceId });
+    logger.info('hal', 'Simulation HAL created', { deviceId: this.deviceId });
   }
 
   async initialize(): Promise<void> {
     this.ready = true;
-    logger.info('hal-sim', 'Simulation HAL initialized');
+    logger.info('hal', 'Simulation HAL initialized');
   }
 
   async cleanup(): Promise<void> {
     this.simulator.stopMotors();
     this.ready = false;
-    logger.info('hal-sim', 'Simulation HAL cleaned up');
+    logger.info('hal', 'Simulation HAL cleaned up');
   }
 
   isReady(): boolean {
