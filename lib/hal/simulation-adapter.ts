@@ -24,7 +24,7 @@ import {
 /**
  * Reference to the cube robot simulator (dynamically imported)
  */
-interface SimulatorReference {
+export interface SimulatorReference {
   setLeftMotor(power: number): void;
   setRightMotor(power: number): void;
   setMotors(left: number, right: number): void;

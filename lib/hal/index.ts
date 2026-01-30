@@ -66,6 +66,7 @@ export {
 export {
   SimulationHAL,
   createSimulationHAL,
+  SimulatorReference,
 } from './simulation-adapter';
 
 export {
@@ -75,7 +76,7 @@ export {
 
 import { logger } from '@/lib/debug/logger';
 import { HALConfig, HardwareAbstractionLayer } from './types';
-import { SimulationHAL } from './simulation-adapter';
+import { SimulationHAL, SimulatorReference } from './simulation-adapter';
 import { PhysicalHAL } from './physical-adapter';
 
 /**
@@ -95,7 +96,7 @@ export function createHAL(config: HALConfig): HardwareAbstractionLayer {
       if (!config.simulator) {
         throw new Error('Simulator reference required for simulation mode');
       }
-      return new SimulationHAL(config.simulator as Parameters<typeof SimulationHAL['prototype']['constructor']>[0], {
+      return new SimulationHAL(config.simulator as SimulatorReference, {
         deviceId: config.deviceId,
       });
 
@@ -118,7 +119,7 @@ export function createHAL(config: HALConfig): HardwareAbstractionLayer {
       if (!config.simulator) {
         throw new Error('Simulator reference required for hybrid mode');
       }
-      return new SimulationHAL(config.simulator as Parameters<typeof SimulationHAL['prototype']['constructor']>[0], {
+      return new SimulationHAL(config.simulator as SimulatorReference, {
         deviceId: config.deviceId,
       });
 
