@@ -628,12 +628,7 @@ export class ESP32DeviceManager {
         mode: device.type === 'virtual' ? 'simulation' : 'physical',
         deviceId: device.id,
         simulator: device.vm,
-        capabilities: {
-          locomotion: true,
-          vision: true,
-          manipulation: false, // Cube robot doesn't have manipulation
-          communication: true,
-        },
+        capabilities: ['locomotion', 'vision', 'communication'],
         connection: device.type !== 'virtual' ? {
           type: device.type as 'serial' | 'wifi' | 'bluetooth',
           baudRate: 115200,
