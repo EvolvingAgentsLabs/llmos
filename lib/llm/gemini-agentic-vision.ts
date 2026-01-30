@@ -108,7 +108,7 @@ export class GeminiAgenticVision {
       ...config,
     };
 
-    logger.info('gemini-vision', 'Agentic Vision client initialized', {
+    logger.info('llm', 'Agentic Vision client initialized', {
       codeExecution: this.config.enableCodeExecution,
       maxIterations: this.config.maxIterations,
     });
@@ -127,7 +127,7 @@ export class GeminiAgenticVision {
     skillPrompt: string,
     sensorContext?: Record<string, unknown>
   ): Promise<AgenticVisionResult> {
-    logger.time('agentic-vision', 'gemini-vision', 'Agentic Vision analysis');
+    logger.time('agentic-vision', 'llm', 'Agentic Vision analysis');
 
     const result: AgenticVisionResult = {
       reasoning: '',
@@ -172,7 +172,7 @@ export class GeminiAgenticVision {
 
       return result;
     } catch (error) {
-      logger.error('gemini-vision', 'Agentic Vision analysis failed', {
+      logger.error('llm', 'Agentic Vision analysis failed', {
         error: error instanceof Error ? error.message : error,
       });
       throw error;
@@ -386,7 +386,7 @@ Always verify visual evidence before taking action.`;
       result.confidence = this.estimateConfidence(result);
 
     } catch (error) {
-      logger.error('gemini-vision', 'Failed to parse response', {
+      logger.error('llm', 'Failed to parse response', {
         error: error instanceof Error ? error.message : error,
       });
     }
