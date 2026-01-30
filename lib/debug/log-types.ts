@@ -15,7 +15,12 @@ export type LogCategory =
   | 'git'       // Git operations
   | 'memory'    // Memory system operations
   | 'plan'      // Plan creation and execution
-  | 'agent';    // Agent execution and orchestration
+  | 'agent'     // Agent execution and orchestration
+  | 'hal'       // Hardware Abstraction Layer
+  | 'blackbox'  // BlackBox recorder
+  | 'replayer'  // Simulation replayer
+  | 'evolution' // Evolutionary patcher
+  | 'dreaming'; // Dreaming engine
 
 export interface LogEntry {
   id: string;
@@ -62,6 +67,11 @@ export const LOG_CATEGORY_COLORS: Record<LogCategory, string> = {
   memory: 'bg-cyan-500/20 text-cyan-400',
   plan: 'bg-indigo-500/20 text-indigo-400',
   agent: 'bg-emerald-500/20 text-emerald-400',
+  hal: 'bg-rose-500/20 text-rose-400',
+  blackbox: 'bg-slate-500/20 text-slate-400',
+  replayer: 'bg-sky-500/20 text-sky-400',
+  evolution: 'bg-violet-500/20 text-violet-400',
+  dreaming: 'bg-fuchsia-500/20 text-fuchsia-400',
 };
 
 export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
@@ -74,4 +84,9 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   memory: 'MEMORY',
   plan: 'PLAN',
   agent: 'AGENT',
+  hal: 'HAL',
+  blackbox: 'BLACKBOX',
+  replayer: 'REPLAYER',
+  evolution: 'EVOLUTION',
+  dreaming: 'DREAMING',
 };

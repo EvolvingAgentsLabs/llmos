@@ -45,9 +45,8 @@
  */
 
 // Export BlackBox Recorder
-export {
-  BlackBoxRecorder,
-  getBlackBoxRecorder,
+export { BlackBoxRecorder, getBlackBoxRecorder } from './black-box-recorder';
+export type {
   RecordedFrame,
   RecordingSession,
   FailureMarker,
@@ -55,17 +54,12 @@ export {
 } from './black-box-recorder';
 
 // Export Simulation Replayer
-export {
-  SimulationReplayer,
-  getSimulationReplayer,
-  ReplayOptions,
-  ReplayResult,
-} from './simulation-replayer';
+export { SimulationReplayer, getSimulationReplayer } from './simulation-replayer';
+export type { ReplayOptions, ReplayResult } from './simulation-replayer';
 
 // Export Evolutionary Patcher
-export {
-  EvolutionaryPatcher,
-  getEvolutionaryPatcher,
+export { EvolutionaryPatcher, getEvolutionaryPatcher } from './evolutionary-patcher';
+export type {
   EvolutionOptions,
   EvolutionProgress,
   EvolutionResult,
