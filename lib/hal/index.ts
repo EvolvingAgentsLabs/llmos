@@ -63,11 +63,8 @@ export {
 } from './hal-tool-executor';
 
 // Export adapters
-export {
-  SimulationHAL,
-  createSimulationHAL,
-  SimulatorReference,
-} from './simulation-adapter';
+export { SimulationHAL, createSimulationHAL } from './simulation-adapter';
+export type { SimulatorReference } from './simulation-adapter';
 
 export {
   PhysicalHAL,
