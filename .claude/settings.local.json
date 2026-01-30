@@ -37,7 +37,8 @@
       "Bash(npm install:*)",
       "Bash(npm run electron:compile:*)",
       "Bash(npx concurrently:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "Bash(npx next build:*)"
     ],
     "deny": [],
     "ask": []

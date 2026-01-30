@@ -186,7 +186,7 @@ export class PhysicalSkillLoader {
 
       const skill = this.parsePhysicalSkill(path, contentResult.value);
       if (!skill) {
-        return err(appError(ErrorCodes.VALIDATION_ERROR, `Failed to parse skill: ${path}`));
+        return err(appError(ErrorCodes.INVALID_INPUT, `Failed to parse skill: ${path}`));
       }
 
       // Compile Gemini prompt
@@ -458,7 +458,7 @@ export class PhysicalSkillLoader {
       const sections = this.parseSections(body);
 
       return {
-        frontmatter: frontmatter as PhysicalSkillFrontmatter,
+        frontmatter: frontmatter as unknown as PhysicalSkillFrontmatter,
         path,
         role: sections.role || '',
         objective: sections.objective || '',

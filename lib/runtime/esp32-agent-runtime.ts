@@ -696,7 +696,11 @@ export class ESP32AgentRuntime {
   /**
    * Record a failure for the Dreaming Engine
    */
-  recordFailure(type: string, description: string, severity: 'low' | 'moderate' | 'critical' = 'moderate'): void {
+  recordFailure(
+    type: 'collision' | 'timeout' | 'low_confidence' | 'safety_stop' | 'skill_error' | 'unknown',
+    description: string,
+    severity: 'minor' | 'moderate' | 'critical' = 'moderate'
+  ): void {
     if (!this.recordingSessionId) {
       return;
     }
@@ -707,11 +711,6 @@ export class ESP32AgentRuntime {
         type,
         description,
         severity,
-        context: {
-          iteration: this.state.iteration,
-          sensors: this.state.lastSensorReading,
-          lastToolCalls: this.state.lastToolCalls,
-        },
       });
 
       this.log(`Recorded failure: ${type} - ${description}`, 'warn');
@@ -730,25 +729,37 @@ export class ESP32AgentRuntime {
     try {
       const recorder = getBlackBoxRecorder();
       recorder.recordFrame({
-        timestamp: Date.now(),
-        sensors: {
-          distance: sensors.distance,
-          line: sensors.line,
-          bumper: sensors.bumper,
-          battery: sensors.battery,
-          pose: sensors.pose,
+        telemetry: {
+          timestamp: Date.now(),
+          deviceId: this.config.deviceId,
+          mode: this.config.useHAL ? 'simulation' : 'physical',
+          pose: sensors.pose
+            ? { x: sensors.pose.x, y: sensors.pose.y, z: 0, yaw: sensors.pose.rotation || 0 }
+            : { x: 0, y: 0, z: 0, yaw: 0 },
+          sensors: {
+            distance: sensors.distance
+              ? [
+                  sensors.distance.front,
+                  sensors.distance.frontLeft,
+                  sensors.distance.frontRight,
+                  sensors.distance.left,
+                  sensors.distance.right,
+                  sensors.distance.back,
+                ]
+              : [],
+            line: sensors.line || [],
+            battery: sensors.battery?.percentage ?? 100,
+          },
+          motors: {
+            left: this.leftWheelPower,
+            right: this.rightWheelPower,
+          },
+          led: { r: 0, g: 0, b: 0 },
         },
         toolCalls: toolCalls.map(tc => ({
           name: tc.tool,
           args: tc.args,
         })),
-        state: {
-          iteration: this.state.iteration,
-          motorPower: {
-            left: this.leftWheelPower,
-            right: this.rightWheelPower,
-          },
-        },
       });
     } catch (error) {
       // Don't spam logs for recording errors
@@ -1018,13 +1029,13 @@ export class ESP32AgentRuntime {
 
         // Detect low battery
         if (sensors.battery.percentage < 10) {
-          this.recordFailure('low_battery', `Battery at ${sensors.battery.percentage}%`, 'moderate');
+          this.recordFailure('safety_stop', `Battery critically low at ${sensors.battery.percentage}%`, 'critical');
         }
 
         // Detect too-close obstacle approach (should have avoided)
         if (sensors.distance.front < 5) {
           this.recordFailure(
-            'near_collision',
+            'collision',
             `Front obstacle at ${sensors.distance.front}cm - should have turned earlier`,
             'moderate'
           );
@@ -1088,13 +1099,13 @@ export class ESP32AgentRuntime {
 
           // Record tool call failure for Dreaming Engine
           if (!result.success && this.recordingSessionId) {
-            this.recordFailure('tool_failure', `Tool ${tool} failed: ${result.error}`, 'moderate');
+            this.recordFailure('skill_error', `Tool ${tool} failed: ${result.error}`, 'moderate');
           }
         } else {
           this.log(`Unknown tool: ${tool}`, 'warn');
           // Record unknown tool as failure
           if (this.recordingSessionId) {
-            this.recordFailure('unknown_tool', `Unknown tool requested: ${tool}`, 'low');
+            this.recordFailure('skill_error', `Unknown tool requested: ${tool}`, 'minor');
           }
         }
       }

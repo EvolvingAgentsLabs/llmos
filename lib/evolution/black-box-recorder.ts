@@ -129,6 +129,8 @@ export interface SessionOptions {
   cameraSampleRate?: number;
   /** Max frames to keep in memory before auto-flush */
   maxFrames?: number;
+  /** Additional metadata for the session */
+  metadata?: Record<string, unknown>;
 }
 
 /**
