@@ -17,6 +17,13 @@ import { WorldModel, getWorldModel, CellState } from './world-model';
 import { LLMClient, createLLMClient } from '../llm/client';
 import { Message, TextContent, ImageContent } from '../llm/types';
 import { logger } from '../debug/logger';
+import {
+  GeminiAgenticVision,
+  AgenticVisionResult,
+  createAgenticVisionClient,
+} from '../llm/gemini-agentic-vision';
+import { PhysicalSkill, getPhysicalSkillLoader } from '../skills/physical-skill-loader';
+import { HALToolCall } from '../hal/types';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -130,6 +137,33 @@ export interface VisionModelConfig {
 
   // Maximum vision range for world model updates (meters)
   maxVisionRange: number;
+
+  // Gemini Agentic Vision settings
+  enableAgenticVision?: boolean;
+  geminiApiKey?: string;
+}
+
+/**
+ * Extended observation that includes Agentic Vision results
+ */
+export interface AgenticVisionObservation extends VisionObservation {
+  // Agentic Vision specific fields
+  agenticVision?: {
+    // Number of Think-Act-Observe iterations performed
+    iterations: number;
+    // Code execution steps
+    codeExecutions: Array<{
+      code: string;
+      output: string;
+      success: boolean;
+    }>;
+    // HAL tool calls determined by vision
+    toolCalls: HALToolCall[];
+    // Alerts triggered
+    alerts: string[];
+    // Active skill name
+    activeSkill?: string;
+  };
 }
 
 const DEFAULT_CONFIG: VisionModelConfig = {
@@ -140,6 +174,7 @@ const DEFAULT_CONFIG: VisionModelConfig = {
   maxHistorySize: 5,
   fieldOfViewDegrees: 90,
   maxVisionRange: 3.0,
+  enableAgenticVision: false,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -204,9 +239,55 @@ export class CameraVisionModel {
   private processing = false;
   private lastProcessTime = 0;
   private listeners: Set<(observation: VisionObservation) => void> = new Set();
+  private agenticVisionClient: GeminiAgenticVision | null = null;
+  private activeSkill: PhysicalSkill | null = null;
 
   constructor(config: Partial<VisionModelConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+
+    // Initialize Agentic Vision client if enabled
+    if (this.config.enableAgenticVision && this.config.geminiApiKey) {
+      this.initializeAgenticVision(this.config.geminiApiKey);
+    }
+  }
+
+  /**
+   * Initialize Gemini Agentic Vision client
+   */
+  initializeAgenticVision(apiKey: string): void {
+    this.agenticVisionClient = createAgenticVisionClient(apiKey, {
+      enableCodeExecution: true,
+      maxIterations: 3,
+    });
+    logger.info('agent', 'Agentic Vision client initialized');
+  }
+
+  /**
+   * Set the active physical skill for Agentic Vision
+   */
+  setActiveSkill(skill: PhysicalSkill): void {
+    this.activeSkill = skill;
+    logger.info('agent', `Active skill set: ${skill.frontmatter.name}`, {
+      agenticVision: skill.frontmatter.agentic_vision,
+    });
+  }
+
+  /**
+   * Clear the active skill
+   */
+  clearActiveSkill(): void {
+    this.activeSkill = null;
+  }
+
+  /**
+   * Check if Agentic Vision is available and should be used
+   */
+  shouldUseAgenticVision(): boolean {
+    return (
+      this.agenticVisionClient !== null &&
+      this.activeSkill !== null &&
+      this.activeSkill.frontmatter.agentic_vision === true
+    );
   }
 
   /**
@@ -214,8 +295,9 @@ export class CameraVisionModel {
    */
   async processCapture(
     capture: CameraCapture,
-    robotPose: { x: number; y: number; rotation: number }
-  ): Promise<VisionObservation | null> {
+    robotPose: { x: number; y: number; rotation: number },
+    sensorContext?: Record<string, unknown>
+  ): Promise<VisionObservation | AgenticVisionObservation | null> {
     if (this.processing) {
       logger.debug('agent', 'Skipping - already processing');
       return null;
@@ -231,6 +313,12 @@ export class CameraVisionModel {
     this.lastProcessTime = now;
 
     try {
+      // Check if we should use Agentic Vision
+      if (this.shouldUseAgenticVision()) {
+        return await this.processWithAgenticVision(capture, robotPose, sensorContext);
+      }
+
+      // Fall back to standard vision analysis
       const client = createLLMClient();
       if (!client) {
         logger.warn('agent', 'LLM client not available');
@@ -263,6 +351,163 @@ export class CameraVisionModel {
     } finally {
       this.processing = false;
     }
+  }
+
+  /**
+   * Process camera capture with Gemini 3 Agentic Vision
+   *
+   * Uses the Think-Act-Observe loop for active visual investigation.
+   * The model can execute code to zoom, crop, annotate images for
+   * grounded visual reasoning.
+   */
+  private async processWithAgenticVision(
+    capture: CameraCapture,
+    robotPose: { x: number; y: number; rotation: number },
+    sensorContext?: Record<string, unknown>
+  ): Promise<AgenticVisionObservation | null> {
+    if (!this.agenticVisionClient || !this.activeSkill) {
+      return null;
+    }
+
+    try {
+      // Get the Visual Cortex prompt from the active skill
+      const skillLoader = getPhysicalSkillLoader();
+      const visualCortexPrompt = skillLoader.getVisualCortexPrompt(this.activeSkill);
+
+      // Add robot pose to sensor context
+      const enrichedContext = {
+        ...sensorContext,
+        robotPose: {
+          x: robotPose.x.toFixed(2),
+          y: robotPose.y.toFixed(2),
+          rotation: this.getCompassDirection(robotPose.rotation),
+        },
+      };
+
+      // Call Agentic Vision
+      const result = await this.agenticVisionClient.analyzeWithAgenticVision(
+        capture.dataUrl,
+        visualCortexPrompt,
+        enrichedContext
+      );
+
+      // Convert to AgenticVisionObservation
+      const observation = this.convertAgenticResult(result, robotPose);
+
+      // Add to history
+      this.observationHistory.push(observation);
+      if (this.observationHistory.length > this.config.maxHistorySize) {
+        this.observationHistory.shift();
+      }
+
+      // Notify listeners
+      this.notifyListeners(observation);
+
+      logger.debug('agent', 'Agentic Vision analysis complete', {
+        iterations: result.iterations,
+        codeExecutions: result.codeExecutions.length,
+        toolCalls: result.toolCalls.length,
+        confidence: result.confidence,
+        alerts: result.alerts.length,
+      });
+
+      return observation;
+    } catch (error) {
+      logger.error('agent', 'Agentic Vision processing failed', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Convert Agentic Vision result to AgenticVisionObservation
+   */
+  private convertAgenticResult(
+    result: AgenticVisionResult,
+    robotPose: { x: number; y: number; rotation: number }
+  ): AgenticVisionObservation {
+    // Extract region analysis from reasoning if possible
+    const regions = this.extractRegionsFromReasoning(result.reasoning);
+
+    // Extract objects from detected objects
+    const objects = (result.detectedObjects || []).map((obj) => ({
+      type: 'unknown' as ObjectType,
+      label: obj.label,
+      relativePosition: {
+        direction: 'center' as const,
+        estimatedDistance: 1.0,
+        verticalPosition: 'mid-height' as const,
+      },
+      estimatedSize: 'medium' as const,
+      appearance: obj.label,
+      confidence: obj.confidence,
+    }));
+
+    return {
+      timestamp: Date.now(),
+      robotPose,
+      fieldOfView: regions,
+      objects,
+      sceneDescription: result.reasoning.slice(0, 200),
+      confidence: result.confidence,
+      rawResponse: result.reasoning,
+      agenticVision: {
+        iterations: result.iterations,
+        codeExecutions: result.codeExecutions,
+        toolCalls: result.toolCalls.map((tc) => ({
+          name: tc.name,
+          args: tc.args,
+        })),
+        alerts: result.alerts,
+        activeSkill: this.activeSkill?.frontmatter.name,
+      },
+    };
+  }
+
+  /**
+   * Extract region analysis from Agentic Vision reasoning
+   */
+  private extractRegionsFromReasoning(reasoning: string): {
+    leftRegion: RegionAnalysis;
+    centerRegion: RegionAnalysis;
+    rightRegion: RegionAnalysis;
+  } {
+    // Default regions - would be enhanced by parsing reasoning
+    const defaultRegion = (region: 'left' | 'center' | 'right'): RegionAnalysis => ({
+      region,
+      content: 'unknown',
+      estimatedDistance: 1.0,
+      clearance: 0.5,
+      appearsUnexplored: false,
+      confidence: 0.5,
+    });
+
+    // Simple heuristics based on reasoning text
+    const lowerReasoning = reasoning.toLowerCase();
+
+    const analyzeRegion = (region: 'left' | 'center' | 'right'): RegionAnalysis => {
+      const base = defaultRegion(region);
+
+      // Check for obstacles mentioned
+      if (lowerReasoning.includes(`${region}`) && lowerReasoning.includes('obstacle')) {
+        base.content = 'obstacle';
+        base.clearance = 0.3;
+      } else if (lowerReasoning.includes(`${region}`) && lowerReasoning.includes('wall')) {
+        base.content = 'wall';
+        base.clearance = 0.1;
+      } else if (lowerReasoning.includes(`${region}`) && lowerReasoning.includes('clear')) {
+        base.content = 'open_space';
+        base.clearance = 0.9;
+        base.estimatedDistance = 3.0;
+      }
+
+      return base;
+    };
+
+    return {
+      leftRegion: analyzeRegion('left'),
+      centerRegion: analyzeRegion('center'),
+      rightRegion: analyzeRegion('right'),
+    };
   }
 
   /**

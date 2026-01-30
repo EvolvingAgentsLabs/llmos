@@ -56,10 +56,50 @@ Make robotics accessible to everyone. No coding required, just describe what you
 
 ---
 
-### Phase 2: Plugin Architecture (Months 4-6) - Q2 2026
+### Phase 2: Adaptive Physical Intelligence - Q2 2026
+**Goal**: The "iPhone Moment" for Robotics - Move from hard-coded robots to skill-based adaptive agents
+
+This phase transforms LLMos from a robot simulation platform into the **Smartphone of Robotics**:
+- **Hardware** (ESP32 + Camera + Arm) = Screen + Touch Sensor
+- **OS** (Gemini 3 Flash Kernel) = iOS/Android
+- **Skill** (Markdown File) = App
+
+#### Milestone 2.1: Gemini 3 Kernel Integration (Weeks 7-8)
+- [ ] Integrate Gemini 3 Flash API with Agentic Vision
+- [ ] Implement Think-Act-Observe loop for visual reasoning
+- [ ] Video streaming pipeline: ESP32 → Browser → Gemini
+- [ ] Enable code execution for visual investigation (zoom, crop, annotate)
+
+#### Milestone 2.2: Skill Cartridges (Weeks 9-10)
+- [ ] Create `PhysicalSkillLoader` for hot-swapping markdown skills
+- [ ] Define Visual Cortex specification (what to see)
+- [ ] Define Motor Cortex protocols (how to move)
+- [ ] Example skills: Gardener, Sorter, Inspector, Security Sentry
+- [ ] Context-based skill switching (detect intent → load skill)
+
+#### Milestone 2.3: Hardware Abstraction Layer (Weeks 11-12)
+- [ ] Unify simulated and physical interfaces
+- [ ] HAL tool definitions: `hal.move_to()`, `hal.grasp()`, `hal.vision.scan()`
+- [ ] Mode router: Same skill works in Three.js and on ESP32
+- [ ] Sensor abstraction: Simulated raycasting ↔ Real sensors
+
+#### Milestone 2.4: The Dreaming Engine (Weeks 13-14)
+- [ ] BlackBox recorder for failed interactions
+- [ ] Headless Three.js simulation for replay
+- [ ] Evolutionary skill patcher (try 1000 variants, select best)
+- [ ] Auto-update skills from successful experiments
+
+**Success Criteria**:
+- Same skill file runs in simulation and on physical hardware
+- Robot can "download" new abilities via skill files
+- Failures automatically improve through dreaming
+
+---
+
+### Phase 3: Plugin Architecture (Months 7-9) - Q3 2026
 **Goal**: Extensible system where community can contribute
 
-#### Why Plugins First?
+#### Why Plugins?
 As a small team, we can't build support for every hardware platform. Plugins let the community extend LLMos to new hardware, sensors, and behaviors.
 
 #### Milestone 2.1: Plugin System (Weeks 7-8)

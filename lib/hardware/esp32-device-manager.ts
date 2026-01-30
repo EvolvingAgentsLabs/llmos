@@ -16,6 +16,18 @@
 import { ESP32WASM4VM, ESP32WASM4VMConfig, ESP32WASM4VMState, GAME_MODE, GAME_TEMPLATES } from './esp32-wasm4-vm';
 import { FloorMap, FLOOR_MAPS, CubeRobotState } from './cube-robot-simulator';
 
+// HAL Integration
+import {
+  HardwareAbstractionLayer,
+  createHAL,
+  setGlobalHAL,
+  getHALToolExecutor,
+  HAL_TOOL_DEFINITIONS,
+  HALMode,
+  HALToolCall,
+  HALToolResult,
+} from '../hal';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DEVICE TYPES AND INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -590,6 +602,116 @@ export class ESP32DeviceManager {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // HAL (HARDWARE ABSTRACTION LAYER) INTEGRATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Create a HAL instance for a device
+   *
+   * This creates a Hardware Abstraction Layer that routes tool calls
+   * to the appropriate implementation (simulation VM or physical hardware).
+   *
+   * @param deviceId - The device to create HAL for
+   * @param setAsGlobal - Whether to set this as the global HAL instance
+   * @returns HAL instance or null if device not found
+   */
+  createDeviceHAL(deviceId: string, setAsGlobal: boolean = false): HardwareAbstractionLayer | null {
+    const device = this.devices.get(deviceId);
+    if (!device) {
+      console.error(`[DeviceManager] Cannot create HAL - device not found: ${deviceId}`);
+      return null;
+    }
+
+    try {
+      // Create HAL based on device type
+      const hal = createHAL({
+        mode: device.type === 'virtual' ? 'simulation' : 'physical',
+        deviceId: device.id,
+        simulator: device.vm,
+        capabilities: {
+          locomotion: true,
+          vision: true,
+          manipulation: false, // Cube robot doesn't have manipulation
+          communication: true,
+        },
+        connection: device.type !== 'virtual' ? {
+          type: device.type as 'serial' | 'wifi' | 'bluetooth',
+          baudRate: 115200,
+        } : undefined,
+      });
+
+      // Store HAL reference on device
+      device.hal = hal;
+
+      // Optionally set as global HAL
+      if (setAsGlobal) {
+        setGlobalHAL(hal);
+      }
+
+      console.log(`[DeviceManager] Created HAL for device: ${deviceId} (${device.type})`);
+      this.emit('device:hal_created', { deviceId, mode: hal.mode });
+
+      return hal;
+    } catch (error) {
+      console.error(`[DeviceManager] Failed to create HAL for ${deviceId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the HAL instance for a device
+   *
+   * @param deviceId - The device ID
+   * @returns HAL instance or null if not created
+   */
+  getDeviceHAL(deviceId: string): HardwareAbstractionLayer | null {
+    const device = this.devices.get(deviceId);
+    return device?.hal || null;
+  }
+
+  /**
+   * Create or get HAL for a device (lazy initialization)
+   *
+   * @param deviceId - The device ID
+   * @returns HAL instance
+   */
+  getOrCreateHAL(deviceId: string): HardwareAbstractionLayer | null {
+    const device = this.devices.get(deviceId);
+    if (!device) return null;
+
+    if (!device.hal) {
+      return this.createDeviceHAL(deviceId);
+    }
+
+    return device.hal;
+  }
+
+  /**
+   * Dispose HAL for a device
+   *
+   * @param deviceId - The device ID
+   */
+  disposeDeviceHAL(deviceId: string): void {
+    const device = this.devices.get(deviceId);
+    if (device?.hal) {
+      // HAL doesn't have dispose method, just remove reference
+      device.hal = undefined;
+      this.emit('device:hal_disposed', { deviceId });
+    }
+  }
+
+  /**
+   * Check if device has HAL enabled
+   *
+   * @param deviceId - The device ID
+   * @returns true if HAL is created for this device
+   */
+  hasHAL(deviceId: string): boolean {
+    const device = this.devices.get(deviceId);
+    return !!device?.hal;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // CLEANUP
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -598,6 +720,10 @@ export class ESP32DeviceManager {
    */
   dispose(): void {
     for (const [deviceId, device] of this.devices) {
+      // Dispose HAL if exists
+      if (device.hal) {
+        device.hal = undefined;
+      }
       device.vm.dispose();
     }
 
@@ -615,6 +741,7 @@ export class ESP32DeviceManager {
 
 interface ManagedDevice extends DeviceInfo {
   vm: ESP32WASM4VM;
+  hal?: HardwareAbstractionLayer;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -653,3 +780,22 @@ export function resetDeviceManager(): void {
     defaultManager = null;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HAL CONVENIENCE EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Re-export HAL module for convenience
+export {
+  createHAL,
+  setGlobalHAL,
+  getHALToolExecutor,
+  HAL_TOOL_DEFINITIONS,
+} from '../hal';
+
+export type {
+  HardwareAbstractionLayer,
+  HALMode,
+  HALToolCall,
+  HALToolResult,
+} from '../hal';
