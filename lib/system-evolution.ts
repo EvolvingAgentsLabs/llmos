@@ -22,6 +22,8 @@ import { artifactManager } from './artifacts/artifact-manager';
 import { GitService, VolumeType } from './git-service';
 import { createLLMClient } from './llm-client';
 import { CronAnalyzer, Pattern } from './cron-analyzer';
+import { getAgenticAuditor, AuditResult } from './evolution/agentic-auditor';
+import { getPhysicalSkillLoader } from './skills/physical-skill-loader';
 
 // Re-export usage tracker functions for convenience
 export { getSubAgentUsage, recordSubAgentExecution, clearSubAgentUsage };
@@ -98,6 +100,8 @@ export interface PromotionResult {
   newPath?: string;
   commitHash?: string;
   error?: string;
+  /** Audit result if skill was audited before promotion */
+  auditResult?: AuditResult;
 }
 
 // ============================================================================
@@ -484,6 +488,10 @@ Return ONLY valid JSON in this format:
 
   /**
    * Promote an artifact to the system volume
+   *
+   * For physical skills, this will run the Agentic Auditor to validate
+   * the skill before promotion. Promotion will be blocked if the skill
+   * fails the audit.
    */
   async promoteArtifact(
     recommendation: EvolutionRecommendation,
@@ -491,6 +499,26 @@ Return ONLY valid JSON in this format:
   ): Promise<PromotionResult> {
     try {
       onProgress?.('Reading artifact content...');
+
+      // For physical skills, run the Agentic Auditor first
+      if (recommendation.artifactType === 'skill') {
+        const auditResult = await this.auditSkillBeforePromotion(
+          recommendation,
+          onProgress
+        );
+
+        if (auditResult && auditResult.promotionBlocked) {
+          return {
+            success: false,
+            artifactId: recommendation.artifactId,
+            artifactName: recommendation.artifactName,
+            sourceVolume: recommendation.sourceVolume,
+            targetVolume: 'system',
+            error: `Audit failed: ${auditResult.blockReason}`,
+            auditResult,
+          };
+        }
+      }
 
       // Determine the source path based on artifact type
       let sourcePath: string;
@@ -627,6 +655,78 @@ Return ONLY valid JSON in this format:
       : `<!-- Promoted from ${metadata.promotedFrom} volume at ${metadata.promotedAt} -->\n<!-- Reason: ${metadata.promotionReason} -->\n\n`;
 
     return comment + content;
+  }
+
+  /**
+   * Audit a physical skill before promotion using the Agentic Auditor
+   *
+   * Returns the audit result, or null if the artifact is not a physical skill.
+   */
+  private async auditSkillBeforePromotion(
+    recommendation: EvolutionRecommendation,
+    onProgress?: (step: string) => void
+  ): Promise<AuditResult | null> {
+    try {
+      onProgress?.('Auditing skill before promotion...');
+
+      // Determine the source path
+      let sourcePath: string | null = null;
+      if (recommendation.artifactId.startsWith('subagent:')) {
+        const [, volume, ...pathParts] = recommendation.artifactId.split(':');
+        sourcePath = `${volume}/${pathParts.join(':')}`;
+      } else if (recommendation.artifactId.startsWith('llm:')) {
+        // Try to find by name
+        const artifact = artifactManager.getAll().find(
+          a => a.name === recommendation.artifactName
+        );
+        if (artifact?.filePath) {
+          sourcePath = artifact.filePath;
+        }
+      } else {
+        const artifact = artifactManager.get(recommendation.artifactId);
+        if (artifact?.filePath) {
+          sourcePath = artifact.filePath;
+        }
+      }
+
+      if (!sourcePath) {
+        console.warn('Could not determine skill path for audit');
+        return null;
+      }
+
+      // Load the skill using PhysicalSkillLoader
+      const skillLoader = getPhysicalSkillLoader();
+      const skillResult = await skillLoader.loadSkill(sourcePath);
+
+      if (!skillResult.ok || !skillResult.value) {
+        // Not a physical skill or couldn't load - skip audit
+        return null;
+      }
+
+      const skill = skillResult.value;
+
+      // Determine target level based on volume
+      const targetLevel: 'user' | 'team' | 'system' =
+        recommendation.sourceVolume === 'user' ? 'team' :
+        recommendation.sourceVolume === 'team' ? 'system' : 'system';
+
+      onProgress?.(`Running ${targetLevel}-level audit...`);
+
+      // Run the audit
+      const auditor = getAgenticAuditor();
+      const auditResult = await auditor.auditSkill(skill, targetLevel);
+
+      onProgress?.(
+        auditResult.approved
+          ? `✓ Audit passed (score: ${auditResult.score})`
+          : `✗ Audit failed: ${auditResult.blockReason}`
+      );
+
+      return auditResult;
+    } catch (error) {
+      console.warn('Skill audit failed:', error);
+      return null;
+    }
   }
 
   /**
