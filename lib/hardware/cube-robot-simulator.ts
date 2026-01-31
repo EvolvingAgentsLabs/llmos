@@ -114,6 +114,12 @@ export interface SensorData {
     angle: number;       // Angle relative to robot heading (-180 to 180 degrees)
     points: number;
   }[];
+
+  // Velocity (for trajectory prediction)
+  velocity: {
+    linear: number;   // m/s (forward/backward speed)
+    angular: number;  // rad/s (turning rate)
+  };
 }
 
 export interface LEDState {
@@ -503,9 +509,21 @@ export class CubeRobotSimulator {
   }
 
   private pwmToVelocity(pwm: number): number {
+    // Motor deadband compensation
+    // Real DC motors need ~40 PWM minimum to overcome static friction
+    const MOTOR_DEADBAND = 40;
+
+    // Apply deadband compensation: boost small non-zero values to minimum effective PWM
+    let effectivePwm = pwm;
+    if (pwm > 0 && pwm < MOTOR_DEADBAND) {
+      effectivePwm = MOTOR_DEADBAND;
+    } else if (pwm < 0 && pwm > -MOTOR_DEADBAND) {
+      effectivePwm = -MOTOR_DEADBAND;
+    }
+
     // Max velocity at PWM 255
     const maxVelocity = (ROBOT_SPECS.MAX_RPM / 60) * 2 * Math.PI * ROBOT_SPECS.WHEEL_RADIUS;
-    return (pwm / 255) * maxVelocity;
+    return (effectivePwm / 255) * maxVelocity;
   }
 
   private normalizeAngle(angle: number): number {
@@ -646,6 +664,7 @@ export class CubeRobotSimulator {
       bumper: { ...this.bumperState },
       encoders: { ...this.encoders },
       nearbyCollectibles: this.getNearbyCollectibles(),
+      velocity: { ...this.velocity }, // Include velocity for trajectory prediction
     };
   }
 

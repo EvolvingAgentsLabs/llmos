@@ -441,8 +441,9 @@ export class RayNavigationSystem {
 
     while (t < predictionHorizon) {
       // Update position using differential drive model
-      x += linearCmPerSec * Math.cos(theta) * dt;
-      y += linearCmPerSec * Math.sin(theta) * dt;
+      // Match physics convention: sin for X, cos for Y (rotation=0 means +Y direction)
+      x += linearCmPerSec * Math.sin(theta) * dt;
+      y += linearCmPerSec * Math.cos(theta) * dt;
       theta += velocity.angular * dt;
       t += dt;
 

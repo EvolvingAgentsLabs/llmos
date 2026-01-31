@@ -41,6 +41,7 @@ export interface SensorReadings {
   battery: { voltage: number; percentage: number };
   imu?: { accelX: number; accelY: number; accelZ: number; gyroZ: number };
   pose: { x: number; y: number; rotation: number };
+  velocity?: { linear: number; angular: number }; // For trajectory prediction
   nearbyCollectibles?: Collectible[];
 }
 
@@ -266,6 +267,42 @@ export class PositionFormatter implements SensorFormatter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// VELOCITY FORMATTER - For trajectory prediction
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class VelocityFormatter implements SensorFormatter {
+  getSectionTitle(): string {
+    return 'Velocity';
+  }
+
+  format(sensors: SensorReadings): string {
+    const velocity = sensors.velocity;
+    if (!velocity) {
+      return '**Velocity:** Not available';
+    }
+
+    // Convert to more readable units
+    const linearCmPerSec = (velocity.linear * 100).toFixed(1);
+    const angularDegPerSec = ((velocity.angular * 180) / Math.PI).toFixed(1);
+
+    // Provide trajectory prediction context
+    const direction = velocity.linear >= 0 ? 'forward' : 'backward';
+    const turning = velocity.angular > 0.1 ? 'turning right' :
+                    velocity.angular < -0.1 ? 'turning left' : 'straight';
+
+    // Predict position in 200ms (one loop interval)
+    const predictionMs = 200;
+    const predictedDistanceCm = (Math.abs(velocity.linear) * (predictionMs / 1000) * 100).toFixed(1);
+    const predictedRotationDeg = ((velocity.angular * (predictionMs / 1000) * 180) / Math.PI).toFixed(1);
+
+    return [
+      `**Velocity:** ${linearCmPerSec} cm/s ${direction}, ${angularDegPerSec}°/s ${turning}`,
+      `**Trajectory (next 200ms):** Will move ${predictedDistanceCm}cm and rotate ${predictedRotationDeg}°`,
+    ].join('\n');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COLLECTIBLES FORMATTER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -374,6 +411,11 @@ export class RayNavigationFormatter implements SensorFormatter {
     // Update pose from sensor data
     if (sensors.pose) {
       this.lastPose = sensors.pose;
+    }
+
+    // Update velocity from sensor data for accurate trajectory prediction
+    if (sensors.velocity) {
+      this.lastVelocity = sensors.velocity;
     }
 
     // Build sensor distances
@@ -641,6 +683,7 @@ export function createExplorerFormatter(): CompositeSensorFormatter {
     new DistanceSensorFormatter({ includeAllSensors: true }),
     new NavigationZoneFormatter(),
     new PositionFormatter(),
+    new VelocityFormatter(), // Added for trajectory prediction
     new BumperFormatter(),
     new BatteryFormatter(),
   ]);
@@ -656,6 +699,7 @@ export function createRayExplorerFormatter(): CompositeSensorFormatter {
     new RayNavigationFormatter(),
     new UltrasoundFormatter(),
     new PositionFormatter(),
+    new VelocityFormatter(), // Added for trajectory prediction
     new BumperFormatter(),
     new BatteryFormatter(),
   ]);
@@ -669,6 +713,7 @@ export function createLineFollowerFormatter(): CompositeSensorFormatter {
     new LineSensorFormatter(),
     new DistanceSensorFormatter({ includeAllSensors: false }),
     new PositionFormatter(),
+    new VelocityFormatter(), // Added for trajectory prediction
     new BumperFormatter(),
   ]);
 }
@@ -681,6 +726,7 @@ export function createWallFollowerFormatter(): CompositeSensorFormatter {
     new DistanceSensorFormatter({ includeAllSensors: true }),
     new NavigationZoneFormatter(),
     new PositionFormatter(),
+    new VelocityFormatter(), // Added for trajectory prediction
     new BumperFormatter(),
   ]);
 }
@@ -694,6 +740,7 @@ export function createCollectorFormatter(): CompositeSensorFormatter {
     new NavigationZoneFormatter(),
     new CollectiblesFormatter(),
     new PositionFormatter(),
+    new VelocityFormatter(), // Added for trajectory prediction
     new BumperFormatter(),
     new BatteryFormatter(),
   ]);
