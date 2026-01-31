@@ -63,6 +63,12 @@ import {
   RecordingSession,
 } from '../evolution/black-box-recorder';
 
+// Robot Navigation Debugger - Comprehensive debugging for navigation issues
+import {
+  getRobotDebugger,
+  RobotNavigationDebugger,
+} from '../debug/robot-navigation-debugger';
+
 // Import modular navigation, sensors, and behaviors
 import {
   NavigationCalculator,
@@ -518,6 +524,9 @@ export class ESP32AgentRuntime {
   private activeSkill: PhysicalSkill | null = null;
   private recordingSessionId: string | null = null;
 
+  // Navigation debugger for comprehensive logging
+  private navDebugger: RobotNavigationDebugger;
+
   constructor(config: ESP32AgentConfig) {
     this.config = {
       ...config,
@@ -571,6 +580,24 @@ export class ESP32AgentRuntime {
     if (this.config.useHAL) {
       this.halExecutor = getHALToolExecutor();
     }
+
+    // Initialize navigation debugger
+    this.navDebugger = getRobotDebugger();
+  }
+
+  /**
+   * Enable/disable navigation debugging
+   */
+  setNavigationDebugging(enabled: boolean, verbosity: 'minimal' | 'normal' | 'detailed' | 'verbose' = 'detailed'): void {
+    this.navDebugger.setEnabled(enabled);
+    this.navDebugger.setVerbosity(verbosity);
+  }
+
+  /**
+   * Get navigation debugger for external access
+   */
+  getNavigationDebugger(): RobotNavigationDebugger {
+    return this.navDebugger;
   }
 
   /**
@@ -1008,12 +1035,23 @@ export class ESP32AgentRuntime {
       return;
     }
 
+    // Start debug iteration
+    this.navDebugger.startIteration(this.state.iteration);
+
     try {
       // ═══════════════════════════════════════════════════════════════════
       // STEP 1: Read sensors (LOCAL on ESP32)
       // ═══════════════════════════════════════════════════════════════════
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
+
+      // Debug: Log sensor readings
+      this.navDebugger.logSensors({
+        distance: sensors.distance,
+        pose: sensors.pose,
+        velocity: (sensors as any).velocity,
+        bumper: sensors.bumper,
+      });
 
       // ═══════════════════════════════════════════════════════════════════
       // STEP 1.1: Auto-detect failures for Dreaming Engine
@@ -1082,9 +1120,14 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       // STEP 3: Parse and execute tool calls (LOCAL on ESP32)
       // ═══════════════════════════════════════════════════════════════════
-      console.log('[ESP32Agent] Raw LLM response:', llmResponse);
+      // Debug: Log LLM response
+      this.navDebugger.logLLMResponse(llmResponse);
+
       const toolCalls = this.parseToolCalls(llmResponse);
-      console.log('[ESP32Agent] Parsed tool calls:', toolCalls);
+
+      // Debug: Log parsed tool calls
+      this.navDebugger.logParsedToolCalls(toolCalls);
+
       this.state.lastToolCalls = [];
 
       // Select tool set based on HAL mode
@@ -1097,6 +1140,9 @@ export class ESP32AgentRuntime {
           this.state.lastToolCalls.push({ tool, args, result });
           this.state.stats.totalToolCalls++;
           this.log(`Tool ${tool}: ${JSON.stringify(result.data)}`, 'info');
+
+          // Debug: Log executed command
+          this.navDebugger.logExecutedCommand(tool, args, result);
 
           // Record tool call failure for Dreaming Engine
           if (!result.success && this.recordingSessionId) {
@@ -1124,10 +1170,15 @@ export class ESP32AgentRuntime {
         (this.state.stats.avgLoopTimeMs * (this.state.iteration - 1) + loopTime) /
         this.state.iteration;
 
+      // Debug: End iteration logging
+      this.navDebugger.endIteration();
+
       this.emitStateChange();
     } catch (error: any) {
       this.log(`Loop error: ${error.message}`, 'error');
       this.state.errors.push(error.message);
+      // Debug: End iteration even on error
+      this.navDebugger.endIteration();
       this.emitStateChange();
     }
 
@@ -1360,6 +1411,9 @@ export class ESP32AgentRuntime {
     // Build the context message with sensor data
     const sensorContext = this.formatSensorContext(sensors);
 
+    // Debug: Log what the LLM will see
+    this.navDebugger.logLLMContext(sensorContext);
+
     // In browser simulation, we can call the LLM client directly
     // On physical device, this would be an HTTP POST to /api/device/llm-request
     if (typeof window !== 'undefined') {
@@ -1497,6 +1551,7 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       imu: sensors.imu,
       pose: sensors.pose,
       nearbyCollectibles: (sensors as any).nearbyCollectibles,
+      velocity: (sensors as any).velocity, // Include velocity for trajectory prediction
     };
 
     // Format with context

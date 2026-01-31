@@ -21,7 +21,8 @@ export type LogCategory =
   | 'blackbox'  // BlackBox recorder
   | 'replayer'  // Simulation replayer
   | 'evolution' // Evolutionary patcher
-  | 'dreaming'; // Dreaming engine
+  | 'dreaming'  // Dreaming engine
+  | 'robot';    // Robot navigation debugging
 
 export interface LogEntry {
   id: string;
@@ -74,6 +75,7 @@ export const LOG_CATEGORY_COLORS: Record<LogCategory, string> = {
   replayer: 'bg-sky-500/20 text-sky-400',
   evolution: 'bg-violet-500/20 text-violet-400',
   dreaming: 'bg-fuchsia-500/20 text-fuchsia-400',
+  robot: 'bg-red-500/20 text-red-400',
 };
 
 export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
@@ -92,4 +94,5 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   replayer: 'REPLAYER',
   evolution: 'EVOLUTION',
   dreaming: 'DREAMING',
+  robot: 'ROBOT',
 };
