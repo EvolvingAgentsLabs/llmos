@@ -144,6 +144,7 @@ export interface SensorReadings {
   battery: { voltage: number; percentage: number };
   imu?: { accelX: number; accelY: number; accelZ: number; gyroZ: number };
   pose: { x: number; y: number; rotation: number };
+  velocity?: { linear: number; angular: number }; // For trajectory prediction
 }
 
 export interface CameraFrame {
@@ -415,7 +416,7 @@ export interface ESP32AgentConfig {
   // Optional goal for the agent to achieve (e.g., "collect all coins", "transport the ball to location X")
   goal?: string;
   // Loop timing
-  loopIntervalMs?: number; // How often to run the control loop (default: 500ms)
+  loopIntervalMs?: number; // How often to run the control loop (default: 200ms)
   maxIterations?: number; // Optional limit
   // Host connection for LLM requests
   hostUrl?: string; // Default: current host
@@ -520,7 +521,7 @@ export class ESP32AgentRuntime {
   constructor(config: ESP32AgentConfig) {
     this.config = {
       ...config,
-      loopIntervalMs: config.loopIntervalMs ?? 500,
+      loopIntervalMs: config.loopIntervalMs ?? 200, // Reduced from 500ms for faster obstacle response
       hostUrl: config.hostUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
       visionEnabled: config.visionEnabled ?? false,
       visionInterval: config.visionInterval ?? 3000,
@@ -1144,11 +1145,12 @@ export class ESP32AgentRuntime {
   // ═══════════════════════════════════════════════════════════════════════════
 
   private static readonly STUCK_DETECTION = {
-    POSITION_HISTORY_SIZE: 5,        // Keep last N positions
-    MIN_MOVEMENT_THRESHOLD: 0.05,    // Minimum movement in meters to be considered "moving"
-    MIN_ROTATION_THRESHOLD: 0.15,    // Minimum rotation in radians (~8.5 degrees)
-    STUCK_ITERATIONS_THRESHOLD: 3,   // Consider stuck after N iterations with no progress
+    POSITION_HISTORY_SIZE: 8,        // Keep last N positions (increased for smoother maneuvers)
+    MIN_MOVEMENT_THRESHOLD: 0.03,    // Minimum movement in meters to be considered "moving" (reduced)
+    MIN_ROTATION_THRESHOLD: 0.5,     // Minimum rotation in radians (~28 degrees) - increased to allow turns
+    STUCK_ITERATIONS_THRESHOLD: 6,   // Consider stuck after N iterations (increased to allow maneuvers)
     MAX_RECOVERY_ATTEMPTS: 5,        // Try different strategies before giving up
+    PURE_ROTATION_ITERATIONS: 5,     // Require more iterations before flagging pure rotation as stuck
   };
 
   /**
@@ -1193,8 +1195,9 @@ export class ESP32AgentRuntime {
     const isRotatingSignificantly = rotationChange > ESP32AgentRuntime.STUCK_DETECTION.MIN_ROTATION_THRESHOLD;
 
     // Robot is stuck if it's neither moving nor rotating significantly
-    // (or just rotating in place without progress)
-    const pureRotationStuck = !isMoving && isRotatingSignificantly && detection.stuckCount >= 2;
+    // Pure rotation (turning in place) is allowed for longer - it's often a valid maneuver
+    const pureRotationStuck = !isMoving && isRotatingSignificantly &&
+      detection.stuckCount >= ESP32AgentRuntime.STUCK_DETECTION.PURE_ROTATION_ITERATIONS;
     const noProgressStuck = !isMoving && !isRotatingSignificantly;
 
     if (noProgressStuck || pureRotationStuck) {
@@ -1468,11 +1471,12 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       // Use advanced ray-based navigation for explorers
       return createRayExplorerFormatter();
     } else if (prompt.includes('explor')) {
-      // Default explorer now uses ray-based navigation for better obstacle avoidance
+      // Explorer uses ray-based navigation for better obstacle avoidance
       return createRayExplorerFormatter();
     } else {
-      // Default to basic explorer formatter
-      return createExplorerFormatter();
+      // Default to ray-based explorer formatter for all behaviors
+      // Ray-based navigation provides trajectory prediction and better obstacle avoidance
+      return createRayExplorerFormatter();
     }
   }
 
