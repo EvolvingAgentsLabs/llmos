@@ -117,9 +117,11 @@ Angular Velocity: ω = (v_right - v_left) / wheel_base
 
 Position Update (per dt):
   rotation += ω * dt
-  x += v * cos(rotation) * dt
-  y += v * sin(rotation) * dt
+  x += v * sin(rotation) * dt
+  y += v * cos(rotation) * dt
 ```
+
+Note: rotation=0 means facing +Y direction. Positive angular velocity increases rotation (clockwise turn).
 
 ### Movement Patterns
 
@@ -127,10 +129,10 @@ Position Update (per dt):
 |------------|-------------|----------|
 | +100 | +100 | Forward |
 | -100 | -100 | Backward |
-| +100 | -100 | Rotate Right (CW) |
-| -100 | +100 | Rotate Left (CCW) |
-| +150 | +50 | Curve Right |
-| +50 | +150 | Curve Left |
+| +100 | -100 | Rotate Left (CCW) |
+| -100 | +100 | Rotate Right (CW) |
+| +150 | +50 | Curve Left |
+| +50 | +150 | Curve Right |
 
 ## Usage Examples
 
@@ -139,7 +141,10 @@ Position Update (per dt):
 // Drive forward
 await sendDeviceCommand({ action: 'drive', l: 100, r: 100 });
 
-// Turn left (rotate in place)
+// Turn left (rotate in place) - left motor faster/forward, right slower/reverse
+await sendDeviceCommand({ action: 'drive', l: 100, r: -100 });
+
+// Turn right (rotate in place) - right motor faster/forward, left slower/reverse
 await sendDeviceCommand({ action: 'drive', l: -100, r: 100 });
 
 // Stop
@@ -161,8 +166,8 @@ async function driveSquare(sideLength = 1.0, speed = 100) {
     await sendDeviceCommand({ action: 'drive', l: speed, r: speed });
     await delay(DRIVE_TIME);
 
-    // Turn 90 degrees right
-    await sendDeviceCommand({ action: 'drive', l: speed, r: -speed });
+    // Turn 90 degrees right (right motor reverse, left motor forward)
+    await sendDeviceCommand({ action: 'drive', l: -speed, r: speed });
     await delay(TURN_TIME);
   }
 
