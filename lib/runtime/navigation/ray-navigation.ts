@@ -641,14 +641,14 @@ export class RayNavigationSystem {
       rightMotor = baseSpeed;
       reason = `Clear path ahead (${bestPath.clearance.toFixed(0)}cm clearance)`;
     } else if (bestPath.direction === 'left' || bestPath.centerAngle < 0) {
-      // Turn left - reduce right motor or reverse it for sharper turn
-      leftMotor = baseSpeed - turnAmount;
-      rightMotor = baseSpeed + turnAmount * 0.5;
-      reason = `Turning left toward ${bestPath.clearance.toFixed(0)}cm clearance`;
-    } else {
-      // Turn right - reduce left motor
+      // Turn left - left motor faster to decrease rotation (turn left)
       leftMotor = baseSpeed + turnAmount * 0.5;
       rightMotor = baseSpeed - turnAmount;
+      reason = `Turning left toward ${bestPath.clearance.toFixed(0)}cm clearance`;
+    } else {
+      // Turn right - right motor faster to increase rotation (turn right)
+      leftMotor = baseSpeed - turnAmount;
+      rightMotor = baseSpeed + turnAmount * 0.5;
       reason = `Turning right toward ${bestPath.clearance.toFixed(0)}cm clearance`;
     }
 
@@ -681,14 +681,14 @@ export class RayNavigationSystem {
     switch (prediction.recommendedAction) {
       case 'turn_left':
         return {
-          leftMotor: Math.round(-maxSpeed * 0.3),
-          rightMotor: Math.round(maxSpeed * 0.5),
+          leftMotor: Math.round(maxSpeed * 0.5),
+          rightMotor: Math.round(-maxSpeed * 0.3),
           reason: 'EMERGENCY: Sharp left turn to avoid collision',
         };
       case 'turn_right':
         return {
-          leftMotor: Math.round(maxSpeed * 0.5),
-          rightMotor: Math.round(-maxSpeed * 0.3),
+          leftMotor: Math.round(-maxSpeed * 0.3),
+          rightMotor: Math.round(maxSpeed * 0.5),
           reason: 'EMERGENCY: Sharp right turn to avoid collision',
         };
       case 'stop':
