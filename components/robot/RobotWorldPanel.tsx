@@ -875,7 +875,7 @@ export default function RobotWorldPanel({
     enabled: true,
     position: 'top-right',
     size: 'medium',
-    view: 'top-down',
+    view: 'robot-camera',  // Default to robot camera so users can see what the robot sees
   });
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [showRayVisualization, setShowRayVisualization] = useState(true); // Show ray trajectory by default
