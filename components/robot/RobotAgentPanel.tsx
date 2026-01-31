@@ -287,18 +287,18 @@ ${prompt}
                   battery: sensors.battery?.percentage ?? 100,
                 },
               },
-              toolCalls: state.toolCallHistory?.slice(-5).map(tc => ({
-                name: tc.name,
+              toolCalls: state.lastToolCalls?.slice(-5).map(tc => ({
+                name: tc.tool,
                 args: tc.args || {},
               })) || [],
-              toolResults: state.toolCallHistory?.slice(-5).map(tc => ({
-                name: tc.name,
-                success: !tc.error,
-                data: tc.result,
-                error: tc.error,
+              toolResults: state.lastToolCalls?.slice(-5).map(tc => ({
+                name: tc.tool,
+                success: tc.result?.success ?? true,
+                data: tc.result?.data,
+                error: tc.result?.error,
               })) || [],
               reasoning: state.lastLLMResponse?.slice(0, 500),
-              confidence: state.lastVisionConfidence,
+              confidence: state.suggestedExplorationDirection?.confidence,
             });
 
             // Mark failures if detected
