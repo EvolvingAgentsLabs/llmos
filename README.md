@@ -22,6 +22,10 @@ Robot: *does exactly that*
 
 ---
 
+> **⚠️ Active Development**: LLMos is in active development. The code compiles and core features work, but some functionality may be incomplete or change rapidly. Perfect for experimenters and early adopters!
+
+---
+
 ## The Simple Truth
 
 **Old way**: Learn C++, write 500 lines of code, debug for hours, maybe your robot works.
@@ -64,6 +68,21 @@ That's it. You have a working robot.
 
 ## What Makes This Different?
 
+### Everything is Markdown
+
+In LLMos, robot behaviors are defined in simple text files anyone can read and edit:
+
+| What | Format | Can Be Evolved |
+|------|--------|----------------|
+| Robot Skills | Markdown | ✅ Yes |
+| Robot Tools (HAL) | Markdown | ✅ Yes |
+| Agents | Markdown | ✅ Yes |
+
+This means:
+- **Humans** can read and understand how the robot works
+- **LLMs** can evaluate and improve behaviors
+- **The Dreaming Engine** can automatically evolve skills overnight
+
 ### You Don't Need Hardware to Start
 
 LLMos includes a 3D simulator. Your robot runs in a virtual world first:
@@ -73,7 +92,7 @@ LLMos includes a 3D simulator. Your robot runs in a virtual world first:
 
 When you're ready, the same code runs on real ESP32 hardware.
 
-### Your Robot Learns
+### Your Robot Learns (Auto-Evolution)
 
 Made a mistake? Hit a wall? LLMos remembers:
 
@@ -88,9 +107,9 @@ This is called the **Dreaming Engine**. Your robot literally learns while it sle
 
 LLMos includes multiple safety layers:
 
-- **Hardware Reflexes** - Local safety rules that work even without AI (bumper stops, emergency distance)
+- **Hardware Reflexes** - Local safety rules that work even without AI
 - **Command Validation** - Every motor command is checked before execution
-- **Automatic Speed Reduction** - Robot slows down near obstacles automatically
+- **Automatic Speed Reduction** - Robot slows down near obstacles
 - **Emergency Stop** - One command to stop everything immediately
 
 ---
@@ -201,7 +220,7 @@ If something goes wrong, LLMos:
 
 ## The Building Blocks
 
-### Skill Cartridges
+### Skill Cartridges (Markdown)
 
 Think of them like apps for your robot:
 
@@ -229,9 +248,42 @@ You're a plant care robot.
 
 Load different skills = Different robot behaviors. Same hardware.
 
-### Hardware Abstraction Layer (HAL)
+### HAL Tools (Markdown)
 
-You don't need to know how motors work. Just use simple commands:
+Robot commands are also defined in markdown for easy evolution:
+
+```markdown
+---
+name: hal_drive
+type: hal_tool
+category: locomotion
+safety_critical: true
+---
+
+# HAL Tool: hal_drive
+
+Control wheel motors for differential drive.
+
+## Parameters
+| Param | Type | Range | Description |
+|-------|------|-------|-------------|
+| left | number | -255 to 255 | Left wheel power |
+| right | number | -255 to 255 | Right wheel power |
+
+## Examples
+### Drive forward
+{"name": "hal_drive", "args": {"left": 100, "right": 100}}
+
+## Evolution History
+| Version | Changes | Source |
+|---------|---------|--------|
+| 1.0.0 | Initial | Created |
+| 1.1.0 | Added deadband | Dreaming Engine |
+```
+
+The Dreaming Engine can update these tools with learned improvements!
+
+### Available HAL Commands
 
 | Command | What It Does |
 |---------|--------------|
@@ -239,6 +291,8 @@ You don't need to know how motors work. Just use simple commands:
 | `hal_stop()` | Stop moving |
 | `hal_set_led(r, g, b)` | Set LED color |
 | `hal_get_distance()` | Read distance sensors |
+| `hal_vision_scan()` | Scan for objects |
+| `hal_speak(text)` | Say something |
 | `hal_emergency_stop()` | STOP EVERYTHING NOW |
 
 These work identically in simulation and on real hardware.
@@ -278,7 +332,7 @@ Your robot's improvement cycle:
 
 ---
 
-## Safety Features (New!)
+## Safety Features
 
 ### Hardware Reflexes
 
@@ -329,7 +383,7 @@ This prevents buggy skills from spreading.
 
 ---
 
-## Physics Simulation (New!)
+## Physics Simulation
 
 The simulator now has realistic physics:
 
@@ -352,7 +406,7 @@ LLMos predicts where your robot will be:
 
 ---
 
-## Session Analysis (New!)
+## Session Analysis
 
 Every robot session is recorded and analyzed:
 
@@ -392,30 +446,36 @@ Export sessions for external analysis in Excel, Python, etc.
 ```
 llmos/
 ├── lib/
-│   ├── hal/                    # Hardware Abstraction Layer
-│   │   ├── types.ts            # HAL interfaces
-│   │   ├── command-validator.ts # Safety validation (NEW)
+│   ├── hal/                       # Hardware Abstraction Layer
+│   │   ├── types.ts               # HAL interfaces
+│   │   ├── command-validator.ts   # Safety validation
+│   │   ├── hal-tool-loader.ts     # Markdown tool loader
 │   │   ├── simulation-adapter.ts
 │   │   └── physical-adapter.ts
 │   │
-│   ├── evolution/              # Dreaming Engine
+│   ├── evolution/                 # Dreaming Engine
 │   │   ├── black-box-recorder.ts  # Session recording
-│   │   ├── simulation-replayer.ts # Physics simulation (ENHANCED)
+│   │   ├── simulation-replayer.ts # Physics simulation
 │   │   ├── evolutionary-patcher.ts
-│   │   └── agentic-auditor.ts     # Skill validation (NEW)
+│   │   └── agentic-auditor.ts     # Skill validation
 │   │
-│   ├── runtime/                # Robot control
-│   │   └── esp32-agent-runtime.ts # Main control loop
+│   ├── runtime/                   # Robot control
+│   │   └── esp32-agent-runtime.ts
 │   │
-│   └── skills/                 # Skill loading
+│   └── skills/                    # Skill loading
 │       └── physical-skill-loader.ts
 │
 ├── volumes/
-│   ├── system/skills/          # Built-in skills
-│   ├── team/skills/            # Shared skills
-│   └── user/skills/            # Your skills
+│   ├── system/
+│   │   ├── skills/                # Built-in skills (markdown)
+│   │   ├── hal-tools/             # HAL commands (markdown)
+│   │   ├── agents/                # Agent definitions (markdown)
+│   │   └── tools/                 # Tool specs (markdown)
+│   ├── team/skills/               # Shared skills
+│   └── user/skills/               # Your skills
 │
-└── components/                 # UI components
+├── app/api/hal-tools/             # HAL tools API
+└── components/                    # UI components
 ```
 
 ---
@@ -584,6 +644,23 @@ The Dreaming Engine will analyze the failure and improve the skill automatically
 **Q: Can multiple robots work together?**
 
 Coming soon! Multi-robot swarms are on the roadmap.
+
+**Q: Is this production-ready?**
+
+Not yet! LLMos is in active development. Great for experiments and learning, but expect rough edges.
+
+---
+
+## What's Next: Auto-Evolving Physical AI
+
+LLMos is building toward **autonomous physical AI** that:
+
+1. **Self-improves** - Robots that get better at their jobs without human intervention
+2. **Knowledge sharing** - Learned skills spread across robot fleets
+3. **Simulation-first** - Test 1000 approaches overnight, deploy the best one
+4. **Human-readable** - Every behavior is a markdown file you can inspect
+
+This is the future: robots that evolve like software, not hardware.
 
 ---
 
