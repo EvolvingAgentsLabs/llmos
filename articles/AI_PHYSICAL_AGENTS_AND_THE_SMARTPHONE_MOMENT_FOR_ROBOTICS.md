@@ -368,7 +368,7 @@ timeline
               : Auto-evolution
 
     section Future
-        2027+ : Skill marketplaces
+        2026+ : Skill marketplaces
               : Fleet learning
               : Physical AI assistants
 ```
