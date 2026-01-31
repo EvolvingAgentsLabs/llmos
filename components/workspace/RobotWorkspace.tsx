@@ -5,7 +5,8 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu } from 'lucide-react';
+import RobotLogsMonitorPanel from '../robot/RobotLogsMonitorPanel';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu, Activity } from 'lucide-react';
 import { WorldModel } from '@/lib/runtime/world-model';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
@@ -50,7 +51,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const [showChat, setShowChat] = useState(true);
   const [currentMap, setCurrentMap] = useState('standard5x5Empty');
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent'>('agent');
+  const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent' | 'logs'>('agent');
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
 
   // File viewer state
@@ -1013,11 +1014,13 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
             <div className="flex items-center gap-2">
               {rightPanelMode === 'chat' ? (
                 <FileCode className="w-4 h-4 text-[#3fb950]" />
+              ) : rightPanelMode === 'logs' ? (
+                <Activity className="w-4 h-4 text-[#f0883e]" />
               ) : (
                 <Cpu className="w-4 h-4 text-[#58a6ff]" />
               )}
               <span className="text-xs font-semibold text-[#e6edf3]">
-                {rightPanelMode === 'chat' ? 'AI Agent Creator' : (selectedRobotAgent?.name || 'Robot AI Agent')}
+                {rightPanelMode === 'chat' ? 'AI Agent Creator' : rightPanelMode === 'logs' ? 'Logs & Trajectory' : (selectedRobotAgent?.name || 'Robot AI Agent')}
               </span>
               {rightPanelMode === 'agent' && selectedRobotAgent && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#58a6ff]/20 text-[#58a6ff] border border-[#58a6ff]/30">
@@ -1048,6 +1051,17 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
               Run Robot
             </button>
             <button
+              onClick={() => setRightPanelMode('logs')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                rightPanelMode === 'logs'
+                  ? 'text-[#f0883e] border-b-2 border-[#f0883e] bg-[#161b22]'
+                  : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              View Logs
+            </button>
+            <button
               onClick={() => setRightPanelMode('chat')}
               className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 rightPanelMode === 'chat'
@@ -1064,6 +1078,11 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           <div className="flex-1 overflow-hidden">
             {rightPanelMode === 'chat' ? (
               <ChatPanel activeVolume={activeVolume} />
+            ) : rightPanelMode === 'logs' ? (
+              <RobotLogsMonitorPanel
+                deviceId={activeDeviceId || undefined}
+                onSessionSelect={(sessionId) => console.log('[RobotWorkspace] Selected session:', sessionId)}
+              />
             ) : (
               <RobotAgentPanel
                 deviceId={activeDeviceId || undefined}
