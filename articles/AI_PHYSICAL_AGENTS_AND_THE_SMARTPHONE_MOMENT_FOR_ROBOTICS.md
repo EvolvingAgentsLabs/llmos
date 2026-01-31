@@ -236,18 +236,18 @@ Hardware Abstraction Layer (HAL) is the bridge between AI intent and physical ac
 
 ```mermaid
 graph TB
-    subgraph "AI World"
-        LLM[LLM decides:<br/>"Move forward carefully"]
-        LLM --> TC[Tool Call:<br/>hal_drive 60, 60]
+    subgraph AI_World [AI World]
+        LLM[LLM decides: Move forward carefully]
+        LLM --> TC[Tool Call: hal_drive 60, 60]
     end
 
-    subgraph "HAL Layer"
+    subgraph HAL_Layer [HAL Layer]
         TC --> HAL{HAL Router}
-        HAL --> |Simulation Mode| SIM[Three.js Physics]
-        HAL --> |Physical Mode| ESP[ESP32 Motors]
+        HAL --> |Simulation| SIM[Three.js Physics]
+        HAL --> |Physical| ESP[ESP32 Motors]
     end
 
-    subgraph "Same Result"
+    subgraph Result [Same Result]
         SIM --> MV[Robot Moves Forward]
         ESP --> MV
     end
@@ -362,13 +362,13 @@ timeline
         2000s : ROS frameworks
 
     section Present
-        2024 : LLMos v1
+        2026 : LLMos v1
               : Prompt-based control
               : Markdown skills
               : Auto-evolution
 
     section Future
-        2025+ : Skill marketplaces
+        2027+ : Skill marketplaces
               : Fleet learning
               : Physical AI assistants
 ```
