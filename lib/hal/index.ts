@@ -62,6 +62,20 @@ export {
   setGlobalHAL,
 } from './hal-tool-executor';
 
+// Export command validator
+export {
+  HALCommandValidator,
+  getCommandValidator,
+  createCommandValidator,
+  DEFAULT_VALIDATION_CONFIG,
+} from './command-validator';
+export type {
+  ValidationResult,
+  ValidationIssue,
+  ValidationConfig,
+  ValidationSeverity,
+} from './command-validator';
+
 // Export adapters
 export { SimulationHAL, createSimulationHAL } from './simulation-adapter';
 export type { SimulatorReference } from './simulation-adapter';

@@ -50,12 +50,17 @@ export type {
   RecordedFrame,
   RecordingSession,
   FailureMarker,
+  FailureType,
+  FailureSeverity,
   SessionOptions,
+  SessionAnalysis,
+  SessionComparison,
 } from './black-box-recorder';
 
 // Export Simulation Replayer
 export { SimulationReplayer, getSimulationReplayer } from './simulation-replayer';
-export type { ReplayOptions, ReplayResult } from './simulation-replayer';
+export type { ReplayOptions, ReplayResult, PhysicsConfig } from './simulation-replayer';
+export { DEFAULT_PHYSICS_CONFIG } from './simulation-replayer';
 
 // Export Evolutionary Patcher
 export { EvolutionaryPatcher, getEvolutionaryPatcher } from './evolutionary-patcher';
@@ -65,6 +70,17 @@ export type {
   EvolutionResult,
   SkillVariant,
 } from './evolutionary-patcher';
+
+// Export Agentic Auditor
+export { AgenticAuditor, getAgenticAuditor, createAgenticAuditor } from './agentic-auditor';
+export type {
+  AuditResult,
+  AuditIssue,
+  AuditConfig,
+  AuditSeverity,
+  AuditCategory,
+} from './agentic-auditor';
+export { DEFAULT_AUDIT_CONFIG } from './agentic-auditor';
 
 import { logger } from '@/lib/debug/logger';
 import { getBlackBoxRecorder } from './black-box-recorder';
