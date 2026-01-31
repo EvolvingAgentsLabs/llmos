@@ -1,378 +1,403 @@
-# Program Robots with Prompts: The Smartphone Moment for Robotics
+# AI Physical Agents: The Smartphone Moment for Robotics
 
-**Your robot. Your words. That's it.**
-
----
-
-> **⚠️ Active Development**: LLMos is being built right now. The code compiles, core features work, but we're shipping fast. Some things may break. Perfect for tinkerers who want to be part of something new.
+**Why we're building robots that program themselves—and why it matters.**
 
 ---
 
-## The Problem
-
-Building a robot today looks like this:
-
-```
-1. Learn C++
-2. Write 500 lines of code
-3. Debug for hours
-4. Flash firmware
-5. Test, fail, repeat
-6. Maybe it works?
-```
-
-What if it looked like this instead?
-
-```
-You: "Avoid walls and blink green when safe"
-
-Robot: *does exactly that*
-```
-
-That's LLMos.
+> **🚧 In Active Development**: LLMos compiles and core features work. We're wiring everything together now. Expect full functionality within days, not weeks. Jump in early or wait for the dust to settle—your choice.
 
 ---
 
-## What is LLMos?
+## Why This, Why Now
 
-LLMos is an operating system for robots where you don't write code—you write prompts.
+Three things converged that made this possible:
 
-| Old Way | LLMos Way |
-|---------|-----------|
-| C++ firmware | English prompts |
-| Weeks to build | Minutes to try |
-| One robot, one job | One robot, infinite jobs |
-| Stuck behavior | Self-improving behavior |
+1. **LLMs got good at reasoning** — Not just text. Vision, planning, tool use.
+2. **Hardware got cheap** — A robot brain costs $10 now, not $1000.
+3. **The abstraction was missing** — Nobody built the "operating system" layer.
 
-The robot's "brain" is an AI that reads simple markdown files. Change the file, change the robot.
+We're building that layer.
 
 ---
 
-## The Simple Demo
+## The Core Insight
 
-**Step 1**: Install LLMos
-```bash
-git clone https://github.com/EvolvingAgentsLabs/llmos
-cd llmos && npm install && npm run dev
+Robotics today is like phones before the App Store.
+
+```mermaid
+graph LR
+    subgraph "Before iPhone (2007)"
+        A[Nokia Phone] --> B[Makes Calls]
+        C[Camera] --> D[Takes Photos]
+        E[Game Boy] --> F[Plays Games]
+    end
+
+    subgraph "After iPhone"
+        G[iPhone + App Store] --> H[Makes Calls]
+        G --> I[Takes Photos]
+        G --> J[Plays Games]
+        G --> K[Anything Else]
+    end
 ```
 
-**Step 2**: Open your browser at `localhost:3000`
+**Robots today**: Buy a vacuum robot, it vacuums. Buy a different robot, it waters plants. Each machine = one job.
 
-**Step 3**: Type: "Create a robot that avoids walls"
+**Robots with LLMos**: One robot. Download a skill. Now it vacuums. Download another skill. Now it waters plants. Same hardware, infinite purposes.
 
-**Step 4**: Watch it work in the 3D simulator
-
-That's it. No C++. No firmware. No debugging. Just words.
+The hardware is the screen. The skill is the app.
 
 ---
 
-## Everything is Markdown
+## The Architecture
 
-Here's the magic: every robot behavior is a simple text file.
+```mermaid
+graph TB
+    subgraph "Human Layer"
+        U[You] -->|"Avoid walls"| P[Prompt]
+    end
 
-### Skills are Markdown
+    subgraph "Intelligence Layer"
+        P --> LLM[Gemini / Claude]
+        LLM --> S[Skill Cartridge<br/>markdown file]
+    end
 
-```markdown
----
-name: Wall_Avoider
-type: physical_skill
-version: 1.0.0
----
+    subgraph "Abstraction Layer"
+        S --> HAL[HAL Tools<br/>markdown files]
+        HAL --> V[Command Validator]
+    end
 
-# Role
-You're a robot that avoids walls.
+    subgraph "Execution Layer"
+        V --> SIM[Simulator<br/>Three.js]
+        V --> HW[Hardware<br/>ESP32]
+    end
 
-# What to Do
-- If wall ahead: turn away
-- If clear: drive forward
-- Always blink green when safe
+    subgraph "Evolution Layer"
+        SIM --> BB[BlackBox<br/>Records failures]
+        HW --> BB
+        BB --> DE[Dreaming Engine]
+        DE -->|Improves| S
+        DE -->|Improves| HAL
+    end
 ```
 
-### Tools are Markdown
-
-```markdown
----
-name: hal_drive
-type: hal_tool
-category: locomotion
----
-
-# HAL Tool: hal_drive
-
-Control wheel motors.
-
-## Parameters
-| Param | Range | What it does |
-|-------|-------|--------------|
-| left  | -255 to 255 | Left wheel power |
-| right | -255 to 255 | Right wheel power |
-
-## Evolution History
-| Version | Changes | How |
-|---------|---------|-----|
-| 1.0.0   | Created | Manual |
-| 1.1.0   | Added deadband | Dreaming Engine |
-```
-
-### Why Markdown?
-
-Because it's:
+Every layer is designed to be:
 - **Readable** by humans
 - **Readable** by AI
-- **Editable** with any text editor
 - **Evolvable** automatically
 
-The Dreaming Engine can read these files, improve them, and save the improvements. Your robot gets smarter while you sleep.
+---
+
+## Core Concept #1: Everything is Text
+
+In LLMos, robot behaviors aren't compiled binaries. They're markdown files.
+
+```mermaid
+graph LR
+    subgraph "Traditional Robotics"
+        A[C++ Code] --> B[Compiler] --> C[Binary Firmware]
+        C --> D[Robot]
+    end
+
+    subgraph "LLMos"
+        E[Markdown Skill] --> F[LLM Reads It]
+        F --> G[Robot Acts]
+        G -->|Learns| E
+    end
+```
+
+**Why this matters:**
+
+| Traditional | LLMos |
+|-------------|-------|
+| Change requires recompile | Change requires editing text |
+| Only engineers can modify | Anyone can modify |
+| Robot can't improve itself | Robot can rewrite its own skills |
+| Knowledge stuck in one robot | Knowledge spreads via file sharing |
 
 ---
 
-## Auto-Evolving Robots
+## Core Concept #2: The Sense-Think-Act Loop
 
-This is where it gets interesting.
+Every AI physical agent runs a continuous loop:
 
-### The Dreaming Engine
+```mermaid
+sequenceDiagram
+    participant S as Sensors
+    participant B as Brain (LLM)
+    participant A as Actuators
+    participant W as World
 
-Your robot fails at something. Maybe it hits a wall. LLMos:
-
-1. **Records** the failure to a "BlackBox"
-2. **Waits** until the robot is idle
-3. **Replays** the failure in simulation
-4. **Generates** 100 variations of the approach
-5. **Tests** each one in accelerated time
-6. **Picks** the winner
-7. **Updates** the skill file
-
-Morning comes. Your robot opens its "eyes" and doesn't hit that wall anymore.
-
-**It learned while it slept.**
-
-### Knowledge Sharing
-
-If your robot is part of a fleet, even better:
-
-```
-Robot A learns to open a sticky door
-        ↓
-Skill file updates in shared storage
-        ↓
-Robot B, C, D all know how to open that door
-        ↓
-They never tried it themselves
+    loop Every 200ms
+        S->>B: "I see a wall 30cm ahead"
+        B->>B: Consult skill file
+        B->>B: "Skill says: turn if wall < 50cm"
+        B->>A: hal_drive(50, -50)
+        A->>W: Robot turns right
+        W->>S: New sensor readings
+    end
 ```
 
-Skills spread like software updates. One robot's lesson becomes every robot's knowledge.
+The magic is in the "Brain" step. Traditional robots use if/else logic. LLMos uses natural language reasoning:
+
+```
+Traditional: if (distance < 30) { turn(); }
+
+LLMos: "I see a wall getting closer. My skill says to maintain
+        20cm distance. I should turn right slightly to correct."
+```
+
+The LLM *understands* the situation. It doesn't just react to numbers.
 
 ---
 
-## The Hardware
+## Core Concept #3: Auto-Evolution
 
-You don't need much:
+This is what makes LLMos different from every other robot framework.
 
-| Part | Cost |
-|------|------|
-| ESP32-S3 board | ~$10 |
-| 2 motors + driver | ~$10 |
-| Distance sensor | ~$5 |
-| Cardboard chassis | ~$5 |
-| **Total** | **~$30** |
+```mermaid
+graph TB
+    subgraph "Daytime: Robot Works"
+        R[Robot Operates] --> F[Sometimes Fails]
+        F --> BB[BlackBox Records Everything]
+    end
 
-Less than dinner for two.
+    subgraph "Night: Robot Dreams"
+        BB --> RE[Replay Failure in Simulation]
+        RE --> MU[Generate 100 Skill Variants]
+        MU --> TE[Test Each at 100x Speed]
+        TE --> SE[Select Best Performer]
+        SE --> UP[Update Skill File]
+    end
 
+    subgraph "Morning: Robot Wakes Up Smarter"
+        UP --> R
+    end
 ```
-[Distance Sensor]
-       |
-   [ESP32-S3] ----USB---- [Your Computer]
-       |
- [Motor Driver]
-   /        \
-[Left]    [Right]
-Motor      Motor
+
+**The robot improves while it sleeps.**
+
+No human intervention. No retraining. The system:
+1. Identifies what went wrong
+2. Hypothesizes alternatives
+3. Tests them in simulation
+4. Deploys the winner
+
+And because skills are just files, improvements can spread:
+
+```mermaid
+graph LR
+    A[Robot A learns<br/>to open sticky door] --> F[Shared Skill File]
+    F --> B[Robot B]
+    F --> C[Robot C]
+    F --> D[Robot D]
+
+    style A fill:#90EE90
+    style B fill:#ADD8E6
+    style C fill:#ADD8E6
+    style D fill:#ADD8E6
 ```
 
-Plug it in. Type a prompt. Watch it move.
+One robot's lesson becomes every robot's knowledge.
 
 ---
 
-## Safety by Design
+## Core Concept #4: Safety as Architecture
 
-We're not crazy. Robots that learn need guardrails.
+Self-improving robots need guardrails. We built safety into every layer:
 
-### Hardware Reflexes
+```mermaid
+graph TB
+    subgraph "Layer 1: Hardware Reflexes"
+        HR[Runs on ESP32<br/>No AI needed]
+        HR --> |"Bumper hit"| STOP1[Instant Stop]
+        HR --> |"Too close"| SLOW[Force Slow Speed]
+    end
 
-These run on the robot itself, no AI needed:
+    subgraph "Layer 2: Command Validator"
+        CV[Checks every AI command]
+        CV --> |"Speed too high<br/>near obstacle"| ADJ[Adjust to safe speed]
+        CV --> |"Invalid command"| REJ[Reject]
+    end
 
+    subgraph "Layer 3: Skill Auditor"
+        SA[Validates skills<br/>before sharing]
+        SA --> |"Missing safety section"| BLOCK[Block promotion]
+        SA --> |"Uses invalid HAL"| BLOCK
+    end
 ```
-Bumper pressed? → Stop instantly
-Too close to wall? → Slow down
-Way too close? → Back up
-```
 
-The AI doesn't get a vote. These rules always win.
-
-### Command Validator
-
-Every command the AI suggests goes through safety checks:
-
-```
-AI: "Drive full speed!"
-Validator: "There's a wall 10cm ahead."
-Actual command: "Drive slowly."
-```
-
-The AI proposes. Safety disposes.
-
-### Agentic Auditor
-
-Before a skill can be shared with other robots, it's automatically checked:
-
-- Does it have safety rules?
-- Does it use valid commands?
-- Is it complete?
-
-Broken skills don't spread.
+The AI proposes. Multiple safety layers dispose.
 
 ---
 
-## The Vision: Download Physical Labor
+## Core Concept #5: The HAL Abstraction
 
-Today you download apps. Tomorrow you'll download skills.
+Hardware Abstraction Layer (HAL) is the bridge between AI intent and physical action:
 
+```mermaid
+graph TB
+    subgraph "AI World"
+        LLM[LLM decides:<br/>"Move forward carefully"]
+        LLM --> TC[Tool Call:<br/>hal_drive 60, 60]
+    end
+
+    subgraph "HAL Layer"
+        TC --> HAL{HAL Router}
+        HAL --> |Simulation Mode| SIM[Three.js Physics]
+        HAL --> |Physical Mode| ESP[ESP32 Motors]
+    end
+
+    subgraph "Same Result"
+        SIM --> MV[Robot Moves Forward]
+        ESP --> MV
+    end
 ```
-Need a security guard?     → sentry.md
-Need a plant waterer?      → gardener.md
-Need a package sorter?     → warehouse.md
-Need a cat entertainer?    → pet_sitter.md
-```
 
-One robot. Infinite jobs. The hardware is just the "screen." The skill is the app.
+Write once, run everywhere. Test in simulation, deploy to hardware.
 
 ---
 
-## What's Being Built Right Now
+## The Full Picture
 
-LLMos is in active development. Here's what exists:
+```mermaid
+flowchart TB
+    subgraph INPUT
+        U[User Prompt]
+        U --> |"Water dry plants"| GEN
+    end
 
-### Working Now
-- 3D robot simulator
-- Prompt-to-skill generation
-- HAL (Hardware Abstraction Layer)
-- Skills in markdown
-- Tools in markdown
-- Command validator
-- Hardware reflexes
-- Physics simulation (motor deadband, inertia)
-- Session recording (BlackBox)
+    subgraph GENERATION
+        GEN[Skill Generator<br/>Gemini] --> SKILL[plant_care.md]
+    end
 
-### Coming Soon
-- Full Dreaming Engine integration
-- ESP32 physical hardware support
-- Multi-robot coordination
-- Camera-based navigation
-- Voice control
+    subgraph RUNTIME
+        SKILL --> LOAD[Skill Loader]
+        LOAD --> LOOP
 
-### The Honesty
+        subgraph LOOP[Agent Loop - 5Hz]
+            SENSE[Sense] --> THINK[Think<br/>LLM + Skill]
+            THINK --> ACT[Act<br/>HAL Tools]
+            ACT --> SENSE
+        end
+    end
 
-Some parts compile but aren't fully wired together yet. If you try it today, expect:
-- The simulator to work great
-- Prompt-to-skill to work
-- Physical hardware integration to be rough
-- Some features to be scaffolding
+    subgraph SAFETY
+        ACT --> VAL[Command Validator]
+        VAL --> |Safe| EXEC[Execute]
+        VAL --> |Unsafe| ADJ[Adjust & Execute]
+    end
 
-We're building in public. You're seeing the construction site.
+    subgraph EXECUTION
+        EXEC --> SIM[Simulator]
+        EXEC --> HW[Hardware]
+    end
+
+    subgraph EVOLUTION
+        SIM --> REC[BlackBox Recorder]
+        HW --> REC
+        REC --> |Failures| DREAM[Dreaming Engine]
+        DREAM --> |Improved| SKILL
+    end
+```
 
 ---
 
-## Why This Matters
+## Why We're Building This
 
-Robotics has been stuck for decades. The barrier isn't hardware—you can buy motors for $5. The barrier is **programming**.
+The barrier to robotics isn't hardware anymore. You can buy:
+- Robot brain (ESP32): $10
+- Motors: $5
+- Sensors: $5
 
-Teaching a robot to do something new traditionally means:
-- Hiring expensive engineers
-- Writing complex code
-- Testing for months
+**The barrier is programming.**
+
+Teaching a robot to do something new means:
+- Hiring engineers ($$$)
+- Writing C++ (months)
+- Testing carefully (more months)
 - Maintaining forever
 
 LLMos inverts this:
 - Anyone can write a prompt
-- AI figures out the implementation
+- AI generates the implementation
 - Simulation tests it instantly
-- The robot improves itself
+- Robot improves itself
 
-**The App Store for the real world is opening.**
+**We're democratizing physical AI.**
+
+---
+
+## Current Status
+
+| Component | Status |
+|-----------|--------|
+| 3D Simulator | ✅ Working |
+| Skill Generation | ✅ Working |
+| HAL (TypeScript) | ✅ Working |
+| HAL (Markdown) | ✅ Working |
+| Command Validator | ✅ Working |
+| Hardware Reflexes | ✅ Working |
+| Physics Simulation | ✅ Working |
+| BlackBox Recorder | ✅ Working |
+| Agentic Auditor | ✅ Working |
+| Dreaming Engine | 🔄 Integration in progress |
+| ESP32 Hardware | 🔄 Integration in progress |
+| Multi-robot | 📋 Planned |
+
+**The code compiles. Core features work. We're connecting the pieces.**
+
+Full functionality coming in days, not weeks.
+
+---
+
+## The Vision
+
+```mermaid
+timeline
+    title The Evolution of Robot Programming
+
+    section Past
+        1960s : Assembly language
+        1980s : C programming
+        2000s : ROS frameworks
+
+    section Present
+        2024 : LLMos v1
+              : Prompt-based control
+              : Markdown skills
+              : Auto-evolution
+
+    section Future
+        2025+ : Skill marketplaces
+              : Fleet learning
+              : Physical AI assistants
+```
+
+We're building the App Store for the real world.
+
+Download a skill. Your robot becomes a gardener, a security guard, a pet sitter, a warehouse worker.
+
+One robot. Infinite trades.
 
 ---
 
 ## Get Involved
 
-We're building this in the open and we'd love help:
-
 ```bash
 git clone https://github.com/EvolvingAgentsLabs/llmos
 cd llmos && npm install && npm run dev
 ```
 
-Then:
-- Try it
-- Break it
-- Fix it
-- Build skills
-- Tell us what's wrong
+Open `localhost:3000`. Type a prompt. Watch the future.
+
+We're building in public. The construction site is open.
+
+---
 
 **GitHub**: [github.com/EvolvingAgentsLabs/llmos](https://github.com/EvolvingAgentsLabs/llmos)
 
----
-
-## The Simple Pitch
-
-```
-You: "Follow the black line"
-
-Robot: *follows the black line*
-
-You: "Actually, stop when you see red"
-
-Robot: *now stops when it sees red*
-
-[That night]
-
-Dreaming Engine: "I noticed the robot struggles with
-sharp curves. Testing 50 variations... Found a better
-approach. Updating skill file."
-
-[Next morning]
-
-Robot: *handles sharp curves smoothly*
-
-You: *didn't do anything*
-```
-
-This is the future we're building:
-
-**Robots that understand you.**
-**Robots that improve themselves.**
-**Robots anyone can program.**
-
-One prompt at a time.
+*Apache 2.0 Licensed. Built by makers, for makers.*
 
 ---
 
-## Start Now
-
-```bash
-git clone https://github.com/EvolvingAgentsLabs/llmos
-cd llmos && npm install && npm run dev
-```
-
-Open `localhost:3000`
-
-Type: **"Create a robot that avoids walls"**
-
-Welcome to the smartphone moment for robotics.
-
----
-
-*Built by makers, for makers.*
-
-*Part of the LLMos project. Apache 2.0 licensed.*
-
-**Tags**: #LLMos #Robotics #AI #OpenSource #PhysicalAI #AutoEvolution #Makers
+**Tags**: #LLMos #PhysicalAI #Robotics #AutoEvolution #AI #OpenSource
