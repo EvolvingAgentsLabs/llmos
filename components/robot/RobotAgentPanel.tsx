@@ -275,9 +275,14 @@ ${prompt}
                 deviceId,
                 timestamp: now,
                 pose: telemetryPose,
-                motors: sensors.motors,
                 sensors: {
-                  distance: sensors.distance,
+                  distance: [
+                    sensors.distance.front,
+                    sensors.distance.frontLeft,
+                    sensors.distance.frontRight,
+                    sensors.distance.left,
+                    sensors.distance.right,
+                  ],
                 },
               },
               toolCalls: state.toolCallHistory?.slice(-5).map(tc => ({
@@ -305,7 +310,6 @@ ${prompt}
                 severity: 'moderate',
                 sensorSnapshot: {
                   pose: telemetryPose,
-                  motors: sensors.motors,
                 },
               });
             }
