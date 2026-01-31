@@ -562,6 +562,12 @@ From beginner (basic navigation) to advanced (maze solving, obstacle racing)
 - **[Getting Started Guide](docs/architecture/HELLO_WORLD_TUTORIAL.md)** - Your first robot
 - **[ESP32 Setup](docs/hardware/ESP32_GUIDE.md)** - Connect your hardware
 - **[Robot Programming](docs/architecture/ROBOT4_GUIDE.md)** - Make your robot do cool stuff
+- **[Hardware Shopping List](docs/hardware/HARDWARE_SHOPPING_LIST.md)** - Build your own robot
+
+### Architecture & Vision
+- **[AI Physical Agents Article](articles/AI_PHYSICAL_AGENTS_AND_THE_SMARTPHONE_MOMENT_FOR_ROBOTICS.md)** - The vision behind LLMos
+- **[Adaptive Physical Intelligence Architecture](docs/architecture/ADAPTIVE_PHYSICAL_INTELLIGENCE.md)** - Technical deep dive
+- **[Gemini Agentic Vision Integration](docs/architecture/GEMINI_AGENTIC_VISION_INTEGRATION.md)** - Vision AI integration
 
 ### Need Help?
 - **GitHub Issues**: https://github.com/EvolvingAgentsLabs/llmos/issues
@@ -1171,6 +1177,76 @@ LLMos is the result of a deliberate evolution in how we think about AI agent sys
 </div>
 
 **Key insight**: Markdown files are the perfect medium for AI agent evolution - human-readable, AI-writable, and version-controllable.
+
+### Skill Cartridges: The "Apps" for Robots
+
+LLMos introduces **Skill Cartridges** - markdown files that transform a generic robot into a specialist:
+
+```markdown
+---
+name: PlantCare_Specialist
+type: physical_skill
+base_model: gemini-3-flash
+agentic_vision: true
+version: 1.2.0
+---
+
+# Role
+You are an expert botanist robot. Identify dry soil and water plants.
+
+# Visual Cortex Instructions
+- **Scan for:** withered_leaves, dry_soil_texture
+- **Ignore:** Plastic pots, furniture
+- **Alert:** yellow_leaves → "Nutrient Deficiency"
+
+# Motor Cortex Protocols
+- Use `hal_arm.precision_mode(true)` for watering
+- Stop if water reaches 1cm from rim
+```
+
+**Same hardware. Different skills. Infinite possibilities.**
+
+- Load `gardener.md` → Robot tends plants
+- Load `security_sentry.md` → Robot patrols area
+- Load `package_sorter.md` → Robot sorts packages
+
+### Hardware Abstraction Layer (HAL)
+
+The HAL enables the same skill to work in simulation AND on real hardware:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     SKILL CARTRIDGE                              │
+│  "hal_drive(left, right)" "hal_vision_scan()" "hal_set_led()"   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        ▼                                           ▼
+┌───────────────────┐                   ┌───────────────────┐
+│  SIMULATION       │                   │  REAL HARDWARE    │
+│  Three.js Physics │                   │  ESP32 + Motors   │
+│  Fast iteration   │                   │  Production use   │
+└───────────────────┘                   └───────────────────┘
+```
+
+**Available HAL Tools:**
+- `hal_drive(left, right)` - Control wheel motors
+- `hal_stop()` - Emergency stop
+- `hal_set_led(r, g, b)` - Status LED
+- `hal_vision_scan()` - Environment scan
+- `hal_get_distance()` - Distance sensors
+- `hal_emergency_stop()` - Safety stop
+
+### The Dreaming Engine: Learning While Sleeping
+
+When your robot fails, it records the failure to a **BlackBox**. During idle time, the **Dreaming Engine** activates:
+
+1. **Replay** - Load failure scenarios into simulation
+2. **Mutate** - Generate skill variants with different approaches
+3. **Evaluate** - Test variants in accelerated simulation
+4. **Patch** - Apply the best strategy to the skill file
+
+Your robot literally learns while it sleeps. And if it's part of a fleet, **every robot learns together**.
 
 ### Short-Term & Long-Term Learning
 

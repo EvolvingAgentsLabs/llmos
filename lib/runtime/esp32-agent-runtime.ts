@@ -40,6 +40,29 @@ import { CameraVisionModel, getCameraVisionModel, VisionObservation } from './ca
 import { cameraCaptureManager } from './camera-capture';
 import { WorldModel, getWorldModel } from './world-model';
 
+// HAL Integration - Hardware Abstraction Layer for simulation/physical duality
+import {
+  HALToolExecutor,
+  getHALToolExecutor,
+  setGlobalHAL,
+  createHAL,
+  HAL_TOOL_DEFINITIONS,
+  HardwareAbstractionLayer,
+  HALToolCall,
+} from '../hal';
+
+// Physical Skill Loader - "Skill Cartridge" system
+import {
+  PhysicalSkill,
+  getPhysicalSkillLoader,
+} from '../skills/physical-skill-loader';
+
+// Dreaming Engine - BlackBox recording for evolution
+import {
+  getBlackBoxRecorder,
+  RecordingSession,
+} from '../evolution/black-box-recorder';
+
 // Import modular navigation, sensors, and behaviors
 import {
   NavigationCalculator,
@@ -241,6 +264,145 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HAL-COMPATIBLE DEVICE TOOLS
+// These provide the Hardware Abstraction Layer interface for Physical Skills.
+// Same tool names work in simulation and on physical ESP32 hardware.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const HAL_DEVICE_TOOLS: DeviceTool[] = [
+  {
+    name: 'hal_drive',
+    description: 'Control wheel motors for differential drive locomotion. HAL-compatible.',
+    parameters: {
+      left: { type: 'number', description: 'Left wheel power (-255 to 255)', required: true },
+      right: { type: 'number', description: 'Right wheel power (-255 to 255)', required: true },
+      duration_ms: { type: 'number', description: 'Optional duration before auto-stop', required: false },
+    },
+    execute: async (args, ctx) => {
+      const left = clampMotorPower(args.left);
+      const right = clampMotorPower(args.right);
+      ctx.setLeftWheel(left);
+      ctx.setRightWheel(right);
+
+      // Handle duration if specified
+      if (args.duration_ms && args.duration_ms > 0) {
+        setTimeout(() => {
+          ctx.setLeftWheel(0);
+          ctx.setRightWheel(0);
+        }, args.duration_ms);
+      }
+
+      return { success: true, data: { left, right, duration_ms: args.duration_ms } };
+    },
+  },
+  {
+    name: 'hal_stop',
+    description: 'Stop all locomotion immediately. HAL-compatible.',
+    parameters: {},
+    execute: async (args, ctx) => {
+      ctx.setLeftWheel(0);
+      ctx.setRightWheel(0);
+      return { success: true, data: { stopped: true } };
+    },
+  },
+  {
+    name: 'hal_set_led',
+    description: 'Control robot LED indicators. HAL-compatible.',
+    parameters: {
+      r: { type: 'number', description: 'Red (0-255)', required: true },
+      g: { type: 'number', description: 'Green (0-255)', required: true },
+      b: { type: 'number', description: 'Blue (0-255)', required: true },
+      pattern: { type: 'string', description: 'Pattern: solid, blink, pulse', required: false },
+    },
+    execute: async (args, ctx) => {
+      const r = Math.max(0, Math.min(255, Math.round(args.r)));
+      const g = Math.max(0, Math.min(255, Math.round(args.g)));
+      const b = Math.max(0, Math.min(255, Math.round(args.b)));
+      ctx.setLED(r, g, b);
+      return { success: true, data: { r, g, b, pattern: args.pattern || 'solid' } };
+    },
+  },
+  {
+    name: 'hal_get_distance',
+    description: 'Get distance sensor readings from all directions. HAL-compatible.',
+    parameters: {},
+    execute: async (args, ctx) => {
+      const sensors = ctx.getSensors();
+      return { success: true, data: sensors.distance };
+    },
+  },
+  {
+    name: 'hal_vision_scan',
+    description: 'Scan environment and return detected objects. HAL-compatible.',
+    parameters: {
+      mode: { type: 'string', description: 'Scan mode: full, targeted, quick', required: false },
+    },
+    execute: async (args, ctx) => {
+      const frame = ctx.captureCamera();
+      const sensors = ctx.getSensors();
+
+      // Combine camera analysis with sensor data for comprehensive scan
+      return {
+        success: true,
+        data: {
+          mode: args.mode || 'quick',
+          frontObstacle: frame.analysis.frontObstacle,
+          frontDistance: frame.analysis.frontObstacleDistance,
+          leftClear: frame.analysis.leftClear,
+          rightClear: frame.analysis.rightClear,
+          distances: sensors.distance,
+          pose: sensors.pose,
+          timestamp: frame.timestamp,
+        },
+      };
+    },
+  },
+  {
+    name: 'hal_capture_frame',
+    description: 'Capture current camera frame. HAL-compatible.',
+    parameters: {},
+    execute: async (args, ctx) => {
+      const frame = ctx.captureCamera();
+      return {
+        success: true,
+        data: {
+          width: frame.width,
+          height: frame.height,
+          timestamp: frame.timestamp,
+          analysis: frame.analysis,
+        },
+      };
+    },
+  },
+  {
+    name: 'hal_emergency_stop',
+    description: 'Immediately stop all robot motion (safety). HAL-compatible.',
+    parameters: {
+      reason: { type: 'string', description: 'Reason for emergency stop', required: false },
+    },
+    execute: async (args, ctx) => {
+      ctx.setLeftWheel(0);
+      ctx.setRightWheel(0);
+      ctx.setLED(255, 0, 0); // Red LED for emergency
+      return { success: true, data: { stopped: true, reason: args.reason || 'Emergency stop activated' } };
+    },
+  },
+];
+
+/**
+ * Get combined tool set (legacy + HAL)
+ * Returns tools based on whether HAL mode is enabled
+ */
+export function getAllDeviceTools(useHAL: boolean = false): DeviceTool[] {
+  if (useHAL) {
+    // HAL mode: Use HAL tools with legacy tools as fallback
+    return [...HAL_DEVICE_TOOLS, ...DEVICE_TOOLS];
+  }
+  // Legacy mode: Use original tools
+  return DEVICE_TOOLS;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AGENT CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -260,6 +422,24 @@ export interface ESP32AgentConfig {
   // Vision mode settings
   visionEnabled?: boolean; // Enable camera-based world model updates
   visionInterval?: number; // How often to process vision (ms) - default: 3000ms
+
+  // ═══════════════════════════════════════════════════════════════════
+  // HAL & PHYSICAL SKILL INTEGRATION
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** Enable HAL (Hardware Abstraction Layer) mode for simulation/physical duality */
+  useHAL?: boolean;
+  /** Physical skill to load (path or skill object) */
+  physicalSkill?: PhysicalSkill | string;
+  /** Enable BlackBox recording for Dreaming Engine */
+  enableRecording?: boolean;
+  /** Callback when skill is loaded */
+  onSkillLoaded?: (skill: PhysicalSkill) => void;
+  /** Callback when recording session starts */
+  onRecordingStart?: (sessionId: string) => void;
+  /** Callback when recording ends */
+  onRecordingEnd?: (session: RecordingSession) => void;
+
   // Callbacks
   onStateChange?: (state: ESP32AgentState) => void;
   onLog?: (message: string, level: 'info' | 'warn' | 'error') => void;
@@ -273,6 +453,8 @@ interface ResolvedESP32AgentConfig extends ESP32AgentConfig {
   goal?: string;
   visionEnabled: boolean;
   visionInterval: number;
+  useHAL: boolean;
+  enableRecording: boolean;
 }
 
 export interface ESP32AgentState {
@@ -306,6 +488,12 @@ export interface ESP32AgentState {
     lastRecoveryAction: string | null;
     recoveryAttempts: number;  // How many recovery attempts in current stuck episode
   };
+
+  // HAL & Physical Skill state
+  halEnabled: boolean;
+  activeSkill: PhysicalSkill | null;
+  recordingSessionId: string | null;
+  recordingActive: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -324,6 +512,11 @@ export class ESP32AgentRuntime {
   private worldModel: WorldModel | null = null;
   private lastVisionProcessTime = 0;
 
+  // HAL & Recording state
+  private halExecutor: HALToolExecutor | null = null;
+  private activeSkill: PhysicalSkill | null = null;
+  private recordingSessionId: string | null = null;
+
   constructor(config: ESP32AgentConfig) {
     this.config = {
       ...config,
@@ -331,6 +524,8 @@ export class ESP32AgentRuntime {
       hostUrl: config.hostUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
       visionEnabled: config.visionEnabled ?? false,
       visionInterval: config.visionInterval ?? 3000,
+      useHAL: config.useHAL ?? false,
+      enableRecording: config.enableRecording ?? false,
     };
 
     this.state = {
@@ -358,6 +553,10 @@ export class ESP32AgentRuntime {
         lastRecoveryAction: null,
         recoveryAttempts: 0,
       },
+      halEnabled: this.config.useHAL,
+      activeSkill: null,
+      recordingSessionId: null,
+      recordingActive: false,
     };
 
     // Initialize vision model if enabled
@@ -365,6 +564,206 @@ export class ESP32AgentRuntime {
       this.visionModel = getCameraVisionModel(config.deviceId, {
         processingInterval: this.config.visionInterval,
       });
+    }
+
+    // Initialize HAL if enabled
+    if (this.config.useHAL) {
+      this.halExecutor = getHALToolExecutor();
+    }
+  }
+
+  /**
+   * Load a physical skill (skill cartridge) to use for this agent
+   */
+  async loadPhysicalSkill(skillPathOrSkill: PhysicalSkill | string): Promise<boolean> {
+    try {
+      let skill: PhysicalSkill;
+
+      if (typeof skillPathOrSkill === 'string') {
+        // Load from path
+        const loader = getPhysicalSkillLoader();
+        const result = await loader.loadSkill(skillPathOrSkill);
+        if (!result.ok) {
+          this.log(`Failed to load skill: ${result.error}`, 'error');
+          return false;
+        }
+        skill = result.value;
+      } else {
+        skill = skillPathOrSkill;
+      }
+
+      this.activeSkill = skill;
+      this.state.activeSkill = skill;
+
+      // Update system prompt from skill
+      this.config.systemPrompt = skill.role;
+      if (skill.objective) {
+        this.config.goal = skill.objective;
+      }
+
+      // Initialize Agentic Vision if skill requires it
+      if (skill.frontmatter.agentic_vision && this.visionModel) {
+        this.visionModel.setActiveSkill(skill);
+      }
+
+      this.log(`Loaded physical skill: ${skill.frontmatter.name} v${skill.frontmatter.version}`, 'info');
+
+      if (this.config.onSkillLoaded) {
+        this.config.onSkillLoaded(skill);
+      }
+
+      return true;
+    } catch (error) {
+      this.log(`Error loading skill: ${error}`, 'error');
+      return false;
+    }
+  }
+
+  /**
+   * Get the currently active physical skill
+   */
+  getActiveSkill(): PhysicalSkill | null {
+    return this.activeSkill;
+  }
+
+  /**
+   * Start BlackBox recording session
+   */
+  startRecording(): string | null {
+    if (!this.config.enableRecording) {
+      return null;
+    }
+
+    try {
+      const recorder = getBlackBoxRecorder();
+      const skillName = this.activeSkill?.frontmatter.name || this.config.name;
+
+      this.recordingSessionId = recorder.startSession({
+        skillName,
+        deviceId: this.config.deviceId,
+        metadata: {
+          agentId: this.config.id,
+          goal: this.config.goal,
+          halEnabled: this.config.useHAL,
+        },
+      });
+
+      this.state.recordingSessionId = this.recordingSessionId;
+      this.state.recordingActive = true;
+
+      this.log(`Started recording session: ${this.recordingSessionId}`, 'info');
+
+      if (this.config.onRecordingStart) {
+        this.config.onRecordingStart(this.recordingSessionId);
+      }
+
+      return this.recordingSessionId;
+    } catch (error) {
+      this.log(`Failed to start recording: ${error}`, 'error');
+      return null;
+    }
+  }
+
+  /**
+   * Stop BlackBox recording and save session
+   */
+  async stopRecording(): Promise<RecordingSession | null> {
+    if (!this.recordingSessionId) {
+      return null;
+    }
+
+    try {
+      const recorder = getBlackBoxRecorder();
+      const session = await recorder.endSession();
+
+      this.state.recordingActive = false;
+      this.log(`Stopped recording session: ${this.recordingSessionId}`, 'info');
+
+      if (session && this.config.onRecordingEnd) {
+        this.config.onRecordingEnd(session);
+      }
+
+      this.recordingSessionId = null;
+      this.state.recordingSessionId = null;
+
+      return session;
+    } catch (error) {
+      this.log(`Failed to stop recording: ${error}`, 'error');
+      return null;
+    }
+  }
+
+  /**
+   * Record a failure for the Dreaming Engine
+   */
+  recordFailure(
+    type: 'collision' | 'timeout' | 'low_confidence' | 'safety_stop' | 'skill_error' | 'unknown',
+    description: string,
+    severity: 'minor' | 'moderate' | 'critical' = 'moderate'
+  ): void {
+    if (!this.recordingSessionId) {
+      return;
+    }
+
+    try {
+      const recorder = getBlackBoxRecorder();
+      recorder.markFailure({
+        type,
+        description,
+        severity,
+      });
+
+      this.log(`Recorded failure: ${type} - ${description}`, 'warn');
+    } catch (error) {
+      this.log(`Failed to record failure: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Record a telemetry frame for the Dreaming Engine
+   */
+  private recordTelemetryFrame(
+    sensors: SensorReadings,
+    toolCalls: Array<{ tool: string; args: Record<string, any> }>
+  ): void {
+    try {
+      const recorder = getBlackBoxRecorder();
+      recorder.recordFrame({
+        telemetry: {
+          timestamp: Date.now(),
+          deviceId: this.config.deviceId,
+          mode: this.config.useHAL ? 'simulation' : 'physical',
+          pose: sensors.pose
+            ? { x: sensors.pose.x, y: sensors.pose.y, z: 0, yaw: sensors.pose.rotation || 0 }
+            : { x: 0, y: 0, z: 0, yaw: 0 },
+          sensors: {
+            distance: sensors.distance
+              ? [
+                  sensors.distance.front,
+                  sensors.distance.frontLeft,
+                  sensors.distance.frontRight,
+                  sensors.distance.left,
+                  sensors.distance.right,
+                  sensors.distance.back,
+                ]
+              : [],
+            line: sensors.line || [],
+            battery: sensors.battery?.percentage ?? 100,
+          },
+          motors: {
+            left: this.leftWheelPower,
+            right: this.rightWheelPower,
+          },
+          led: { r: 0, g: 0, b: 0 },
+        },
+        toolCalls: toolCalls.map(tc => ({
+          name: tc.tool,
+          args: tc.args,
+        })),
+      });
+    } catch (error) {
+      // Don't spam logs for recording errors
+      console.debug('[ESP32Agent] Frame recording error:', error);
     }
   }
 
@@ -507,7 +906,7 @@ export class ESP32AgentRuntime {
   /**
    * Start the agent control loop
    */
-  start(): void {
+  async start(): Promise<void> {
     if (this.state.running) {
       this.log('Agent already running', 'warn');
       return;
@@ -528,6 +927,24 @@ export class ESP32AgentRuntime {
       this.log('Vision mode enabled - camera will update world model', 'info');
     }
 
+    // Load physical skill if specified
+    if (this.config.physicalSkill) {
+      const loaded = await this.loadPhysicalSkill(this.config.physicalSkill);
+      if (loaded) {
+        this.log(`Physical skill loaded: ${this.activeSkill?.frontmatter.name}`, 'info');
+      }
+    }
+
+    // Start recording if enabled
+    if (this.config.enableRecording) {
+      this.startRecording();
+    }
+
+    // Log HAL mode status
+    if (this.config.useHAL) {
+      this.log('HAL mode enabled - using hardware abstraction layer tools', 'info');
+    }
+
     this.state.running = true;
     this.state.iteration = 0;
     this.state.errors = [];
@@ -540,7 +957,7 @@ export class ESP32AgentRuntime {
   /**
    * Stop the agent control loop
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.state.running) return;
 
     this.log(`Stopping ESP32 agent: ${this.config.name}`, 'info');
@@ -555,6 +972,11 @@ export class ESP32AgentRuntime {
       this.deviceContext.setLeftWheel(0);
       this.deviceContext.setRightWheel(0);
       this.deviceContext.setLED(0, 0, 0);
+    }
+
+    // Stop recording if active
+    if (this.recordingSessionId) {
+      await this.stopRecording();
     }
 
     this.state.running = false;
@@ -591,6 +1013,34 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.1: Auto-detect failures for Dreaming Engine
+      // ═══════════════════════════════════════════════════════════════════
+      if (this.recordingSessionId) {
+        // Detect bumper collision
+        if (sensors.bumper.front || sensors.bumper.back) {
+          this.recordFailure(
+            'collision',
+            `Bumper triggered: ${sensors.bumper.front ? 'front' : 'back'}`,
+            'critical'
+          );
+        }
+
+        // Detect low battery
+        if (sensors.battery.percentage < 10) {
+          this.recordFailure('safety_stop', `Battery critically low at ${sensors.battery.percentage}%`, 'critical');
+        }
+
+        // Detect too-close obstacle approach (should have avoided)
+        if (sensors.distance.front < 5) {
+          this.recordFailure(
+            'collision',
+            `Front obstacle at ${sensors.distance.front}cm - should have turned earlier`,
+            'moderate'
+          );
+        }
+      }
 
       // ═══════════════════════════════════════════════════════════════════
       // STEP 1.2: Stuck Detection - Check if robot is making progress
@@ -636,16 +1086,35 @@ export class ESP32AgentRuntime {
       console.log('[ESP32Agent] Parsed tool calls:', toolCalls);
       this.state.lastToolCalls = [];
 
+      // Select tool set based on HAL mode
+      const availableTools = getAllDeviceTools(this.config.useHAL);
+
       for (const { tool, args } of toolCalls) {
-        const toolDef = DEVICE_TOOLS.find((t) => t.name === tool);
+        const toolDef = availableTools.find((t) => t.name === tool);
         if (toolDef) {
           const result = await toolDef.execute(args, this.deviceContext);
           this.state.lastToolCalls.push({ tool, args, result });
           this.state.stats.totalToolCalls++;
           this.log(`Tool ${tool}: ${JSON.stringify(result.data)}`, 'info');
+
+          // Record tool call failure for Dreaming Engine
+          if (!result.success && this.recordingSessionId) {
+            this.recordFailure('skill_error', `Tool ${tool} failed: ${result.error}`, 'moderate');
+          }
         } else {
           this.log(`Unknown tool: ${tool}`, 'warn');
+          // Record unknown tool as failure
+          if (this.recordingSessionId) {
+            this.recordFailure('skill_error', `Unknown tool requested: ${tool}`, 'minor');
+          }
         }
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 3.5: Record telemetry frame for Dreaming Engine
+      // ═══════════════════════════════════════════════════════════════════
+      if (this.recordingSessionId) {
+        this.recordTelemetryFrame(sensors, toolCalls);
       }
 
       // Update loop timing stats
@@ -931,7 +1400,9 @@ export class ESP32AgentRuntime {
    * Build the system prompt for the LLM
    */
   private buildSystemPrompt(): string {
-    const toolDocs = DEVICE_TOOLS.map(
+    // Select tool set based on HAL mode
+    const tools = getAllDeviceTools(this.config.useHAL);
+    const toolDocs = tools.map(
       (t) =>
         `- ${t.name}: ${t.description}\n  Parameters: ${JSON.stringify(
           Object.entries(t.parameters)
@@ -945,7 +1416,22 @@ export class ESP32AgentRuntime {
       ? `\n\n## Current Goal\n**${this.config.goal}**\n\nYou must work toward achieving this goal. Use your sensors and available tools to make progress. Report your observations and reasoning as you work toward the goal.`
       : '';
 
-    return `${this.config.systemPrompt}${goalSection}
+    // Build skill context if a physical skill is loaded
+    let skillContext = '';
+    if (this.activeSkill) {
+      const skill = this.activeSkill;
+      skillContext = `\n\n## Active Skill: ${skill.frontmatter.name}
+Version: ${skill.frontmatter.version}
+${skill.objective ? `Objective: ${skill.objective}` : ''}
+
+### Visual Cortex Instructions
+${skill.visualCortex.primaryTargets.map(t => `- Look for: ${t.name} - ${t.description}`).join('\n')}
+
+### Safety Protocols
+${skill.safetyProtocols.join('\n')}`;
+    }
+
+    return `${this.config.systemPrompt}${goalSection}${skillContext}
 
 ## Available Tools (executed locally on device)
 ${toolDocs}
@@ -1650,3 +2136,60 @@ export {
   createWallFollowerFormatter,
   createCollectorFormatter,
 } from './sensors';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HAL & PHYSICAL SKILL EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Re-export HAL module for convenience
+export {
+  HAL_TOOL_DEFINITIONS,
+  getHALToolExecutor,
+  setGlobalHAL,
+  createHAL,
+} from '../hal';
+
+// Re-export Physical Skill Loader
+export {
+  getPhysicalSkillLoader,
+} from '../skills/physical-skill-loader';
+
+export type {
+  PhysicalSkill,
+} from '../skills/physical-skill-loader';
+
+// Re-export Dreaming Engine components
+export {
+  getBlackBoxRecorder,
+  runDreamingCycle,
+  shouldDream,
+  getDreamingStats,
+} from '../evolution';
+
+/**
+ * Create an ESP32 agent with HAL mode enabled
+ * This is the recommended way to create agents that work with Physical Skills
+ */
+export function createHALAgent(config: Omit<ESP32AgentConfig, 'useHAL'> & { useHAL?: boolean }): ESP32AgentRuntime {
+  return createESP32Agent({
+    ...config,
+    useHAL: config.useHAL ?? true,
+  });
+}
+
+/**
+ * Create an ESP32 agent with full Dreaming Engine integration
+ * Enables HAL, recording, and connects to the evolution system
+ */
+export function createEvolvingAgent(
+  config: Omit<ESP32AgentConfig, 'useHAL' | 'enableRecording'> & {
+    useHAL?: boolean;
+    enableRecording?: boolean;
+  }
+): ESP32AgentRuntime {
+  return createESP32Agent({
+    ...config,
+    useHAL: config.useHAL ?? true,
+    enableRecording: config.enableRecording ?? true,
+  });
+}
