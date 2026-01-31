@@ -1098,6 +1098,38 @@ export class ESP32AgentRuntime {
       }
 
       // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.3: HARDWARE REFLEXES - Local safety rules (NO LLM DEPENDENCY)
+      // These execute at control loop frequency (~5Hz) to prevent collisions
+      // ═══════════════════════════════════════════════════════════════════
+      const reflexAction = this.evaluateHardwareReflexes(sensors);
+      if (reflexAction) {
+        // Execute reflex locally without LLM - this is critical for safety
+        this.log(`🛡️ REFLEX: ${reflexAction.action} - ${reflexAction.reason}`, 'warn');
+        await this.executeReflexAction(reflexAction);
+
+        // Record reflex activation for analysis
+        if (this.recordingSessionId) {
+          this.recordFailure('safety_stop', `Hardware reflex: ${reflexAction.reason}`, 'moderate');
+        }
+
+        // Debug: Log reflex activation
+        this.navDebugger.logSensors({
+          distance: sensors.distance,
+          pose: sensors.pose,
+          velocity: (sensors as any).velocity,
+          bumper: sensors.bumper,
+        });
+
+        this.emitStateChange();
+
+        // Schedule next iteration - skip LLM this cycle for faster response
+        if (this.state.running) {
+          this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
+        }
+        return;
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
       // STEP 1.5: Process camera vision (if enabled)
       // ═══════════════════════════════════════════════════════════════════
       if (this.config.visionEnabled && this.visionModel && this.worldModel) {
@@ -1134,15 +1166,24 @@ export class ESP32AgentRuntime {
       const availableTools = getAllDeviceTools(this.config.useHAL);
 
       for (const { tool, args } of toolCalls) {
+        // ═══════════════════════════════════════════════════════════════════
+        // PRE-EXECUTION SAFETY FILTER: Validate motor commands against sensors
+        // This prevents the LLM from commanding dangerous movements
+        // ═══════════════════════════════════════════════════════════════════
+        const safeArgs = this.applyMotorSafetyFilter(tool, args, sensors);
+        if (safeArgs !== args) {
+          this.log(`🛡️ SAFETY FILTER: Modified ${tool} args for safety`, 'warn');
+        }
+
         const toolDef = availableTools.find((t) => t.name === tool);
         if (toolDef) {
-          const result = await toolDef.execute(args, this.deviceContext);
-          this.state.lastToolCalls.push({ tool, args, result });
+          const result = await toolDef.execute(safeArgs, this.deviceContext);
+          this.state.lastToolCalls.push({ tool, args: safeArgs, result });
           this.state.stats.totalToolCalls++;
           this.log(`Tool ${tool}: ${JSON.stringify(result.data)}`, 'info');
 
           // Debug: Log executed command
-          this.navDebugger.logExecutedCommand(tool, args, result);
+          this.navDebugger.logExecutedCommand(tool, safeArgs, result);
 
           // Record tool call failure for Dreaming Engine
           if (!result.success && this.recordingSessionId) {
@@ -1401,6 +1442,387 @@ export class ESP32AgentRuntime {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HARDWARE REFLEXES - Local Safety Rules (LLM-Independent)
+  // These execute at control loop frequency (~5Hz) to prevent collisions
+  // Critical for real-time safety when LLM latency is too slow
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Hardware Reflex Configuration
+   * These thresholds define when local safety rules override LLM control
+   */
+  private static readonly HARDWARE_REFLEXES = {
+    // Distance thresholds (in cm)
+    EMERGENCY_STOP_DISTANCE: 8,      // Immediate stop if obstacle this close
+    COLLISION_WARNING_DISTANCE: 15,  // Slow down / prepare to evade
+    SAFE_REVERSE_DISTANCE: 20,       // Safe to reverse at full speed
+
+    // Velocity thresholds
+    MAX_SPEED_NEAR_OBSTACLE: 30,     // Max motor power when near obstacles
+    REFLEX_SPEED: 40,                // Motor power for reflex maneuvers
+
+    // Timing
+    REFLEX_DURATION: 300,            // Duration of reflex actions (ms)
+    SENSOR_STALENESS_THRESHOLD: 500, // Max age of sensor data (ms)
+  };
+
+  /**
+   * Evaluate hardware reflexes based on current sensor state
+   * Returns a reflex action if safety intervention is needed, null otherwise
+   */
+  private evaluateHardwareReflexes(sensors: SensorReadings): { action: string; reason: string; priority: string } | null {
+    const REFLEXES = ESP32AgentRuntime.HARDWARE_REFLEXES;
+    const { distance, bumper } = sensors;
+    const velocity = (sensors as any).velocity;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PRIORITY 1: BUMPER COLLISION (Already happened - stop immediately)
+    // ═══════════════════════════════════════════════════════════════════
+    if (bumper.front) {
+      return {
+        action: 'bumper_halt_reverse',
+        reason: `FRONT BUMPER TRIGGERED - Collision detected! Reversing.`,
+        priority: 'critical',
+      };
+    }
+    if (bumper.back) {
+      return {
+        action: 'bumper_halt_forward',
+        reason: `BACK BUMPER TRIGGERED - Collision detected! Moving forward.`,
+        priority: 'critical',
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PRIORITY 2: EMERGENCY STOP - Obstacle dangerously close
+    // ═══════════════════════════════════════════════════════════════════
+    const isMovingForward = velocity && velocity.linear > 0.01;
+    const isMovingBackward = velocity && velocity.linear < -0.01;
+
+    // Front obstacle emergency
+    if (distance.front < REFLEXES.EMERGENCY_STOP_DISTANCE && isMovingForward) {
+      return {
+        action: 'emergency_stop_reverse',
+        reason: `EMERGENCY: Front obstacle at ${distance.front}cm while moving forward!`,
+        priority: 'critical',
+      };
+    }
+
+    // Back obstacle emergency
+    if (distance.back < REFLEXES.EMERGENCY_STOP_DISTANCE && isMovingBackward) {
+      return {
+        action: 'emergency_stop_forward',
+        reason: `EMERGENCY: Back obstacle at ${distance.back}cm while reversing!`,
+        priority: 'critical',
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PRIORITY 3: COLLISION WARNING - Need to evade
+    // ═══════════════════════════════════════════════════════════════════
+    if (distance.front < REFLEXES.COLLISION_WARNING_DISTANCE && isMovingForward) {
+      // Determine best evasion direction
+      const leftClearance = Math.min(distance.frontLeft, distance.left);
+      const rightClearance = Math.min(distance.frontRight, distance.right);
+
+      if (leftClearance > rightClearance + 10) {
+        return {
+          action: 'evade_left',
+          reason: `WARNING: Front obstacle at ${distance.front}cm - Evading LEFT (clearance: ${leftClearance}cm)`,
+          priority: 'high',
+        };
+      } else if (rightClearance > leftClearance + 10) {
+        return {
+          action: 'evade_right',
+          reason: `WARNING: Front obstacle at ${distance.front}cm - Evading RIGHT (clearance: ${rightClearance}cm)`,
+          priority: 'high',
+        };
+      } else {
+        // Both sides equally blocked - stop and reverse
+        return {
+          action: 'stop_and_reverse',
+          reason: `WARNING: Front blocked at ${distance.front}cm, sides also blocked - Stopping and reversing`,
+          priority: 'high',
+        };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PRIORITY 4: SIDE COLLISION WARNING - Prevent side scrapes during turns
+    // ═══════════════════════════════════════════════════════════════════
+    const isTurningLeft = velocity && velocity.angular < -0.1;
+    const isTurningRight = velocity && velocity.angular > 0.1;
+
+    if (distance.left < REFLEXES.EMERGENCY_STOP_DISTANCE && isTurningLeft) {
+      return {
+        action: 'correct_right',
+        reason: `WARNING: Left side at ${distance.left}cm while turning left - Correcting right`,
+        priority: 'medium',
+      };
+    }
+
+    if (distance.right < REFLEXES.EMERGENCY_STOP_DISTANCE && isTurningRight) {
+      return {
+        action: 'correct_left',
+        reason: `WARNING: Right side at ${distance.right}cm while turning right - Correcting left`,
+        priority: 'medium',
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PRIORITY 5: CORNERED DETECTION - Surrounded by obstacles
+    // ═══════════════════════════════════════════════════════════════════
+    const allSidesClose =
+      distance.front < REFLEXES.COLLISION_WARNING_DISTANCE &&
+      distance.frontLeft < REFLEXES.COLLISION_WARNING_DISTANCE &&
+      distance.frontRight < REFLEXES.COLLISION_WARNING_DISTANCE;
+
+    if (allSidesClose && isMovingForward) {
+      return {
+        action: 'cornered_escape',
+        reason: `CORNERED: Front(${distance.front}), FL(${distance.frontLeft}), FR(${distance.frontRight})cm - Escaping`,
+        priority: 'high',
+      };
+    }
+
+    // No reflex needed - LLM can control
+    return null;
+  }
+
+  /**
+   * Execute a hardware reflex action
+   * These are fast, pre-programmed responses that don't wait for LLM
+   */
+  private async executeReflexAction(reflex: { action: string; reason: string; priority: string }): Promise<void> {
+    if (!this.deviceContext) return;
+
+    const { setLeftWheel, setRightWheel } = this.deviceContext;
+    const REFLEXES = ESP32AgentRuntime.HARDWARE_REFLEXES;
+    const SPEED = REFLEXES.REFLEX_SPEED;
+    const DURATION = REFLEXES.REFLEX_DURATION;
+
+    // Log the reflex action
+    this.log(`🛡️ EXECUTING REFLEX: ${reflex.action}`, 'warn');
+
+    switch (reflex.action) {
+      // ═══ CRITICAL PRIORITY ═══
+      case 'bumper_halt_reverse':
+        // Bumper hit - stop then reverse
+        setLeftWheel(0);
+        setRightWheel(0);
+        await this.sleep(50);
+        setLeftWheel(-SPEED);
+        setRightWheel(-SPEED);
+        await this.sleep(DURATION * 2);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'bumper_halt_forward':
+        // Back bumper hit - stop then move forward
+        setLeftWheel(0);
+        setRightWheel(0);
+        await this.sleep(50);
+        setLeftWheel(SPEED);
+        setRightWheel(SPEED);
+        await this.sleep(DURATION * 2);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'emergency_stop_reverse':
+        // Emergency stop then gentle reverse
+        setLeftWheel(0);
+        setRightWheel(0);
+        await this.sleep(50);
+        setLeftWheel(-SPEED * 0.7);
+        setRightWheel(-SPEED * 0.7);
+        await this.sleep(DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'emergency_stop_forward':
+        // Emergency stop then gentle forward
+        setLeftWheel(0);
+        setRightWheel(0);
+        await this.sleep(50);
+        setLeftWheel(SPEED * 0.7);
+        setRightWheel(SPEED * 0.7);
+        await this.sleep(DURATION);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      // ═══ HIGH PRIORITY ═══
+      case 'evade_left':
+        // Quick left turn while moving
+        setLeftWheel(SPEED * 0.3);
+        setRightWheel(SPEED);
+        await this.sleep(DURATION);
+        break;
+
+      case 'evade_right':
+        // Quick right turn while moving
+        setLeftWheel(SPEED);
+        setRightWheel(SPEED * 0.3);
+        await this.sleep(DURATION);
+        break;
+
+      case 'stop_and_reverse':
+        // Stop, reverse, then slight turn
+        setLeftWheel(0);
+        setRightWheel(0);
+        await this.sleep(50);
+        setLeftWheel(-SPEED);
+        setRightWheel(-SPEED * 0.7); // Slight turn while reversing
+        await this.sleep(DURATION * 1.5);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      case 'cornered_escape':
+        // Cornered - reverse and rotate
+        setLeftWheel(-SPEED);
+        setRightWheel(-SPEED);
+        await this.sleep(DURATION);
+        // Then rotate to find opening
+        setLeftWheel(-SPEED * 0.5);
+        setRightWheel(SPEED * 0.5);
+        await this.sleep(DURATION * 2);
+        setLeftWheel(0);
+        setRightWheel(0);
+        break;
+
+      // ═══ MEDIUM PRIORITY ═══
+      case 'correct_right':
+        // Gentle right correction
+        setLeftWheel(SPEED * 0.8);
+        setRightWheel(SPEED * 0.4);
+        await this.sleep(DURATION * 0.5);
+        break;
+
+      case 'correct_left':
+        // Gentle left correction
+        setLeftWheel(SPEED * 0.4);
+        setRightWheel(SPEED * 0.8);
+        await this.sleep(DURATION * 0.5);
+        break;
+
+      default:
+        this.log(`Unknown reflex action: ${reflex.action}`, 'error');
+        setLeftWheel(0);
+        setRightWheel(0);
+    }
+
+    // Record reflex in tool calls for visibility
+    this.state.lastToolCalls = [{
+      tool: 'hardware_reflex',
+      args: { action: reflex.action, reason: reflex.reason },
+      result: { success: true, data: { action: reflex.action, priority: reflex.priority } },
+    }];
+  }
+
+  /**
+   * Apply motor safety filter to LLM tool calls
+   * Prevents the LLM from commanding movements that would cause collisions
+   * Returns modified args if unsafe, original args if safe
+   */
+  private applyMotorSafetyFilter(
+    tool: string,
+    args: Record<string, unknown>,
+    sensors: SensorReadings
+  ): Record<string, unknown> {
+    // Only filter motor-related commands
+    const motorTools = ['drive', 'hal_drive', 'set_left_wheel', 'set_right_wheel'];
+    if (!motorTools.includes(tool)) {
+      return args;
+    }
+
+    const REFLEXES = ESP32AgentRuntime.HARDWARE_REFLEXES;
+    const { distance } = sensors;
+
+    // Get motor values from args
+    let left = (args.left ?? args.leftPWM ?? args.power ?? 0) as number;
+    let right = (args.right ?? args.rightPWM ?? args.power ?? 0) as number;
+    let modified = false;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RULE 1: Block forward motion if front obstacle is too close
+    // ═══════════════════════════════════════════════════════════════════
+    const movingForward = left > 0 && right > 0;
+    if (movingForward && distance.front < REFLEXES.EMERGENCY_STOP_DISTANCE) {
+      this.log(`🛡️ BLOCKED: LLM tried to move forward but front obstacle at ${distance.front}cm`, 'warn');
+      left = 0;
+      right = 0;
+      modified = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RULE 2: Limit speed when near obstacles
+    // ═══════════════════════════════════════════════════════════════════
+    if (movingForward && distance.front < REFLEXES.COLLISION_WARNING_DISTANCE) {
+      const maxSpeed = REFLEXES.MAX_SPEED_NEAR_OBSTACLE;
+      if (left > maxSpeed || right > maxSpeed) {
+        const scale = maxSpeed / Math.max(left, right);
+        left = Math.round(left * scale);
+        right = Math.round(right * scale);
+        this.log(`🛡️ LIMITED: Reduced speed near obstacle (front: ${distance.front}cm)`, 'info');
+        modified = true;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RULE 3: Block reverse if back obstacle is too close
+    // ═══════════════════════════════════════════════════════════════════
+    const movingBackward = left < 0 && right < 0;
+    if (movingBackward && distance.back < REFLEXES.EMERGENCY_STOP_DISTANCE) {
+      this.log(`🛡️ BLOCKED: LLM tried to reverse but back obstacle at ${distance.back}cm`, 'warn');
+      left = 0;
+      right = 0;
+      modified = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RULE 4: Prevent turning into obstacles
+    // ═══════════════════════════════════════════════════════════════════
+    const turningLeft = right > left; // Right wheel faster = turning left
+    const turningRight = left > right; // Left wheel faster = turning right
+
+    if (turningLeft && distance.frontLeft < REFLEXES.EMERGENCY_STOP_DISTANCE) {
+      this.log(`🛡️ BLOCKED: LLM tried to turn left but frontLeft obstacle at ${distance.frontLeft}cm`, 'warn');
+      // Reverse the turn direction
+      const temp = left;
+      left = right;
+      right = temp;
+      modified = true;
+    }
+
+    if (turningRight && distance.frontRight < REFLEXES.EMERGENCY_STOP_DISTANCE) {
+      this.log(`🛡️ BLOCKED: LLM tried to turn right but frontRight obstacle at ${distance.frontRight}cm`, 'warn');
+      // Reverse the turn direction
+      const temp = left;
+      left = right;
+      right = temp;
+      modified = true;
+    }
+
+    if (modified) {
+      // Return new args with safe values
+      return {
+        ...args,
+        left,
+        right,
+        leftPWM: left,
+        rightPWM: right,
+        _safety_modified: true,
+      };
+    }
+
+    return args;
   }
 
   /**
