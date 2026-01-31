@@ -262,11 +262,19 @@ ${prompt}
           const recorder = getBlackBoxRecorder();
           if (recorder.isRecording() && state.lastSensorReading) {
             const sensors = state.lastSensorReading;
+            // Convert sensor pose format to DeviceTelemetry pose format
+            const telemetryPose = sensors.pose ? {
+              x: sensors.pose.x,
+              y: sensors.pose.y,
+              z: 0,
+              yaw: sensors.pose.rotation ?? 0,
+            } : undefined;
+
             recorder.recordFrame({
               telemetry: {
                 deviceId,
                 timestamp: now,
-                pose: sensors.pose,
+                pose: telemetryPose,
                 motors: sensors.motors,
                 sensors: {
                   distance: sensors.distance,
@@ -296,7 +304,7 @@ ${prompt}
                 description: lastError,
                 severity: 'moderate',
                 sensorSnapshot: {
-                  pose: sensors.pose,
+                  pose: telemetryPose,
                   motors: sensors.motors,
                 },
               });
