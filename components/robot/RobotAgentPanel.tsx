@@ -24,6 +24,7 @@ import { Artifact, ArtifactVolume } from '@/lib/artifacts/types';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { WorldModel, getWorldModel, clearWorldModel } from '@/lib/runtime/world-model';
+import { getBlackBoxRecorder } from '@/lib/evolution/black-box-recorder';
 import { Cpu, ChevronDown, Plus } from 'lucide-react';
 
 interface RobotAgentPanelProps {
@@ -62,6 +63,7 @@ export default function RobotAgentPanel({
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
   const worldModelRef = useRef<WorldModel | null>(null);
   const lastUpdateRef = useRef<number>(0);
+  const recorderSessionRef = useRef<string | null>(null);
 
   // Unified robot color
   const ROBOT_COLOR = '#58a6ff';
@@ -211,6 +213,18 @@ ${prompt}
       onWorldModelUpdate(worldModelRef.current);
     }
 
+    // Start BlackBox recording session
+    const recorder = getBlackBoxRecorder();
+    const sessionId = recorder.startSession({
+      skillName: selectedAgent?.name || `Robot-${selectedPrompt}`,
+      skillVersion: '1.0.0',
+      deviceId,
+      mode: 'simulation',
+      cameraSampleRate: 3, // Sample every 3rd frame
+    });
+    recorderSessionRef.current = sessionId;
+    console.log(`[RobotAgentPanel] BlackBox recording started: ${sessionId}`);
+
     // Use the behavior registry to get the prompt (connects to the modular behavior system)
     const prompt = customPrompt || getAgentPrompt(selectedPrompt);
     const newAgentId = `robot-agent-${Date.now()}`;
@@ -243,6 +257,51 @@ ${prompt}
           lastUpdateRef.current = now;
 
           setAgentState(state);
+
+          // Record frame to BlackBox
+          const recorder = getBlackBoxRecorder();
+          if (recorder.isRecording() && state.lastSensorReading) {
+            const sensors = state.lastSensorReading;
+            recorder.recordFrame({
+              telemetry: {
+                deviceId,
+                timestamp: now,
+                pose: sensors.pose,
+                motors: sensors.motors,
+                sensors: {
+                  distance: sensors.distance,
+                },
+              },
+              toolCalls: state.toolCallHistory?.slice(-5).map(tc => ({
+                name: tc.name,
+                args: tc.args || {},
+              })) || [],
+              toolResults: state.toolCallHistory?.slice(-5).map(tc => ({
+                name: tc.name,
+                success: !tc.error,
+                data: tc.result,
+                error: tc.error,
+              })) || [],
+              reasoning: state.lastLLMResponse?.slice(0, 500),
+              confidence: state.lastVisionConfidence,
+            });
+
+            // Mark failures if detected
+            if (state.errors.length > 0) {
+              const lastError = state.errors[state.errors.length - 1];
+              recorder.markFailure({
+                type: lastError.includes('collision') ? 'collision' :
+                      lastError.includes('timeout') ? 'timeout' :
+                      lastError.includes('stop') ? 'safety_stop' : 'skill_error',
+                description: lastError,
+                severity: 'moderate',
+                sensorSnapshot: {
+                  pose: sensors.pose,
+                  motors: sensors.motors,
+                },
+              });
+            }
+          }
 
           // Update world model with sensor data
           if (state.lastSensorReading && worldModelRef.current) {
@@ -286,10 +345,21 @@ ${prompt}
   }, [deviceId, selectedPrompt, customPrompt, agentGoal, loopInterval, onWorldModelUpdate, registerAgentInVolume]);
 
   // Stop the agent
-  const stopAgent = useCallback(() => {
+  const stopAgent = useCallback(async () => {
     if (agentId) {
       stopESP32Agent(agentId);
       console.log('[RobotAgentPanel] Agent stopped');
+
+      // End BlackBox recording session
+      if (recorderSessionRef.current) {
+        const recorder = getBlackBoxRecorder();
+        const session = await recorder.endSession();
+        if (session) {
+          console.log(`[RobotAgentPanel] BlackBox recording saved: ${session.id} (${session.metadata.totalFrames} frames, ${session.failures.length} failures)`);
+        }
+        recorderSessionRef.current = null;
+      }
+
       setIsRunning(false);
       setAgentId(null);
       agentRef.current = null;
