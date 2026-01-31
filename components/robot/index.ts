@@ -4,10 +4,10 @@
  * Exports all robot-related UI components for easy importing.
  */
 
-export { RobotCanvas3D } from './RobotCanvas3D';
-export { DreamingDashboardPanel } from './DreamingDashboardPanel';
-export { SkillSelectorPanel } from './SkillSelectorPanel';
-export { SceneGraphVisualization } from './SceneGraphVisualization';
-export { RobotWorldPanel } from './RobotWorldPanel';
-export { RobotAgentPanel } from './RobotAgentPanel';
-export { RobotLogsMonitorPanel } from './RobotLogsMonitorPanel';
+export { default as RobotCanvas3D } from './RobotCanvas3D';
+export { default as DreamingDashboardPanel } from './DreamingDashboardPanel';
+export { default as SkillSelectorPanel } from './SkillSelectorPanel';
+export { default as SceneGraphVisualization } from './SceneGraphVisualization';
+export { default as RobotWorldPanel } from './RobotWorldPanel';
+export { default as RobotAgentPanel } from './RobotAgentPanel';
+export { default as RobotLogsMonitorPanel } from './RobotLogsMonitorPanel';
