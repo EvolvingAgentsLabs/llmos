@@ -76,6 +76,19 @@ export type {
   ValidationSeverity,
 } from './command-validator';
 
+// Export HAL tool loader (markdown-based definitions)
+export {
+  HALToolRegistry,
+  getHALToolRegistry,
+  createHALToolRegistry,
+  parseHALToolMarkdown,
+  toFunctionDefinition,
+  toOpenAIFormat,
+  initializeHALTools,
+  BUNDLED_HAL_TOOLS,
+} from './hal-tool-loader';
+export type { HALToolDefinition } from './hal-tool-loader';
+
 // Export adapters
 export { SimulationHAL, createSimulationHAL } from './simulation-adapter';
 export type { SimulatorReference } from './simulation-adapter';
@@ -89,6 +102,7 @@ import { logger } from '@/lib/debug/logger';
 import { HALConfig, HardwareAbstractionLayer } from './types';
 import { SimulationHAL, SimulatorReference } from './simulation-adapter';
 import { PhysicalHAL } from './physical-adapter';
+import { getHALToolRegistry } from './hal-tool-loader';
 
 /**
  * Create a HAL instance based on configuration
@@ -309,8 +323,20 @@ export const HAL_TOOL_DEFINITIONS = [
 
 /**
  * Get HAL tool definitions formatted for OpenAI-style function calling
+ *
+ * If markdown-based tools have been loaded into the registry, uses those.
+ * Otherwise falls back to the hardcoded definitions.
  */
 export function getOpenAIToolDefinitions() {
+  const registry = getHALToolRegistry();
+  const registryTools = registry.getAll();
+
+  // Use registry if tools have been loaded
+  if (registryTools.length > 0) {
+    return registry.getOpenAIDefinitions();
+  }
+
+  // Fallback to hardcoded definitions
   return HAL_TOOL_DEFINITIONS.map((tool) => ({
     type: 'function' as const,
     function: {
@@ -323,8 +349,20 @@ export function getOpenAIToolDefinitions() {
 
 /**
  * Get HAL tool definitions formatted for Gemini function calling
+ *
+ * If markdown-based tools have been loaded into the registry, uses those.
+ * Otherwise falls back to the hardcoded definitions.
  */
 export function getGeminiToolDefinitions() {
+  const registry = getHALToolRegistry();
+  const registryTools = registry.getAll();
+
+  // Use registry if tools have been loaded
+  if (registryTools.length > 0) {
+    return registry.getGeminiDefinitions();
+  }
+
+  // Fallback to hardcoded definitions
   return {
     functionDeclarations: HAL_TOOL_DEFINITIONS.map((tool) => ({
       name: tool.name,
@@ -332,4 +370,15 @@ export function getGeminiToolDefinitions() {
       parameters: tool.parameters,
     })),
   };
+}
+
+/**
+ * Get rich HAL tool definitions with full metadata
+ *
+ * Only available when markdown-based tools have been loaded.
+ * Returns full tool definitions including examples, safety info, etc.
+ */
+export function getHALToolsWithMetadata(): import('./hal-tool-loader').HALToolDefinition[] {
+  const registry = getHALToolRegistry();
+  return registry.getAll();
 }
