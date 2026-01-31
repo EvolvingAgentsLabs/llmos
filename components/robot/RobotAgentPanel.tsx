@@ -283,6 +283,8 @@ ${prompt}
                     sensors.distance.left,
                     sensors.distance.right,
                   ],
+                  line: sensors.line || [],
+                  battery: sensors.battery?.percentage ?? 100,
                 },
               },
               toolCalls: state.toolCallHistory?.slice(-5).map(tc => ({
