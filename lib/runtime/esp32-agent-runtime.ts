@@ -1793,14 +1793,58 @@ export class ESP32AgentRuntime {
     let modified = false;
 
     // ═══════════════════════════════════════════════════════════════════
+    // RULE 0: ALWAYS allow pivot turns for escape maneuvers
+    // A pivot turn (one wheel forward, one backward/zero) can rotate in place
+    // This is critical for escaping when blocked
+    // ═══════════════════════════════════════════════════════════════════
+    const isPivotRight = left > 0 && right <= 0; // Turn right in place
+    const isPivotLeft = left <= 0 && right > 0;  // Turn left in place
+
+    if (isPivotRight || isPivotLeft) {
+      // Allow pivot turns but limit speed for safety
+      const maxPivotSpeed = REFLEXES.MAX_SPEED_NEAR_OBSTACLE;
+      const needsLimit = Math.abs(left) > maxPivotSpeed || Math.abs(right) > maxPivotSpeed;
+      if (needsLimit) {
+        const scale = maxPivotSpeed / Math.max(Math.abs(left), Math.abs(right));
+        left = Math.round(left * scale);
+        right = Math.round(right * scale);
+        modified = true;
+      }
+      this.log(`🛡️ ALLOWING pivot turn ${isPivotRight ? 'right' : 'left'} for escape`, 'info');
+      // Return early - pivot turns bypass other rules
+      if (modified) {
+        return { ...args, left, right, leftPWM: left, rightPWM: right, _safety_modified: true };
+      }
+      return args;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // RULE 1: Block forward motion if front obstacle is too close
+    // BUT allow differential turns that escape toward clear space
     // ═══════════════════════════════════════════════════════════════════
     const movingForward = left > 0 && right > 0;
+    const initialTurnDiff = Math.abs(left - right);
+    const isTurning = initialTurnDiff >= 10; // Significant differential = turning, not straight forward
+    const turningRightEscape = right > left && distance.frontRight >= REFLEXES.EMERGENCY_STOP_DISTANCE;
+    const turningLeftEscape = left > right && distance.frontLeft >= REFLEXES.EMERGENCY_STOP_DISTANCE;
+
     if (movingForward && distance.front < REFLEXES.EMERGENCY_STOP_DISTANCE) {
-      this.log(`🛡️ BLOCKED: LLM tried to move forward but front obstacle at ${distance.front}cm`, 'warn');
-      left = 0;
-      right = 0;
-      modified = true;
+      if (isTurning && (turningRightEscape || turningLeftEscape)) {
+        // Allow escape turn toward clear side - reduce speed but don't block
+        const maxSpeed = REFLEXES.MAX_SPEED_NEAR_OBSTACLE;
+        if (left > maxSpeed || right > maxSpeed) {
+          const scale = maxSpeed / Math.max(left, right);
+          left = Math.round(left * scale);
+          right = Math.round(right * scale);
+          modified = true;
+        }
+        this.log(`🛡️ ALLOWING escape turn toward ${turningRightEscape ? 'right' : 'left'} (front blocked at ${distance.front}cm)`, 'info');
+      } else {
+        this.log(`🛡️ BLOCKED: LLM tried to move forward but front obstacle at ${distance.front}cm`, 'warn');
+        left = 0;
+        right = 0;
+        modified = true;
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════════
