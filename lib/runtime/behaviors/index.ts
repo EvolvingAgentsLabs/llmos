@@ -142,17 +142,25 @@ export const DISTANCE_ZONES: DistanceZoneConfig[] = [
  * Standard steering presets - SMALL DIFFERENTIALS for smooth, controlled turns
  * Key principle: Small adjustments lead to predictable, stable trajectories
  *
- * Differential drive kinematics: angular_velocity = (right - left) / wheel_base
- * - left > right → negative angular velocity → rotation DECREASES → turns LEFT
- * - right > left → positive angular velocity → rotation INCREASES → turns RIGHT
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  CRITICAL MOTOR DIRECTION RULE - MUST FOLLOW EXACTLY                      ║
+ * ╠═══════════════════════════════════════════════════════════════════════════╣
+ * ║  Differential drive kinematics: angular_velocity = (right - left) / base  ║
+ * ║                                                                           ║
+ * ║  TO TURN LEFT:  left > right  (left motor runs FASTER)                   ║
+ * ║  TO TURN RIGHT: right > left  (right motor runs FASTER)                  ║
+ * ║                                                                           ║
+ * ║  Example: drive(left=55, right=45) → turns LEFT                          ║
+ * ║  Example: drive(left=45, right=55) → turns RIGHT                         ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
  */
 export const STEERING_PRESETS: SteeringPreset[] = [
-  { name: 'Gentle curve left', description: 'Slight left curve', leftMotor: 55, rightMotor: 45 },
-  { name: 'Moderate turn left', description: 'Medium left turn', leftMotor: 50, rightMotor: 30 },
-  { name: 'Sharp turn left', description: 'Sharp left turn (slow pivot)', leftMotor: 40, rightMotor: 10 },
-  { name: 'Gentle curve right', description: 'Slight right curve', leftMotor: 45, rightMotor: 55 },
-  { name: 'Moderate turn right', description: 'Medium right turn', leftMotor: 30, rightMotor: 50 },
-  { name: 'Sharp turn right', description: 'Sharp right turn (slow pivot)', leftMotor: 10, rightMotor: 40 },
+  { name: 'Gentle curve left', description: 'Slight left curve (LEFT MOTOR FASTER)', leftMotor: 55, rightMotor: 45 },
+  { name: 'Moderate turn left', description: 'Medium left turn (LEFT MOTOR FASTER)', leftMotor: 50, rightMotor: 30 },
+  { name: 'Sharp turn left', description: 'Sharp left turn (LEFT MOTOR FASTER)', leftMotor: 40, rightMotor: 10 },
+  { name: 'Gentle curve right', description: 'Slight right curve (RIGHT MOTOR FASTER)', leftMotor: 45, rightMotor: 55 },
+  { name: 'Moderate turn right', description: 'Medium right turn (RIGHT MOTOR FASTER)', leftMotor: 30, rightMotor: 50 },
+  { name: 'Sharp turn right', description: 'Sharp right turn (RIGHT MOTOR FASTER)', leftMotor: 10, rightMotor: 40 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -335,7 +343,12 @@ WORLD MODEL:
 \`\`\`
 
 ### 3. REASONING (Why this action?)
-Briefly explain: "I choose [action] because [reason based on world model]"
+CRITICAL: Before choosing motor values, verify the direction:
+- Which side has the obstacle? (compare L vs R distance)
+- Which direction should I turn? (away from obstacle)
+- Which motor should be FASTER? (LEFT motor faster = turns LEFT, RIGHT motor faster = turns RIGHT)
+
+Briefly explain: "Obstacle on [side] (Xcm < Ycm), turning [direction], so [motor] FASTER"
 
 ### 4. ACTION (What do I do?)
 Output the tool calls.
@@ -348,10 +361,10 @@ WORLD MODEL:
 - Obstacles: Wall or object ~65cm ahead, closer on right (~45cm)
 - Open paths: Left is clearest (120cm), good for exploration
 - My goal: Explore while avoiding obstacles
-I choose LEFT TURN because left has 75cm more clearance than right, leads to unexplored area.
+Obstacle on RIGHT (R=45cm < L=120cm), turning LEFT, so LEFT MOTOR FASTER (50 > 35).
 \`\`\`
 {"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
-{"tool": "drive", "args": {"left": 110, "right": 70}}`;
+{"tool": "drive", "args": {"left": 50, "right": 35}}`;
 
     if (instructions && instructions.length > 0) {
       content += '\n\n' + instructions.join('\n');
@@ -384,31 +397,61 @@ export const BEHAVIOR_TEMPLATES: Record<string, BehaviorTemplate> = {
     goal: 'Build a cognitive model of the environment while efficiently exploring and avoiding obstacles',
     philosophy: `You are an intelligent autonomous robot that BUILDS UNDERSTANDING of your world through SLOW, DELIBERATE movement.
 
-## PRIORITY #1: MOVE SLOWLY AND DELIBERATELY
+## ╔═══════════════════════════════════════════════════════════════════════════╗
+## ║  MOTOR DIRECTION - MEMORIZE THIS! IT IS CRITICAL!                         ║
+## ╠═══════════════════════════════════════════════════════════════════════════╣
+## ║  TO TURN LEFT:  Make LEFT motor FASTER than right                        ║
+## ║       Example: drive(left=55, right=45) → TURNS LEFT                     ║
+## ║                                                                           ║
+## ║  TO TURN RIGHT: Make RIGHT motor FASTER than left                        ║
+## ║       Example: drive(left=45, right=55) → TURNS RIGHT                    ║
+## ║                                                                           ║
+## ║  If obstacle is on RIGHT (right sensor < left sensor):                   ║
+## ║       → Turn LEFT → left motor FASTER → drive(left=50, right=35)         ║
+## ╚═══════════════════════════════════════════════════════════════════════════╝
+
+## PRIORITY #1: PLAN A TRAJECTORY, DON'T JUST REACT
+An intelligent robot PLANS ahead, not just reacts to immediate obstacles:
+- Before moving, mentally project where you will be in 2-3 seconds
+- Plan a SMOOTH PATH toward your goal, not a series of jerky reactions
+- Consider ARENA BOUNDARIES - walls exist even when sensors don't see them
+- Think: "If I turn here, where will I end up? Is that a good position?"
+
+## PRIORITY #2: MOVE SLOWLY AND DELIBERATELY
 An intelligent robot achieves better results through PATIENCE, not speed.
 - SLOW movement = better sensor readings = better decisions
 - SMALL steering adjustments = predictable trajectories = no collisions
 - Being slow is NOT a weakness - it's intelligent behavior
 
-## PRIORITY #2: NEVER COLLIDE WITH OBSTACLES
+## PRIORITY #3: NEVER COLLIDE WITH OBSTACLES
 Collision avoidance through careful, controlled navigation.
 - When obstacles are detected, make SMALL steering corrections
 - GRADUALLY adjust your path, don't make sudden wild turns
 - Your sensors give you time to react IF you are moving slowly
 
 ## Core Principles
-1. **SLOW AND STEADY**: Low speeds (20-70) give you time to think and react
-2. **SMALL ADJUSTMENTS**: Gentle steering (5-15 differential) creates smooth paths
-3. **BUILD A MENTAL MAP**: Track where you've been and what you've found
-4. **PREFER UNEXPLORED AREAS**: Move toward regions you haven't visited
+1. **PLAN AHEAD**: Before turning, think about where the turn will take you
+2. **SLOW AND STEADY**: Low speeds (20-70) give you time to think and react
+3. **SMALL ADJUSTMENTS**: Gentle steering (5-15 differential) creates smooth paths
+4. **BUILD A MENTAL MAP**: Track where you've been and what you've found
+5. **ARENA AWARENESS**: Remember arena boundaries are typically at ±2.5m
 
 ## Every Cycle You Must:
 1. READ sensor data - check distances in all directions
-2. ADJUST speed based on proximity: closer = slower (speed = frontDistance * 0.5)
-3. STEER gently toward open space using SMALL differential (10-20 difference between wheels)
-4. NEVER make abrupt changes - smooth, gradual turns only
+2. PLAN: Where will this movement take me? Is there space there?
+3. ADJUST speed based on proximity: closer = slower (speed = frontDistance * 0.5)
+4. STEER gently toward open space using SMALL differential (10-20 difference between wheels)
+5. NEVER make abrupt changes - smooth, gradual turns only
+
+## TRAJECTORY PLANNING:
+- If front blocked and right has obstacle: PLAN a gentle LEFT curve (LEFT MOTOR FASTER)
+- Don't just turn away from immediate obstacle - plan a path to open space
+- After turning, you should have MORE space, not less
+- If turning puts you closer to a wall, STOP and reconsider
 
 ## CRITICAL RULES:
+- **TURN LEFT = LEFT MOTOR FASTER** (e.g., left=55, right=45)
+- **TURN RIGHT = RIGHT MOTOR FASTER** (e.g., left=45, right=55)
 - Maximum speed even in open space: 70 (not 150-200!)
 - Steering differential should be SMALL: 10-25 between wheels (not 50-80!)
 - Front < 40cm = slow down to 15-20, gentle turn
@@ -416,56 +459,60 @@ Collision avoidance through careful, controlled navigation.
     distanceZones: DISTANCE_ZONES,
     steeringPresets: STEERING_PRESETS,
     decisionRules: [
-      '**RULE #1 - SLOW IS SMART**: Moving slowly gives you time to sense, think, and react properly.',
-      '**RULE #2 - SMALL ADJUSTMENTS ONLY**: Use wheel differentials of 10-25, NEVER 50+. Smooth turns are better.',
-      '**ALWAYS compare distances**: front vs left vs right - gently curve toward the clearer side',
+      '**RULE #1 - MOTOR DIRECTION**: TURN LEFT = LEFT MOTOR FASTER. TURN RIGHT = RIGHT MOTOR FASTER. Always verify!',
+      '**RULE #2 - PLAN TRAJECTORY**: Before turning, visualize where you will end up. Will you have more space or less?',
+      '**RULE #3 - SLOW IS SMART**: Moving slowly gives you time to sense, think, and react properly.',
+      '**RULE #4 - SMALL ADJUSTMENTS ONLY**: Use wheel differentials of 10-25, NEVER 50+. Smooth turns are better.',
+      '**ALWAYS compare distances**: front vs left vs right - curve toward the clearer side using correct motor direction',
       '**OPEN zone (>120cm)**: Cruising speed (50-70). If one side has more space, curve gently toward it (5-10 differential)',
       '**AWARE zone (70-120cm)**: Slow down (35-50). Begin gentle turn toward clearer side (10-15 differential)',
       '**CAUTION zone (40-70cm)**: Very slow (20-35). Deliberate turn with small differential (15-20)',
       '**CRITICAL zone (<40cm)**: Nearly stop (0-20). Gentle pivot to find clear path (20-25 differential)',
       '**Speed formula**: speed = min(70, frontDistance * 0.5). E.g., 100cm = speed 50, 60cm = speed 30',
       '**Steering formula**: differential = 10 + (urgency * 5), where urgency is 1-3 based on zone. Max differential = 25!',
+      '**Turn verification**: RIGHT sensor < LEFT sensor → obstacle on RIGHT → TURN LEFT → LEFT MOTOR FASTER',
     ],
     sensorGuidelines: [
       '**READ EVERY SENSOR EVERY CYCLE**: front, frontLeft, frontRight, left, right - use them to plan ahead',
       '**SLOW MOVEMENT = BETTER SENSING**: At low speeds, your sensors have time to update and you can react smoothly',
       '**Obstacle AHEAD** (front < 70cm): Slow down and begin GENTLE curve toward clearer side. Differential 10-15.',
-      '**Obstacle on LEFT** (left < 50cm): Gentle curve RIGHT - e.g., drive(left=40, right=50)',
-      '**Obstacle on RIGHT** (right < 50cm): Gentle curve LEFT - e.g., drive(left=50, right=40)',
-      '**Corner detected** (front < 40cm AND limited sides): Slow to near-stop, gentle pivot: drive(left=25, right=-20)',
+      '**Obstacle on LEFT** (left < 50cm): Gentle curve RIGHT → RIGHT MOTOR FASTER → drive(left=40, right=50)',
+      '**Obstacle on RIGHT** (right < 50cm): Gentle curve LEFT → LEFT MOTOR FASTER → drive(left=50, right=40)',
+      '**Corner detected** (front < 40cm AND limited sides): Slow to near-stop, gentle pivot LEFT: drive(left=25, right=-20)',
       '**BUMPER CONTACT**: You were moving too fast! Slow reverse: drive(left=-20, right=-20), then gentle turn',
       '**Smooth is key**: Always use SMALL differentials (10-25 between wheels). Never use 50+ differences!',
-      '**Examples**: drive(45, 55) = gentle right curve. drive(50, 30) = moderate left turn. drive(25, -20) = slow pivot left',
+      '**MOTOR DIRECTION REMINDER**: left > right = TURN LEFT. right > left = TURN RIGHT. Verify before every command!',
+      '**Examples**: drive(45, 55) = RIGHT curve (right faster). drive(55, 45) = LEFT curve (left faster). drive(25, -20) = pivot LEFT',
     ],
     ledProtocol: LED_PROTOCOLS.exploration,
     examples: [
       {
-        situation: 'Front=150cm, L=180cm, R=90cm. OPEN zone, clear ahead. Right side closer, favoring gentle left curve.',
-        reasoning: 'Wide open, slow steady pace with gentle left curve (left faster to turn left)',
+        situation: 'Front=150cm, L=180cm, R=90cm. OPEN zone, clear ahead. Right side closer (90cm), left clearer (180cm).',
+        reasoning: 'Right=90cm < Left=180cm → obstacle on RIGHT → TURN LEFT → LEFT MOTOR FASTER (65 > 55)',
         toolCalls: `{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 255}}
 {"tool": "drive", "args": {"left": 65, "right": 55}}`,
       },
       {
-        situation: 'Front=65cm, L=120cm, R=45cm. AWARE zone. Left has more space. Gentle curve left at reduced speed.',
-        reasoning: 'Left is clearer, slow down and curve gently left (left faster)',
+        situation: 'Front=65cm, L=120cm, R=45cm. AWARE zone. Right=45cm obstacle, left=120cm clear.',
+        reasoning: 'Right=45cm < Left=120cm → obstacle on RIGHT → TURN LEFT → LEFT MOTOR FASTER (50 > 35)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
 {"tool": "drive", "args": {"left": 50, "right": 35}}`,
       },
       {
-        situation: 'Front=35cm, L=80cm, R=25cm. CAUTION zone. Obstacle ahead and right. Slow turn left.',
-        reasoning: 'Slow down significantly, gentle turn toward open left (left faster)',
+        situation: 'Front=35cm, L=80cm, R=25cm. CAUTION zone. Obstacle ahead and on right side.',
+        reasoning: 'Right=25cm < Left=80cm → obstacle on RIGHT → TURN LEFT → LEFT MOTOR FASTER (35 > 20)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 100, "b": 0}}
 {"tool": "drive", "args": {"left": 35, "right": 20}}`,
       },
       {
-        situation: 'Front=20cm, L=60cm, R=30cm. CRITICAL zone. Very close. Slow pivot left.',
-        reasoning: 'Nearly stop, gentle pivot left to find clear path (left faster)',
+        situation: 'Front=20cm, L=60cm, R=30cm. CRITICAL zone. Very close ahead, left is clearer.',
+        reasoning: 'Right=30cm < Left=60cm → obstacle on RIGHT → TURN LEFT → LEFT MOTOR FASTER (25 > 5)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
 {"tool": "drive", "args": {"left": 25, "right": 5}}`,
       },
       {
-        situation: 'Front=25cm, L=20cm, R=35cm. Tight space. Right has slightly more room. Slow pivot right.',
-        reasoning: 'Very slow pivot right toward the best option (right faster)',
+        situation: 'Front=25cm, L=20cm, R=35cm. Tight space. Left blocked, right has more room.',
+        reasoning: 'Left=20cm < Right=35cm → obstacle on LEFT → TURN RIGHT → RIGHT MOTOR FASTER (25 > 5)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
 {"tool": "drive", "args": {"left": 5, "right": 25}}`,
       },
