@@ -179,6 +179,11 @@ export class NavigationZoneFormatter implements SensorFormatter {
                          context.rightDistance < 40 &&
                          context.frontLeftDistance < 50 &&
                          context.frontRightDistance < 50;
+    // L-shaped wall trap: front blocked + one side blocked, but other side is open
+    // This catches scenarios where robot is against a wall corner but has escape route
+    const isLShapedTrap = context.frontDistance < 20 &&
+                          ((context.rightDistance < 20 && context.leftDistance > 80) ||
+                           (context.leftDistance < 20 && context.rightDistance > 80));
     const canReverseOut = backDist > 60;  // Check if backing up is an option
     const hasBumperContact = sensors.bumper.front || sensors.bumper.back;
 
@@ -224,6 +229,16 @@ Step 2: ${bestEscape.pivot} to turn toward ${bestEscape.name} (most open: ${best
         cornerWarning = `\n**⚠️ MANDATORY ACTION - CORNER TRAP:** All directions tight! GENTLE pivot toward ${bestEscape.name}.
 Use: ${bestEscape.pivot} (controlled rotation - DO NOT use aggressive values!)`;
       }
+    } else if (isLShapedTrap) {
+      // L-shaped wall: front + one side blocked, other side open
+      // MUST back up first to get clearance for turning
+      const openSide = context.leftDistance > context.rightDistance ? 'left' : 'right';
+      const openDistance = Math.max(context.leftDistance, context.rightDistance);
+      cornerWarning = `\n**⚠️ MANDATORY ACTION - L-SHAPED WALL TRAP:** Front blocked at ${context.frontDistance.toFixed(0)}cm!
+**CRITICAL:** You MUST back up FIRST before turning - pivoting in place will hit the wall!
+Step 1: drive(left=-35, right=-35) to back up at least 20cm
+Step 2: Turn toward ${openSide} (${openDistance.toFixed(0)}cm clearance)
+DO NOT attempt forward turns until you have backed up!`;
     }
 
     // Add clear speed guidance
