@@ -340,6 +340,7 @@ WORLD MODEL:
 - Obstacles: [where are they relative to me?]
 - Open paths: [which directions are clear?]
 - My goal: [what am I trying to achieve?]
+- Should I replan? [yes if stuck, uncertain, or destination reached]
 \`\`\`
 
 ### 3. REASONING (Why this action?)
@@ -410,12 +411,21 @@ export const BEHAVIOR_TEMPLATES: Record<string, BehaviorTemplate> = {
 ## ║       → Turn LEFT → left motor FASTER → drive(left=50, right=35)         ║
 ## ╚═══════════════════════════════════════════════════════════════════════════╝
 
-## PRIORITY #1: PLAN A TRAJECTORY, DON'T JUST REACT
+## PRIORITY #1: STOP, ANALYZE, PLAN, THEN EXECUTE
 An intelligent robot PLANS ahead, not just reacts to immediate obstacles:
-- Before moving, mentally project where you will be in 2-3 seconds
-- Plan a SMOOTH PATH toward your goal, not a series of jerky reactions
-- Consider ARENA BOUNDARIES - walls exist even when sensors don't see them
-- Think: "If I turn here, where will I end up? Is that a good position?"
+- STOP to analyze when entering a new area or when uncertain
+- BUILD A MENTAL MAP of obstacles and open spaces from your sensors
+- PLAN a smooth trajectory to unexplored areas before moving
+- EXECUTE the plan with smooth, controlled movements
+- REPLAN periodically or when unexpected obstacles appear
+- Think: "Where should I go? What's the safest path to get there?"
+
+## STOP-AND-THINK MOMENTS (When to pause and replan):
+- When you've traveled for ~10 seconds without replanning
+- When an unexpected obstacle appears
+- When you reach your planned destination
+- When you feel lost or disoriented
+- Stopping to think is SMART, not a weakness!
 
 ## PRIORITY #2: MOVE SLOWLY AND DELIBERATELY
 An intelligent robot achieves better results through PATIENCE, not speed.
@@ -459,10 +469,12 @@ Collision avoidance through careful, controlled navigation.
     distanceZones: DISTANCE_ZONES,
     steeringPresets: STEERING_PRESETS,
     decisionRules: [
+      '**RULE #0 - STOP AND PLAN**: If confused or stuck, STOP completely, analyze sensors, then plan next move',
       '**RULE #1 - MOTOR DIRECTION**: TURN LEFT = LEFT MOTOR FASTER. TURN RIGHT = RIGHT MOTOR FASTER. Always verify!',
       '**RULE #2 - PLAN TRAJECTORY**: Before turning, visualize where you will end up. Will you have more space or less?',
       '**RULE #3 - SLOW IS SMART**: Moving slowly gives you time to sense, think, and react properly.',
       '**RULE #4 - SMALL ADJUSTMENTS ONLY**: Use wheel differentials of 10-25, NEVER 50+. Smooth turns are better.',
+      '**RULE #5 - PERIODIC REPLANNING**: Every few seconds, STOP and reassess - plan a smooth path to unexplored areas',
       '**ALWAYS compare distances**: front vs left vs right - curve toward the clearer side using correct motor direction',
       '**OPEN zone (>120cm)**: Cruising speed (50-70). If one side has more space, curve gently toward it (5-10 differential)',
       '**AWARE zone (70-120cm)**: Slow down (35-50). Begin gentle turn toward clearer side (10-15 differential)',
