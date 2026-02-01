@@ -314,7 +314,7 @@ export class CognitiveWorldModel {
         features: {
           label: observation.label,
           category: observation.category,
-          attributes: observation.attributes || {},
+          attributes: (observation.attributes || {}) as Record<string, string | number | boolean>,
         },
         confidence: observation.confidence,
         timestamp,
