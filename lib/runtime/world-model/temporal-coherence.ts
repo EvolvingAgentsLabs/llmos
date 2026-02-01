@@ -162,15 +162,19 @@ export interface Velocity3D {
   vz: number;
 }
 
-export interface PositionState extends Position3D {
+export type PositionState = {
+  x: number;
+  y: number;
+  z: number;
   rotation?: number;
-}
+  [key: string]: number | undefined;
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TEMPORAL COHERENCE ENGINE
 // ═══════════════════════════════════════════════════════════════════════════
 
-export class TemporalCoherenceEngine<T extends Record<string, number> = PositionState> {
+export class TemporalCoherenceEngine<T extends { [key: string]: number | undefined } = PositionState> {
   private config: TemporalCoherenceConfig;
   private states: Map<string, TemporalState<T>> = new Map();
   private history: Map<string, TemporalObservation<T>[]> = new Map();
