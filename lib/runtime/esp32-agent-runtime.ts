@@ -39,6 +39,7 @@ import { getDeviceManager } from '../hardware/esp32-device-manager';
 import { CameraVisionModel, getCameraVisionModel, VisionObservation } from './camera-vision-model';
 import { cameraCaptureManager } from './camera-capture';
 import { WorldModel, getWorldModel } from './world-model';
+import { TrajectoryPlanner, getTrajectoryPlanner, clearTrajectoryPlanner } from './trajectory-planner';
 
 // HAL Integration - Hardware Abstraction Layer for simulation/physical duality
 import {
@@ -448,6 +449,17 @@ export interface ESP32AgentConfig {
   /** Callback when recording ends */
   onRecordingEnd?: (session: RecordingSession) => void;
 
+  // ═══════════════════════════════════════════════════════════════════
+  // TRAJECTORY PLANNING OPTIONS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** Enable trajectory planning mode (stop-plan-execute-replan cycle) */
+  enableTrajectoryPlanning?: boolean;
+  /** How often to stop and replan (ms) - default: 8000ms */
+  replanIntervalMs?: number;
+  /** Callback when trajectory is planned */
+  onTrajectoryPlanned?: (trajectory: { id: string; waypoints: number; goal: string }) => void;
+
   // Callbacks
   onStateChange?: (state: ESP32AgentState) => void;
   onLog?: (message: string, level: 'info' | 'warn' | 'error') => void;
@@ -463,6 +475,8 @@ interface ResolvedESP32AgentConfig extends ESP32AgentConfig {
   visionInterval: number;
   useHAL: boolean;
   enableRecording: boolean;
+  enableTrajectoryPlanning: boolean;
+  replanIntervalMs: number;
 }
 
 export interface ESP32AgentState {
@@ -508,6 +522,13 @@ export interface ESP32AgentState {
   activeSkill: PhysicalSkill | null;
   recordingSessionId: string | null;
   recordingActive: boolean;
+
+  // Trajectory planning state
+  trajectoryPlanningEnabled: boolean;
+  trajectoryMode: 'planning' | 'executing' | 'replanning' | 'reactive' | null;
+  currentTrajectoryId: string | null;
+  trajectoryProgress: string | null;
+  lastReplanReason: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -531,6 +552,9 @@ export class ESP32AgentRuntime {
   private activeSkill: PhysicalSkill | null = null;
   private recordingSessionId: string | null = null;
 
+  // Trajectory planning
+  private trajectoryPlanner: TrajectoryPlanner | null = null;
+
   // Navigation debugger for comprehensive logging
   private navDebugger: RobotNavigationDebugger;
 
@@ -543,6 +567,8 @@ export class ESP32AgentRuntime {
       visionInterval: config.visionInterval ?? 3000,
       useHAL: config.useHAL ?? false,
       enableRecording: config.enableRecording ?? false,
+      enableTrajectoryPlanning: config.enableTrajectoryPlanning ?? false,
+      replanIntervalMs: config.replanIntervalMs ?? 8000,
     };
 
     this.state = {
@@ -579,6 +605,11 @@ export class ESP32AgentRuntime {
       activeSkill: null,
       recordingSessionId: null,
       recordingActive: false,
+      trajectoryPlanningEnabled: this.config.enableTrajectoryPlanning,
+      trajectoryMode: this.config.enableTrajectoryPlanning ? 'planning' : null,
+      currentTrajectoryId: null,
+      trajectoryProgress: null,
+      lastReplanReason: null,
     };
 
     // Initialize vision model if enabled
@@ -974,6 +1005,14 @@ export class ESP32AgentRuntime {
       this.log('Vision mode enabled - camera will also update world model', 'info');
     }
 
+    // Initialize trajectory planner if enabled
+    if (this.config.enableTrajectoryPlanning) {
+      this.trajectoryPlanner = getTrajectoryPlanner(this.config.deviceId, {
+        replanIntervalMs: this.config.replanIntervalMs,
+      });
+      this.log('Trajectory planning enabled - using stop-plan-execute-replan cycle', 'info');
+    }
+
     // Load physical skill if specified
     if (this.config.physicalSkill) {
       const loaded = await this.loadPhysicalSkill(this.config.physicalSkill);
@@ -1024,6 +1063,14 @@ export class ESP32AgentRuntime {
     // Stop recording if active
     if (this.recordingSessionId) {
       await this.stopRecording();
+    }
+
+    // Reset trajectory planner
+    if (this.trajectoryPlanner) {
+      this.trajectoryPlanner.reset();
+      this.state.trajectoryMode = null;
+      this.state.currentTrajectoryId = null;
+      this.state.trajectoryProgress = null;
     }
 
     this.state.running = false;
@@ -1172,6 +1219,43 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       if (this.config.visionEnabled && this.visionModel && this.worldModel) {
         await this.processVision(sensors);
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.6: TRAJECTORY PLANNING - Stop, Plan, Execute cycle
+      // Instead of reactive frame-by-frame control, plan ahead and follow
+      // ═══════════════════════════════════════════════════════════════════
+      if (this.config.enableTrajectoryPlanning && this.trajectoryPlanner) {
+        const trajectoryAction = await this.handleTrajectoryPlanning(sensors);
+        if (trajectoryAction) {
+          // Trajectory planner provided a motor command
+          const { left, right, action, skipLLM } = trajectoryAction;
+
+          // Execute the trajectory command
+          if (this.deviceContext) {
+            this.deviceContext.setLeftWheel(left);
+            this.deviceContext.setRightWheel(right);
+          }
+
+          // Update state
+          this.state.lastToolCalls = [{
+            tool: 'trajectory_follow',
+            args: { left, right, action },
+            result: { success: true, data: { action, left, right } },
+          }];
+
+          // Log trajectory action
+          this.log(`📍 TRAJECTORY: ${action} - L=${left}, R=${right}`, 'info');
+
+          if (skipLLM) {
+            // Trajectory planner is handling movement, skip LLM this cycle
+            this.emitStateChange();
+            if (this.state.running) {
+              this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
+            }
+            return;
+          }
+        }
       }
 
       // ═══════════════════════════════════════════════════════════════════
@@ -1480,6 +1564,107 @@ export class ESP32AgentRuntime {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRAJECTORY PLANNING - Stop, Plan, Execute, Replan Cycle
+  // This provides smooth, predictable navigation instead of reactive jerky motion
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Handle trajectory planning and execution
+   * Returns motor command if trajectory planner is controlling, null if LLM should take over
+   */
+  private async handleTrajectoryPlanning(
+    sensors: SensorReadings
+  ): Promise<{ left: number; right: number; action: string; skipLLM: boolean } | null> {
+    if (!this.trajectoryPlanner) return null;
+
+    const pose = sensors.pose;
+
+    // Check if we need to replan
+    const shouldReplan = this.trajectoryPlanner.shouldReplan(sensors);
+
+    if (shouldReplan) {
+      // STOP AND PLAN - This is the key insight: stop, analyze, then move
+      this.log('🎯 TRAJECTORY PLANNING: Stopping to analyze and plan...', 'info');
+      this.state.trajectoryMode = 'planning';
+      this.state.lastReplanReason = this.getReplanReason(sensors);
+
+      // Stop motors during planning
+      if (this.deviceContext) {
+        this.deviceContext.setLeftWheel(0);
+        this.deviceContext.setRightWheel(0);
+      }
+
+      // Plan new trajectory
+      const trajectory = this.trajectoryPlanner.planTrajectory(pose, sensors, 'explore');
+
+      // Update state
+      this.state.currentTrajectoryId = trajectory.id;
+      this.state.trajectoryProgress = `0/${trajectory.waypoints.length} waypoints`;
+      this.state.trajectoryMode = 'executing';
+
+      this.log(`🎯 TRAJECTORY PLANNED: ${trajectory.goalDescription} (${trajectory.waypoints.length} waypoints)`, 'info');
+
+      // Notify callback
+      if (this.config.onTrajectoryPlanned) {
+        this.config.onTrajectoryPlanned({
+          id: trajectory.id,
+          waypoints: trajectory.waypoints.length,
+          goal: trajectory.goalDescription,
+        });
+      }
+
+      // Return stop command for this cycle (planning takes 1 cycle)
+      return { left: 0, right: 0, action: 'planning', skipLLM: true };
+    }
+
+    // Get motor command from trajectory planner
+    const command = this.trajectoryPlanner.getMotorCommand(pose, sensors);
+
+    if (command) {
+      // Update trajectory progress in state
+      const status = this.trajectoryPlanner.getTrajectoryStatus();
+      this.state.trajectoryProgress = status.progress;
+      this.state.trajectoryMode = 'executing';
+
+      // Return trajectory-guided motor command
+      return {
+        left: command.left,
+        right: command.right,
+        action: command.action,
+        skipLLM: true, // Skip LLM when trajectory is providing good guidance
+      };
+    }
+
+    // Trajectory complete or no trajectory - let LLM take over for this cycle
+    // (will replan next cycle)
+    this.state.trajectoryMode = 'replanning';
+    return null;
+  }
+
+  /**
+   * Get the reason for replanning (for logging/debugging)
+   */
+  private getReplanReason(sensors: SensorReadings): string {
+    if (!this.trajectoryPlanner) return 'No planner';
+
+    const status = this.trajectoryPlanner.getTrajectoryStatus();
+
+    if (!status.trajectoryId) {
+      return 'Initial planning';
+    }
+
+    if (status.mode === 'complete') {
+      return 'Trajectory complete';
+    }
+
+    if (sensors.distance.front < 20) {
+      return 'Unexpected obstacle ahead';
+    }
+
+    return 'Periodic replan';
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2107,11 +2292,17 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       visionContext = this.formatVisionContext(this.state.lastVisionObservation);
     }
 
+    // Add trajectory planning context if enabled
+    let trajectoryContext = '';
+    if (this.config.enableTrajectoryPlanning && this.trajectoryPlanner) {
+      trajectoryContext = this.trajectoryPlanner.generatePlanningContext(sensors.pose, sensors);
+    }
+
     // Add action instruction suffix
     const behaviorType = this.detectBehaviorType();
     const instruction = getActionInstruction(behaviorType);
 
-    return `${formatted}${worldModelSection}${visionContext}\n\n${instruction}`;
+    return `${formatted}${worldModelSection}${visionContext}${trajectoryContext}\n\n${instruction}`;
   }
 
   /**
