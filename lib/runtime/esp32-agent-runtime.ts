@@ -92,6 +92,7 @@ import {
   getActionInstruction,
   SensorReadings as FormatterSensorReadings,
   RayNavigationFormatter,
+  FormatContext,
 } from './sensors';
 
 import {
@@ -956,14 +957,21 @@ export class ESP32AgentRuntime {
     // Initialize device context
     this.deviceContext = this.initDeviceContext();
 
-    // Initialize world model for vision-based updates
+    // Initialize world model for spatial memory and trajectory tracking
+    // The world model is essential for cognitive navigation - it stores:
+    // - Accumulated obstacle observations from sensors
+    // - Robot trajectory history
+    // - Explored vs unexplored areas
+    // This context is provided to the LLM for better decision making
+    this.worldModel = getWorldModel(this.config.deviceId, {
+      gridResolution: 10,  // 10cm per cell
+      worldWidth: 500,     // 5m
+      worldHeight: 500,    // 5m
+    });
+    this.log('World model initialized for spatial memory and navigation', 'info');
+
     if (this.config.visionEnabled) {
-      this.worldModel = getWorldModel(this.config.deviceId, {
-        gridResolution: 10,  // 10cm per cell
-        worldWidth: 500,     // 5m
-        worldHeight: 500,    // 5m
-      });
-      this.log('Vision mode enabled - camera will update world model', 'info');
+      this.log('Vision mode enabled - camera will also update world model', 'info');
     }
 
     // Load physical skill if specified
@@ -1063,6 +1071,25 @@ export class ESP32AgentRuntime {
         velocity: (sensors as any).velocity,
         bumper: sensors.bumper,
       });
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1.0.5: Update World Model from Sensors (builds spatial memory)
+      // This incrementally builds the robot's understanding of the arena
+      // ═══════════════════════════════════════════════════════════════════
+      if (this.worldModel) {
+        this.worldModel.updateFromSensors(
+          sensors.pose,
+          {
+            front: sensors.distance.front,
+            frontLeft: sensors.distance.frontLeft,
+            frontRight: sensors.distance.frontRight,
+            left: sensors.distance.left,
+            right: sensors.distance.right,
+            back: sensors.distance.back,
+          },
+          Date.now()
+        );
+      }
 
       // ═══════════════════════════════════════════════════════════════════
       // STEP 1.1: Auto-detect failures for Dreaming Engine
@@ -2012,13 +2039,23 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
       velocity: (sensors as any).velocity, // Include velocity for trajectory prediction
     };
 
+    // Build world model context for spatial memory
+    const worldModelContext = this.buildWorldModelContext(sensors);
+
     // Format with context
     const context = {
       iteration: this.state.iteration,
       goal: this.config.goal,
+      worldModelContext,
     };
 
     const formatted = formatter.format(formatterSensors, context);
+
+    // Add world model context section for LLM
+    let worldModelSection = '';
+    if (worldModelContext) {
+      worldModelSection = this.formatWorldModelContext(worldModelContext, sensors);
+    }
 
     // Add vision context if available
     let visionContext = '';
@@ -2030,7 +2067,107 @@ IMPORTANT: Use integer motor values in range -255 to 255 (NOT decimals like 0.5!
     const behaviorType = this.detectBehaviorType();
     const instruction = getActionInstruction(behaviorType);
 
-    return `${formatted}${visionContext}\n\n${instruction}`;
+    return `${formatted}${worldModelSection}${visionContext}\n\n${instruction}`;
+  }
+
+  /**
+   * Build world model context data for LLM
+   * This provides spatial memory, trajectory history, and obstacle tracking
+   */
+  private buildWorldModelContext(sensors: SensorReadings): FormatContext['worldModelContext'] {
+    if (!this.worldModel) return undefined;
+
+    const pose = sensors.pose;
+    const snapshot = this.worldModel.getSnapshot();
+    const unexploredDirs = this.worldModel.getUnexploredDirections(pose);
+
+    // Get recent trajectory points (last 10)
+    const trajectoryHistory = snapshot.robotPath.slice(-10).map(p => ({
+      x: p.x,
+      y: p.y,
+      yaw: p.rotation,
+      time: p.timestamp,
+    }));
+
+    // Build recent obstacles from sensor history
+    const recentObstacles: Array<{ direction: string; distance: number; lastSeen: number }> = [];
+    const d = sensors.distance;
+    if (d.front < 100) recentObstacles.push({ direction: 'front', distance: d.front, lastSeen: Date.now() });
+    if (d.frontLeft < 100) recentObstacles.push({ direction: 'front-left', distance: d.frontLeft, lastSeen: Date.now() });
+    if (d.frontRight < 100) recentObstacles.push({ direction: 'front-right', distance: d.frontRight, lastSeen: Date.now() });
+    if (d.left < 100) recentObstacles.push({ direction: 'left', distance: d.left, lastSeen: Date.now() });
+    if (d.right < 100) recentObstacles.push({ direction: 'right', distance: d.right, lastSeen: Date.now() });
+
+    return {
+      compactSummary: this.worldModel.generateCompactSummary(pose),
+      trajectoryHistory,
+      recentObstacles,
+      explorationProgress: snapshot.explorationProgress,
+      unexploredDirections: unexploredDirs.map(u => u.direction),
+    };
+  }
+
+  /**
+   * Format world model context as a section for the LLM prompt
+   * This gives the LLM memory of past observations and trajectory
+   */
+  private formatWorldModelContext(
+    worldModelContext: NonNullable<FormatContext['worldModelContext']>,
+    sensors: SensorReadings
+  ): string {
+    let section = '\n\n## SPATIAL MEMORY (World Model)\n';
+    section += 'You have built this understanding from your sensors and trajectory:\n\n';
+
+    // Add compact summary
+    if (worldModelContext.compactSummary) {
+      section += worldModelContext.compactSummary;
+    }
+
+    // Add trajectory history
+    if (worldModelContext.trajectoryHistory && worldModelContext.trajectoryHistory.length > 1) {
+      section += '\n### Recent Trajectory:\n';
+      const trajectory = worldModelContext.trajectoryHistory;
+      const startPos = trajectory[0];
+      const currentPos = trajectory[trajectory.length - 1];
+
+      // Calculate distance traveled
+      const dx = currentPos.x - startPos.x;
+      const dy = currentPos.y - startPos.y;
+      const distanceTraveled = Math.sqrt(dx * dx + dy * dy);
+
+      section += `- Path points: ${trajectory.length}\n`;
+      section += `- Distance traveled recently: ${distanceTraveled.toFixed(2)}m\n`;
+      section += `- Start: (${startPos.x.toFixed(2)}, ${startPos.y.toFixed(2)})\n`;
+      section += `- Current: (${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)})\n`;
+
+      // Check if robot is stuck (not moving despite attempts)
+      if (distanceTraveled < 0.1 && trajectory.length > 5) {
+        section += `⚠️ **WARNING: Robot appears stuck - minimal movement detected!**\n`;
+      }
+    }
+
+    // Add remembered obstacles (temporal context)
+    if (worldModelContext.recentObstacles && worldModelContext.recentObstacles.length > 0) {
+      section += '\n### Detected Obstacles:\n';
+      for (const obs of worldModelContext.recentObstacles) {
+        const urgency = obs.distance < 30 ? '🔴 CRITICAL' : obs.distance < 60 ? '🟠 CAUTION' : '🟢 NOTED';
+        section += `- ${urgency} ${obs.direction}: ${obs.distance}cm\n`;
+      }
+    }
+
+    // Add unexplored directions (exploration guidance)
+    if (worldModelContext.unexploredDirections && worldModelContext.unexploredDirections.length > 0) {
+      section += '\n### Unexplored Areas:\n';
+      section += `Consider exploring: ${worldModelContext.unexploredDirections.join(', ')}\n`;
+    }
+
+    // Add exploration progress
+    if (worldModelContext.explorationProgress !== undefined) {
+      const progressPct = (worldModelContext.explorationProgress * 100).toFixed(1);
+      section += `\n### Exploration Progress: ${progressPct}%\n`;
+    }
+
+    return section;
   }
 
   /**

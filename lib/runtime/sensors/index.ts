@@ -57,6 +57,16 @@ export interface FormatContext {
   iteration: number;
   goal?: string;
   behaviorType?: string;
+  // World model context for spatial memory and trajectory tracking
+  worldModelContext?: {
+    asciiMap?: string;           // ASCII visualization of known world
+    compactSummary?: string;     // Brief status summary
+    cognitiveAnalysis?: string;  // Full cognitive analysis for complex decisions
+    trajectoryHistory?: Array<{ x: number; y: number; yaw: number; time: number }>;
+    recentObstacles?: Array<{ direction: string; distance: number; lastSeen: number }>;
+    explorationProgress?: number; // 0-1
+    unexploredDirections?: string[];
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
