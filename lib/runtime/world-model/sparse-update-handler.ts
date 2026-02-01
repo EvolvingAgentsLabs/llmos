@@ -348,7 +348,7 @@ export class SparseUpdateHandler {
 
       case 'spline':
         // Simplified cubic interpolation using Hermite spline
-        interpolated.push(...this.hermiteInterpolate(before, after, t));
+        Object.assign(interpolated, this.hermiteInterpolate(before, after, t));
         break;
 
       case 'constant':
