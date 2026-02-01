@@ -141,14 +141,18 @@ export const DISTANCE_ZONES: DistanceZoneConfig[] = [
 /**
  * Standard steering presets - SMALL DIFFERENTIALS for smooth, controlled turns
  * Key principle: Small adjustments lead to predictable, stable trajectories
+ *
+ * Differential drive kinematics: angular_velocity = (right - left) / wheel_base
+ * - left > right → negative angular velocity → rotation DECREASES → turns LEFT
+ * - right > left → positive angular velocity → rotation INCREASES → turns RIGHT
  */
 export const STEERING_PRESETS: SteeringPreset[] = [
-  { name: 'Gentle curve left', description: 'Slight left curve', leftMotor: 45, rightMotor: 55 },
-  { name: 'Moderate turn left', description: 'Medium left turn', leftMotor: 30, rightMotor: 50 },
-  { name: 'Sharp turn left', description: 'Sharp left turn (slow pivot)', leftMotor: 10, rightMotor: 40 },
-  { name: 'Gentle curve right', description: 'Slight right curve', leftMotor: 55, rightMotor: 45 },
-  { name: 'Moderate turn right', description: 'Medium right turn', leftMotor: 50, rightMotor: 30 },
-  { name: 'Sharp turn right', description: 'Sharp right turn (slow pivot)', leftMotor: 40, rightMotor: 10 },
+  { name: 'Gentle curve left', description: 'Slight left curve', leftMotor: 55, rightMotor: 45 },
+  { name: 'Moderate turn left', description: 'Medium left turn', leftMotor: 50, rightMotor: 30 },
+  { name: 'Sharp turn left', description: 'Sharp left turn (slow pivot)', leftMotor: 40, rightMotor: 10 },
+  { name: 'Gentle curve right', description: 'Slight right curve', leftMotor: 45, rightMotor: 55 },
+  { name: 'Moderate turn right', description: 'Medium right turn', leftMotor: 30, rightMotor: 50 },
+  { name: 'Sharp turn right', description: 'Sharp right turn (slow pivot)', leftMotor: 10, rightMotor: 40 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -347,7 +351,7 @@ WORLD MODEL:
 I choose LEFT TURN because left has 75cm more clearance than right, leads to unexplored area.
 \`\`\`
 {"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
-{"tool": "drive", "args": {"left": 70, "right": 110}}`;
+{"tool": "drive", "args": {"left": 110, "right": 70}}`;
 
     if (instructions && instructions.length > 0) {
       content += '\n\n' + instructions.join('\n');
@@ -426,44 +430,44 @@ Collision avoidance through careful, controlled navigation.
       '**READ EVERY SENSOR EVERY CYCLE**: front, frontLeft, frontRight, left, right - use them to plan ahead',
       '**SLOW MOVEMENT = BETTER SENSING**: At low speeds, your sensors have time to update and you can react smoothly',
       '**Obstacle AHEAD** (front < 70cm): Slow down and begin GENTLE curve toward clearer side. Differential 10-15.',
-      '**Obstacle on LEFT** (left < 50cm): Gentle curve RIGHT - e.g., drive(left=50, right=40)',
-      '**Obstacle on RIGHT** (right < 50cm): Gentle curve LEFT - e.g., drive(left=40, right=50)',
-      '**Corner detected** (front < 40cm AND limited sides): Slow to near-stop, gentle pivot: drive(left=-20, right=25)',
+      '**Obstacle on LEFT** (left < 50cm): Gentle curve RIGHT - e.g., drive(left=40, right=50)',
+      '**Obstacle on RIGHT** (right < 50cm): Gentle curve LEFT - e.g., drive(left=50, right=40)',
+      '**Corner detected** (front < 40cm AND limited sides): Slow to near-stop, gentle pivot: drive(left=25, right=-20)',
       '**BUMPER CONTACT**: You were moving too fast! Slow reverse: drive(left=-20, right=-20), then gentle turn',
       '**Smooth is key**: Always use SMALL differentials (10-25 between wheels). Never use 50+ differences!',
-      '**Examples**: drive(45, 55) = gentle right curve. drive(30, 50) = moderate left turn. drive(-20, 25) = slow pivot left',
+      '**Examples**: drive(45, 55) = gentle right curve. drive(50, 30) = moderate left turn. drive(25, -20) = slow pivot left',
     ],
     ledProtocol: LED_PROTOCOLS.exploration,
     examples: [
       {
         situation: 'Front=150cm, L=180cm, R=90cm. OPEN zone, clear ahead. Right side closer, favoring gentle left curve.',
-        reasoning: 'Wide open, slow steady pace with gentle left curve',
+        reasoning: 'Wide open, slow steady pace with gentle left curve (left faster to turn left)',
         toolCalls: `{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 255}}
-{"tool": "drive", "args": {"left": 55, "right": 65}}`,
+{"tool": "drive", "args": {"left": 65, "right": 55}}`,
       },
       {
         situation: 'Front=65cm, L=120cm, R=45cm. AWARE zone. Left has more space. Gentle curve left at reduced speed.',
-        reasoning: 'Left is clearer, slow down and curve gently',
+        reasoning: 'Left is clearer, slow down and curve gently left (left faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 200, "b": 0}}
-{"tool": "drive", "args": {"left": 35, "right": 50}}`,
+{"tool": "drive", "args": {"left": 50, "right": 35}}`,
       },
       {
         situation: 'Front=35cm, L=80cm, R=25cm. CAUTION zone. Obstacle ahead and right. Slow turn left.',
-        reasoning: 'Slow down significantly, gentle turn toward open left',
+        reasoning: 'Slow down significantly, gentle turn toward open left (left faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 100, "b": 0}}
-{"tool": "drive", "args": {"left": 20, "right": 35}}`,
+{"tool": "drive", "args": {"left": 35, "right": 20}}`,
       },
       {
         situation: 'Front=20cm, L=60cm, R=30cm. CRITICAL zone. Very close. Slow pivot left.',
-        reasoning: 'Nearly stop, gentle pivot to find clear path',
+        reasoning: 'Nearly stop, gentle pivot left to find clear path (left faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
-{"tool": "drive", "args": {"left": 5, "right": 25}}`,
+{"tool": "drive", "args": {"left": 25, "right": 5}}`,
       },
       {
         situation: 'Front=25cm, L=20cm, R=35cm. Tight space. Right has slightly more room. Slow pivot right.',
-        reasoning: 'Very slow pivot toward the best option',
+        reasoning: 'Very slow pivot right toward the best option (right faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 255, "g": 0, "b": 0}}
-{"tool": "drive", "args": {"left": 25, "right": 5}}`,
+{"tool": "drive", "args": {"left": 5, "right": 25}}`,
       },
     ],
     recommendedMap: '5m × 5m Obstacles',
@@ -642,21 +646,21 @@ Use VISION to decide WHERE to go, SENSORS to navigate SAFELY.`,
     examples: [
       {
         situation: 'VISION shows LEFT: open_space [UNEXPLORED], CENTER: wall (1.2m), RIGHT: obstacle (0.8m). Moving left slowly to explore.',
-        reasoning: 'Vision identified unexplored area to the left, gentle curve',
+        reasoning: 'Vision identified unexplored area to the left, gentle curve left (left faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 128}}
-{"tool": "drive", "args": {"left": 35, "right": 50}}`,
+{"tool": "drive", "args": {"left": 50, "right": 35}}`,
       },
       {
         situation: 'VISION: All regions show walls/obstacles, no unexplored areas visible. Need slow pivot for better viewpoint.',
-        reasoning: 'Current position has limited visibility, gentle rotation',
+        reasoning: 'Current position has limited visibility, gentle pivot right to scan',
         toolCalls: `{"tool": "set_led", "args": {"r": 128, "g": 0, "b": 255}}
 {"tool": "drive", "args": {"left": -20, "right": 25}}`,
       },
       {
         situation: 'VISION RECOMMENDATION: Explore RIGHT - "Open space visible, appears unexplored". Sensors show right clear (120cm).',
-        reasoning: 'Following vision recommendation, gentle curve right',
+        reasoning: 'Following vision recommendation, gentle curve right (right faster)',
         toolCalls: `{"tool": "set_led", "args": {"r": 0, "g": 255, "b": 128}}
-{"tool": "drive", "args": {"left": 50, "right": 35}}`,
+{"tool": "drive", "args": {"left": 35, "right": 50}}`,
       },
     ],
     responseInstructions: [

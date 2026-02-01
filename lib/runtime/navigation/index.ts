@@ -318,11 +318,13 @@ export class NavigationCalculator {
       case NavigationZone.AWARE:
         if (clearanceDiff > this.config.clearanceAdvantage) {
           // Gentle curve toward open side - SMALL differential for smooth turns
+          // Turn left: left motor faster (left > right) → negative angular velocity → rotation decreases
+          // Turn right: right motor faster (right > left) → positive angular velocity → rotation increases
           return {
             type: 'gentle_curve',
             direction,
-            leftMotor: turnLeft ? baseSpeed - 10 : baseSpeed + 5,
-            rightMotor: turnLeft ? baseSpeed + 5 : baseSpeed - 10,
+            leftMotor: turnLeft ? baseSpeed + 5 : baseSpeed - 10,
+            rightMotor: turnLeft ? baseSpeed - 10 : baseSpeed + 5,
           };
         }
         return {
@@ -334,29 +336,32 @@ export class NavigationCalculator {
 
       case NavigationZone.CAUTION:
         // Moderate turn - still gentle, controlled differential
+        // Turn left: left faster. Turn right: right faster.
         return {
           type: 'moderate_turn',
           direction,
-          leftMotor: turnLeft ? baseSpeed - 15 : baseSpeed + 10,
-          rightMotor: turnLeft ? baseSpeed + 10 : baseSpeed - 15,
+          leftMotor: turnLeft ? baseSpeed + 10 : baseSpeed - 15,
+          rightMotor: turnLeft ? baseSpeed - 15 : baseSpeed + 10,
         };
 
       case NavigationZone.CRITICAL:
         // Sharp turn or pivot - but still controlled, no wild swings
         if (frontDistance < 15) {
           // Pivot in place - SLOW rotation, not aggressive
+          // Turn left: left forward, right backward. Turn right: left backward, right forward.
           return {
             type: 'pivot',
             direction,
-            leftMotor: turnLeft ? -20 : 25,
-            rightMotor: turnLeft ? 25 : -20,
+            leftMotor: turnLeft ? 25 : -20,
+            rightMotor: turnLeft ? -20 : 25,
           };
         }
+        // Turn left: left faster. Turn right: right faster.
         return {
           type: 'sharp_turn',
           direction,
-          leftMotor: turnLeft ? 10 : baseSpeed,
-          rightMotor: turnLeft ? baseSpeed : 10,
+          leftMotor: turnLeft ? baseSpeed : 10,
+          rightMotor: turnLeft ? 10 : baseSpeed,
         };
     }
   }
@@ -472,20 +477,24 @@ export const STEERING_PRESETS = {
   straight: (speed: number) => ({ left: speed, right: speed }),
 
   // Gentle curves (for AWARE zone) - SMALL differentials for smooth turns
-  gentleCurveLeft: (speed: number) => ({ left: speed - 10, right: speed + 5 }),
-  gentleCurveRight: (speed: number) => ({ left: speed + 5, right: speed - 10 }),
+  // Turn left: left motor faster → angular velocity negative → rotation decreases
+  // Turn right: right motor faster → angular velocity positive → rotation increases
+  gentleCurveLeft: (speed: number) => ({ left: speed + 5, right: speed - 10 }),
+  gentleCurveRight: (speed: number) => ({ left: speed - 10, right: speed + 5 }),
 
   // Moderate turns (for CAUTION zone) - controlled, not aggressive
-  moderateTurnLeft: (speed: number) => ({ left: speed - 20, right: speed + 10 }),
-  moderateTurnRight: (speed: number) => ({ left: speed + 10, right: speed - 20 }),
+  moderateTurnLeft: (speed: number) => ({ left: speed + 10, right: speed - 20 }),
+  moderateTurnRight: (speed: number) => ({ left: speed - 20, right: speed + 10 }),
 
   // Sharp turns (for CRITICAL zone) - still controlled, avoid wild swings
-  sharpTurnLeft: () => ({ left: 10, right: 40 }),
-  sharpTurnRight: () => ({ left: 40, right: 10 }),
+  sharpTurnLeft: () => ({ left: 40, right: 10 }),
+  sharpTurnRight: () => ({ left: 10, right: 40 }),
 
   // Pivot in place - SLOW rotation for precision
-  pivotLeft: () => ({ left: -25, right: 25 }),
-  pivotRight: () => ({ left: 25, right: -25 }),
+  // Pivot left: left forward, right backward → angular velocity negative
+  // Pivot right: left backward, right forward → angular velocity positive
+  pivotLeft: () => ({ left: 25, right: -25 }),
+  pivotRight: () => ({ left: -25, right: 25 }),
 
   // Reverse - slow and controlled
   reverse: (speed: number) => ({ left: -Math.min(speed, 30), right: -Math.min(speed, 30) }),
