@@ -1173,7 +1173,7 @@ export class ESP32AgentRuntime {
       if (stuckRecoveryAction) {
         // Execute recovery action directly, bypass LLM
         this.log(`STUCK DETECTED - Executing recovery: ${stuckRecoveryAction}`, 'warn');
-        await this.executeRecoveryAction(stuckRecoveryAction);
+        await this.executeRecoveryAction(stuckRecoveryAction, sensors);
         this.emitStateChange();
         // Schedule next iteration and return early
         if (this.state.running) {
@@ -1452,6 +1452,14 @@ export class ESP32AgentRuntime {
   private generateRecoveryAction(sensors: SensorReadings, attempt: number): string {
     const { distance, bumper } = sensors;
 
+    // CRITICAL: When front is very close (<10cm), ALWAYS back up first
+    // This prevents pivot attempts that would clip the obstacle
+    if (distance.front < 10) {
+      this.log(`Front obstacle at ${distance.front}cm - forcing reverse-first recovery`, 'warn');
+      const bestDirection = distance.left > distance.right ? 'left' : 'right';
+      return bestDirection === 'left' ? 'reverse_turn_left' : 'reverse_turn_right';
+    }
+
     // Different recovery strategies based on attempt number
     const strategies = [
       // Strategy 1: Back up and turn toward most open direction
@@ -1484,7 +1492,7 @@ export class ESP32AgentRuntime {
   /**
    * Execute a recovery action directly without LLM
    */
-  private async executeRecoveryAction(action: string): Promise<void> {
+  private async executeRecoveryAction(action: string, sensors?: SensorReadings): Promise<void> {
     if (!this.deviceContext) return;
 
     const { setLeftWheel, setRightWheel } = this.deviceContext;
@@ -1492,7 +1500,11 @@ export class ESP32AgentRuntime {
     // All recovery actions use controlled, gentle values
     const RECOVERY_SPEED = 35;      // Moderate speed
     const PIVOT_DIFF = 25;          // Gentle pivot differential
-    const ACTION_DURATION = 500;    // Duration in ms
+    // Dynamic action duration: longer backup when very close to obstacles
+    const frontDist = sensors?.distance?.front ?? 50;
+    const ACTION_DURATION = frontDist < 15 ? 800 : 500;  // Longer backup when close
+    // Higher turn differential allowed in critical escape situations
+    const ESCAPE_PIVOT_DIFF = frontDist < 15 ? 40 : PIVOT_DIFF;
 
     switch (action) {
       case 'reverse_straight':
@@ -1522,16 +1534,30 @@ export class ESP32AgentRuntime {
         break;
 
       case 'pivot_left':
-        setLeftWheel(-PIVOT_DIFF);
-        setRightWheel(PIVOT_DIFF);
+        // When front is very close, back up first to get clearance for pivot
+        if (frontDist < 15) {
+          this.log(`Front at ${frontDist}cm - backing up before pivot`, 'info');
+          setLeftWheel(-RECOVERY_SPEED);
+          setRightWheel(-RECOVERY_SPEED);
+          await this.sleep(400);  // Brief backup to clear obstacle
+        }
+        setLeftWheel(-ESCAPE_PIVOT_DIFF);
+        setRightWheel(ESCAPE_PIVOT_DIFF);
         await this.sleep(ACTION_DURATION);
         setLeftWheel(0);
         setRightWheel(0);
         break;
 
       case 'pivot_right':
-        setLeftWheel(PIVOT_DIFF);
-        setRightWheel(-PIVOT_DIFF);
+        // When front is very close, back up first to get clearance for pivot
+        if (frontDist < 15) {
+          this.log(`Front at ${frontDist}cm - backing up before pivot`, 'info');
+          setLeftWheel(-RECOVERY_SPEED);
+          setRightWheel(-RECOVERY_SPEED);
+          await this.sleep(400);  // Brief backup to clear obstacle
+        }
+        setLeftWheel(ESCAPE_PIVOT_DIFF);
+        setRightWheel(-ESCAPE_PIVOT_DIFF);
         await this.sleep(ACTION_DURATION);
         setLeftWheel(0);
         setRightWheel(0);
@@ -1543,8 +1569,8 @@ export class ESP32AgentRuntime {
         setRightWheel(-RECOVERY_SPEED);
         await this.sleep(ACTION_DURATION);
         // Then rotate
-        setLeftWheel(-PIVOT_DIFF);
-        setRightWheel(PIVOT_DIFF);
+        setLeftWheel(-ESCAPE_PIVOT_DIFF);
+        setRightWheel(ESCAPE_PIVOT_DIFF);
         await this.sleep(ACTION_DURATION * 2); // Longer rotation
         setLeftWheel(0);
         setRightWheel(0);
@@ -1728,9 +1754,27 @@ export class ESP32AgentRuntime {
     // ═══════════════════════════════════════════════════════════════════
     const isMovingForward = velocity && velocity.linear > 0.01;
     const isMovingBackward = velocity && velocity.linear < -0.01;
+    const isRotating = velocity && Math.abs(velocity.angular) > 0.3;
 
-    // Front obstacle emergency
+    // Check if there's a clear escape route to either side
+    const hasLeftEscape = distance.left > 80 || distance.frontLeft > 60;
+    const hasRightEscape = distance.right > 80 || distance.frontRight > 60;
+    const hasEscapeRoute = hasLeftEscape || hasRightEscape;
+
+    // Front obstacle emergency - but allow escape pivots when there's a clear route
     if (distance.front < REFLEXES.EMERGENCY_STOP_DISTANCE && isMovingForward) {
+      // Exception: Allow escape turns when robot is pivoting toward clear space
+      // This prevents blocking legitimate escape maneuvers
+      if (isRotating && hasEscapeRoute) {
+        const turningTowardClear =
+          (velocity.angular < 0 && hasLeftEscape) ||   // Turning left toward open left
+          (velocity.angular > 0 && hasRightEscape);    // Turning right toward open right
+        if (turningTowardClear) {
+          // Allow the escape turn, but log it for visibility
+          this.log(`Allowing escape turn: front=${distance.front}cm, turning toward clear side`, 'info');
+          return null;  // Don't block the escape
+        }
+      }
       return {
         action: 'emergency_stop_reverse',
         reason: `EMERGENCY: Front obstacle at ${distance.front}cm while moving forward!`,
@@ -2087,18 +2131,24 @@ export class ESP32AgentRuntime {
     // ═══════════════════════════════════════════════════════════════════
     // RULE 5: Limit turn differential to prevent over-rotation
     // Excessive turn differentials cause rapid, uncontrolled rotation
+    // EXCEPTION: Allow higher differential (up to 50) during escape maneuvers
     // ═══════════════════════════════════════════════════════════════════
     const turnDifferential = Math.abs(left - right);
-    if (turnDifferential > REFLEXES.MAX_TURN_DIFFERENTIAL) {
+    // In critical escape situations (front blocked, side open), allow tighter turns
+    const isEscapeSituation = distance.front < 15 &&
+      (distance.left > 60 || distance.right > 60);
+    const effectiveMaxDiff = isEscapeSituation ? 50 : REFLEXES.MAX_TURN_DIFFERENTIAL;
+
+    if (turnDifferential > effectiveMaxDiff) {
       // Reduce the differential while preserving direction
       const avgSpeed = (left + right) / 2;
       const direction = left > right ? 1 : -1; // 1 = turning left, -1 = turning right
-      const maxDiff = REFLEXES.MAX_TURN_DIFFERENTIAL / 2;
+      const maxDiff = effectiveMaxDiff / 2;
 
       left = Math.round(avgSpeed + direction * maxDiff);
       right = Math.round(avgSpeed - direction * maxDiff);
 
-      this.log(`🛡️ LIMITED: Reduced turn differential from ${turnDifferential} to ${REFLEXES.MAX_TURN_DIFFERENTIAL}`, 'info');
+      this.log(`🛡️ LIMITED: Reduced turn differential from ${turnDifferential} to ${effectiveMaxDiff}${isEscapeSituation ? ' (escape mode)' : ''}`, 'info');
       modified = true;
     }
 
