@@ -495,6 +495,12 @@ export interface ESP32AgentState {
     lastRecoveryAction: string | null;
     recoveryAttempts: number;  // How many recovery attempts in current stuck episode
   };
+  // Turn rate limiting state - prevents excessive rotation
+  turnRateLimiting: {
+    lastYaw: number | null;
+    lastTimestamp: number | null;
+    recentAngularRates: number[]; // Track recent angular velocities for smoothing
+  };
 
   // HAL & Physical Skill state
   halEnabled: boolean;
@@ -562,6 +568,11 @@ export class ESP32AgentRuntime {
         stuckCount: 0,
         lastRecoveryAction: null,
         recoveryAttempts: 0,
+      },
+      turnRateLimiting: {
+        lastYaw: null,
+        lastTimestamp: null,
+        recentAngularRates: [],
       },
       halEnabled: this.config.useHAL,
       activeSkill: null,
@@ -1467,6 +1478,10 @@ export class ESP32AgentRuntime {
     // Timing
     REFLEX_DURATION: 300,            // Duration of reflex actions (ms)
     SENSOR_STALENESS_THRESHOLD: 500, // Max age of sensor data (ms)
+
+    // Turn rate limiting - prevents over-rotation
+    MAX_TURN_DIFFERENTIAL: 30,       // Max difference between left and right motor
+    MAX_ANGULAR_RATE: 1.0,           // Max radians per second (about 57 degrees/sec)
   };
 
   /**
@@ -1788,13 +1803,16 @@ export class ESP32AgentRuntime {
 
     // ═══════════════════════════════════════════════════════════════════
     // RULE 4: Prevent turning into obstacles
+    // Differential drive kinematics:
+    // - left > right → angular velocity = (right - left) / wheelbase < 0 → turns LEFT
+    // - right > left → angular velocity = (right - left) / wheelbase > 0 → turns RIGHT
     // ═══════════════════════════════════════════════════════════════════
-    const turningLeft = right > left; // Right wheel faster = turning left
-    const turningRight = left > right; // Left wheel faster = turning right
+    const turningLeft = left > right; // Left wheel faster = turning left (correct)
+    const turningRight = right > left; // Right wheel faster = turning right (correct)
 
     if (turningLeft && distance.frontLeft < REFLEXES.EMERGENCY_STOP_DISTANCE) {
       this.log(`🛡️ BLOCKED: LLM tried to turn left but frontLeft obstacle at ${distance.frontLeft}cm`, 'warn');
-      // Reverse the turn direction
+      // Reverse the turn direction - turn right instead
       const temp = left;
       left = right;
       right = temp;
@@ -1803,10 +1821,28 @@ export class ESP32AgentRuntime {
 
     if (turningRight && distance.frontRight < REFLEXES.EMERGENCY_STOP_DISTANCE) {
       this.log(`🛡️ BLOCKED: LLM tried to turn right but frontRight obstacle at ${distance.frontRight}cm`, 'warn');
-      // Reverse the turn direction
+      // Reverse the turn direction - turn left instead
       const temp = left;
       left = right;
       right = temp;
+      modified = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RULE 5: Limit turn differential to prevent over-rotation
+    // Excessive turn differentials cause rapid, uncontrolled rotation
+    // ═══════════════════════════════════════════════════════════════════
+    const turnDifferential = Math.abs(left - right);
+    if (turnDifferential > REFLEXES.MAX_TURN_DIFFERENTIAL) {
+      // Reduce the differential while preserving direction
+      const avgSpeed = (left + right) / 2;
+      const direction = left > right ? 1 : -1; // 1 = turning left, -1 = turning right
+      const maxDiff = REFLEXES.MAX_TURN_DIFFERENTIAL / 2;
+
+      left = Math.round(avgSpeed + direction * maxDiff);
+      right = Math.round(avgSpeed - direction * maxDiff);
+
+      this.log(`🛡️ LIMITED: Reduced turn differential from ${turnDifferential} to ${REFLEXES.MAX_TURN_DIFFERENTIAL}`, 'info');
       modified = true;
     }
 
