@@ -728,7 +728,7 @@ export function getTemporalEngine<T extends { [key: string]: number | undefined 
   let engine = temporalEngines.get(deviceId) as TemporalCoherenceEngine<T> | undefined;
   if (!engine) {
     engine = new TemporalCoherenceEngine<T>(config);
-    temporalEngines.set(deviceId, engine as TemporalCoherenceEngine);
+    temporalEngines.set(deviceId, engine as unknown as TemporalCoherenceEngine);
   }
   return engine;
 }
