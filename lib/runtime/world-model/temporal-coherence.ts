@@ -233,8 +233,9 @@ export class TemporalCoherenceEngine<T extends { [key: string]: number | undefin
       }
     } else {
       // Existing entity - check for anomalies and update
-      this.checkForAnomalies(entityId, entityState, observation);
-      entityState = this.updateState(entityState, observation);
+      // entityState is guaranteed to be defined here since isNew is false
+      this.checkForAnomalies(entityId, entityState!, observation);
+      entityState = this.updateState(entityState!, observation);
     }
 
     // Store observation in history
