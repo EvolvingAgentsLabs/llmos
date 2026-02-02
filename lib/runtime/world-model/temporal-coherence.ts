@@ -721,7 +721,7 @@ const temporalEngines = new Map<string, TemporalCoherenceEngine>();
 /**
  * Get or create a temporal coherence engine for a device
  */
-export function getTemporalEngine<T extends Record<string, number> = PositionState>(
+export function getTemporalEngine<T extends { [key: string]: number | undefined } = PositionState>(
   deviceId: string,
   config?: Partial<TemporalCoherenceConfig>
 ): TemporalCoherenceEngine<T> {
