@@ -112,6 +112,25 @@ LLMos includes multiple safety layers:
 - **Automatic Speed Reduction** - Robot slows down near obstacles
 - **Emergency Stop** - One command to stop everything immediately
 
+### Cognitive World Model (AI World Models)
+
+LLMos includes a sophisticated **Cognitive World Model** system that enables robots to build and maintain internal representations from partial reality. Unlike traditional AI systems that only see snapshots, LLMos robots maintain persistent spatial/temporal world models and notice subtle changes.
+
+> *"An AI that knows when something is different, not just what it sees."*
+
+**Key Capabilities:**
+- **Temporal Coherence** - Track observations over time consistently
+- **Object Identity** - Maintain persistent object identities across observations
+- **Change Detection** - Distinguish meaningful changes from sensor drift/noise
+- **Uncertainty Reasoning** - Trust calibration and belief management
+- **Sparse Updates** - Handle infrequent observations gracefully
+
+This bridges robotics, medicine, and cognition - the same technology can be applied to:
+- Medical imaging (longitudinal change detection)
+- Surgery navigation
+- Rehabilitation monitoring
+- Environment sensing
+
 ---
 
 ## For Makers: Build Your First Robot
@@ -330,6 +349,82 @@ Your robot's improvement cycle:
          └─────────────────────────┘
 ```
 
+### Cognitive World Model
+
+The **Cognitive World Model** is the robot's internal representation of reality - its mental map that persists across observations and updates intelligently.
+
+```
+         ┌─────────────────────────────────────────┐
+         │        COGNITIVE WORLD MODEL            │
+         │                                         │
+         │  ┌───────────────┐  ┌───────────────┐   │
+         │  │   Temporal    │  │    Object     │   │
+  Sensor │  │  Coherence    │  │   Identity    │   │
+   Data  │  │   Engine      │  │   Tracker     │   │
+    ───►─┼─►│  (history,    │  │  (persistent  │   │
+         │  │   prediction) │  │   tracking)   │   │
+         │  └───────┬───────┘  └───────┬───────┘   │
+         │          │                  │           │
+         │          ▼                  ▼           │
+         │  ┌───────────────┐  ┌───────────────┐   │
+         │  │    Change     │  │  Uncertainty  │   │
+         │  │   Detector    │  │   Reasoner    │   │
+         │  │ (drift vs     │  │ (trust        │   │
+         │  │  real change) │  │  calibration) │   │
+         │  └───────┬───────┘  └───────┬───────┘   │
+         │          │                  │           │
+         │          ▼                  ▼           │
+         │  ┌─────────────────────────────────┐   │
+         │  │      Sparse Update Handler      │   │
+         │  │   (interpolation, scheduling)   │   │
+         │  └─────────────────────────────────┘   │
+         └─────────────────────────────────────────┘
+                            │
+                            ▼
+              ┌─────────────────────────┐
+              │   Cognitive Analysis    │
+              │   for LLM Reasoning     │
+              └─────────────────────────┘
+```
+
+**Components:**
+
+| Component | Purpose | Hard Problem Solved |
+|-----------|---------|---------------------|
+| Temporal Coherence Engine | Maintains consistency across observations | Temporal coherence |
+| Object Identity Tracker | Keeps track of objects even when not visible | Object identity across time |
+| Change Detector | Distinguishes real changes from sensor noise | Drift vs real change |
+| Uncertainty Reasoner | Manages trust and confidence in observations | Trust calibration |
+| Sparse Update Handler | Handles irregular, infrequent observations | Sparse updates |
+
+**Example Usage:**
+```typescript
+import { getCognitiveWorldModel } from '@/lib/runtime/world-model';
+
+const worldModel = getCognitiveWorldModel('robot-1');
+worldModel.start();
+
+// Process an observation
+const result = worldModel.processObservation({
+  entityId: 'obstacle-1',
+  position: { x: 1.5, y: 0, z: 2.3 },
+  positionUncertainty: 0.05,
+  label: 'box',
+  category: 'obstacle',
+  confidence: 0.9,
+  source: 'camera_vision',
+  timestamp: Date.now(),
+});
+
+// The robot now knows:
+// - What changed (result.changes)
+// - Any anomalies detected (result.anomalies)
+// - Updated entity state (result.entity)
+
+// Generate cognitive analysis for decision-making
+const analysis = worldModel.generateCognitiveAnalysis();
+```
+
 ---
 
 ## Safety Features
@@ -460,7 +555,17 @@ llmos/
 │   │   └── agentic-auditor.ts     # Skill validation
 │   │
 │   ├── runtime/                   # Robot control
-│   │   └── esp32-agent-runtime.ts
+│   │   ├── esp32-agent-runtime.ts
+│   │   ├── world-model.ts         # Occupancy grid world model
+│   │   ├── world-model/           # Cognitive World Model System
+│   │   │   ├── index.ts           # Module exports
+│   │   │   ├── cognitive-world-model.ts  # Main integration
+│   │   │   ├── temporal-coherence.ts     # Temporal tracking
+│   │   │   ├── object-identity-tracker.ts # Object persistence
+│   │   │   ├── change-detector.ts        # Drift vs change
+│   │   │   ├── uncertainty-reasoner.ts   # Trust calibration
+│   │   │   └── sparse-update-handler.ts  # Sparse observations
+│   │   └── scene-graph/           # 3D spatial graph
 │   │
 │   └── skills/                    # Skill loading
 │       └── physical-skill-loader.ts
@@ -659,6 +764,38 @@ LLMos is building toward **autonomous physical AI** that:
 2. **Knowledge sharing** - Learned skills spread across robot fleets
 3. **Simulation-first** - Test 1000 approaches overnight, deploy the best one
 4. **Human-readable** - Every behavior is a markdown file you can inspect
+5. **Cognitive World Models** - Persistent understanding that goes beyond snapshots
+
+### AI World Models from Partial Reality
+
+The new **Cognitive World Model** system represents a significant step toward true robot cognition:
+
+```
+Traditional AI:              LLMos Cognitive Model:
+┌──────────────────┐        ┌──────────────────────────────┐
+│  See snapshot    │        │  Maintain persistent model   │
+│       ↓          │        │           ↓                  │
+│  React to it     │        │  Detect meaningful changes   │
+│       ↓          │        │           ↓                  │
+│  Forget          │        │  Reason about uncertainty    │
+└──────────────────┘        │           ↓                  │
+                            │  Remember and predict        │
+                            └──────────────────────────────┘
+```
+
+**The Problem We're Solving:**
+- Traditional AI systems see snapshots, not persistent models
+- They don't notice subtle changes over time
+- They can't distinguish sensor drift from real changes
+- Humans do this effortlessly - robots should too
+
+**Applications Beyond Robotics:**
+- **Medical Imaging**: Track longitudinal changes in scans
+- **Surgery Navigation**: Maintain spatial awareness during procedures
+- **Rehabilitation Monitoring**: Detect subtle progress over time
+- **Environment Sensing**: Notice what's different, not just what's there
+
+This is **pre-robot cognition** - the cognitive infrastructure needed for truly intelligent autonomous systems.
 
 This is the future: robots that evolve like software, not hardware.
 
