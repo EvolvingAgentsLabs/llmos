@@ -18,6 +18,7 @@
  */
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
+import { LLMStorage, DEFAULT_BASE_URL } from '../llm/storage';
 
 // Fixed speed constants - simple and predictable
 export const WHEEL_SPEED = {
@@ -554,6 +555,16 @@ export class ESP32AgentRuntime {
       (tool) => `Tool: ${tool.name}\nDescription: ${tool.description}\nParameters: ${JSON.stringify(tool.parameters)}`
     ).join('\n\n');
 
+    // Get LLM config from browser storage (runs client-side)
+    const apiKey = LLMStorage.getApiKey();
+    const model = LLMStorage.getModel();
+    const baseURL = LLMStorage.getBaseUrl() || DEFAULT_BASE_URL;
+
+    if (!apiKey || !model) {
+      this.log('LLM not configured - set API key in settings', 'error');
+      return '{"tool": "left_wheel", "args": {"direction": "stop"}}\n{"tool": "right_wheel", "args": {"direction": "stop"}}';
+    }
+
     // Call the LLM API
     try {
       const response = await fetch('/api/robot-llm', {
@@ -564,6 +575,12 @@ export class ESP32AgentRuntime {
           systemPrompt: this.config.systemPrompt,
           userPrompt: prompt,
           tools: toolsDescription,
+          // Pass LLM config from client storage
+          llmConfig: {
+            apiKey,
+            model,
+            baseURL,
+          },
         }),
       });
 
