@@ -1087,12 +1087,6 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
               <RobotAgentPanel
                 deviceId={activeDeviceId || undefined}
                 onDeviceCreated={(deviceId) => setActiveDeviceId(deviceId)}
-                selectedAgent={selectedRobotAgent}
-                availableAgents={robotAgents}
-                onAgentSelect={setSelectedRobotAgent}
-                onBehaviorChange={handleBehaviorChange}
-                activeVolume={activeVolume}
-                onWorldModelUpdate={setWorldModel}
               />
             )}
           </div>
