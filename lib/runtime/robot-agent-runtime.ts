@@ -146,7 +146,7 @@ const ROBOT_TOOLS: RobotAgentTool[] = [
       }
 
       // Get current right wheel power to send combined command
-      const currentRightPower = state.robot.motors?.right || 0;
+      const currentRightPower = state.robot.motors?.rightPWM || 0;
 
       const success = await manager.sendCommand(deviceId, {
         type: 'drive',
@@ -187,7 +187,7 @@ const ROBOT_TOOLS: RobotAgentTool[] = [
       }
 
       // Get current left wheel power to send combined command
-      const currentLeftPower = state.robot.motors?.left || 0;
+      const currentLeftPower = state.robot.motors?.leftPWM || 0;
 
       const success = await manager.sendCommand(deviceId, {
         type: 'drive',
