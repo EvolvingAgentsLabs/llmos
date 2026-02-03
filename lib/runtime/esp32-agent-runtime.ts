@@ -83,6 +83,58 @@ export interface CameraAnalysis {
   recommendation: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STRUCTURED RESPONSE TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP';
+
+export interface WorldModelObstacle {
+  direction: 'front' | 'left' | 'right' | 'back';
+  distance_cm: number;
+  type: 'wall' | 'object' | 'unknown';
+}
+
+export interface WorldModel {
+  robot_position: { x: number; y: number; rotation: number };
+  obstacles: WorldModelObstacle[];
+  explored_areas: string[];
+  unexplored_directions: string[];
+}
+
+export interface StructuredObservation {
+  front_clear: boolean;
+  front_distance_cm: number;
+  left_clear: boolean;
+  right_clear: boolean;
+  scene_description: string;
+}
+
+export interface StructuredDecision {
+  reasoning: string;
+  target_direction: 'forward' | 'left' | 'right' | 'backward' | null;
+  action_type: 'observe' | 'rotate' | 'move' | 'stop' | 'backup';
+}
+
+export interface StructuredResponse {
+  cycle: number;
+  current_step: BehaviorStep;
+  goal: string;
+  world_model: WorldModel;
+  observation: StructuredObservation | null;
+  decision: StructuredDecision;
+  wheel_commands: {
+    left_wheel: WheelDirection;
+    right_wheel: WheelDirection;
+  };
+  next_step: string;
+}
+
+export interface ConversationMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 /**
  * Helper: Convert direction to power
  */
@@ -245,49 +297,75 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DEFAULT_AGENT_PROMPTS = {
-  simple: `You are a simple autonomous robot with a camera and two wheels.
+  simple: `You are a structured autonomous robot with a camera and two wheels.
 
 ## Your Tools
-You have exactly 3 tools:
-1. **take_picture** - See what's around you (obstacles, clear paths)
+1. **take_picture** - See environment (call during OBSERVE step)
 2. **left_wheel** - Control left wheel: "forward", "backward", or "stop"
 3. **right_wheel** - Control right wheel: "forward", "backward", or "stop"
 
-## How to Move
-- **Go straight**: Both wheels forward
-- **Turn left**: Right wheel forward, left wheel stop (or backward for sharper turn)
-- **Turn right**: Left wheel forward, right wheel stop (or backward for sharper turn)
-- **Stop**: Both wheels stop
-- **Back up**: Both wheels backward
+## Movement Reference
+| Movement      | Left Wheel | Right Wheel |
+|---------------|------------|-------------|
+| Forward       | forward    | forward     |
+| Backward      | backward   | backward    |
+| Rotate Left   | backward   | forward     |
+| Rotate Right  | forward    | backward    |
+| Stop          | stop       | stop        |
 
-## CRITICAL: Obstacle Avoidance Rules
-1. **If obstacle < 30cm ahead**: BACK UP FIRST (both wheels backward), then turn
-2. **If obstacle 30-80cm ahead**: Turn toward the clearer side
-3. **If path clear (> 80cm)**: Go forward
-4. **NEVER keep taking pictures when obstacle is close** - ACT on what you already see!
+## STRICT BEHAVIOR CYCLE
+Follow this cycle EXACTLY:
+1. **OBSERVE** → Call take_picture to see environment
+2. **ANALYZE** → Update world_model with new obstacle/position data
+3. **PLAN** → Choose direction based on obstacles and GOAL
+4. **ROTATE** → Turn to face target direction (if needed)
+5. **MOVE** → Go forward (if path clear)
+6. **STOP** → Halt wheels, return to step 1
 
-## Your Behavior Cycle
-1. **LOOK**: Take a picture (only if you don't have recent info)
-2. **THINK**: Decide based on what you see
-3. **ACT**: Control wheels immediately - don't hesitate when obstacle is close!
+## Obstacle Avoidance Rules (PRIORITY)
+1. **< 20cm**: DANGER! Backup immediately
+2. **20-40cm**: Stop and rotate away
+3. **40-80cm**: Safe to rotate
+4. **> 80cm**: Clear, can move forward
 
-## Response Format
-Briefly state your plan, then output wheel commands as JSON:
-{"tool": "left_wheel", "args": {"direction": "forward"}}
-{"tool": "right_wheel", "args": {"direction": "forward"}}
+## REQUIRED: Structured JSON Response
+EVERY response MUST be valid JSON with this EXACT structure:
 
-## Examples
-Obstacle close (< 30cm): "Obstacle too close! Backing up."
-{"tool": "left_wheel", "args": {"direction": "backward"}}
-{"tool": "right_wheel", "args": {"direction": "backward"}}
+{
+  "cycle": <number>,
+  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP>",
+  "goal": "<your goal>",
+  "world_model": {
+    "robot_position": {"x": <number>, "y": <number>, "rotation": <degrees>},
+    "obstacles": [{"direction": "<front|left|right|back>", "distance_cm": <number>, "type": "<wall|object|unknown>"}],
+    "explored_areas": ["<descriptions>"],
+    "unexplored_directions": ["<directions>"]
+  },
+  "observation": {
+    "front_clear": <boolean>,
+    "front_distance_cm": <number>,
+    "left_clear": <boolean>,
+    "right_clear": <boolean>,
+    "scene_description": "<what you see>"
+  },
+  "decision": {
+    "reasoning": "<why this action>",
+    "target_direction": "<forward|left|right|backward|null>",
+    "action_type": "<observe|rotate|move|stop|backup>"
+  },
+  "wheel_commands": {
+    "left_wheel": "<forward|backward|stop>",
+    "right_wheel": "<forward|backward|stop>"
+  },
+  "next_step": "<next step in cycle>"
+}
 
-After backing up, turn: "Now turning right to avoid."
-{"tool": "left_wheel", "args": {"direction": "forward"}}
-{"tool": "right_wheel", "args": {"direction": "backward"}}
-
-Path clear: "Path clear, moving forward."
-{"tool": "left_wheel", "args": {"direction": "forward"}}
-{"tool": "right_wheel", "args": {"direction": "forward"}}`,
+## CRITICAL RULES
+1. Output ONLY valid JSON - no extra text before or after
+2. Update world_model EVERY cycle with new information
+3. Safety first - backup when < 20cm from obstacle
+4. Build internal map of arena over time
+5. Consider GOAL when planning direction`,
 };
 
 // Backwards compatibility - these now all point to the same simple behavior
@@ -326,10 +404,14 @@ export interface ESP32AgentConfig {
 export interface ESP32AgentState {
   running: boolean;
   iteration: number;
+  currentStep: BehaviorStep;
   lastSensorReading: SensorReadings | null;
   lastLLMResponse: string | null;
+  lastStructuredResponse: StructuredResponse | null;
   lastToolCalls: Array<{ tool: string; args: any; result: ToolResult }>;
   lastPicture: CameraAnalysis | null;
+  conversationHistory: ConversationMessage[];
+  worldModel: WorldModel;
   errors: string[];
   stats: {
     totalIterations: number;
@@ -368,10 +450,19 @@ export class ESP32AgentRuntime {
     this.state = {
       running: false,
       iteration: 0,
+      currentStep: 'OBSERVE',
       lastSensorReading: null,
       lastLLMResponse: null,
+      lastStructuredResponse: null,
       lastToolCalls: [],
       lastPicture: null,
+      conversationHistory: [],
+      worldModel: {
+        robot_position: { x: 0, y: 0, rotation: 0 },
+        obstacles: [],
+        explored_areas: [],
+        unexplored_directions: ['front', 'left', 'right', 'back'],
+      },
       errors: [],
       stats: {
         totalIterations: 0,
@@ -556,32 +647,44 @@ export class ESP32AgentRuntime {
   }
 
   /**
-   * Call LLM for decision
+   * Call LLM for decision with conversation history
    */
   private async callLLM(sensors: SensorReadings): Promise<string> {
-    // Build the prompt based on current situation
-    let prompt = `Cycle ${this.state.iteration}: Time to act.\n\n`;
+    // Build structured user prompt with sensor data
+    const sensorContext = {
+      cycle: this.state.iteration,
+      current_step: this.state.currentStep,
+      sensor_data: {
+        front_distance_cm: Math.round(sensors.distance.front),
+        left_distance_cm: Math.round(sensors.distance.left),
+        right_distance_cm: Math.round(sensors.distance.right),
+        back_distance_cm: Math.round(sensors.distance.back),
+        robot_pose: sensors.pose,
+      },
+      last_observation: this.state.lastPicture ? {
+        scene: this.state.lastPicture.scene,
+        recommendation: this.state.lastPicture.recommendation,
+        front_distance: this.state.lastPicture.obstacles.frontDistance,
+      } : null,
+      current_world_model: this.state.worldModel,
+      goal: this.config.goal || 'explore safely',
+    };
 
-    if (this.state.lastPicture) {
-      const hasObstacle = this.state.lastPicture.obstacles.front;
-      const distance = this.state.lastPicture.obstacles.frontDistance;
+    const userPrompt = `CYCLE ${this.state.iteration} - SENSOR UPDATE:
+${JSON.stringify(sensorContext, null, 2)}
 
-      prompt += `Current view: ${this.state.lastPicture.scene}\n`;
-      prompt += `Recommendation: ${this.state.lastPicture.recommendation}\n\n`;
+Continue the behavior cycle. Current step: ${this.state.currentStep}
+Respond with ONLY valid JSON in the required structured format.`;
 
-      // If there's a close obstacle, be very explicit about what to do
-      if (hasObstacle && distance < 30) {
-        prompt += `⚠️ OBSTACLE VERY CLOSE (${distance}cm)! You MUST act NOW:\n`;
-        prompt += `1. First, set BOTH wheels to "backward" to back up\n`;
-        prompt += `2. Then turn toward the clearer side\n\n`;
-        prompt += 'Do NOT take another picture - act immediately with wheel controls!';
-      } else if (hasObstacle) {
-        prompt += `Obstacle detected at ${distance}cm. Follow the recommendation and control the wheels to avoid it.`;
-      } else {
-        prompt += 'Path is clear. You may take a picture to check surroundings, or continue forward.';
-      }
-    } else {
-      prompt += 'No recent observation. Take a picture first to see your surroundings.';
+    // Add to conversation history
+    this.state.conversationHistory.push({
+      role: 'user',
+      content: userPrompt,
+    });
+
+    // Keep only last 10 exchanges to prevent context overflow
+    if (this.state.conversationHistory.length > 20) {
+      this.state.conversationHistory = this.state.conversationHistory.slice(-20);
     }
 
     // Format tools description
@@ -596,10 +699,10 @@ export class ESP32AgentRuntime {
 
     if (!apiKey || !model) {
       this.log('LLM not configured - set API key in settings', 'error');
-      return '{"tool": "left_wheel", "args": {"direction": "stop"}}\n{"tool": "right_wheel", "args": {"direction": "stop"}}';
+      return this.createFallbackResponse('stop', 'LLM not configured');
     }
 
-    // Call the LLM API
+    // Call the LLM API with conversation history
     try {
       const response = await fetch('/api/robot-llm', {
         method: 'POST',
@@ -607,9 +710,9 @@ export class ESP32AgentRuntime {
         body: JSON.stringify({
           deviceId: this.config.deviceId,
           systemPrompt: this.config.systemPrompt,
-          userPrompt: prompt,
+          userPrompt: userPrompt,
           tools: toolsDescription,
-          // Pass LLM config from client storage
+          conversationHistory: this.state.conversationHistory,
           llmConfig: {
             apiKey,
             model,
@@ -623,21 +726,167 @@ export class ESP32AgentRuntime {
       }
 
       const data = await response.json();
-      return data.response || '';
+      const llmResponse = data.response || '';
+
+      // Add assistant response to conversation history
+      this.state.conversationHistory.push({
+        role: 'assistant',
+        content: llmResponse,
+      });
+
+      // Parse and update state from structured response
+      this.parseStructuredResponse(llmResponse);
+
+      return llmResponse;
     } catch (error: any) {
       this.log(`LLM call failed: ${error.message}`, 'error');
-      // Return a safe fallback - stop the robot
-      return '{"tool": "left_wheel", "args": {"direction": "stop"}}\n{"tool": "right_wheel", "args": {"direction": "stop"}}';
+      return this.createFallbackResponse('stop', error.message);
     }
   }
 
   /**
-   * Parse tool calls from LLM response
+   * Parse structured JSON response and update state
+   */
+  private parseStructuredResponse(response: string): void {
+    try {
+      // Try to extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        this.log('No JSON found in response', 'warn');
+        return;
+      }
+
+      const parsed: StructuredResponse = JSON.parse(jsonMatch[0]);
+      this.state.lastStructuredResponse = parsed;
+
+      // Update current step
+      if (parsed.current_step) {
+        this.state.currentStep = parsed.current_step;
+      }
+
+      // Update world model from response
+      if (parsed.world_model) {
+        // Merge new world model data
+        if (parsed.world_model.robot_position) {
+          this.state.worldModel.robot_position = parsed.world_model.robot_position;
+        }
+        if (parsed.world_model.obstacles) {
+          // Merge obstacles, avoiding duplicates
+          const existingDirs = new Set(this.state.worldModel.obstacles.map(o => o.direction));
+          for (const obs of parsed.world_model.obstacles) {
+            if (existingDirs.has(obs.direction)) {
+              // Update existing obstacle
+              const idx = this.state.worldModel.obstacles.findIndex(o => o.direction === obs.direction);
+              if (idx >= 0) this.state.worldModel.obstacles[idx] = obs;
+            } else {
+              this.state.worldModel.obstacles.push(obs);
+            }
+          }
+        }
+        if (parsed.world_model.explored_areas) {
+          // Add new explored areas
+          for (const area of parsed.world_model.explored_areas) {
+            if (!this.state.worldModel.explored_areas.includes(area)) {
+              this.state.worldModel.explored_areas.push(area);
+            }
+          }
+        }
+        if (parsed.world_model.unexplored_directions) {
+          this.state.worldModel.unexplored_directions = parsed.world_model.unexplored_directions;
+        }
+      }
+
+      // Determine next step in cycle
+      if (parsed.next_step) {
+        const nextStepMap: Record<string, BehaviorStep> = {
+          'OBSERVE': 'OBSERVE',
+          'ANALYZE': 'ANALYZE',
+          'PLAN': 'PLAN',
+          'ROTATE': 'ROTATE',
+          'MOVE': 'MOVE',
+          'STOP': 'STOP',
+        };
+        const nextStep = nextStepMap[parsed.next_step.toUpperCase()];
+        if (nextStep) {
+          this.state.currentStep = nextStep;
+        }
+      }
+
+      this.log(`Parsed structured response: step=${parsed.current_step}, action=${parsed.decision?.action_type}`, 'info');
+    } catch (error: any) {
+      this.log(`Failed to parse structured response: ${error.message}`, 'warn');
+    }
+  }
+
+  /**
+   * Create a fallback structured response
+   */
+  private createFallbackResponse(action: 'stop' | 'backup', reason: string): string {
+    const fallback: StructuredResponse = {
+      cycle: this.state.iteration,
+      current_step: 'STOP',
+      goal: this.config.goal || 'explore safely',
+      world_model: this.state.worldModel,
+      observation: null,
+      decision: {
+        reasoning: `Fallback action due to: ${reason}`,
+        target_direction: action === 'backup' ? 'backward' : null,
+        action_type: action,
+      },
+      wheel_commands: {
+        left_wheel: action === 'backup' ? 'backward' : 'stop',
+        right_wheel: action === 'backup' ? 'backward' : 'stop',
+      },
+      next_step: 'OBSERVE',
+    };
+    return JSON.stringify(fallback);
+  }
+
+  /**
+   * Parse tool calls from LLM response (supports both structured and legacy formats)
    */
   private parseToolCalls(response: string): Array<{ tool: string; args: Record<string, any> }> {
     const calls: Array<{ tool: string; args: Record<string, any> }> = [];
 
-    // Find all JSON objects with tool and args
+    // First, try to extract from structured response format
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+
+        // Check for structured wheel_commands
+        if (parsed.wheel_commands) {
+          if (parsed.wheel_commands.left_wheel) {
+            calls.push({
+              tool: 'left_wheel',
+              args: { direction: parsed.wheel_commands.left_wheel },
+            });
+          }
+          if (parsed.wheel_commands.right_wheel) {
+            calls.push({
+              tool: 'right_wheel',
+              args: { direction: parsed.wheel_commands.right_wheel },
+            });
+          }
+        }
+
+        // Check if decision says to observe (take picture)
+        if (parsed.decision?.action_type === 'observe' || parsed.current_step === 'OBSERVE') {
+          // Only add take_picture if no picture recently
+          if (!this.state.lastPicture || Date.now() - this.state.lastPicture.timestamp > 1000) {
+            calls.unshift({ tool: 'take_picture', args: {} });
+          }
+        }
+
+        if (calls.length > 0) {
+          return calls;
+        }
+      }
+    } catch {
+      // Fall through to legacy parsing
+    }
+
+    // Legacy format: Find all JSON objects with tool and args
     const jsonPattern = /\{[^{}]*"tool"\s*:\s*"([^"]+)"[^{}]*"args"\s*:\s*(\{[^{}]*\})[^{}]*\}/g;
     let match;
 

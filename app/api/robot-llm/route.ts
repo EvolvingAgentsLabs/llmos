@@ -30,11 +30,17 @@ interface LLMConfig {
   baseURL: string;
 }
 
+interface ConversationMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 interface RobotLLMRequest {
   deviceId: string;
   systemPrompt: string;
   userPrompt: string;
   tools: string;
+  conversationHistory?: ConversationMessage[];
   llmConfig: LLMConfig;
 }
 
@@ -47,7 +53,7 @@ export async function POST(request: NextRequest) {
   try {
     const body: RobotLLMRequest = await request.json();
 
-    const { deviceId, systemPrompt, userPrompt, tools, llmConfig } = body;
+    const { deviceId, systemPrompt, userPrompt, tools, conversationHistory, llmConfig } = body;
 
     // Validate required fields
     if (!deviceId || !systemPrompt || !userPrompt) {
@@ -76,11 +82,23 @@ export async function POST(request: NextRequest) {
       ? `${systemPrompt}\n\n## Available Tools\n${tools}`
       : systemPrompt;
 
-    // Build messages for LLM
-    const messages: Message[] = [
-      { role: 'system', content: fullSystemPrompt },
-      { role: 'user', content: userPrompt },
-    ];
+    // Build messages for LLM - include conversation history if provided
+    const messages: Message[] = [{ role: 'system', content: fullSystemPrompt }];
+
+    // Add conversation history (excluding the current user prompt which we add separately)
+    if (conversationHistory && conversationHistory.length > 0) {
+      // Filter out system messages from history (we already have our own)
+      // and the last user message (we'll add userPrompt instead)
+      const historyWithoutLast = conversationHistory.slice(0, -1);
+      for (const msg of historyWithoutLast) {
+        if (msg.role !== 'system') {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+    }
+
+    // Add the current user prompt
+    messages.push({ role: 'user', content: userPrompt });
 
     // Create OpenAI client with passed config
     const client = new OpenAI({
@@ -96,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     const response = completion.choices[0]?.message?.content || '';
 
-    console.log(`[RobotLLM] ${deviceId}: Got response (${response.length} chars)`);
+    console.log(`[RobotLLM] ${deviceId}: Got response (${response.length} chars), history: ${conversationHistory?.length || 0} msgs`);
 
     return NextResponse.json({
       success: true,
