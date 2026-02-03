@@ -1,13 +1,34 @@
 /**
- * Robot Agent Runtime
+ * Robot Agent Runtime - Simplified
  *
- * Executes AI robot agents with LLM control loops.
- * Agents have access to robot control tools (motors, LED, sensors, camera).
+ * Ultra-simple robot control with just 3 tools:
+ * - take_picture: Capture camera for visual planning
+ * - left_wheel: Control left wheel (forward/backward/stop)
+ * - right_wheel: Control right wheel (forward/backward/stop)
+ *
+ * Fixed speed: 80 for forward, -80 for backward, 0 for stop
+ *
+ * Default behavior cycle:
+ * 1. Take picture
+ * 2. Plan direction based on what's seen (and main goal if any)
+ * 3. Rotate to face desired direction
+ * 4. Go straight a short distance
+ * 5. Stop
+ * 6. Repeat
  */
 
 import { createLLMClient } from '../llm/client';
 import { Message } from '../llm/types';
 import { getDeviceManager } from '../hardware/esp32-device-manager';
+
+// Fixed speed constants - simple and predictable
+export const WHEEL_SPEED = {
+  FORWARD: 80,   // Single forward speed
+  BACKWARD: -80, // Single backward speed
+  STOP: 0,       // Stop
+} as const;
+
+export type WheelDirection = 'forward' | 'backward' | 'stop';
 
 export interface RobotAgentConfig {
   id: string;
@@ -15,6 +36,7 @@ export interface RobotAgentConfig {
   description: string;
   deviceId: string;
   systemPrompt: string;
+  goal?: string; // Main goal for the robot to consider when planning
   loopInterval?: number; // milliseconds between LLM calls (default: 2000)
   maxIterations?: number; // max control loop iterations (default: unlimited)
 }
@@ -37,110 +59,28 @@ export interface RobotAgentState {
   lastAction: string | null;
   conversationHistory: Message[];
   errors: string[];
+  lastPicture?: CameraAnalysis;
+}
+
+export interface CameraAnalysis {
+  timestamp: number;
+  scene: string;
+  obstacles: {
+    front: boolean;
+    left: boolean;
+    right: boolean;
+    frontDistance?: number;
+  };
+  recommendation?: string;
 }
 
 /**
- * Robot Control Tools - LLM can call these to control the robot
+ * Simple Robot Control Tools - Just 3 tools for basic planning and control
  */
 const ROBOT_TOOLS: RobotAgentTool[] = [
   {
-    name: 'drive_motors',
-    description: 'Set motor power for left and right wheels. Values from -255 (full reverse) to 255 (full forward).',
-    parameters: {
-      type: 'object',
-      properties: {
-        left: {
-          type: 'number',
-          description: 'Left motor power (-255 to 255)',
-          minimum: -255,
-          maximum: 255,
-        },
-        right: {
-          type: 'number',
-          description: 'Right motor power (-255 to 255)',
-          minimum: -255,
-          maximum: 255,
-        },
-      },
-      required: ['left', 'right'],
-    },
-    execute: async (args, deviceId) => {
-      const manager = getDeviceManager();
-      const success = await manager.sendCommand(deviceId, {
-        type: 'drive',
-        payload: { left: args.left, right: args.right },
-      });
-      return {
-        success,
-        message: success
-          ? `Motors set: L=${args.left}, R=${args.right}`
-          : 'Failed to set motors',
-      };
-    },
-  },
-  {
-    name: 'stop_motors',
-    description: 'Stop both motors immediately.',
-    parameters: {
-      type: 'object',
-      properties: {},
-    },
-    execute: async (args, deviceId) => {
-      const manager = getDeviceManager();
-      const success = await manager.sendCommand(deviceId, {
-        type: 'drive',
-        payload: { left: 0, right: 0 },
-      });
-      return {
-        success,
-        message: success ? 'Motors stopped' : 'Failed to stop motors',
-      };
-    },
-  },
-  {
-    name: 'set_led',
-    description: 'Set RGB LED color. Values from 0-255 for each color channel.',
-    parameters: {
-      type: 'object',
-      properties: {
-        r: {
-          type: 'number',
-          description: 'Red channel (0-255)',
-          minimum: 0,
-          maximum: 255,
-        },
-        g: {
-          type: 'number',
-          description: 'Green channel (0-255)',
-          minimum: 0,
-          maximum: 255,
-        },
-        b: {
-          type: 'number',
-          description: 'Blue channel (0-255)',
-          minimum: 0,
-          maximum: 255,
-        },
-      },
-      required: ['r', 'g', 'b'],
-    },
-    execute: async (args, deviceId) => {
-      const manager = getDeviceManager();
-      const success = await manager.sendCommand(deviceId, {
-        type: 'led',
-        payload: { r: args.r, g: args.g, b: args.b },
-      });
-      return {
-        success,
-        message: success
-          ? `LED set to RGB(${args.r}, ${args.g}, ${args.b})`
-          : 'Failed to set LED',
-      };
-    },
-  },
-  {
-    name: 'get_sensors',
-    description: 'Read all robot sensors: distance sensors, line sensors, bumpers, battery level.',
+    name: 'take_picture',
+    description: 'Take a picture with the camera to see the environment. Returns what the robot sees ahead, to the left, and to the right. Use this before planning your next move.',
     parameters: {
       type: 'object',
       properties: {},
@@ -152,42 +92,225 @@ const ROBOT_TOOLS: RobotAgentTool[] = [
       if (!state) {
         return {
           success: false,
-          error: 'Device not found or has no state',
+          error: 'Device not found',
         };
       }
 
+      // Create a simple scene analysis from sensor data
+      const sensors = state.robot.sensors;
+      const frontDist = sensors.distance.front;
+      const leftDist = sensors.distance.left;
+      const rightDist = sensors.distance.right;
+
+      const analysis: CameraAnalysis = {
+        timestamp: Date.now(),
+        scene: describeSene(frontDist, leftDist, rightDist),
+        obstacles: {
+          front: frontDist < 50,
+          left: leftDist < 40,
+          right: rightDist < 40,
+          frontDistance: frontDist,
+        },
+        recommendation: suggestDirection(frontDist, leftDist, rightDist),
+      };
+
       return {
         success: true,
-        sensors: {
-          distance: {
-            front: state.robot.sensors.distance.front,
-            frontLeft: state.robot.sensors.distance.frontLeft,
-            frontRight: state.robot.sensors.distance.frontRight,
-            left: state.robot.sensors.distance.left,
-            right: state.robot.sensors.distance.right,
-            backLeft: state.robot.sensors.distance.backLeft,
-            backRight: state.robot.sensors.distance.backRight,
-            back: state.robot.sensors.distance.back,
-          },
-          line: state.robot.sensors.line,
-          bumper: {
-            front: state.robot.sensors.bumper.front,
-            back: state.robot.sensors.bumper.back,
-          },
-          battery: {
-            percentage: state.robot.battery.percentage,
-            voltage: state.robot.battery.voltage,
-          },
-          pose: {
-            x: state.robot.pose.x.toFixed(3),
-            y: state.robot.pose.y.toFixed(3),
-            rotation: ((state.robot.pose.rotation * 180) / Math.PI).toFixed(1) + '°',
-          },
+        picture: analysis,
+      };
+    },
+  },
+  {
+    name: 'left_wheel',
+    description: 'Control the left wheel. Use "forward" to move forward, "backward" to move backward, or "stop" to stop the wheel. Only one speed is available for each direction.',
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['forward', 'backward', 'stop'],
+          description: 'Direction: "forward", "backward", or "stop"',
         },
+      },
+      required: ['direction'],
+    },
+    execute: async (args, deviceId) => {
+      const direction = args.direction as WheelDirection;
+      const power = getWheelPower(direction);
+
+      const manager = getDeviceManager();
+      const state = manager.getDeviceState(deviceId);
+
+      if (!state) {
+        return { success: false, error: 'Device not found' };
+      }
+
+      // Get current right wheel power to send combined command
+      const currentRightPower = state.robot.motors?.right || 0;
+
+      const success = await manager.sendCommand(deviceId, {
+        type: 'drive',
+        payload: { left: power, right: currentRightPower },
+      });
+
+      return {
+        success,
+        message: success
+          ? `Left wheel: ${direction} (power: ${power})`
+          : 'Failed to control left wheel',
+      };
+    },
+  },
+  {
+    name: 'right_wheel',
+    description: 'Control the right wheel. Use "forward" to move forward, "backward" to move backward, or "stop" to stop the wheel. Only one speed is available for each direction.',
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['forward', 'backward', 'stop'],
+          description: 'Direction: "forward", "backward", or "stop"',
+        },
+      },
+      required: ['direction'],
+    },
+    execute: async (args, deviceId) => {
+      const direction = args.direction as WheelDirection;
+      const power = getWheelPower(direction);
+
+      const manager = getDeviceManager();
+      const state = manager.getDeviceState(deviceId);
+
+      if (!state) {
+        return { success: false, error: 'Device not found' };
+      }
+
+      // Get current left wheel power to send combined command
+      const currentLeftPower = state.robot.motors?.left || 0;
+
+      const success = await manager.sendCommand(deviceId, {
+        type: 'drive',
+        payload: { left: currentLeftPower, right: power },
+      });
+
+      return {
+        success,
+        message: success
+          ? `Right wheel: ${direction} (power: ${power})`
+          : 'Failed to control right wheel',
       };
     },
   },
 ];
+
+/**
+ * Helper: Convert direction to power
+ */
+function getWheelPower(direction: WheelDirection): number {
+  switch (direction) {
+    case 'forward':
+      return WHEEL_SPEED.FORWARD;
+    case 'backward':
+      return WHEEL_SPEED.BACKWARD;
+    case 'stop':
+    default:
+      return WHEEL_SPEED.STOP;
+  }
+}
+
+/**
+ * Helper: Describe the scene from sensor readings
+ */
+function describeSene(front: number, left: number, right: number): string {
+  const parts: string[] = [];
+
+  if (front > 100) {
+    parts.push('Clear path ahead');
+  } else if (front > 50) {
+    parts.push(`Obstacle ahead at ~${Math.round(front)}cm`);
+  } else {
+    parts.push(`Close obstacle ahead at ~${Math.round(front)}cm`);
+  }
+
+  if (left < 40) {
+    parts.push('obstacle on left');
+  } else {
+    parts.push('left side clear');
+  }
+
+  if (right < 40) {
+    parts.push('obstacle on right');
+  } else {
+    parts.push('right side clear');
+  }
+
+  return parts.join(', ');
+}
+
+/**
+ * Helper: Suggest direction based on sensors
+ */
+function suggestDirection(front: number, left: number, right: number): string {
+  if (front > 80) {
+    return 'Path ahead is clear - can go forward';
+  }
+
+  if (left > right && left > 50) {
+    return 'Turn left - more space on the left side';
+  }
+
+  if (right > left && right > 50) {
+    return 'Turn right - more space on the right side';
+  }
+
+  if (front < 30) {
+    return 'Too close to obstacle - back up first';
+  }
+
+  return 'Limited space - turn slowly to find open path';
+}
+
+/**
+ * Default system prompt for simple robot behavior
+ */
+export const SIMPLE_ROBOT_PROMPT = `You are a simple autonomous robot with a camera and two wheels.
+
+## Your Tools
+You have exactly 3 tools:
+1. **take_picture** - See what's around you (obstacles, clear paths)
+2. **left_wheel** - Control left wheel: "forward", "backward", or "stop"
+3. **right_wheel** - Control right wheel: "forward", "backward", or "stop"
+
+## How to Move
+- **Go straight**: Both wheels forward
+- **Turn left**: Right wheel forward, left wheel stop (or backward for sharper turn)
+- **Turn right**: Left wheel forward, right wheel stop (or backward for sharper turn)
+- **Stop**: Both wheels stop
+- **Back up**: Both wheels backward
+
+## Your Behavior Cycle
+Every turn, follow this cycle:
+1. **LOOK**: Take a picture to see your surroundings
+2. **THINK**: Based on what you see (and your goal), decide direction
+3. **ORIENT**: Rotate to face the desired direction
+4. **MOVE**: Go forward a short distance
+5. **STOP**: Stop and prepare for next cycle
+
+## Decision Making
+- If path ahead is clear → go forward
+- If obstacle ahead → turn toward clearer side
+- If stuck → back up, then turn
+- Always consider your main goal when choosing direction
+
+## Response Format
+First briefly describe what you see and your plan, then output tool calls as JSON:
+{"tool": "tool_name", "args": {...}}
+
+Example:
+"I see a clear path ahead. Going forward."
+{"tool": "left_wheel", "args": {"direction": "forward"}}
+{"tool": "right_wheel", "args": {"direction": "forward"}}`;
 
 /**
  * Robot Agent Runtime - Manages LLM control loop for a robot agent
@@ -206,6 +329,12 @@ export class RobotAgentRuntime {
       maxIterations: config.maxIterations,
     };
 
+    // Build system prompt with goal if provided
+    let systemPrompt = config.systemPrompt || SIMPLE_ROBOT_PROMPT;
+    if (config.goal) {
+      systemPrompt = `${systemPrompt}\n\n## Your Main Goal\n**${config.goal}**\n\nKeep this goal in mind when deciding which direction to go.`;
+    }
+
     this.state = {
       running: false,
       iteration: 0,
@@ -214,7 +343,7 @@ export class RobotAgentRuntime {
       conversationHistory: [
         {
           role: 'system',
-          content: config.systemPrompt,
+          content: systemPrompt,
         },
       ],
       errors: [],
@@ -265,7 +394,7 @@ export class RobotAgentRuntime {
     this.state.running = false;
     this.emitStateChange();
 
-    // Stop the robot motors
+    // Stop the robot wheels
     const manager = getDeviceManager();
     manager.sendCommand(this.config.deviceId, {
       type: 'drive',
@@ -299,29 +428,13 @@ export class RobotAgentRuntime {
     console.log(`[RobotAgent:${this.config.name}] Iteration ${this.state.iteration}`);
 
     try {
-      // Get current sensor readings
-      const sensorTool = ROBOT_TOOLS.find((t) => t.name === 'get_sensors');
-      const sensorData = await sensorTool!.execute({}, this.config.deviceId);
+      // Build user prompt for this cycle
+      const userPrompt = this.buildCyclePrompt();
 
-      // Format sensor data for LLM
-      const sensorPrompt = `Current Sensor Readings (Iteration ${this.state.iteration}):
-- Distance Sensors: Front=${sensorData.sensors.distance.front}cm, Left=${sensorData.sensors.distance.left}cm, Right=${sensorData.sensors.distance.right}cm
-- Line Sensors: [${sensorData.sensors.line.join(', ')}]
-- Battery: ${sensorData.sensors.battery.percentage}%
-- Position: (${sensorData.sensors.pose.x}, ${sensorData.sensors.pose.y}), facing ${sensorData.sensors.pose.rotation}
-
-Based on these sensor readings, what should the robot do next? Use the available tools to control the robot.
-
-Available tools:
-- drive_motors(left, right): Set motor power (-255 to 255)
-- stop_motors(): Stop both motors
-- set_led(r, g, b): Set LED color (0-255)
-- get_sensors(): Read all sensors (already called above)`;
-
-      // Add sensor data to conversation
+      // Add to conversation
       this.state.conversationHistory.push({
         role: 'user',
-        content: sensorPrompt,
+        content: userPrompt,
       });
 
       // Call LLM with tool descriptions
@@ -346,6 +459,24 @@ Available tools:
         }, this.config.loopInterval);
       }
     }
+  }
+
+  /**
+   * Build the prompt for this cycle
+   */
+  private buildCyclePrompt(): string {
+    let prompt = `Cycle ${this.state.iteration}: Time to observe and act.\n\n`;
+
+    prompt += 'Remember the cycle: LOOK (take_picture) → THINK → ORIENT → MOVE → STOP\n\n';
+
+    if (this.state.lastPicture) {
+      prompt += `Last observation: ${this.state.lastPicture.scene}\n`;
+      prompt += `Suggestion: ${this.state.lastPicture.recommendation}\n\n`;
+    }
+
+    prompt += 'What will you do? Start by taking a picture if you need to see, then control the wheels.';
+
+    return prompt;
   }
 
   /**
@@ -387,45 +518,57 @@ Parameters: ${JSON.stringify(tool.parameters, null, 2)}`
    * Parse and execute tool calls from LLM response
    */
   private async executeToolCalls(response: string): Promise<void> {
-    // Try to extract JSON tool call
-    const jsonMatch = response.match(/\{[\s\S]*"tool"[\s\S]*"args"[\s\S]*\}/);
+    // Find all JSON tool calls in the response
+    const jsonPattern = /\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\}/g;
+    const matches = response.match(jsonPattern);
 
-    if (!jsonMatch) {
+    if (!matches) {
       console.log(`[RobotAgent:${this.config.name}] No tool call in response`);
       this.state.lastAction = null;
       return;
     }
 
-    try {
-      const toolCall = JSON.parse(jsonMatch[0]);
-      const { tool, args } = toolCall;
+    const results: string[] = [];
 
-      console.log(`[RobotAgent:${this.config.name}] Calling tool: ${tool}`, args);
+    for (const jsonMatch of matches) {
+      try {
+        const toolCall = JSON.parse(jsonMatch);
+        const { tool, args } = toolCall;
 
-      // Find and execute the tool
-      const toolDef = ROBOT_TOOLS.find((t) => t.name === tool);
+        console.log(`[RobotAgent:${this.config.name}] Calling tool: ${tool}`, args);
 
-      if (!toolDef) {
-        throw new Error(`Unknown tool: ${tool}`);
+        // Find and execute the tool
+        const toolDef = ROBOT_TOOLS.find((t) => t.name === tool);
+
+        if (!toolDef) {
+          throw new Error(`Unknown tool: ${tool}`);
+        }
+
+        const result = await toolDef.execute(args || {}, this.config.deviceId);
+
+        // Store camera analysis if this was a picture
+        if (tool === 'take_picture' && result.success && result.picture) {
+          this.state.lastPicture = result.picture;
+        }
+
+        results.push(`${tool}(${JSON.stringify(args || {})}) -> ${JSON.stringify(result)}`);
+      } catch (error: any) {
+        console.error(`[RobotAgent:${this.config.name}] Failed to execute tool:`, error);
+        this.state.errors.push(`Tool execution failed: ${error.message}`);
       }
+    }
 
-      const result = await toolDef.execute(args, this.config.deviceId);
+    this.state.lastAction = results.join('\n');
 
-      this.state.lastAction = `${tool}(${JSON.stringify(args)}) -> ${JSON.stringify(result)}`;
-
-      // Add tool result to conversation
+    // Add tool results to conversation
+    if (results.length > 0) {
       this.state.conversationHistory.push({
         role: 'user',
-        content: `Tool ${tool} executed: ${JSON.stringify(result)}`,
+        content: `Tool results:\n${results.join('\n')}`,
       });
-
-      this.emitStateChange();
-    } catch (error: any) {
-      console.error(`[RobotAgent:${this.config.name}] Failed to execute tool:`, error);
-      this.state.errors.push(`Tool execution failed: ${error.message}`);
-      this.state.lastAction = null;
-      this.emitStateChange();
     }
+
+    this.emitStateChange();
   }
 
   private emitStateChange(): void {
