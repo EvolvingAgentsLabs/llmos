@@ -131,20 +131,34 @@ function describeScene(front: number, left: number, right: number): string {
  * Helper: Suggest direction based on sensors
  */
 function suggestDirection(front: number, left: number, right: number): string {
-  if (front > 80) {
-    return 'Path ahead is clear - can go forward';
+  // CRITICAL: Check for dangerous proximity FIRST - must back up before turning
+  if (front < 20) {
+    return 'DANGER: Too close to obstacle! Back up immediately, then turn';
   }
 
+  // If close but not critical, suggest backing up first
+  if (front < 40) {
+    if (right > left && right > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn right';
+    }
+    if (left > right && left > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn left';
+    }
+    return 'Obstacle close ahead - back up first to get room to turn';
+  }
+
+  // Path is clear - go forward
+  if (front > 80) {
+    return 'Path ahead is clear - go forward';
+  }
+
+  // Moderate distance (40-80cm) - can turn safely without backing up
   if (left > right && left > 50) {
     return 'Turn left - more space on the left side';
   }
 
   if (right > left && right > 50) {
     return 'Turn right - more space on the right side';
-  }
-
-  if (front < 30) {
-    return 'Too close to obstacle - back up first';
   }
 
   return 'Limited space - turn slowly to find open path';
@@ -246,26 +260,32 @@ You have exactly 3 tools:
 - **Stop**: Both wheels stop
 - **Back up**: Both wheels backward
 
-## Your Behavior Cycle
-Every turn, follow this cycle:
-1. **LOOK**: Take a picture to see your surroundings
-2. **THINK**: Based on what you see (and your goal), decide direction
-3. **ORIENT**: Rotate to face the desired direction
-4. **MOVE**: Go forward a short distance
-5. **STOP**: Stop and prepare for next cycle
+## CRITICAL: Obstacle Avoidance Rules
+1. **If obstacle < 30cm ahead**: BACK UP FIRST (both wheels backward), then turn
+2. **If obstacle 30-80cm ahead**: Turn toward the clearer side
+3. **If path clear (> 80cm)**: Go forward
+4. **NEVER keep taking pictures when obstacle is close** - ACT on what you already see!
 
-## Decision Making
-- If path ahead is clear → go forward
-- If obstacle ahead → turn toward clearer side
-- If stuck → back up, then turn
-- Always consider your main goal when choosing direction
+## Your Behavior Cycle
+1. **LOOK**: Take a picture (only if you don't have recent info)
+2. **THINK**: Decide based on what you see
+3. **ACT**: Control wheels immediately - don't hesitate when obstacle is close!
 
 ## Response Format
-First briefly describe what you see and your plan, then output tool calls as JSON:
-{"tool": "tool_name", "args": {...}}
+Briefly state your plan, then output wheel commands as JSON:
+{"tool": "left_wheel", "args": {"direction": "forward"}}
+{"tool": "right_wheel", "args": {"direction": "forward"}}
 
-Example:
-"I see a clear path ahead. Going forward."
+## Examples
+Obstacle close (< 30cm): "Obstacle too close! Backing up."
+{"tool": "left_wheel", "args": {"direction": "backward"}}
+{"tool": "right_wheel", "args": {"direction": "backward"}}
+
+After backing up, turn: "Now turning right to avoid."
+{"tool": "left_wheel", "args": {"direction": "forward"}}
+{"tool": "right_wheel", "args": {"direction": "backward"}}
+
+Path clear: "Path clear, moving forward."
 {"tool": "left_wheel", "args": {"direction": "forward"}}
 {"tool": "right_wheel", "args": {"direction": "forward"}}`,
 };
@@ -539,16 +559,30 @@ export class ESP32AgentRuntime {
    * Call LLM for decision
    */
   private async callLLM(sensors: SensorReadings): Promise<string> {
-    // Build the prompt
-    let prompt = `Cycle ${this.state.iteration}: Time to observe and act.\n\n`;
-    prompt += 'Remember the cycle: LOOK (take_picture) → THINK → ORIENT → MOVE → STOP\n\n';
+    // Build the prompt based on current situation
+    let prompt = `Cycle ${this.state.iteration}: Time to act.\n\n`;
 
     if (this.state.lastPicture) {
-      prompt += `Last observation: ${this.state.lastPicture.scene}\n`;
-      prompt += `Suggestion: ${this.state.lastPicture.recommendation}\n\n`;
-    }
+      const hasObstacle = this.state.lastPicture.obstacles.front;
+      const distance = this.state.lastPicture.obstacles.frontDistance;
 
-    prompt += 'What will you do? Start by taking a picture if you need to see, then control the wheels.';
+      prompt += `Current view: ${this.state.lastPicture.scene}\n`;
+      prompt += `Recommendation: ${this.state.lastPicture.recommendation}\n\n`;
+
+      // If there's a close obstacle, be very explicit about what to do
+      if (hasObstacle && distance < 30) {
+        prompt += `⚠️ OBSTACLE VERY CLOSE (${distance}cm)! You MUST act NOW:\n`;
+        prompt += `1. First, set BOTH wheels to "backward" to back up\n`;
+        prompt += `2. Then turn toward the clearer side\n\n`;
+        prompt += 'Do NOT take another picture - act immediately with wheel controls!';
+      } else if (hasObstacle) {
+        prompt += `Obstacle detected at ${distance}cm. Follow the recommendation and control the wheels to avoid it.`;
+      } else {
+        prompt += 'Path is clear. You may take a picture to check surroundings, or continue forward.';
+      }
+    } else {
+      prompt += 'No recent observation. Take a picture first to see your surroundings.';
+    }
 
     // Format tools description
     const toolsDescription = DEVICE_TOOLS.map(
