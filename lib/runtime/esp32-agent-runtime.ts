@@ -604,6 +604,10 @@ export class ESP32AgentRuntime {
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
+      // CRITICAL: Always sync world model position from actual sensor data
+      // This ensures the robot's position is always accurate, not dependent on LLM parsing
+      this.syncWorldModelFromSensors(sensors);
+
       // STEP 2: Call LLM for decision
       const llmStart = Date.now();
       const llmResponse = await this.callLLM(sensors);
@@ -616,7 +620,18 @@ export class ESP32AgentRuntime {
         this.state.stats.llmCallCount;
 
       // STEP 3: Parse and execute tool calls
-      const toolCalls = this.parseToolCalls(llmResponse);
+      let toolCalls = this.parseToolCalls(llmResponse);
+
+      // FALLBACK: If no wheel commands from LLM, use sensor-based reactive behavior
+      const hasWheelCommand = toolCalls.some(
+        (c) => c.tool === 'left_wheel' || c.tool === 'right_wheel'
+      );
+      if (!hasWheelCommand) {
+        this.log('No wheel commands from LLM, using sensor-based fallback', 'warn');
+        const fallbackCalls = this.getSensorBasedFallbackCommands(sensors);
+        toolCalls = [...toolCalls, ...fallbackCalls];
+      }
+
       this.state.lastToolCalls = [];
 
       for (const { tool, args } of toolCalls) {
@@ -825,7 +840,198 @@ Respond with ONLY valid JSON in the required structured format.`;
       this.log(`Parsed structured response: step=${parsed.current_step}, action=${parsed.decision?.action_type}`, 'info');
     } catch (error: any) {
       this.log(`Failed to parse structured response: ${error.message}`, 'warn');
+      // When JSON parsing fails, advance the step automatically to prevent getting stuck
+      this.advanceStepAutomatically();
     }
+  }
+
+  /**
+   * Sync world model from actual sensor data - ensures position is always accurate
+   */
+  private syncWorldModelFromSensors(sensors: SensorReadings): void {
+    // Update position from actual sensor pose (source of truth)
+    const newPos = sensors.pose;
+    const oldPos = this.state.worldModel.robot_position;
+
+    // Check if robot has moved significantly (> 0.1 units)
+    const hasMoved =
+      Math.abs(newPos.x - oldPos.x) > 0.1 ||
+      Math.abs(newPos.y - oldPos.y) > 0.1 ||
+      Math.abs(newPos.rotation - oldPos.rotation) > 5;
+
+    // Always update position from sensors
+    this.state.worldModel.robot_position = {
+      x: newPos.x,
+      y: newPos.y,
+      rotation: newPos.rotation,
+    };
+
+    // Automatically track explored areas based on actual position
+    if (hasMoved) {
+      this.trackExploredArea(newPos);
+    }
+
+    // Update obstacles from current sensor readings
+    this.updateObstaclesFromSensors(sensors);
+
+    // Update unexplored directions based on sensor readings
+    this.updateUnexploredDirections(sensors);
+  }
+
+  /**
+   * Track explored areas automatically based on robot position
+   */
+  private trackExploredArea(pose: { x: number; y: number; rotation: number }): void {
+    // Grid-based exploration tracking (0.5 unit cells)
+    const gridX = Math.round(pose.x * 2) / 2;
+    const gridY = Math.round(pose.y * 2) / 2;
+    const areaKey = `position(${gridX.toFixed(1)},${gridY.toFixed(1)})`;
+
+    if (!this.state.worldModel.explored_areas.includes(areaKey)) {
+      this.state.worldModel.explored_areas.push(areaKey);
+      // Keep only last 50 explored areas to prevent memory bloat
+      if (this.state.worldModel.explored_areas.length > 50) {
+        this.state.worldModel.explored_areas = this.state.worldModel.explored_areas.slice(-50);
+      }
+    }
+  }
+
+  /**
+   * Update obstacles from current sensor readings
+   */
+  private updateObstaclesFromSensors(sensors: SensorReadings): void {
+    const OBSTACLE_THRESHOLD_CM = 80; // Consider something an obstacle if closer than this
+    const obstacles: WorldModelObstacle[] = [];
+
+    if (sensors.distance.front < OBSTACLE_THRESHOLD_CM) {
+      obstacles.push({
+        direction: 'front',
+        distance_cm: Math.round(sensors.distance.front),
+        type: sensors.distance.front < 30 ? 'wall' : 'object',
+      });
+    }
+    if (sensors.distance.left < OBSTACLE_THRESHOLD_CM) {
+      obstacles.push({
+        direction: 'left',
+        distance_cm: Math.round(sensors.distance.left),
+        type: sensors.distance.left < 30 ? 'wall' : 'object',
+      });
+    }
+    if (sensors.distance.right < OBSTACLE_THRESHOLD_CM) {
+      obstacles.push({
+        direction: 'right',
+        distance_cm: Math.round(sensors.distance.right),
+        type: sensors.distance.right < 30 ? 'wall' : 'object',
+      });
+    }
+    if (sensors.distance.back < OBSTACLE_THRESHOLD_CM) {
+      obstacles.push({
+        direction: 'back',
+        distance_cm: Math.round(sensors.distance.back),
+        type: sensors.distance.back < 30 ? 'wall' : 'object',
+      });
+    }
+
+    this.state.worldModel.obstacles = obstacles;
+  }
+
+  /**
+   * Update unexplored directions based on sensor readings
+   */
+  private updateUnexploredDirections(sensors: SensorReadings): void {
+    const unexplored: string[] = [];
+    const CLEAR_THRESHOLD_CM = 100; // Direction is explorable if > 100cm clear
+
+    if (sensors.distance.front > CLEAR_THRESHOLD_CM) unexplored.push('front');
+    if (sensors.distance.left > CLEAR_THRESHOLD_CM) unexplored.push('left');
+    if (sensors.distance.right > CLEAR_THRESHOLD_CM) unexplored.push('right');
+    if (sensors.distance.back > CLEAR_THRESHOLD_CM) unexplored.push('back');
+
+    // If all directions are blocked, keep them all as options
+    if (unexplored.length === 0) {
+      unexplored.push('front', 'left', 'right', 'back');
+    }
+
+    this.state.worldModel.unexplored_directions = unexplored;
+  }
+
+  /**
+   * Advance the behavior step automatically when LLM parsing fails
+   * This prevents the robot from getting stuck in one step
+   */
+  private advanceStepAutomatically(): void {
+    const stepOrder: BehaviorStep[] = ['OBSERVE', 'ANALYZE', 'PLAN', 'ROTATE', 'MOVE', 'STOP'];
+    const currentIdx = stepOrder.indexOf(this.state.currentStep);
+    const nextIdx = (currentIdx + 1) % stepOrder.length;
+    const nextStep = stepOrder[nextIdx];
+
+    this.log(`Auto-advancing step: ${this.state.currentStep} -> ${nextStep}`, 'info');
+    this.state.currentStep = nextStep;
+  }
+
+  /**
+   * Generate sensor-based fallback wheel commands when LLM fails to provide them
+   * This ensures the robot always has reactive behavior even without LLM guidance
+   */
+  private getSensorBasedFallbackCommands(
+    sensors: SensorReadings
+  ): Array<{ tool: string; args: Record<string, any> }> {
+    const front = sensors.distance.front;
+    const left = sensors.distance.left;
+    const right = sensors.distance.right;
+
+    let leftDir: WheelDirection = 'stop';
+    let rightDir: WheelDirection = 'stop';
+
+    // DANGER: Too close - back up immediately
+    if (front < 20) {
+      leftDir = 'backward';
+      rightDir = 'backward';
+      this.log(`FALLBACK: Backing up (front=${Math.round(front)}cm)`, 'info');
+    }
+    // Close obstacle - rotate away
+    else if (front < 40) {
+      if (right > left) {
+        // Rotate right (left forward, right backward)
+        leftDir = 'forward';
+        rightDir = 'backward';
+        this.log(`FALLBACK: Rotating right (front=${Math.round(front)}cm)`, 'info');
+      } else {
+        // Rotate left (left backward, right forward)
+        leftDir = 'backward';
+        rightDir = 'forward';
+        this.log(`FALLBACK: Rotating left (front=${Math.round(front)}cm)`, 'info');
+      }
+    }
+    // Moderate distance - can turn or move
+    else if (front < 80) {
+      // Slight turn toward more open space
+      if (right > left && right > 60) {
+        leftDir = 'forward';
+        rightDir = 'stop'; // Curve right
+        this.log(`FALLBACK: Curving right (front=${Math.round(front)}cm)`, 'info');
+      } else if (left > right && left > 60) {
+        leftDir = 'stop';
+        rightDir = 'forward'; // Curve left
+        this.log(`FALLBACK: Curving left (front=${Math.round(front)}cm)`, 'info');
+      } else {
+        // Just go forward slowly
+        leftDir = 'forward';
+        rightDir = 'forward';
+        this.log(`FALLBACK: Moving forward cautiously (front=${Math.round(front)}cm)`, 'info');
+      }
+    }
+    // Clear path - go forward
+    else {
+      leftDir = 'forward';
+      rightDir = 'forward';
+      this.log(`FALLBACK: Path clear, moving forward (front=${Math.round(front)}cm)`, 'info');
+    }
+
+    return [
+      { tool: 'left_wheel', args: { direction: leftDir } },
+      { tool: 'right_wheel', args: { direction: rightDir } },
+    ];
   }
 
   /**
