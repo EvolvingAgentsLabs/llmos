@@ -360,12 +360,22 @@ EVERY response MUST be valid JSON with this EXACT structure:
   "next_step": "<next step in cycle>"
 }
 
+## LEARNING FROM PREVIOUS ACTIONS
+**CRITICAL: Analyze your conversation history before deciding!**
+- If the last movement resulted in a COLLISION or getting TOO CLOSE to an obstacle → you MUST choose a DIFFERENT direction
+- If the last decision led to the same sensor readings (no progress) → TRY A DIFFERENT approach
+- If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
+- If backing up didn't help → try rotating first, THEN backing up
+- Compare current sensor data with previous readings to detect if you're stuck in a loop
+- NEVER repeat the exact same wheel_commands if they failed to make progress
+
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
 2. Update world_model EVERY cycle with new information
 3. Safety first - backup when < 20cm from obstacle
 4. Build internal map of arena over time
-5. Consider GOAL when planning direction`,
+5. Consider GOAL when planning direction
+6. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT`,
 };
 
 // Backwards compatibility - these now all point to the same simple behavior
