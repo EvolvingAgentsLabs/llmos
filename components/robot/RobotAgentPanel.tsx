@@ -18,7 +18,7 @@ import {
   DEFAULT_AGENT_PROMPTS,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
-import { Cpu } from 'lucide-react';
+import { Cpu, ChevronDown, ChevronRight, MessageSquare, User, Bot } from 'lucide-react';
 
 interface RobotAgentPanelProps {
   deviceId?: string;
@@ -35,8 +35,10 @@ export default function RobotAgentPanel({
   const [isRunning, setIsRunning] = useState(false);
   const [agentGoal, setAgentGoal] = useState('');
   const [loopInterval, setLoopInterval] = useState(2000);
+  const [showMessages, setShowMessages] = useState(true);
 
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Unified robot color
   const ROBOT_COLOR = '#58a6ff';
@@ -248,16 +250,96 @@ export default function RobotAgentPanel({
           </div>
         )}
 
-        {/* Last LLM response */}
-        {agentState?.lastLLMResponse && isRunning && (
-          <div className="p-3 rounded-lg bg-[#161b22] border border-[#30363d]">
-            <p className="text-xs text-[#8b949e] mb-1">
-              <span className="text-[#a371f7] font-medium">LLM Response:</span>
-            </p>
-            <p className="text-xs text-[#e6edf3] whitespace-pre-wrap max-h-32 overflow-y-auto">
-              {agentState.lastLLMResponse.slice(0, 300)}
-              {agentState.lastLLMResponse.length > 300 ? '...' : ''}
-            </p>
+        {/* Session Messages - Full Conversation History */}
+        {agentState && (
+          <div className="rounded-lg bg-[#161b22] border border-[#30363d] overflow-hidden">
+            {/* Messages Header - Collapsible */}
+            <button
+              onClick={() => setShowMessages(!showMessages)}
+              className="w-full px-3 py-2 flex items-center justify-between bg-[#21262d] hover:bg-[#30363d] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-[#a371f7]" />
+                <span className="text-xs font-medium text-[#e6edf3]">
+                  Session Messages ({agentState.conversationHistory.length})
+                </span>
+              </div>
+              {showMessages ? (
+                <ChevronDown className="w-4 h-4 text-[#8b949e]" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-[#8b949e]" />
+              )}
+            </button>
+
+            {/* Messages List */}
+            {showMessages && (
+              <div className="max-h-96 overflow-y-auto">
+                {agentState.conversationHistory.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-xs text-[#8b949e]">
+                    No messages yet. Start the agent to see conversation history.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#30363d]">
+                    {agentState.conversationHistory.map((message, index) => (
+                      <div
+                        key={index}
+                        className={`px-3 py-2 ${
+                          message.role === 'assistant'
+                            ? 'bg-[#161b22]'
+                            : message.role === 'user'
+                            ? 'bg-[#0d1117]'
+                            : 'bg-[#1c2128]'
+                        }`}
+                      >
+                        {/* Message Header */}
+                        <div className="flex items-center gap-2 mb-1">
+                          {message.role === 'assistant' ? (
+                            <Bot className="w-3 h-3 text-[#58a6ff]" />
+                          ) : message.role === 'user' ? (
+                            <User className="w-3 h-3 text-[#3fb950]" />
+                          ) : (
+                            <Cpu className="w-3 h-3 text-[#f0883e]" />
+                          )}
+                          <span
+                            className={`text-[10px] font-medium uppercase ${
+                              message.role === 'assistant'
+                                ? 'text-[#58a6ff]'
+                                : message.role === 'user'
+                                ? 'text-[#3fb950]'
+                                : 'text-[#f0883e]'
+                            }`}
+                          >
+                            {message.role === 'assistant'
+                              ? 'Robot AI'
+                              : message.role === 'user'
+                              ? 'Sensor Input'
+                              : 'System'}
+                          </span>
+                          <span className="text-[9px] text-[#6e7681]">#{index + 1}</span>
+                        </div>
+
+                        {/* Message Content */}
+                        <div className="text-xs text-[#e6edf3] whitespace-pre-wrap break-words font-mono overflow-x-auto">
+                          {message.content.length > 2000 ? (
+                            <details>
+                              <summary className="cursor-pointer text-[#8b949e] hover:text-[#e6edf3]">
+                                Show full message ({message.content.length} chars)
+                              </summary>
+                              <pre className="mt-2 p-2 bg-[#0d1117] rounded overflow-x-auto text-[10px]">
+                                {message.content}
+                              </pre>
+                            </details>
+                          ) : (
+                            <pre className="overflow-x-auto text-[10px]">{message.content}</pre>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

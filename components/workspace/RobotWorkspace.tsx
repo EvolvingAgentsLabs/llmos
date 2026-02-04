@@ -5,8 +5,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RobotWorldPanel from '../robot/RobotWorldPanel';
 import ChatPanel from '../chat/ChatPanel';
 import RobotAgentPanel from '../robot/RobotAgentPanel';
-import RobotLogsMonitorPanel from '../robot/RobotLogsMonitorPanel';
-import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu, Activity } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderTree, FileCode, Layers, X, FileText, ChevronDown, Folder, FolderOpen, Bot, MessageSquare, Copy, Edit3, Save, MoreVertical, Home, ChevronUp, Play, Cpu, Trash2 } from 'lucide-react';
 import { WorldModel } from '@/lib/runtime/world-model';
 import { generateRobotConfig, robotIconToDataURL } from '@/lib/agents/robot-icon-generator';
 import { artifactManager } from '@/lib/artifacts/artifact-manager';
@@ -51,7 +50,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
   const [showChat, setShowChat] = useState(true);
   const [currentMap, setCurrentMap] = useState('standard5x5Empty');
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent' | 'logs'>('agent');
+  const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent'>('agent');
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
 
   // File viewer state
@@ -469,6 +468,29 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
     }
   }, [selectedFile, editContent, loadAgents]);
 
+  // Delete robot agent (only for user volume)
+  const deleteRobotAgent = useCallback(async (agent: Artifact) => {
+    if (agent.volume !== 'user') {
+      console.warn('[RobotWorkspace] Can only delete agents from user volume');
+      return;
+    }
+
+    try {
+      artifactManager.delete(agent.id);
+      console.log(`[RobotWorkspace] Deleted robot agent: ${agent.name}`);
+
+      // Clear selection if this was the selected agent
+      if (selectedRobotAgent?.id === agent.id) {
+        setSelectedRobotAgent(null);
+      }
+
+      // Reload agents
+      loadAgents();
+    } catch (error) {
+      console.error('[RobotWorkspace] Failed to delete agent:', error);
+    }
+  }, [selectedRobotAgent, loadAgents]);
+
   // View/edit agent
   const openAgentFile = useCallback((agent: Artifact) => {
     setSelectedFile({
@@ -691,6 +713,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                       onSelect={() => selectRobotAgentForSimulation(agent)}
                       onView={() => openAgentFile(agent)}
                       onCopy={(targetVolume) => copyAgentToVolume(agent, targetVolume)}
+                      onDelete={activeVolume === 'user' ? () => deleteRobotAgent(agent) : undefined}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setContextMenu({ x: e.clientX, y: e.clientY, agent });
@@ -1014,13 +1037,11 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
             <div className="flex items-center gap-2">
               {rightPanelMode === 'chat' ? (
                 <FileCode className="w-4 h-4 text-[#3fb950]" />
-              ) : rightPanelMode === 'logs' ? (
-                <Activity className="w-4 h-4 text-[#f0883e]" />
               ) : (
                 <Cpu className="w-4 h-4 text-[#58a6ff]" />
               )}
               <span className="text-xs font-semibold text-[#e6edf3]">
-                {rightPanelMode === 'chat' ? 'AI Agent Creator' : rightPanelMode === 'logs' ? 'Logs & Trajectory' : (selectedRobotAgent?.name || 'Robot AI Agent')}
+                {rightPanelMode === 'chat' ? 'AI Agent Creator' : (selectedRobotAgent?.name || 'Robot AI Agent')}
               </span>
               {rightPanelMode === 'agent' && selectedRobotAgent && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#58a6ff]/20 text-[#58a6ff] border border-[#58a6ff]/30">
@@ -1051,17 +1072,6 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
               Run Robot
             </button>
             <button
-              onClick={() => setRightPanelMode('logs')}
-              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                rightPanelMode === 'logs'
-                  ? 'text-[#f0883e] border-b-2 border-[#f0883e] bg-[#161b22]'
-                  : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              View Logs
-            </button>
-            <button
               onClick={() => setRightPanelMode('chat')}
               className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 rightPanelMode === 'chat'
@@ -1078,11 +1088,6 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
           <div className="flex-1 overflow-hidden">
             {rightPanelMode === 'chat' ? (
               <ChatPanel activeVolume={activeVolume} />
-            ) : rightPanelMode === 'logs' ? (
-              <RobotLogsMonitorPanel
-                deviceId={activeDeviceId || undefined}
-                onSessionSelect={(sessionId) => console.log('[RobotWorkspace] Selected session:', sessionId)}
-              />
             ) : (
               <RobotAgentPanel
                 deviceId={activeDeviceId || undefined}
@@ -1219,10 +1224,11 @@ interface RobotAgentTreeItemProps {
   onSelect: () => void;
   onView: () => void;
   onCopy: (targetVolume: ArtifactVolume) => void;
+  onDelete?: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function RobotAgentTreeItem({ agent, activeVolume, isSelected, onSelect, onView, onCopy, onContextMenu }: RobotAgentTreeItemProps) {
+function RobotAgentTreeItem({ agent, activeVolume, isSelected, onSelect, onView, onCopy, onDelete, onContextMenu }: RobotAgentTreeItemProps) {
   // Generate unique robot icon based on agent ID
   const robotConfig = generateRobotConfig(agent.id);
   const iconDataUrl = robotIconToDataURL(robotConfig, 24);
@@ -1306,6 +1312,23 @@ function RobotAgentTreeItem({ agent, activeVolume, isSelected, onSelect, onView,
           <Edit3 className="w-3 h-3" />
           View
         </button>
+
+        {/* Delete button - only for user volume */}
+        {activeVolume === 'user' && onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm(`Delete robot "${agent.name}"? This cannot be undone.`)) {
+                onDelete();
+              }
+            }}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-[#da3633]/20 text-[#f85149] border border-[#da3633]/30 hover:bg-[#da3633]/40 transition-colors"
+            title="Delete Robot"
+          >
+            <Trash2 className="w-3 h-3" />
+            Delete
+          </button>
+        )}
 
         {/* Copy button (on hover) */}
         <div className="hidden group-hover:flex items-center gap-1">
