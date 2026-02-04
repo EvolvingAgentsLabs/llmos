@@ -446,7 +446,7 @@ export class JEPAMentalModel {
    * Check if robot appears stuck
    */
   isStuck(): boolean {
-    return this.currentState?.exploration.stuckRisk ?? 0 > 0.7;
+    return (this.currentState?.exploration.stuckRisk ?? 0) > 0.7;
   }
 }
 
