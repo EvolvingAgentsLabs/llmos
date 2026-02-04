@@ -275,7 +275,9 @@ export class JEPAAgentRuntime {
     sensors: SensorReadings,
     abstractState: AbstractState
   ): Promise<JEPAResponse | null> {
-    const settings = LLMStorage.getSettings();
+    const apiKey = LLMStorage.getApiKey();
+    const model = LLMStorage.getModel();
+    const baseUrl = LLMStorage.getBaseUrl();
 
     // Build message with abstract state
     const userMessage = `
@@ -316,14 +318,14 @@ Remember: SIMULATE before ACTING. Predict what will happen for each action.
     }
 
     try {
-      const response = await fetch(`${settings.baseUrl || DEFAULT_BASE_URL}/chat/completions`, {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: settings.model || 'google/gemini-2.0-flash-001',
+          model: model || 'google/gemini-2.0-flash-001',
           messages: [
             { role: 'system', content: JEPA_INSPIRED_AGENT_PROMPT },
             ...this.state.conversationHistory,
