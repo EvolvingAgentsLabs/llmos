@@ -98,6 +98,9 @@ export interface WorldModelObstacle {
 export interface WorldModel {
   robot_position: { x: number; y: number; rotation: number };
   obstacles: WorldModelObstacle[];
+  // Track last known position for stuck detection
+  lastPosition?: { x: number; y: number; rotation: number };
+  stuckCounter?: number;
   explored_areas: string[];
   unexplored_directions: string[];
 }
@@ -756,6 +759,10 @@ export class ESP32AgentRuntime {
         this.addToolResultsToHistory(this.state.lastToolCalls);
       }
 
+      // AUTOMATIC CYCLE PROGRESSION & STUCK DETECTION
+      // This ensures the robot advances through the cycle even if LLM doesn't set next_step correctly
+      this.handleAutomaticCycleProgression(sensors, toolCalls);
+
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
       this.state.stats.avgLoopTimeMs =
@@ -898,6 +905,99 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
+   * Handle automatic cycle progression and stuck detection
+   * This ensures the robot moves even if the LLM doesn't properly advance the cycle
+   */
+  private handleAutomaticCycleProgression(
+    sensors: SensorReadings,
+    toolCalls: Array<{ tool: string; args: Record<string, any> }>
+  ): void {
+    const currentPos = sensors.pose;
+    const lastPos = this.state.worldModel.lastPosition;
+
+    // Check if robot has moved since last cycle
+    const hasMoved = !lastPos ||
+      Math.abs(currentPos.x - lastPos.x) > 0.1 ||
+      Math.abs(currentPos.y - lastPos.y) > 0.1 ||
+      Math.abs(currentPos.rotation - lastPos.rotation) > 5;
+
+    // Update last position
+    this.state.worldModel.lastPosition = { ...currentPos };
+
+    // Check if we executed a stop command this cycle
+    const executedStop = toolCalls.some(tc =>
+      (tc.tool === 'left_wheel' || tc.tool === 'right_wheel') &&
+      tc.args.direction === 'stop'
+    );
+
+    // Check if paths are clear
+    const frontClear = sensors.distance.front > 80;
+    const leftClear = sensors.distance.left > 50;
+    const rightClear = sensors.distance.right > 50;
+
+    // Stuck detection: robot hasn't moved, executed stop, but has clear paths
+    if (!hasMoved && executedStop && (frontClear || leftClear || rightClear)) {
+      this.state.worldModel.stuckCounter = (this.state.worldModel.stuckCounter || 0) + 1;
+      this.log(`Stuck detection: counter=${this.state.worldModel.stuckCounter}, front=${sensors.distance.front}cm`, 'warn');
+    } else if (hasMoved) {
+      // Reset stuck counter if robot moved
+      this.state.worldModel.stuckCounter = 0;
+    }
+
+    // FORCE MOVEMENT if stuck for 3+ cycles with clear paths
+    if ((this.state.worldModel.stuckCounter || 0) >= 3) {
+      this.log('STUCK DETECTED - Forcing movement!', 'warn');
+
+      // Force the robot to move by directly controlling wheels
+      if (frontClear) {
+        this.log('Forcing forward movement - path is clear', 'info');
+        this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
+        this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
+      } else if (rightClear) {
+        this.log('Forcing right turn - front blocked, right clear', 'info');
+        this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
+        this.deviceContext?.setRightWheel(WHEEL_SPEED.BACKWARD);
+      } else if (leftClear) {
+        this.log('Forcing left turn - front and right blocked, left clear', 'info');
+        this.deviceContext?.setLeftWheel(WHEEL_SPEED.BACKWARD);
+        this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
+      }
+
+      // Reset stuck counter after forcing movement
+      this.state.worldModel.stuckCounter = 0;
+
+      // Also advance the cycle step to MOVE to sync with what we did
+      this.state.currentStep = 'MOVE';
+    }
+
+    // AUTOMATIC CYCLE ADVANCEMENT based on what tools were executed
+    // This helps ensure the cycle progresses even if LLM doesn't set next_step
+    const tookPicture = toolCalls.some(tc => tc.tool === 'take_picture');
+    const executedMove = toolCalls.some(tc =>
+      (tc.tool === 'left_wheel' || tc.tool === 'right_wheel') &&
+      tc.args.direction !== 'stop'
+    );
+
+    // Simple cycle advancement logic:
+    // - After OBSERVE (take_picture), advance to PLAN
+    // - After MOVE (forward/backward commands), advance to STOP
+    // - After STOP (stop commands), advance to OBSERVE
+    if (this.state.currentStep === 'OBSERVE' && tookPicture) {
+      this.state.currentStep = 'PLAN';
+      this.log('Cycle: OBSERVE → PLAN (took picture)', 'info');
+    } else if ((this.state.currentStep === 'PLAN' || this.state.currentStep === 'ROTATE') && executedMove) {
+      this.state.currentStep = 'MOVE';
+      this.log('Cycle: → MOVE (wheels moving)', 'info');
+    } else if (this.state.currentStep === 'MOVE' && executedStop) {
+      this.state.currentStep = 'STOP';
+      this.log('Cycle: MOVE → STOP (wheels stopped)', 'info');
+    } else if (this.state.currentStep === 'STOP') {
+      this.state.currentStep = 'OBSERVE';
+      this.log('Cycle: STOP → OBSERVE (restarting cycle)', 'info');
+    }
+  }
+
+  /**
    * Parse structured JSON response and update state
    */
   private parseStructuredResponse(response: string): void {
@@ -912,10 +1012,9 @@ Respond with ONLY valid JSON in the required structured format.`;
       const parsed: StructuredResponse = JSON.parse(jsonMatch[0]);
       this.state.lastStructuredResponse = parsed;
 
-      // Update current step
-      if (parsed.current_step) {
-        this.state.currentStep = parsed.current_step;
-      }
+      // NOTE: We no longer update currentStep from LLM's current_step.
+      // The system controls the cycle state through handleAutomaticCycleProgression().
+      // This prevents the LLM from getting the robot stuck in a single step.
 
       // Update world model from response
       if (parsed.world_model) {
@@ -949,23 +1048,12 @@ Respond with ONLY valid JSON in the required structured format.`;
         }
       }
 
-      // Determine next step in cycle
-      if (parsed.next_step) {
-        const nextStepMap: Record<string, BehaviorStep> = {
-          'OBSERVE': 'OBSERVE',
-          'ANALYZE': 'ANALYZE',
-          'PLAN': 'PLAN',
-          'ROTATE': 'ROTATE',
-          'MOVE': 'MOVE',
-          'STOP': 'STOP',
-        };
-        const nextStep = nextStepMap[parsed.next_step.toUpperCase()];
-        if (nextStep) {
-          this.state.currentStep = nextStep;
-        }
-      }
-
-      this.log(`Parsed structured response: step=${parsed.current_step}, action=${parsed.decision?.action_type}`, 'info');
+      // NOTE: We no longer update currentStep from LLM's next_step here.
+      // The automatic cycle progression in handleAutomaticCycleProgression() is now
+      // the authoritative source for cycle state transitions. This fixes the bug where
+      // the robot got stuck if the LLM always returned "next_step": "STOP".
+      // The LLM's next_step is logged for debugging but doesn't drive the state machine.
+      this.log(`Parsed structured response: step=${parsed.current_step}, llm_next_step=${parsed.next_step}, action=${parsed.decision?.action_type}`, 'info');
     } catch (error: any) {
       this.log(`Failed to parse structured response: ${error.message}`, 'warn');
     }
