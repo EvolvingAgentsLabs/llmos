@@ -376,22 +376,136 @@ EVERY response MUST be valid JSON with this EXACT structure:
 4. Build internal map of arena over time
 5. Consider GOAL when planning direction
 6. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT`,
+
+  reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
+
+## BEHAVIOR CYCLE (Follow This Loop)
+
+OBSERVE → PLAN → MOVE → STOP → REPEAT
+
+1. **OBSERVE**: Call take_picture to get sensor readings
+2. **PLAN**: Update world map grid, review history, decide action
+3. **MOVE**: Execute wheel commands
+4. **STOP**: Stop wheels, return to OBSERVE
+
+## Tools
+
+Use this format: [TOOL] tool_name argument
+
+| Tool | Example |
+|------|---------|
+| take_picture | [TOOL] take_picture |
+| left_wheel | [TOOL] left_wheel forward |
+| right_wheel | [TOOL] right_wheel backward |
+
+## Movement Reference
+
+| Action | Left Wheel | Right Wheel |
+|--------|------------|-------------|
+| Forward | forward | forward |
+| Backward | backward | backward |
+| Turn Left | backward | forward |
+| Turn Right | forward | backward |
+| Stop | stop | stop |
+
+## WORLD MAP (Grid)
+
+Maintain a grid map. Start at (0,0) facing NORTH.
+
+Legend: R=Robot, .=Unknown, ~=Clear, #=Obstacle, ?=Visited
+
+Example 3x3 map:
+    -1   0  +1
+   ┌───┬───┬───┐
++1 │ ~ │ ~ │ . │
+   ├───┼───┼───┤
+ 0 │ # │ R │ ~ │
+   └───┴───┴───┘
+
+Update rules:
+- front > 80cm → cells ahead = ~ (clear)
+- front < 40cm → cell ahead = # (obstacle)
+- After move → update position, old cell = ?
+
+Position tracking:
+- Forward: +1 in heading direction
+- Turn Left: heading -= 90°
+- Turn Right: heading += 90°
+
+## RESPONSE FORMAT
+
+Every response MUST have:
+1. State line (OBSERVE: readings)
+2. World Map (ASCII grid)
+3. Plan line
+4. [TOOL] lines
+
+Example:
+OBSERVE: Front=120cm (clear), Left=45cm (obstacle), Right=200cm (clear)
+
+World Map (pos: 0,0 heading: N):
+    -1   0  +1
+   ┌───┬───┬───┐
++1 │ ~ │ ~ │ ~ │
+   ├───┼───┼───┤
+ 0 │ # │ R │ ~ │
+   └───┴───┴───┘
+
+PLAN: Clear ahead. Moving forward.
+
+[TOOL] left_wheel forward
+[TOOL] right_wheel forward
+
+## Safety Rules
+
+| Distance | Action |
+|----------|--------|
+| < 20cm | DANGER! Backup now |
+| 20-40cm | Stop, turn away |
+| 40-80cm | Safe to turn |
+| > 80cm | Clear, go forward |
+
+## Using History
+
+CRITICAL: Check previous messages!
+- What did you see before?
+- Did last move work?
+- Same readings 2+ cycles = stuck, try different action
+- Build cumulative map from all observations
+
+## CRITICAL RULES
+
+1. ALWAYS output world map
+2. ALWAYS output [TOOL] lines
+3. ALWAYS check safety first
+4. UPDATE position after moves
+5. USE HISTORY to build map
+6. VARY ACTIONS if stuck`,
 };
 
 // Backwards compatibility - these now all point to the same simple behavior
 export const BEHAVIOR_TO_MAP: Record<string, string> = {
   simple: 'standard5x5Empty',
+  reactive: 'standard5x5Empty',
 };
 
 export const BEHAVIOR_DESCRIPTIONS: Record<string, { name: string; description: string; mapName: string }> = {
   simple: {
     name: 'Simple Explorer',
-    description: 'Basic look-think-move behavior with 3 simple tools',
+    description: 'Structured JSON-based behavior with world model building',
+    mapName: '5m × 5m Empty',
+  },
+  reactive: {
+    name: 'Reactive Explorer',
+    description: 'OBSERVE-PLAN-MOVE-STOP cycle with grid world mapping - recommended',
     mapName: '5m × 5m Empty',
   },
 };
 
 export function getAgentPrompt(behaviorId: string): string {
+  if (behaviorId === 'reactive') {
+    return DEFAULT_AGENT_PROMPTS.reactive;
+  }
   return DEFAULT_AGENT_PROMPTS.simple;
 }
 
@@ -637,6 +751,11 @@ export class ESP32AgentRuntime {
         }
       }
 
+      // CRITICAL: Add tool results to conversation history so LLM can see them
+      if (this.state.lastToolCalls.length > 0) {
+        this.addToolResultsToHistory(this.state.lastToolCalls);
+      }
+
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
       this.state.stats.avgLoopTimeMs =
@@ -755,6 +874,30 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
+   * Add tool results to conversation history so LLM can see what happened
+   */
+  private addToolResultsToHistory(toolCalls: Array<{ tool: string; args: any; result: ToolResult }>): void {
+    if (toolCalls.length === 0) return;
+
+    const resultsSummary = toolCalls.map(tc => {
+      if (tc.tool === 'take_picture' && tc.result.success && tc.result.data) {
+        const data = tc.result.data as CameraAnalysis;
+        return `TOOL RESULT [take_picture]:\n${JSON.stringify({
+          scene: data.scene,
+          obstacles: data.obstacles,
+          recommendation: data.recommendation
+        }, null, 2)}`;
+      }
+      return `TOOL RESULT [${tc.tool}]: ${JSON.stringify(tc.result.data)}`;
+    }).join('\n\n');
+
+    this.state.conversationHistory.push({
+      role: 'user',
+      content: `--- TOOL EXECUTION RESULTS ---\n${resultsSummary}\n\nNow decide your next action based on these results.`,
+    });
+  }
+
+  /**
    * Parse structured JSON response and update state
    */
   private parseStructuredResponse(response: string): void {
@@ -853,12 +996,31 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
-   * Parse tool calls from LLM response (supports both structured and legacy formats)
+   * Parse tool calls from LLM response (supports multiple formats)
    */
   private parseToolCalls(response: string): Array<{ tool: string; args: Record<string, any> }> {
     const calls: Array<{ tool: string; args: Record<string, any> }> = [];
 
-    // First, try to extract from structured response format
+    // Format 1: Simple [TOOL] format - e.g., "[TOOL] left_wheel forward"
+    const simpleToolPattern = /\[TOOL\]\s+(take_picture|left_wheel|right_wheel)(?:\s+(forward|backward|stop))?/gi;
+    let simpleMatch;
+    while ((simpleMatch = simpleToolPattern.exec(response)) !== null) {
+      const toolName = simpleMatch[1].toLowerCase();
+      const direction = simpleMatch[2]?.toLowerCase();
+
+      if (toolName === 'take_picture') {
+        calls.push({ tool: 'take_picture', args: {} });
+      } else if (toolName === 'left_wheel' || toolName === 'right_wheel') {
+        calls.push({ tool: toolName, args: { direction: direction || 'stop' } });
+      }
+    }
+
+    // If simple format found calls, return them
+    if (calls.length > 0) {
+      return calls;
+    }
+
+    // Format 2: Try to extract from structured response format
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
