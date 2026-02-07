@@ -1238,4 +1238,259 @@ graph TB
 
 ---
 
-*Last Updated: January 2026*
+---
+
+## Dual-Brain Cognitive Architecture
+
+### Overview
+
+LLMos agents use a **Dual-Brain** architecture that separates fast reactive decisions from deep deliberative planning. This is inspired by [JEPA](https://openreview.net/forum?id=BZ5a1r-kVsf) (fast physical intuition) and [RSA](https://arxiv.org/html/2509.26626v1) (Recursive Self-Aggregation for deep reasoning).
+
+The key insight: a single LLM call is too slow for split-second obstacle avoidance but too shallow for multi-step exploration planning. The Dual-Brain solves this by running **two cognitive layers in parallel**, each optimized for its time scale.
+
+```mermaid
+graph TB
+    subgraph "Sensing Layer"
+        CAM[Camera Frame]
+        SEN[Distance Sensors]
+    end
+
+    subgraph "Perception Layer"
+        MN[MobileNet SSD<br/>~30ms<br/>Object Detection]
+        DF[Depth from BBox<br/>Known Object Sizes]
+        VF[VisionFrame JSON<br/>Structured Detections]
+    end
+
+    subgraph "Dual-Brain Controller"
+        direction TB
+        subgraph "INSTINCT — System 1"
+            RI[Reactive Rules<br/>&lt;5ms]
+            LI[LLM Single-Pass<br/>Qwen3-4B ~200ms]
+        end
+
+        subgraph "PLANNER — System 2"
+            RSA[RSA Engine<br/>Qwen3-4B + RSA<br/>3-22 seconds]
+        end
+
+        ESC{Escalation<br/>Check}
+    end
+
+    subgraph "Execution Layer"
+        HAL[HAL Tool Executor]
+        SIM[Simulation Adapter]
+        PHY[Physical Adapter<br/>ESP32]
+    end
+
+    CAM --> MN
+    SEN --> DF
+    MN --> VF
+    DF --> VF
+
+    VF --> RI
+    VF --> ESC
+    RI --> |High confidence| HAL
+    RI --> |Low confidence| LI
+    ESC --> |Stuck / Unknown / Complex goal| RSA
+    LI --> HAL
+    RSA --> HAL
+
+    HAL --> SIM
+    HAL --> PHY
+
+    style RSA fill:#f9f,stroke:#333
+    style RI fill:#bfb,stroke:#333
+    style MN fill:#bbf,stroke:#333
+```
+
+### Brain Decision Flow
+
+```mermaid
+sequenceDiagram
+    participant Sensors
+    participant MobileNet
+    participant Instinct as Instinct Brain
+    participant Escalation as Escalation Check
+    participant Planner as Planner Brain (RSA)
+    participant HAL
+
+    loop Every ~100ms (10Hz sensing cycle)
+        Sensors->>MobileNet: Camera frame + distance readings
+        MobileNet->>Instinct: VisionFrame JSON
+
+        Instinct->>Instinct: Reactive rules (<5ms)
+
+        alt Clear reactive rule (confidence > 85%)
+            Instinct->>HAL: Execute action immediately
+        else No clear rule
+            Instinct->>Escalation: Check escalation conditions
+            alt Should escalate
+                Escalation->>Planner: Run RSA (N=4, K=2, T=2)
+                Note over Planner: ~2.5-8 seconds
+                Planner->>HAL: Execute planned action sequence
+            else Stay in instinct
+                Instinct->>Instinct: LLM single-pass (~200ms)
+                Instinct->>HAL: Execute action
+            end
+        end
+    end
+```
+
+### Escalation Conditions
+
+The Instinct brain escalates to the Planner when:
+
+| Condition | Trigger | RSA Preset |
+|-----------|---------|------------|
+| **Imminent unknown** | MobileNet confidence < 50% on nearby object | `quick` |
+| **Stuck** | No movement for > 5 seconds | `quick` |
+| **Complex goal** | Goal contains "find", "explore", "collect", "bring" | `standard` |
+| **Low confidence** | Instinct confidence < 40% | `quick` |
+| **New area** | Entered exploration frontier | `standard` |
+| **Fleet coordination** | Multi-robot decision needed | `swarm` |
+| **Periodic replan** | Every 50 sensing cycles (~5s) | `quick` |
+
+### RSA (Recursive Self-Aggregation) Engine
+
+RSA is a test-time scaling method from [Venkatraman et al., 2025](https://arxiv.org/html/2509.26626v1) that makes a small local model (Qwen3-4B) match cloud-scale reasoning quality.
+
+```mermaid
+graph LR
+    subgraph "Step 0: Generate Population"
+        Q[Query + Context] --> G1[Candidate 1]
+        Q --> G2[Candidate 2]
+        Q --> G3[Candidate 3]
+        Q --> G4[Candidate 4]
+    end
+
+    subgraph "Step 1-T: Recursive Aggregation"
+        G1 --> |Subsample K=2| A1[Aggregate 1+3]
+        G3 --> A1
+        G2 --> |Subsample K=2| A2[Aggregate 2+4]
+        G4 --> A2
+        A1 --> |Next step| R1[Refined 1]
+        A2 --> |Next step| R2[Refined 2]
+    end
+
+    subgraph "Final: Select"
+        R1 --> MV{Majority Vote<br/>or Random}
+        R2 --> MV
+        MV --> BEST[Best Answer]
+    end
+
+    style BEST fill:#bfb,stroke:#333
+```
+
+**Key paper findings applied to robotics:**
+- **K=2 already gives massive improvement** over K=1 (self-refinement). For quick replans, K=2 is sufficient.
+- **Population preserves correct fragments**: Even wrong candidates contain correct intermediate steps (e.g., correct obstacle detection but wrong path). RSA extracts and recombines them.
+- **Consensus measures convergence**: When the population agrees, stop early (no need to run all T steps).
+
+#### RSA Presets for Robotics
+
+| Preset | N | K | T | Inferences | Latency | Use Case |
+|--------|---|---|---|------------|---------|----------|
+| `quick` | 4 | 2 | 2 | 12 | ~2.5s | Stuck recovery, quick replan |
+| `standard` | 8 | 3 | 4 | 40 | ~8s | New area exploration, goal planning |
+| `deep` | 16 | 4 | 6 | 112 | ~22s | Skill generation, complex reasoning |
+| `swarm` | fleet_size | all | 3 | 3×fleet | ~6s | Multi-robot world model merge |
+
+### MobileNet Vision Pipeline
+
+[MobileNet SSD](https://arxiv.org/abs/1801.04381) runs locally via TensorFlow.js or ONNX Runtime, producing structured JSON that both brains consume.
+
+```mermaid
+graph TB
+    subgraph "Camera Input"
+        FRAME[Camera Frame<br/>640×480 @ 30fps]
+    end
+
+    subgraph "MobileNet SSD (~30ms)"
+        DETECT[Object Detection]
+        CLASSIFY[Classification<br/>COCO 80 classes]
+        BBOX[Bounding Boxes]
+    end
+
+    subgraph "Depth Estimation"
+        KOS[Known Object Size<br/>Pinhole camera model]
+        BAR[BBox Area Ratio<br/>Empirical power law]
+        FP[Floor Position<br/>Y-coordinate heuristic]
+    end
+
+    subgraph "VisionFrame Output"
+        DET["detections: [<br/>  { label, confidence,<br/>    bbox, depth_cm, region }<br/>]"]
+        SCN["scene: {<br/>  openings: ['center','right'],<br/>  blocked: ['left']<br/>}"]
+    end
+
+    FRAME --> DETECT
+    DETECT --> CLASSIFY
+    DETECT --> BBOX
+    BBOX --> KOS
+    BBOX --> BAR
+    BBOX --> FP
+    CLASSIFY --> DET
+    KOS --> DET
+    BAR --> DET
+    FP --> DET
+    DET --> SCN
+
+    style DET fill:#ffd,stroke:#333
+    style SCN fill:#ffd,stroke:#333
+```
+
+**Depth estimation methods (ranked by accuracy):**
+1. **Known Object Size** — If we know a chair is ~45cm wide and it occupies 30% of the frame, we can calculate distance via the pinhole camera equation: `depth = (realWidth × focalLength) / bboxWidth`
+2. **BBox Area Ratio** — Larger bounding box area → closer object. Uses empirical power-law: `depth ≈ k / sqrt(area)`
+3. **Floor Position** — Objects lower in the frame are closer (assumes forward-facing camera)
+
+### Swarm Intelligence via RSA
+
+RSA naturally implements the "MapReduce for physical intelligence" described in the project vision. Each robot's world model observation becomes a candidate in the RSA population, and the aggregation step serves as the consensus mechanism.
+
+```mermaid
+sequenceDiagram
+    participant R1 as Robot A<br/>Sector 1
+    participant R2 as Robot B<br/>Sector 2
+    participant R3 as Robot C<br/>Sector 3
+    participant HOST as Host Computer<br/>RSA Swarm Engine
+
+    par Map Phase (parallel exploration)
+        R1->>R1: Explore sector 1
+        R2->>R2: Explore sector 2
+        R3->>R3: Explore sector 3
+    end
+
+    R1->>HOST: World model snapshot (candidate 1)
+    R2->>HOST: World model snapshot (candidate 2)
+    R3->>HOST: World model snapshot (candidate 3)
+
+    loop RSA Aggregation (T=3 rounds)
+        HOST->>HOST: Subsample K candidates
+        HOST->>HOST: LLM aggregates into merged model
+        HOST->>HOST: Check consensus
+    end
+
+    HOST->>R1: Unified world model
+    HOST->>R2: Unified world model
+    HOST->>R3: Unified world model
+
+    Note over HOST: "Collective hallucination":<br/>Complete semantic map<br/>no single robot could build alone
+```
+
+### File Structure
+
+```
+lib/runtime/
+├── rsa-engine.ts              # RSA algorithm implementation
+├── dual-brain-controller.ts   # Dual-Brain orchestration
+├── jepa-mental-model.ts       # JEPA-inspired abstract state
+├── world-model.ts             # Grid-based spatial model
+├── camera-vision-model.ts     # Cloud LLM vision (legacy)
+├── robot4-runtime.ts          # Firmware simulator
+├── esp32-agent-runtime.ts     # ESP32 agent runtime
+└── vision/
+    └── mobilenet-detector.ts  # Local MobileNet detection pipeline
+```
+
+---
+
+*Last Updated: February 2026*
