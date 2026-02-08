@@ -3,7 +3,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
-import { type CubeRobotState as SimulatorState, type FloorMap, type Collectible } from '@/lib/hardware/cube-robot-simulator';
+import { type CubeRobotState as SimulatorState, type FloorMap, type Collectible, type PushableObjectState, type DockZone } from '@/lib/hardware/cube-robot-simulator';
 import { cameraCaptureManager, type CameraCapture } from '@/lib/runtime/camera-capture';
 import { WorldModel, type WorldModelSnapshot } from '@/lib/runtime/world-model';
 import { type RayFan, type TrajectoryPrediction, type PathExplorationResult } from '@/lib/runtime/navigation/ray-navigation';
@@ -32,7 +32,7 @@ interface AgentActivity {
 
 // Selected object information
 interface SelectedObjectInfo {
-  type: 'robot' | 'wall' | 'obstacle' | 'checkpoint' | 'floor' | 'collectible';
+  type: 'robot' | 'wall' | 'obstacle' | 'checkpoint' | 'floor' | 'collectible' | 'pushable' | 'dock-zone';
   name: string;
   position: { x: number; y: number; z: number };
   data?: Record<string, unknown>;
@@ -51,6 +51,8 @@ interface RobotCanvas3DProps {
   onCameraCapture?: (capture: CameraCapture) => void;  // Callback when a screenshot is captured
   rayNavigation?: PathExplorationResult | null;  // Ray navigation data for visualization
   showRayVisualization?: boolean;  // Whether to show ray fan and trajectory
+  pushableObjects?: PushableObjectState[];  // Runtime state of pushable objects
+  dockZones?: DockZone[];  // Dock zones from the floor map
 }
 
 // Handle for external camera capture control
@@ -1157,6 +1159,263 @@ function CollectibleMesh({
   );
 }
 
+// Pushable object rendering (physics-based cubes)
+function PushableObjectsRenderer({
+  objects,
+  selectedId,
+  onSelect,
+}: {
+  objects: PushableObjectState[];
+  selectedId: string | null;
+  onSelect: (obj: PushableObjectState) => void;
+}) {
+  if (!objects || objects.length === 0) return null;
+
+  return (
+    <group>
+      {objects.map((obj) => (
+        <PushableObjectMesh
+          key={obj.id}
+          object={obj}
+          isSelected={selectedId === obj.id}
+          onSelect={onSelect}
+        />
+      ))}
+    </group>
+  );
+}
+
+// Individual pushable object with physics animation
+function PushableObjectMesh({
+  object: obj,
+  isSelected,
+  onSelect,
+}: {
+  object: PushableObjectState;
+  isSelected: boolean;
+  onSelect: (obj: PushableObjectState) => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const halfSize = obj.size / 2;
+  const speed = Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy);
+
+  // Animate: slight wobble when moving
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.position.set(obj.x, halfSize, obj.y);
+      // Wobble when moving
+      if (speed > 0.01) {
+        const wobble = Math.sin(state.clock.elapsedTime * 8) * 0.05 * Math.min(speed * 5, 1);
+        meshRef.current.rotation.x = wobble;
+        meshRef.current.rotation.z = wobble * 0.7;
+      } else {
+        meshRef.current.rotation.x *= 0.9;
+        meshRef.current.rotation.z *= 0.9;
+      }
+    }
+  });
+
+  return (
+    <group>
+      {/* The pushable cube */}
+      <mesh
+        ref={meshRef}
+        position={[obj.x, halfSize, obj.y]}
+        castShadow
+        receiveShadow
+        onClick={(e) => { e.stopPropagation(); onSelect(obj); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+        userData={{ type: 'pushable', name: obj.label || obj.id }}
+      >
+        <boxGeometry args={[obj.size, obj.size, obj.size]} />
+        <meshStandardMaterial
+          color={isSelected || hovered ? '#ffffff' : obj.color}
+          emissive={obj.color}
+          emissiveIntensity={isSelected ? 0.8 : hovered ? 0.6 : 0.3}
+          metalness={0.2}
+          roughness={0.4}
+        />
+      </mesh>
+
+      {/* Selection/hover outline */}
+      {(isSelected || hovered) && (
+        <mesh position={[obj.x, halfSize, obj.y]}>
+          <boxGeometry args={[obj.size + 0.02, obj.size + 0.02, obj.size + 0.02]} />
+          <meshBasicMaterial
+            color={isSelected ? '#58a6ff' : '#8b949e'}
+            transparent
+            opacity={0.3}
+            side={THREE.BackSide}
+          />
+        </mesh>
+      )}
+
+      {/* Shadow/glow on floor */}
+      <mesh
+        position={[obj.x, 0.003, obj.y]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <circleGeometry args={[obj.size * 0.8, 16]} />
+        <meshBasicMaterial
+          color={obj.color}
+          transparent
+          opacity={isSelected ? 0.4 : 0.15}
+        />
+      </mesh>
+
+      {/* Point light for glow */}
+      <pointLight
+        position={[obj.x, obj.size + 0.05, obj.y]}
+        color={obj.color}
+        intensity={isSelected ? 0.4 : 0.15}
+        distance={0.5}
+      />
+
+      {/* Docked indicator */}
+      {obj.dockedIn && (
+        <mesh
+          position={[obj.x, obj.size + 0.03, obj.y]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[obj.size * 0.5, obj.size * 0.6, 16]} />
+          <meshBasicMaterial color="#4caf50" transparent opacity={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+// Dock zone rendering (target area on the floor)
+function DockZonesRenderer({
+  dockZones,
+  dockedObjectIds,
+  selectedId,
+  onSelect,
+}: {
+  dockZones: DockZone[];
+  dockedObjectIds: Map<string, string[]>; // dockId -> objectIds[]
+  selectedId: string | null;
+  onSelect: (dz: DockZone) => void;
+}) {
+  if (!dockZones || dockZones.length === 0) return null;
+
+  return (
+    <group>
+      {dockZones.map((dz) => (
+        <DockZoneMesh
+          key={dz.id}
+          dockZone={dz}
+          isSelected={selectedId === dz.id}
+          hasDockedObject={(dockedObjectIds.get(dz.id) || []).length > 0}
+          onSelect={onSelect}
+        />
+      ))}
+    </group>
+  );
+}
+
+// Individual dock zone mesh
+function DockZoneMesh({
+  dockZone: dz,
+  isSelected,
+  hasDockedObject,
+  onSelect,
+}: {
+  dockZone: DockZone;
+  isSelected: boolean;
+  hasDockedObject: boolean;
+  onSelect: (dz: DockZone) => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const borderRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+
+  // Pulsing animation for the dock zone
+  useFrame((state) => {
+    if (borderRef.current) {
+      const pulse = hasDockedObject
+        ? 0.9 + Math.sin(state.clock.elapsedTime * 2) * 0.1
+        : 0.7 + Math.sin(state.clock.elapsedTime * 3) * 0.3;
+      (borderRef.current.material as THREE.MeshBasicMaterial).opacity = pulse * (isSelected ? 0.9 : 0.6);
+    }
+  });
+
+  return (
+    <group>
+      {/* Dock zone floor plane */}
+      <mesh
+        ref={meshRef}
+        position={[dz.x, 0.004, dz.y]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+        onClick={(e) => { e.stopPropagation(); onSelect(dz); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+        userData={{ type: 'dock-zone', name: dz.label || dz.id }}
+      >
+        <planeGeometry args={[dz.width, dz.height]} />
+        <meshStandardMaterial
+          color={dz.color}
+          transparent
+          opacity={hasDockedObject ? 0.5 : isSelected ? 0.4 : hovered ? 0.35 : 0.25}
+          emissive={dz.color}
+          emissiveIntensity={hasDockedObject ? 0.4 : 0.2}
+        />
+      </mesh>
+
+      {/* Border outline */}
+      <mesh
+        ref={borderRef}
+        position={[dz.x, 0.005, dz.y]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <ringGeometry args={[
+          Math.min(dz.width, dz.height) / 2 - 0.02,
+          Math.min(dz.width, dz.height) / 2,
+          4
+        ]} />
+        <meshBasicMaterial
+          color={dz.color}
+          transparent
+          opacity={0.6}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Corner markers */}
+      {[[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([cx, cy], i) => (
+        <mesh
+          key={i}
+          position={[
+            dz.x + cx * dz.width / 2,
+            0.01,
+            dz.y + cy * dz.height / 2
+          ]}
+        >
+          <boxGeometry args={[0.03, 0.02, 0.03]} />
+          <meshStandardMaterial
+            color={dz.color}
+            emissive={dz.color}
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+      ))}
+
+      {/* Success glow when object is docked */}
+      {hasDockedObject && (
+        <pointLight
+          position={[dz.x, 0.2, dz.y]}
+          color={dz.color}
+          intensity={0.5}
+          distance={1}
+        />
+      )}
+    </group>
+  );
+}
+
 // Canvas capture registration component
 function CanvasCaptureRegistration() {
   const { gl } = useThree();
@@ -1467,6 +1726,8 @@ function SelectionInfoPanel({ selectedObject }: { selectedObject: SelectedObject
     checkpoint: 'bg-green-500/20 border-green-500/50 text-green-400',
     floor: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
     collectible: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
+    pushable: 'bg-orange-500/20 border-orange-500/50 text-orange-400',
+    'dock-zone': 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
   };
 
   return (
@@ -1511,6 +1772,8 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
   onCameraCapture,
   rayNavigation = null,
   showRayVisualization = false,
+  pushableObjects = [],
+  dockZones = [],
 }, ref) {
   const controlsRef = useRef<any>(null);
   const [selectedObject, setSelectedObject] = useState<SelectedObjectInfo | null>(null);
@@ -1637,6 +1900,38 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
     onObjectSelected?.(info);
   }, [onObjectSelected]);
 
+  const handlePushableClick = useCallback((obj: PushableObjectState) => {
+    const info: SelectedObjectInfo = {
+      type: 'pushable',
+      name: obj.label || obj.id,
+      position: { x: obj.x, y: obj.size / 2, z: obj.y },
+      data: {
+        size: `${(obj.size * 100).toFixed(0)}cm`,
+        mass: `${(obj.mass * 1000).toFixed(0)}g`,
+        velocity: `${Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy).toFixed(3)} m/s`,
+        docked: obj.dockedIn || 'none',
+      },
+    };
+    setSelectedObject(info);
+    setSelectedType({ type: 'pushable', index: null, id: obj.id });
+    onObjectSelected?.(info);
+  }, [onObjectSelected]);
+
+  const handleDockZoneClick = useCallback((dz: DockZone) => {
+    const info: SelectedObjectInfo = {
+      type: 'dock-zone',
+      name: dz.label || dz.id,
+      position: { x: dz.x, y: 0, z: dz.y },
+      data: {
+        width: `${(dz.width * 100).toFixed(0)}cm`,
+        height: `${(dz.height * 100).toFixed(0)}cm`,
+      },
+    };
+    setSelectedObject(info);
+    setSelectedType({ type: 'dock-zone', index: null, id: dz.id });
+    onObjectSelected?.(info);
+  }, [onObjectSelected]);
+
   const handleBackgroundClick = useCallback(() => {
     setSelectedObject(null);
     setSelectedType({ type: '', index: null });
@@ -1720,6 +2015,30 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
             collectedIds={collectedIds}
             selectedId={selectedType.type === 'collectible' ? selectedType.id || null : null}
             onSelect={handleCollectibleClick}
+          />
+        )}
+
+        {/* Dock zones (target areas on the floor) - render before pushable objects */}
+        {dockZones.length > 0 && (
+          <DockZonesRenderer
+            dockZones={dockZones}
+            dockedObjectIds={new Map(
+              dockZones.map(dz => [
+                dz.id,
+                pushableObjects.filter(obj => obj.dockedIn === dz.id).map(obj => obj.id)
+              ])
+            )}
+            selectedId={selectedType.type === 'dock-zone' ? selectedType.id || null : null}
+            onSelect={handleDockZoneClick}
+          />
+        )}
+
+        {/* Pushable objects (physics cubes) */}
+        {pushableObjects.length > 0 && (
+          <PushableObjectsRenderer
+            objects={pushableObjects}
+            selectedId={selectedType.type === 'pushable' ? selectedType.id || null : null}
+            onSelect={handlePushableClick}
           />
         )}
 
