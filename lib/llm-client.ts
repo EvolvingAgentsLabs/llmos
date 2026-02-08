@@ -9,6 +9,7 @@ export {
   createLLMClient,
   LLMStorage,
   AVAILABLE_MODELS,
+  MODEL_PROVIDER_CONFIG,
   DEFAULT_BASE_URL,
   PROVIDER_BASE_URLS,
 } from './llm';

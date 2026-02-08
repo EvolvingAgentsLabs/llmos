@@ -12,16 +12,13 @@ const STORAGE_KEYS = {
   BASE_URL: 'llmos_base_url',
 } as const;
 
-// Default base URL for Gemini's OpenAI-compatible API
-export const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
+// Default base URL for OpenRouter's OpenAI-compatible API
+export const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1/';
 
 // Known provider base URLs for easy switching
 export const PROVIDER_BASE_URLS: Record<string, string> = {
-  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-  openai: 'https://api.openai.com/v1/',
   openrouter: 'https://openrouter.ai/api/v1/',
-  together: 'https://api.together.xyz/v1/',
-  groq: 'https://api.groq.com/openai/v1/',
+  ollama: 'http://localhost:11434/v1/',
 };
 
 export const LLMStorage = {
@@ -121,6 +118,11 @@ export const LLMStorage = {
   },
 
   isConfigured(): boolean {
-    return !!this.getApiKey() && !!this.getModel();
+    const model = this.getModel();
+    if (!model) return false;
+    // Ollama doesn't require an API key
+    const provider = this.getProvider();
+    if (provider === 'ollama') return true;
+    return !!this.getApiKey();
   },
 };

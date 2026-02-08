@@ -267,7 +267,7 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     supportsImages: false,
   },
 
-  // Qwen Models
+  // Qwen Models - OpenRouter
   'qwen/qwen3-vl-8b-instruct': {
     markdownInstructionFollowing: 'good',
     structuredOutputReliability: 'good',
@@ -277,22 +277,23 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     agentDelegation: 'moderate',
     selfCorrection: 'good',
     recommendedStrategy: 'compiled',
-    provider: 'alibaba',
+    provider: 'openrouter',
     supportsStreaming: true,
     supportsImages: true,
   },
-  'qwen/qwen-2.5-72b': {
+  // Qwen Models - Ollama (Local)
+  'qwen3-vl:8b-instruct': {
     markdownInstructionFollowing: 'good',
     structuredOutputReliability: 'good',
     toolUseAccuracy: 'moderate',
-    contextWindowSize: 128000,
+    contextWindowSize: 131072,
     multiStepReasoning: 'good',
     agentDelegation: 'moderate',
     selfCorrection: 'good',
     recommendedStrategy: 'compiled',
-    provider: 'alibaba',
+    provider: 'ollama',
     supportsStreaming: true,
-    supportsImages: false,
+    supportsImages: true,
   },
 
   // Google Gemini 3 Flash Preview
@@ -368,11 +369,11 @@ export function getModelCapabilities(modelId: string): ModelCapabilities {
   }
 
   if (normalizedId.includes('qwen')) {
-    // Prefer VL model for multimodal capabilities
-    if (normalizedId.includes('vl') || normalizedId.includes('vision')) {
-      return MODEL_CAPABILITIES['qwen/qwen3-vl-8b-instruct'];
+    // Check for Ollama variant first
+    if (MODEL_CAPABILITIES[modelId]) {
+      return MODEL_CAPABILITIES[modelId];
     }
-    return MODEL_CAPABILITIES['qwen/qwen-2.5-72b'];
+    return MODEL_CAPABILITIES['qwen/qwen3-vl-8b-instruct'];
   }
 
   return DEFAULT_CAPABILITIES;

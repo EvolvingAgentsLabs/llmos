@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AVAILABLE_MODELS, LLMStorage } from '@/lib/llm-client';
+import { AVAILABLE_MODELS, MODEL_PROVIDER_CONFIG, LLMStorage } from '@/lib/llm-client';
 
 interface ModelSelectorProps {
   onModelChange?: (modelId: string) => void;
@@ -12,23 +12,11 @@ interface ModelSelectorProps {
 export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [customModel, setCustomModel] = useState('');
-  const [isCustomMode, setIsCustomMode] = useState(false);
 
   useEffect(() => {
     const currentModel = LLMStorage.getModel();
     if (currentModel) {
       setSelectedModel(currentModel);
-      // Check if it's a custom model (not in AVAILABLE_MODELS)
-      if (!AVAILABLE_MODELS[currentModel]) {
-        setIsCustomMode(true);
-        setCustomModel(currentModel);
-      }
-    }
-    // Load previously saved custom model for the input field
-    const savedCustomModel = LLMStorage.getCustomModel();
-    if (savedCustomModel && !customModel) {
-      setCustomModel(savedCustomModel);
     }
 
     // Listen for model changes from other components
@@ -36,13 +24,6 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
       const customEvent = event as CustomEvent<{ modelId: string }>;
       const newModelId = customEvent.detail.modelId;
       setSelectedModel(newModelId);
-      // Check if it's a custom model
-      if (!AVAILABLE_MODELS[newModelId]) {
-        setIsCustomMode(true);
-        setCustomModel(newModelId);
-      } else {
-        setIsCustomMode(false);
-      }
     };
 
     window.addEventListener('llmos:model-changed', handleModelChange);
@@ -54,25 +35,20 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
   const handleModelSelect = (modelId: string) => {
     setSelectedModel(modelId);
     LLMStorage.saveModel(modelId);
+
+    // Also update provider and base URL based on model
+    const providerConfig = MODEL_PROVIDER_CONFIG[modelId];
+    if (providerConfig) {
+      LLMStorage.saveProvider(providerConfig.provider);
+      LLMStorage.saveBaseUrl(providerConfig.baseUrl);
+    }
+
     setIsOpen(false);
-    setIsCustomMode(false);
     onModelChange?.(modelId);
   };
 
-  const handleCustomModelSubmit = () => {
-    if (!customModel.trim()) return;
-
-    const customModelId = customModel.trim();
-    setSelectedModel(customModelId);
-    LLMStorage.saveModel(customModelId);
-    LLMStorage.saveCustomModel(customModelId);
-    setIsOpen(false);
-    setIsCustomMode(true);
-    onModelChange?.(customModelId);
-  };
-
   const currentModelInfo = selectedModel ? AVAILABLE_MODELS[selectedModel] : null;
-  const displayName = currentModelInfo?.name || (isCustomMode ? customModel.split('/').pop() : 'Select Model');
+  const displayName = currentModelInfo?.name || 'Select Model';
 
   // Get models as array
   const models = Object.entries(AVAILABLE_MODELS).map(([key, model]) => ({ key, ...model }));
@@ -123,23 +99,26 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
             </div>
 
             <div className="p-3 space-y-2">
-              {/* Preset Models */}
               {models.map((model) => (
                 <button
                   key={model.key}
                   onClick={() => handleModelSelect(model.key)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                    selectedModel === model.key && !isCustomMode
+                    selectedModel === model.key
                       ? 'bg-accent-primary/20 border border-accent-primary/50'
                       : 'bg-bg-tertiary border border-transparent hover:border-border-primary hover:bg-bg-elevated'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className={`text-sm font-medium ${selectedModel === model.key && !isCustomMode ? 'text-accent-primary' : 'text-fg-primary'}`}>
+                      <span className={`text-sm font-medium ${selectedModel === model.key ? 'text-accent-primary' : 'text-fg-primary'}`}>
                         {model.name}
                       </span>
                       <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-fg-tertiary">
+                          {model.provider}
+                        </span>
+                        <span className="text-[10px] text-fg-tertiary">•</span>
                         <span className="text-[10px] text-fg-tertiary">
                           {model.contextWindow}
                         </span>
@@ -149,7 +128,7 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
                         </span>
                       </div>
                     </div>
-                    {selectedModel === model.key && !isCustomMode && (
+                    {selectedModel === model.key && (
                       <svg className="w-4 h-4 text-accent-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
@@ -157,37 +136,6 @@ export default function ModelSelector({ onModelChange }: ModelSelectorProps) {
                   </div>
                 </button>
               ))}
-
-              {/* Divider */}
-              <div className="border-t border-border-primary my-2" />
-
-              {/* Custom Model Input */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-medium text-fg-secondary uppercase tracking-wider">
-                  Custom Gemini Model
-                </label>
-                <input
-                  type="text"
-                  value={customModel}
-                  onChange={(e) => setCustomModel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleCustomModelSubmit();
-                    }
-                  }}
-                  placeholder="e.g., gemini-2.5-pro-preview"
-                  className={`w-full px-3 py-2 text-xs bg-bg-tertiary border rounded-lg focus:outline-none focus:border-accent-primary transition-colors ${
-                    isCustomMode ? 'border-accent-primary/50' : 'border-border-primary'
-                  }`}
-                />
-                <button
-                  onClick={handleCustomModelSubmit}
-                  disabled={!customModel.trim()}
-                  className="w-full px-3 py-2 text-xs font-medium bg-bg-tertiary text-fg-primary border border-border-primary rounded-lg hover:bg-bg-elevated hover:border-accent-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Use Custom Model
-                </button>
-              </div>
             </div>
           </div>
         </>,

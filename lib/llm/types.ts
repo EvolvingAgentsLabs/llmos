@@ -99,36 +99,26 @@ export interface ModelInfo {
 export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
   'qwen/qwen3-vl-8b-instruct': {
     id: 'qwen/qwen3-vl-8b-instruct',
-    name: 'Qwen3 VL 8B Instruct',
-    provider: 'OpenRouter (Alibaba)',
+    name: 'Qwen3 VL 8B (OpenRouter)',
+    provider: 'OpenRouter',
     inputCost: '$0.08/M',
     outputCost: '$0.50/M',
     contextWindow: '131k tokens',
   },
-  'google/gemini-3-flash-preview': {
-    id: 'google/gemini-3-flash-preview',
-    name: 'Gemini 3 Flash Preview',
-    provider: 'OpenRouter (Google)',
-    inputCost: 'Varies',
-    outputCost: 'Varies',
-    contextWindow: '1M tokens',
+  'qwen3-vl:8b-instruct': {
+    id: 'qwen3-vl:8b-instruct',
+    name: 'Qwen3 VL 8B (Ollama Local)',
+    provider: 'Ollama',
+    inputCost: 'Free (local)',
+    outputCost: 'Free (local)',
+    contextWindow: '131k tokens',
   },
-  'anthropic/claude-haiku-4.5': {
-    id: 'anthropic/claude-haiku-4.5',
-    name: 'Claude Haiku 4.5',
-    provider: 'OpenRouter (Anthropic)',
-    inputCost: 'Varies',
-    outputCost: 'Varies',
-    contextWindow: '200k tokens',
-  },
-  'custom': {
-    id: 'custom',
-    name: 'Custom Model',
-    provider: 'Custom',
-    inputCost: 'Varies',
-    outputCost: 'Varies',
-    contextWindow: 'Varies',
-  },
+};
+
+// Maps model keys to their provider configuration
+export const MODEL_PROVIDER_CONFIG: Record<string, { provider: string; baseUrl: string; requiresApiKey: boolean }> = {
+  'qwen/qwen3-vl-8b-instruct': { provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/', requiresApiKey: true },
+  'qwen3-vl:8b-instruct': { provider: 'ollama', baseUrl: 'http://localhost:11434/v1/', requiresApiKey: false },
 };
 
 // Type for preset model keys

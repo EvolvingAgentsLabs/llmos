@@ -362,9 +362,19 @@ export function createLLMClient(): LLMClient | null {
   const apiKey = LLMStorage.getApiKey();
   const modelId = LLMStorage.getModel();
   const baseURL = LLMStorage.getBaseUrl();
+  const provider = LLMStorage.getProvider();
 
-  if (!apiKey || !modelId) {
-    logger.warn('llm', 'Missing configuration', { hasApiKey: !!apiKey, hasModelId: !!modelId });
+  if (!modelId) {
+    logger.warn('llm', 'Missing model configuration', { hasModelId: false });
+    return null;
+  }
+
+  // Ollama doesn't require an API key; use a placeholder for the OpenAI client
+  const isOllama = provider === 'ollama';
+  const effectiveApiKey = isOllama ? 'ollama' : apiKey;
+
+  if (!effectiveApiKey) {
+    logger.warn('llm', 'Missing API key', { provider });
     return null;
   }
 
@@ -372,11 +382,11 @@ export function createLLMClient(): LLMClient | null {
   const actualModelId = model ? model.id : modelId;
 
   const client = new LLMClient({
-    apiKey,
+    apiKey: effectiveApiKey,
     model: actualModelId,
     baseURL,
   });
 
-  logger.success('llm', 'LLM client initialized', { model: actualModelId, baseURL });
+  logger.success('llm', 'LLM client initialized', { model: actualModelId, baseURL, provider });
   return client;
 }
