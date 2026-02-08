@@ -22,7 +22,7 @@ It allows you to program robots using natural language, compiles those intention
 ### Key Capabilities
 
 *   **Natural Language Programming:** Type "Create a robot that avoids walls" and the system generates the code, HAL bindings, and logic.
-*   **Dual-Brain Architecture:** Fast instinct brain (MobileNet + Qwen3-4B, ~200ms) handles reactive avoidance. Deep planner brain (Qwen3-4B + [RSA](https://arxiv.org/html/2509.26626v1), 2-22s) handles goal planning and exploration.
+*   **Dual-Brain Architecture:** Fast instinct brain ([Qwen3-VL-8B](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) multimodal single-pass, ~200-500ms) handles reactive perception and avoidance. Deep planner brain (Qwen3-VL-8B + [RSA](https://arxiv.org/html/2509.26626v1), 3-8s) handles goal planning and exploration.
 *   **Zero Cloud Dependency:** Runs fully offline on a host computer with GPU. No API costs. No latency.
 *   **Markdown-as-Code:** Agents, Skills, and Tools are defined in human-readable Markdown files that serve as both documentation and executable logic.
 *   **Hybrid Runtime:** Runs entirely in the browser (via WebAssembly/Pyodide), on Desktop (Electron), or deploys to physical hardware (ESP32).
@@ -36,18 +36,16 @@ It allows you to program robots using natural language, compiles those intention
 ```mermaid
 graph TB
     subgraph "Sensing"
-        CAM[Camera] --> MN[MobileNet SSD<br/>~30ms]
+        CAM[Camera]
         DIST[Distance Sensors]
     end
 
-    subgraph "Perception"
-        MN --> VF[VisionFrame JSON<br/>objects + depth + scene]
-        DIST --> VF
-    end
-
-    subgraph "Cognition"
-        VF --> INSTINCT[INSTINCT Brain<br/>Reactive rules + Qwen3-4B single-pass<br/>~200ms]
-        VF --> PLANNER[PLANNER Brain<br/>Qwen3-4B + RSA<br/>2-22 seconds]
+    subgraph "Perception + Cognition (Unified VLM)"
+        CAM --> VLM[Qwen3-VL-8B-Instruct<br/>Direct image + text<br/>~200-500ms]
+        DIST --> VLM
+        VLM --> VF[VisionFrame JSON<br/>objects + depth + scene + reasoning]
+        VF --> INSTINCT[INSTINCT Brain<br/>Reactive rules + VLM single-pass<br/>~200-500ms]
+        VF --> PLANNER[PLANNER Brain<br/>Qwen3-VL-8B + RSA<br/>3-8 seconds]
         INSTINCT --> |Escalate when stuck<br/>or complex goal| PLANNER
     end
 
@@ -59,9 +57,11 @@ graph TB
     end
 ```
 
+The **Qwen3-VL-8B-Instruct** model serves as a unified vision-language backbone — it processes raw camera frames directly (no separate object detector needed), producing structured VisionFrame data with scene understanding, depth estimates, and OCR. This replaces the previous MobileNet SSD + Qwen3-4B two-model pipeline with a single multimodal model.
+
 The **Instinct** brain handles immediate decisions: obstacle avoidance, wall following, simple tracking. The **Planner** brain handles deep reasoning: exploration strategy, skill generation, multi-robot coordination.
 
-[RSA](https://arxiv.org/html/2509.26626v1) (Recursive Self-Aggregation) enables the small local model (Qwen3-4B, 4B parameters) to match the reasoning quality of much larger cloud models like o3-mini and DeepSeek-R1 by recursively aggregating multiple candidate reasoning chains.
+[RSA](https://arxiv.org/html/2509.26626v1) (Recursive Self-Aggregation) enables the local model (Qwen3-VL-8B, 8B parameters) to match the reasoning quality of much larger cloud models like o3-mini and DeepSeek-R1 by recursively aggregating multiple candidate reasoning chains.
 
 ---
 
@@ -70,7 +70,7 @@ The **Instinct** brain handles immediate decisions: obstacle avoidance, wall fol
 *   **Frontend/Desktop:** Next.js 14, Electron, Tailwind CSS, React Flow.
 *   **Simulation:** Three.js, React-Three-Fiber.
 *   **Runtime Logic:** TypeScript, Python (via Pyodide), WebAssembly (@wasmer/sdk).
-*   **Intelligence:** [Qwen3-4B](https://huggingface.co/Qwen/Qwen3-4B-Instruct) + [RSA](https://arxiv.org/html/2509.26626v1) (local), [MobileNet SSD](https://arxiv.org/abs/1801.04381) (vision).
+*   **Intelligence:** [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) (unified vision-language model) + [RSA](https://arxiv.org/html/2509.26626v1) (local).
 *   **Storage:** Browser-native Virtual File System (VFS) with LightningFS.
 *   **Hardware:** ESP32-S3 (C++ Firmware, WASM runtime).
 
@@ -82,7 +82,7 @@ The **Instinct** brain handles immediate decisions: obstacle avoidance, wall fol
 *   Node.js 18+
 *   Python 3.10+ (for backend services/compilation)
 *   Git
-*   GPU with 8GB+ VRAM (for local Qwen3-4B inference — optional, cloud API fallback available)
+*   GPU with 8GB+ VRAM (for local Qwen3-VL-8B inference — optional, cloud API via OpenRouter available at $0.08/M input)
 
 ### Installation
 
@@ -109,7 +109,7 @@ The **Instinct** brain handles immediate decisions: obstacle avoidance, wall fol
         ```
 
 4.  **Setup Keys:**
-    Upon launch, the setup wizard will ask for your LLM API Key (Gemini or OpenAI). This key is stored locally in your browser/desktop storage and is never sent to our servers. For fully offline operation, set up a local Qwen3-4B server (see ROADMAP.md Phase 2).
+    Upon launch, the setup wizard will ask for your LLM API Key (OpenRouter, Gemini, or OpenAI). This key is stored locally in your browser/desktop storage and is never sent to our servers. For fully offline operation, set up a local Qwen3-VL-8B server (see ROADMAP.md Phase 2).
 
 ---
 
@@ -119,9 +119,9 @@ LLMos is built on five pillars that distinguish it from standard agent framework
 
 ### 1. Dual-Brain Cognitive Architecture (`/lib/runtime`)
 Two cognitive layers run in parallel:
-*   **Instinct Brain** — Reactive rules + single-pass LLM (~200ms). Handles obstacle avoidance, wall following, simple tracking.
-*   **Planner Brain** — RSA-enhanced LLM (2-22s). Handles exploration planning, skill generation, swarm coordination.
-*   **MobileNet Vision** — Local object detection (~30ms) with bbox-based depth estimation. Feeds structured JSON to both brains.
+*   **Instinct Brain** — Reactive rules + single-pass Qwen3-VL-8B (~200-500ms). Handles obstacle avoidance, wall following, simple tracking.
+*   **Planner Brain** — RSA-enhanced Qwen3-VL-8B (3-8s). Handles exploration planning, skill generation, swarm coordination.
+*   **Unified VLM Vision** — Qwen3-VL-8B processes raw camera frames directly (no separate object detector). Produces structured VisionFrame JSON with scene understanding, depth estimation, and OCR.
 
 ### 2. The Volume System (`/volumes`)
 The file system is the database. Data is organized into hierarchical volumes:
@@ -164,12 +164,13 @@ llmos/
 │   ├── hal/              # Hardware Abstraction Layer
 │   ├── kernel/           # OS Boot Logic & Process Mgmt
 │   ├── runtime/          # Cognitive Runtimes
-│   │   ├── rsa-engine.ts            # RSA algorithm
+│   │   ├── rsa-engine.ts            # RSA + multimodal RSA algorithm
 │   │   ├── dual-brain-controller.ts # Instinct + Planner orchestration
 │   │   ├── jepa-mental-model.ts     # JEPA-inspired abstract state
 │   │   ├── world-model.ts           # Grid-based spatial model
 │   │   └── vision/
-│   │       └── mobilenet-detector.ts # MobileNet object detection
+│   │       ├── vlm-vision-detector.ts  # Qwen3-VL-8B unified vision detector
+│   │       └── mobilenet-detector.ts   # Vision types + utility functions
 │   └── virtual-fs.ts     # In-browser File System
 ├── volumes/              # The "Brain" (Markdown Knowledge Base)
 │   ├── system/           # Built-in Agents & Skills
@@ -196,12 +197,12 @@ To use LLMos with real hardware, you need an **ESP32-S3**.
 
 This project builds on:
 
-| Paper | Role in LLMos |
+| Paper / Model | Role in LLMos |
 |-------|---------------|
-| [RSA: Recursive Self-Aggregation Unlocks Deep Thinking in LLMs](https://arxiv.org/html/2509.26626v1) | Planner brain — enables small local model to match cloud-scale reasoning |
+| [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified vision-language backbone — perceives images + reasons in one pass |
+| [RSA: Recursive Self-Aggregation Unlocks Deep Thinking in LLMs](https://arxiv.org/html/2509.26626v1) | Planner brain — enables local model to match cloud-scale reasoning |
 | [JEPA: A Path Towards Autonomous Machine Intelligence](https://openreview.net/forum?id=BZ5a1r-kVsf) | Mental model architecture — predict-before-act paradigm |
-| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Vision pipeline — fast local object detection |
-| [MobileNet SSD](https://arxiv.org/abs/1704.04861) | Object detection backbone for structured scene understanding |
+| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Vision type definitions and depth estimation utilities |
 
 ---
 

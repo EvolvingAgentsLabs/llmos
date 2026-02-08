@@ -14,7 +14,7 @@ Make robotics accessible to everyone. No coding required, just describe what you
 ### What Makes LLMos Different
 - **Natural Language First**: Describe your robot's behavior in plain English
 - **Physical World Focus**: Not just chat - real motors, sensors, and robots
-- **Dual-Brain Architecture**: Fast instinct (MobileNet + LLM single-pass) + deep planner ([RSA](https://arxiv.org/html/2509.26626v1) + LLM)
+- **Dual-Brain Architecture**: Fast instinct ([Qwen3-VL-8B](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) multimodal single-pass) + deep planner (Qwen3-VL-8B + [RSA](https://arxiv.org/html/2509.26626v1))
 - **Zero Cloud Dependency**: Runs fully offline on a host computer with GPU — no API costs
 - **Hybrid Runtime**: Run natively on Desktop or directly in the Browser via Web Serial
 - **Swarm Intelligence**: Multiple robots merge world models via RSA consensus
@@ -57,22 +57,23 @@ Make robotics accessible to everyone. No coding required, just describe what you
 
 This phase is driven by two key insights:
 1. Cloud LLMs are too slow (~1-2s) and expensive (~$36/hr at 10Hz) for physical agents
-2. [RSA](https://arxiv.org/html/2509.26626v1) enables Qwen3-4B to match o3-mini/DeepSeek-R1 reasoning quality
+2. [RSA](https://arxiv.org/html/2509.26626v1) enables Qwen3-VL-8B to match o3-mini/DeepSeek-R1 reasoning quality
+3. A unified VLM (Qwen3-VL-8B) eliminates the need for separate object detection models
 
 ```mermaid
 gantt
     title Phase 2 Timeline
     dateFormat YYYY-MM-DD
-    section 2A: Vision Pipeline
-        MobileNet integration           :a1, 2026-04-01, 14d
-        Depth estimation calibration     :a2, after a1, 7d
-        VisionFrame → World Model bridge :a3, after a2, 7d
-    section 2B: RSA Engine
-        Local Qwen3-4B inference server  :b1, 2026-04-01, 14d
+    section 2A: Unified VLM Vision
+        Qwen3-VL-8B integration         :a1, 2026-04-01, 14d
+        VisionFrame → World Model bridge :a2, after a1, 7d
+        Multimodal RSA testing           :a3, after a2, 7d
+    section 2B: Local Inference
+        Local Qwen3-VL-8B server         :b1, 2026-04-01, 14d
         RSA engine integration tests     :b2, after b1, 7d
         Robot planning prompts tuning    :b3, after b2, 7d
     section 2C: Dual-Brain Controller
-        Instinct + Planner integration   :c1, after a3, 14d
+        Instinct + Planner integration   :c1, after a2, 14d
         Escalation logic tuning          :c2, after c1, 7d
         Performance benchmarks           :c3, after c2, 7d
     section 2D: Testing & CI
@@ -81,33 +82,37 @@ gantt
         Integration tests                :d3, after d2, 7d
 ```
 
-#### Milestone 2.1: MobileNet Vision Pipeline
-- [ ] Integrate TensorFlow.js [COCO-SSD](https://github.com/tensorflow/tfjs-models/tree/master/coco-ssd) model
-- [ ] Implement depth estimation (known object sizes + bbox area + floor position)
+#### Milestone 2.1: Qwen3-VL-8B Vision Pipeline
+- [x] Create `VLMVisionDetector` for direct image → VisionFrame conversion
+- [x] Implement `VLMBackend` interface for OpenAI-compatible vision API
+- [x] Add `vlm_estimate` depth method to Detection type
 - [ ] Wire `VisionFrame` JSON output to world model updates
-- [ ] Calibrate depth estimation for ESP32-CAM (OV2640 lens)
-- [ ] Benchmark: <50ms per frame on host GPU
+- [ ] Connect to camera source (webcam for desktop, ESP32-CAM stream for real robot)
+- [ ] Benchmark: <500ms per frame on host GPU
 
-**Success criteria**: Robot can detect "chair at 120cm on the left" from a camera frame in <50ms
+**Success criteria**: Robot can detect and describe arbitrary objects from a camera frame with depth estimates via Qwen3-VL-8B
 
 #### Milestone 2.2: Local LLM Inference
 - [ ] Set up [llama.cpp](https://github.com/ggerganov/llama.cpp) or [vLLM](https://github.com/vllm-project/vllm) server on host
-- [ ] Load [Qwen3-4B-Instruct](https://huggingface.co/Qwen/Qwen3-4B-Instruct) (Q4_K_M quantization)
-- [ ] Implement `RSAInferenceProvider` adapter for local server
-- [ ] Benchmark: <200ms for single-pass, <3s for RSA quick preset
-- [ ] Fallback to cloud API when local model unavailable
+- [ ] Load [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) with multimodal support
+- [ ] Implement `RSAMultimodalProvider` adapter for local server
+- [ ] Benchmark: <500ms for single-pass, <3s for RSA quick preset
+- [ ] OpenRouter cloud API as alternative ($0.08/M input, $0.50/M output)
 
-**Success criteria**: Robot operates fully offline with local Qwen3-4B
+**Success criteria**: Robot operates fully offline with local Qwen3-VL-8B
 
-#### Milestone 2.3: RSA Engine Integration
+#### Milestone 2.3: Multimodal RSA Engine Integration
 - [x] Implement RSA algorithm (`lib/runtime/rsa-engine.ts`)
 - [x] Implement preset configurations (quick/standard/deep/swarm)
+- [x] Add `RSAMultimodalProvider` interface for VLM-based RSA
+- [x] Add `runWithImage()` method for multimodal RSA
+- [x] Add `VISION_AGGREGATION_PROMPT` for visual cross-referencing
 - [ ] Integration tests with robot planning scenarios
 - [ ] Tune aggregation prompts for navigation tasks
-- [ ] Benchmark RSA quality vs. single-pass vs. cloud LLM
+- [ ] Benchmark multimodal RSA quality vs. single-pass vs. cloud LLM
 - [ ] Implement swarm consensus mode for multi-robot
 
-**Success criteria**: RSA `quick` preset (N=4, K=2, T=2) solves stuck-robot scenarios that single-pass fails on
+**Success criteria**: Multimodal RSA `quick` preset (N=4, K=2, T=2) where each candidate independently analyzes the camera frame produces better spatial understanding than single-pass VLM
 
 #### Milestone 2.4: Dual-Brain Controller
 - [x] Implement `DualBrainController` (`lib/runtime/dual-brain-controller.ts`)
@@ -138,9 +143,8 @@ graph TB
     end
 
     subgraph "Host Computer"
-        RSA[RSA Swarm Engine<br/>Merge world models]
-        Q[Qwen3-4B<br/>Local inference]
-        MN[MobileNet<br/>Shared vision]
+        RSA[Multimodal RSA Swarm Engine<br/>Merge world models + visual observations]
+        Q[Qwen3-VL-8B<br/>Unified vision + language]
     end
 
     subgraph "Outputs"
@@ -148,14 +152,11 @@ graph TB
         PLAN[Coordinated Plans]
     end
 
-    R1 --> |snapshot| RSA
-    R2 --> |snapshot| RSA
-    R3 --> |snapshot| RSA
+    R1 --> |snapshot + image| RSA
+    R2 --> |snapshot + image| RSA
+    R3 --> |snapshot + image| RSA
     RSA --> Q
     Q --> RSA
-    R1 --> |camera| MN
-    R2 --> |camera| MN
-    R3 --> |camera| MN
 
     RSA --> UWM
     RSA --> PLAN
@@ -215,11 +216,11 @@ graph TB
 ### Dual-Brain Intelligence
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| Vision | [MobileNet SSD](https://arxiv.org/abs/1801.04381) via TensorFlow.js | Local object detection (~30ms) |
-| Instinct | [Qwen3-4B-Instruct](https://huggingface.co/Qwen/Qwen3-4B-Instruct) | Fast single-pass reasoning (~200ms) |
-| Planner | Qwen3-4B + [RSA](https://arxiv.org/html/2509.26626v1) | Deep deliberative planning (2-22s) |
-| Inference | [llama.cpp](https://github.com/ggerganov/llama.cpp) / [vLLM](https://github.com/vllm-project/vllm) | Local model serving |
-| Depth | Pinhole camera model + heuristics | BBox-based depth estimation |
+| Vision + Language | [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified multimodal perception + reasoning |
+| Instinct | Qwen3-VL-8B single-pass | Fast visual reasoning (~200-500ms) |
+| Planner | Qwen3-VL-8B + Multimodal [RSA](https://arxiv.org/html/2509.26626v1) | Deep deliberative planning with visual cross-referencing (3-8s) |
+| Inference | [llama.cpp](https://github.com/ggerganov/llama.cpp) / [vLLM](https://github.com/vllm-project/vllm) / [OpenRouter](https://openrouter.ai/) | Local or cloud model serving |
+| Depth | VLM spatial reasoning | Direct depth estimation from visual understanding |
 
 ### Hardware Integration
 | Component | Technology | Purpose |
@@ -242,12 +243,11 @@ graph TB
 
 ## Key Research References
 
-| Paper | How We Use It |
+| Paper / Model | How We Use It |
 |-------|---------------|
-| [RSA: Recursive Self-Aggregation](https://arxiv.org/html/2509.26626v1) | Planner brain — small LLM matches large model quality |
+| [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified vision-language backbone — perceives images + reasons in one pass |
+| [RSA: Recursive Self-Aggregation](https://arxiv.org/html/2509.26626v1) | Planner brain — multimodal RSA cross-references visual observations |
 | [JEPA: Joint Embedding Predictive Architecture](https://openreview.net/forum?id=BZ5a1r-kVsf) | Mental model — predict-before-act paradigm |
-| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Vision pipeline — fast local object detection |
-| [MobileNet SSD](https://arxiv.org/abs/1704.04861) | Object detection backbone |
 
 ---
 
@@ -255,4 +255,4 @@ graph TB
 
 **Today**: Programming robots requires weeks of learning and installing heavy IDEs. Cloud AI is too slow and expensive for physical agents.
 
-**Tomorrow with LLMos**: Describe what you want in plain English. A Dual-Brain architecture reasons deeply (RSA planner) and reacts instantly (instinct), all running locally on a $200 GPU. Swarms of robots share knowledge through RSA consensus. No cloud. No coding. No limits.
+**Tomorrow with LLMos**: Describe what you want in plain English. A Dual-Brain architecture powered by Qwen3-VL-8B reasons deeply (multimodal RSA planner) and reacts instantly (VLM instinct), seeing and understanding the world through a single unified vision-language model — all running locally on a $200 GPU or via OpenRouter at $0.08/M tokens. Swarms of robots share visual knowledge through multimodal RSA consensus. No cloud dependency. No coding. No limits.

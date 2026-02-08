@@ -1,13 +1,14 @@
 /**
- * MobileNet Object Detection Pipeline for LLMos
+ * Vision Types and Utilities for LLMos
  *
- * Provides fast, local object detection using MobileNet SSD
- * running via TensorFlow.js or ONNX Runtime in the browser/Electron.
+ * Defines the VisionFrame structured output format consumed by the
+ * Dual-Brain cognitive architecture. Also provides utility functions
+ * for depth estimation and scene analysis.
  *
  * Architecture:
- * Camera Frame → MobileNet SSD (30ms) → Structured JSON (VisionFrame)
- *                                              ↓
- *                            ┌─────────────────┴─────────────────┐
+ * Camera Frame → Qwen3-VL-8B-Instruct (~200-500ms) → VisionFrame + Reasoning
+ *                                                          ↓
+ *                            ┌───────────────────────────────────┐
  *                            │         VisionFrame               │
  *                            │  {                                │
  *                            │    detections: [                  │
@@ -18,10 +19,10 @@
  *                            └───────────────────────────────────┘
  *                                    ↓                ↓
  *                            Instinct Brain     Planner Brain
- *                            (Qwen3-4B)         (Qwen3-4B + RSA)
+ *                            (Qwen3-VL-8B)      (Qwen3-VL-8B + RSA)
  *
  * Key design decision: Output structured JSON, not raw tensors.
- * Both the instinct (single-pass LLM) and planner (RSA) consume
+ * Both the instinct (single-pass VLM) and planner (RSA) consume
  * the same VisionFrame — they reason over semantics, not pixels.
  *
  * Depth estimation uses bbox-area-ratio for known object classes
@@ -58,7 +59,7 @@ export interface Detection {
   /** Estimated depth in cm, derived from bbox size + class priors. */
   estimatedDepthCm: number;
   /** Method used for depth estimation. */
-  depthMethod: 'known_object_size' | 'bbox_area_ratio' | 'floor_position' | 'unknown';
+  depthMethod: 'known_object_size' | 'bbox_area_ratio' | 'floor_position' | 'vlm_estimate' | 'unknown';
   /** Estimated real-world width of object in cm (if class is known). */
   estimatedWidthCm?: number;
   /** Region of frame: 'left' | 'center' | 'right'. */

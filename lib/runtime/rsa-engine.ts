@@ -15,9 +15,9 @@
  * 4. RECURSE:    Repeat for T steps, refining the population each time
  *
  * In the LLMos Dual-Brain architecture, RSA serves as the PLANNER brain:
- * - Called on escalation from the INSTINCT layer (Qwen3-4B single-pass)
+ * - Called on escalation from the INSTINCT layer (Qwen3-VL-8B single-pass)
  * - Runs at 0.1-1Hz for deep planning, goal decomposition, skill generation
- * - Uses structured JSON from MobileNet vision as input context
+ * - Uses VisionFrame JSON from Qwen3-VL-8B multimodal analysis as input context
  *
  * Key insight from the paper: Even K=2 gives massive improvement over
  * K=1 (self-refinement). You don't need large K to benefit.
@@ -53,7 +53,7 @@ export interface RSAConfig {
 
 /**
  * Preset configurations for different robotics use cases.
- * Latency estimates assume ~200ms per Qwen3-4B inference on RTX 3060+.
+ * Latency estimates assume ~200-500ms per Qwen3-VL-8B inference on RTX 3060+.
  */
 export const RSA_PRESETS: Record<string, RSAConfig> = {
   /** Quick replan when robot gets stuck. ~2.5s latency. */
@@ -152,7 +152,7 @@ export interface RSAResult {
 
 /**
  * Interface for the LLM inference backend.
- * This allows RSA to work with any model provider (local Qwen3-4B, cloud API, etc.)
+ * This allows RSA to work with any model provider (local Qwen3-VL-8B, cloud API, etc.)
  */
 export interface RSAInferenceProvider {
   /** Generate a single completion given a prompt. */
@@ -166,6 +166,37 @@ export interface RSAInferenceProvider {
     temperature: number;
     maxTokens: number;
   }): Promise<string[]>;
+}
+
+/**
+ * Extended provider interface for multimodal RSA with VLMs like Qwen3-VL-8B.
+ *
+ * When using a VLM, RSA candidates can reason directly about images —
+ * each candidate in the population independently interprets the visual scene,
+ * and aggregation cross-references spatial observations across candidates.
+ *
+ * This is a strict superset of RSAInferenceProvider. Implementations that
+ * don't support images simply ignore the imageBase64 parameter.
+ *
+ * Key insight from the RSA paper: "Even K=2 gives massive improvement over K=1."
+ * Applied to vision: two independent VLM interpretations of the same scene,
+ * aggregated, produce significantly better spatial understanding than one pass.
+ */
+export interface RSAMultimodalProvider extends RSAInferenceProvider {
+  /** Generate a completion with optional image context (for VLMs). */
+  generateWithImage(prompt: string, imageBase64: string, options: {
+    temperature: number;
+    maxTokens: number;
+  }): Promise<string>;
+
+  /** Generate multiple completions with the same image context. */
+  generateBatchWithImage(prompts: string[], imageBase64: string, options: {
+    temperature: number;
+    maxTokens: number;
+  }): Promise<string[]>;
+
+  /** Whether this provider supports image inputs. */
+  supportsImages: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -218,6 +249,39 @@ export const ROBOT_AGGREGATION_PROMPT = `You are a robot planning intelligence. 
 5. PRODUCE A SINGLE PLAN: Output one coherent action sequence
 
 Think step by step, then output your improved plan.`;
+
+/**
+ * Vision-aware aggregation prompt for multimodal RSA with VLMs.
+ *
+ * When using Qwen3-VL-8B, each RSA candidate independently analyzes the
+ * camera frame. The aggregation step cross-references their spatial
+ * observations to produce a more accurate scene understanding.
+ *
+ * This leverages the RSA paper's key finding: candidates with wrong final
+ * answers often contain correct intermediate steps. Applied to vision:
+ * - Candidate A may correctly identify a doorway but misjudge distance
+ * - Candidate B may estimate depth accurately but miss an obstacle
+ * - Aggregation combines the correct spatial fragments from both
+ */
+export const VISION_AGGREGATION_PROMPT = `You are a robot's multimodal planning intelligence. You are looking at a camera frame AND receiving multiple candidate analyses of it. Your job is to produce an optimal understanding by cross-referencing the visual observations.
+
+## Current Situation
+{PROBLEM}
+
+## Candidate Visual Analyses
+{CANDIDATES}
+
+## Multimodal Aggregation Rules
+1. LOOK AT THE IMAGE: You can see the actual camera frame — use it to verify candidate claims
+2. CROSS-REFERENCE SPATIAL CLAIMS: When candidates disagree about object positions or distances, check the image yourself
+3. PRESERVE CORRECT FRAGMENTS: Even if a candidate's final plan is wrong, their spatial observations may be correct — reuse them
+4. COMBINE DEPTH ESTIMATES: Multiple depth estimates for the same object can be averaged for better accuracy
+5. IDENTIFY MISSED OBJECTS: If you see something in the image that no candidate mentioned, add it
+6. SAFETY FIRST: If ANY candidate identifies a collision risk, verify it visually and respect it if confirmed
+7. OCR AND SIGNAGE: Read any text visible in the scene that candidates may have missed
+8. PRODUCE A UNIFIED PLAN: Output one coherent action sequence grounded in your visual verification
+
+Think step by step. First describe what YOU see in the image, then cross-reference with the candidates, then output your improved plan.`;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RSA ENGINE
@@ -341,19 +405,151 @@ export class RSAEngine {
   }
 
   /**
-   * Run RSA for robot planning specifically.
-   * Wraps `run()` with robot-specific context formatting.
+   * Run multimodal RSA with image context.
+   *
+   * Each candidate in the RSA population independently analyzes the image,
+   * producing N diverse visual interpretations. The aggregation step then
+   * cross-references spatial observations across candidates.
+   *
+   * From the RSA paper: "Even K=2 gives massive improvement over K=1."
+   * Applied to vision: two independent VLM analyses of the same scene,
+   * aggregated, produce significantly better spatial understanding.
+   *
+   * @param problem - The problem/query to solve
+   * @param imageBase64 - Base64-encoded camera frame
+   * @param systemPrompt - Optional system context
+   * @param promptTemplate - Aggregation prompt (default: VISION_AGGREGATION_PROMPT)
+   */
+  async runWithImage(
+    problem: string,
+    imageBase64: string,
+    systemPrompt?: string,
+    promptTemplate: string = VISION_AGGREGATION_PROMPT
+  ): Promise<RSAResult> {
+    // Check if provider supports images
+    const multimodalProvider = this.provider as RSAMultimodalProvider;
+    if (!multimodalProvider.supportsImages || !multimodalProvider.generateBatchWithImage) {
+      // Fallback to text-only RSA if provider doesn't support images
+      return this.run(problem, systemPrompt, promptTemplate);
+    }
+
+    const startTime = Date.now();
+    let totalInferences = 0;
+    const history: RSAStepSnapshot[] = [];
+
+    // ─── Step 1: Generate initial population (each candidate sees the image) ──
+    const initialPrompt = systemPrompt
+      ? `${systemPrompt}\n\n${problem}`
+      : problem;
+
+    const initialPrompts = Array(this.config.populationSize).fill(initialPrompt);
+    const initialResponses = await multimodalProvider.generateBatchWithImage(
+      initialPrompts,
+      imageBase64,
+      {
+        temperature: this.config.initialTemperature,
+        maxTokens: this.config.maxTokensPerCandidate,
+      }
+    );
+    totalInferences += this.config.populationSize;
+
+    let population: RSACandidate[] = initialResponses.map((response, i) => ({
+      id: `gen0-${i}`,
+      reasoning: response,
+      answer: this.extractAnswer(response),
+      generation: 0,
+      parentIds: [],
+    }));
+
+    history.push(this.takeSnapshot(0, population));
+
+    // ─── Steps 2-3: Recursive aggregation with image context ─────────
+    // The aggregator ALSO sees the image, so it can verify candidate claims
+    for (let step = 1; step <= this.config.maxSteps; step++) {
+      const consensus = this.measureConsensus(population);
+      if (consensus >= this.config.consensusThreshold) {
+        break;
+      }
+
+      const aggregationSets = this.subsample(population);
+
+      const aggregationPrompts = aggregationSets.map((subset) => {
+        const candidatesText = subset
+          .map((candidate, i) => `### Candidate ${i + 1}\n${candidate.reasoning}`)
+          .join('\n\n');
+
+        return promptTemplate
+          .replace('{PROBLEM}', problem)
+          .replace('{CANDIDATES}', candidatesText);
+      });
+
+      // Aggregation with image: the VLM sees both candidate text AND the original image
+      const aggregatedResponses = await multimodalProvider.generateBatchWithImage(
+        aggregationPrompts,
+        imageBase64,
+        {
+          temperature: this.config.aggregationTemperature,
+          maxTokens: this.config.maxTokensPerCandidate,
+        }
+      );
+      totalInferences += this.config.populationSize;
+
+      population = aggregatedResponses.map((response, i) => ({
+        id: `gen${step}-${i}`,
+        reasoning: response,
+        answer: this.extractAnswer(response),
+        generation: step,
+        parentIds: aggregationSets[i].map((c) => c.id),
+      }));
+
+      history.push(this.takeSnapshot(step, population));
+    }
+
+    const bestCandidate = this.config.useMajorityVoting
+      ? this.majorityVote(population)
+      : population[Math.floor(Math.random() * population.length)];
+
+    return {
+      bestAnswer: bestCandidate.answer,
+      bestReasoning: bestCandidate.reasoning,
+      bestCandidate,
+      history,
+      totalInferences,
+      totalTimeMs: Date.now() - startTime,
+      finalConsensus: this.measureConsensus(population),
+      config: { ...this.config },
+    };
+  }
+
+  /**
+   * Run RSA for robot planning with optional image context.
+   *
+   * When imageBase64 is provided and the provider supports images,
+   * uses multimodal RSA where each candidate independently analyzes
+   * the camera frame. This enables RSA to improve visual-spatial
+   * reasoning through cross-referencing multiple VLM interpretations.
    */
   async planRobotAction(
     situation: string,
     worldModelSummary: string,
-    visionContext?: string
+    visionContext?: string,
+    imageBase64?: string
   ): Promise<RSAResult> {
     const systemPrompt = [
       '## World Model State',
       worldModelSummary,
       visionContext ? `\n## Vision Detection\n${visionContext}` : '',
     ].join('\n');
+
+    // If we have a raw image AND a multimodal provider, use vision RSA
+    if (imageBase64) {
+      return this.runWithImage(
+        situation,
+        imageBase64,
+        systemPrompt,
+        VISION_AGGREGATION_PROMPT
+      );
+    }
 
     return this.run(situation, systemPrompt, ROBOT_AGGREGATION_PROMPT);
   }

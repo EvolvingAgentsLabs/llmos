@@ -97,6 +97,14 @@ export interface ModelInfo {
 }
 
 export const AVAILABLE_MODELS: Record<string, ModelInfo> = {
+  'qwen/qwen3-vl-8b-instruct': {
+    id: 'qwen/qwen3-vl-8b-instruct',
+    name: 'Qwen3 VL 8B Instruct',
+    provider: 'OpenRouter (Alibaba)',
+    inputCost: '$0.08/M',
+    outputCost: '$0.50/M',
+    contextWindow: '131k tokens',
+  },
   'google/gemini-3-flash-preview': {
     id: 'google/gemini-3-flash-preview',
     name: 'Gemini 3 Flash Preview',
