@@ -164,13 +164,13 @@ llmos/
 │   ├── hal/              # Hardware Abstraction Layer
 │   ├── kernel/           # OS Boot Logic & Process Mgmt
 │   ├── runtime/          # Cognitive Runtimes
-│   │   ├── rsa-engine.ts            # RSA algorithm
+│   │   ├── rsa-engine.ts            # RSA + multimodal RSA algorithm
 │   │   ├── dual-brain-controller.ts # Instinct + Planner orchestration
 │   │   ├── jepa-mental-model.ts     # JEPA-inspired abstract state
 │   │   ├── world-model.ts           # Grid-based spatial model
 │   │   └── vision/
-│   │       ├── vlm-vision-detector.ts  # Qwen3-VL-8B unified vision (primary)
-│   │       └── mobilenet-detector.ts   # MobileNet object detection (fallback)
+│   │       ├── vlm-vision-detector.ts  # Qwen3-VL-8B unified vision detector
+│   │       └── mobilenet-detector.ts   # Vision types + utility functions
 │   └── virtual-fs.ts     # In-browser File System
 ├── volumes/              # The "Brain" (Markdown Knowledge Base)
 │   ├── system/           # Built-in Agents & Skills
@@ -202,7 +202,7 @@ This project builds on:
 | [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified vision-language backbone — perceives images + reasons in one pass |
 | [RSA: Recursive Self-Aggregation Unlocks Deep Thinking in LLMs](https://arxiv.org/html/2509.26626v1) | Planner brain — enables local model to match cloud-scale reasoning |
 | [JEPA: A Path Towards Autonomous Machine Intelligence](https://openreview.net/forum?id=BZ5a1r-kVsf) | Mental model architecture — predict-before-act paradigm |
-| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Fallback vision pipeline — fast local object detection when VLM unavailable |
+| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Vision type definitions and depth estimation utilities |
 
 ---
 

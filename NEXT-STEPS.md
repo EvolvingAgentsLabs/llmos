@@ -23,15 +23,14 @@ graph LR
     end
 
     subgraph "DONE — This PR"
-        RSA[RSA Engine<br/>rsa-engine.ts 613 lines]
-        DB[Dual-Brain Controller<br/>dual-brain-controller.ts 601 lines]
-        MN[MobileNet Detector<br/>mobilenet-detector.ts 510 lines]
+        RSA[RSA Engine + Multimodal RSA<br/>rsa-engine.ts]
+        DB[Dual-Brain Controller<br/>dual-brain-controller.ts]
+        VLM[VLM Vision Detector<br/>vlm-vision-detector.ts]
         DOC[Documentation<br/>ARCHITECTURE + ROADMAP + README]
     end
 
     subgraph "NOT YET WIRED"
-        INF[Local LLM Server]
-        TFJS[TensorFlow.js Backend]
+        INF[Local Qwen3-VL-8B Server]
         WIRE[Integration into<br/>ESP32 Agent Runtime]
     end
 
@@ -39,16 +38,14 @@ graph LR
     WM --> RSA
     JEPA --> DB
     RSA --> DB
-    MN --> DB
+    VLM --> DB
     DB --> WIRE
     INF --> WIRE
-    TFJS --> MN
 
     style RSA fill:#bfb,stroke:#333
     style DB fill:#bfb,stroke:#333
-    style MN fill:#bfb,stroke:#333
+    style VLM fill:#bfb,stroke:#333
     style INF fill:#ffd,stroke:#333
-    style TFJS fill:#ffd,stroke:#333
     style WIRE fill:#ffd,stroke:#333
 ```
 
@@ -72,11 +69,11 @@ graph LR
 | Black-Box Recorder | `lib/evolution/black-box-recorder.ts` | Done | 600+ |
 | Evolutionary Patcher | `lib/evolution/evolutionary-patcher.ts` | Done | — |
 | 3D Arena | `components/canvas/RobotCanvas3D.tsx` | Done | 1770 |
-| **RSA Engine** | **`lib/runtime/rsa-engine.ts`** | **Done (this PR)** | **613** |
-| **Dual-Brain Controller** | **`lib/runtime/dual-brain-controller.ts`** | **Done (this PR)** | **601** |
-| **MobileNet Detector** | **`lib/runtime/vision/mobilenet-detector.ts`** | **Done (this PR)** | **510** |
-| Local LLM Inference | — | Not started | — |
-| TensorFlow.js COCO-SSD | — | Not started | — |
+| **RSA Engine + Multimodal RSA** | **`lib/runtime/rsa-engine.ts`** | **Done** | **700+** |
+| **Dual-Brain Controller** | **`lib/runtime/dual-brain-controller.ts`** | **Done** | **601** |
+| **VLM Vision Detector** | **`lib/runtime/vision/vlm-vision-detector.ts`** | **Done** | **280+** |
+| **Vision Types + Utilities** | **`lib/runtime/vision/mobilenet-detector.ts`** | **Done** | **510** |
+| Local Qwen3-VL-8B Inference | — | Not started | — |
 | Dual-Brain ↔ Runtime wiring | — | Not started | — |
 | World Model Merging | — | Not started | — |
 | Fleet Coordinator | — | Not started | — |
@@ -98,25 +95,31 @@ Two commits on `claude/review-code-ai-agents-OUOMc`:
 ### Commit 2: Dual-Brain Architecture Implementation
 Three new runtime modules and complete documentation overhaul:
 
-**RSA Engine** (`lib/runtime/rsa-engine.ts`)
+**RSA Engine + Multimodal RSA** (`lib/runtime/rsa-engine.ts`)
 - Full [RSA algorithm](https://arxiv.org/html/2509.26626v1): population → subsample → aggregate → recurse
-- 4 presets: `quick` (2.5s), `standard` (8s), `deep` (22s), `swarm` (6s)
-- `planRobotAction()` for navigation with safety-first aggregation prompts
+- 4 presets: `quick` (3s), `standard` (8s), `deep` (22s), `swarm` (6s)
+- `planRobotAction()` with optional `imageBase64` for multimodal RSA
+- `runWithImage()` — each RSA candidate independently analyzes the camera frame
+- `VISION_AGGREGATION_PROMPT` for visual cross-referencing during aggregation
+- `RSAMultimodalProvider` interface for VLM backends (Qwen3-VL-8B)
 - `swarmConsensus()` for multi-robot world model merging
-- `RSAInferenceProvider` interface for any LLM backend
 
 **Dual-Brain Controller** (`lib/runtime/dual-brain-controller.ts`)
-- 3-layer decision cascade: reactive rules (<5ms) → LLM instinct (~200ms) → RSA planner (2-22s)
+- 3-layer decision cascade: reactive rules (<5ms) → VLM instinct (~200-500ms) → multimodal RSA planner (3-8s)
 - 7 escalation conditions with per-condition RSA preset selection
 - Plan caching (planner generates sequence, instinct executes step-by-step)
 - Full metrics: brain attribution, latency tracking, escalation histograms
 
-**MobileNet Detector** (`lib/runtime/vision/mobilenet-detector.ts`)
+**VLM Vision Detector** (`lib/runtime/vision/vlm-vision-detector.ts`)
+- Direct image → VisionFrame conversion via Qwen3-VL-8B
+- Structured prompt for consistent VisionFrame JSON output
+- OCR, spatial reasoning, unlimited object vocabulary
+- `VLMBackend` interface for any OpenAI-compatible vision API
+
+**Vision Types + Utilities** (`lib/runtime/vision/mobilenet-detector.ts`)
 - `VisionFrame` structured JSON — the bridge between perception and cognition
-- 3 depth estimation methods (known object size, bbox area ratio, floor position)
-- 22 known object sizes for pinhole-model depth calculation
+- Depth estimation utilities and known object size constants
 - Scene analysis (openings, blocked directions, floor visibility)
-- `ObjectDetectionBackend` interface for TensorFlow.js or ONNX Runtime
 
 **Documentation** (all with Mermaid diagrams and paper links)
 - `ARCHITECTURE.md` — New Dual-Brain section with 6 Mermaid diagrams
@@ -127,52 +130,53 @@ Three new runtime modules and complete documentation overhaul:
 
 ## Next Steps — Priority Ordered
 
-### Priority 1: Wire the Dual-Brain to a Real LLM (makes everything else work)
+### Priority 1: Wire the Dual-Brain to Qwen3-VL-8B (makes everything else work)
 
 ```mermaid
 graph TB
-    subgraph "Step 1A: Local Inference Server"
+    subgraph "Step 1A: Inference Server"
         LLAMA[Install llama.cpp<br/>or vLLM on host]
-        QWEN[Load Qwen3-4B-Instruct<br/>Q4_K_M quantization]
-        API[OpenAI-compatible<br/>API on localhost:8080]
+        QWEN[Load Qwen3-VL-8B-Instruct<br/>Multimodal support]
+        API[OpenAI-compatible<br/>vision API on localhost:8080]
     end
 
     subgraph "Step 1B: Provider Adapter"
-        PROV[Implement RSAInferenceProvider<br/>that calls localhost:8080]
-        BATCH[Implement generateBatch<br/>with parallel requests]
+        PROV[Implement RSAMultimodalProvider<br/>that calls localhost:8080]
+        BATCH[Implement generateBatchWithImage<br/>with parallel requests]
     end
 
     subgraph "Step 1C: Integration"
         ESP[Wire DualBrainController.decide<br/>into ESP32AgentRuntime<br/>sensing loop]
-        TEST[Test: robot navigates<br/>using instinct + planner]
+        TEST[Test: robot navigates<br/>using VLM instinct + multimodal RSA planner]
     end
 
     LLAMA --> QWEN --> API --> PROV --> BATCH --> ESP --> TEST
 ```
 
 **What to do:**
-1. Set up [llama.cpp](https://github.com/ggerganov/llama.cpp) server with [Qwen3-4B-Instruct](https://huggingface.co/Qwen/Qwen3-4B-Instruct) (Q4_K_M, ~2.5GB VRAM)
-2. Create `lib/runtime/inference/local-llm-provider.ts` implementing `RSAInferenceProvider`
+1. Set up [llama.cpp](https://github.com/ggerganov/llama.cpp) or [vLLM](https://github.com/vllm-project/vllm) server with [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) (multimodal, ~8GB VRAM)
+2. Create `lib/runtime/inference/local-vlm-provider.ts` implementing `RSAMultimodalProvider`
 3. In `ESP32AgentRuntime`, replace the current single-LLM-call loop with `DualBrainController.decide()`
-4. Test in simulator: set goal "explore room" → verify instinct handles walls → verify planner escalates on stuck
+4. Test in simulator: set goal "explore room" → verify VLM instinct handles walls → verify multimodal RSA planner escalates on stuck
+5. Alternative: use OpenRouter API (`qwen/qwen3-vl-8b-instruct`, $0.08/M input) for quick testing
 
-**Why first:** Without this, the RSA engine and Dual-Brain controller are just interfaces. This step makes them run.
+**Why first:** Without this, the multimodal RSA engine and Dual-Brain controller are just interfaces. This step makes them run.
 
 **Estimated effort:** 2-3 days
-**Hardware needed:** Any GPU with 8GB+ VRAM (RTX 3060, RTX 4060, etc.)
+**Hardware needed:** Any GPU with 8GB+ VRAM (RTX 3060, RTX 4060, etc.) or OpenRouter API key
 
 ---
 
-### Priority 2: Wire MobileNet to Real Camera Frames
+### Priority 2: Connect Camera Frames to VLM Vision Detector
 
 **What to do:**
-1. Install `@tensorflow-models/coco-ssd` and `@tensorflow/tfjs`
-2. Create `lib/runtime/vision/tfjs-coco-backend.ts` implementing `ObjectDetectionBackend`
-3. Connect to camera source (webcam for desktop, ESP32-CAM stream for real robot)
+1. Create `VLMBackend` adapter that calls Qwen3-VL-8B via OpenAI-compatible vision API
+2. Connect to camera source (webcam for desktop, ESP32-CAM stream for real robot)
+3. Pipe base64-encoded frames through `VLMVisionDetector.processFrame()`
 4. Feed `VisionFrame` output into `DualBrainController.decide()` context
-5. Calibrate depth estimation constants for the specific camera lens
+5. Test multimodal RSA: verify that `planRobotAction()` with `imageBase64` produces better spatial reasoning than text-only
 
-**Why second:** The Dual-Brain already works with sensor data alone. Vision adds richer scene understanding but isn't blocking.
+**Why second:** The Dual-Brain already works with sensor data alone. VLM vision adds rich scene understanding — object identification, OCR, depth estimation, and spatial reasoning from a single model.
 
 **Estimated effort:** 2-3 days
 
@@ -184,7 +188,7 @@ graph TB
 1. Add test files:
    - `__tests__/lib/runtime/rsa-engine.test.ts` — population mechanics, consensus measurement, majority voting, early termination
    - `__tests__/lib/runtime/dual-brain-controller.test.ts` — escalation logic, reactive rules, plan caching
-   - `__tests__/lib/runtime/vision/mobilenet-detector.test.ts` — depth estimation accuracy for known objects
+   - `__tests__/lib/runtime/vision/vlm-vision-detector.test.ts` — VisionFrame parsing, VLM response handling
    - `__tests__/lib/runtime/world-model.test.ts` — grid operations, exploration tracking, confidence decay
    - `__tests__/lib/hal/command-validator.test.ts` — safety rules, speed reduction, emergency stop
 2. Create `.github/workflows/ci.yml`:
@@ -307,10 +311,10 @@ graph LR
 From [RSA paper Section 4](https://arxiv.org/html/2509.26626v1): Standard RL fine-tuning can *degrade* RSA performance because the model isn't trained to aggregate. The paper proposes augmenting training data with aggregation prompts.
 
 **What to do:**
-1. Collect robot planning scenarios from simulator runs
-2. Generate aggregation training data: problem + K candidate solutions
-3. Fine-tune Qwen3-4B with RLOO on mixed standard + aggregation prompts
-4. Evaluate: compare RSA performance with base vs. aggregation-aware model
+1. Collect robot planning scenarios from simulator runs (including camera frames)
+2. Generate multimodal aggregation training data: problem + image + K candidate visual analyses
+3. Fine-tune Qwen3-VL-8B with RLOO on mixed standard + aggregation prompts
+4. Evaluate: compare multimodal RSA performance with base vs. aggregation-aware model
 
 **Why last:** Requires working RSA pipeline (Priority 1), substantial training data, and GPU time. High impact but longer horizon.
 
@@ -326,16 +330,16 @@ gantt
     dateFormat YYYY-MM-DD
     axisFormat %b %d
 
-    section Priority 1: Local LLM
-        llama.cpp server setup           :p1a, 2026-02-10, 1d
-        RSAInferenceProvider adapter     :p1b, after p1a, 1d
+    section Priority 1: Qwen3-VL-8B Inference
+        Local server or OpenRouter setup :p1a, 2026-02-10, 1d
+        RSAMultimodalProvider adapter    :p1b, after p1a, 1d
         Wire into ESP32AgentRuntime      :p1c, after p1b, 1d
         Test in simulator                :p1d, after p1c, 1d
 
-    section Priority 2: MobileNet
-        TF.js COCO-SSD backend           :p2a, 2026-02-10, 2d
+    section Priority 2: VLM Camera Integration
+        VLMBackend adapter               :p2a, 2026-02-10, 1d
         Camera source integration        :p2b, after p2a, 1d
-        Depth calibration                :p2c, after p2b, 1d
+        Multimodal RSA testing           :p2c, after p2b, 1d
 
     section Priority 3: Tests + CI
         RSA engine tests                 :p3a, after p1d, 1d
@@ -366,12 +370,11 @@ gantt
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Cloud vs. local LLM | **Local Qwen3-4B** | RSA makes 4B match cloud quality. $0 cost. Offline. <200ms instinct. |
-| Reasoning strategy | **RSA (Recursive Self-Aggregation)** | Paper proves K=2 already massive improvement. Evolutionary approach matches our mutation engine philosophy. |
-| Vision backbone | **MobileNet SSD via TF.js** | ~30ms local inference, 80 COCO classes, good depth estimation from bbox. |
-| Depth estimation | **Pinhole model + bbox heuristics** | No depth camera needed. Known object sizes give accurate estimates. Floor position as fallback. |
-| Instinct implementation | **Rule-based + single-pass LLM** | Rules for emergency (<5ms), LLM for nuanced decisions (~200ms). |
-| Swarm consensus | **RSA swarm mode** | No separate consensus algorithm needed. RSA IS the consensus — robot observations are candidates in the population. |
+| Vision + Language model | **Qwen3-VL-8B-Instruct** | Unified multimodal model. Sees images directly. OCR in 32 languages. 131K context. $0.08/M on OpenRouter or run locally. |
+| Reasoning strategy | **Multimodal RSA** | Paper proves K=2 already massive improvement. With VLM, RSA cross-references spatial observations across candidates. |
+| Depth estimation | **VLM spatial reasoning** | Qwen3-VL-8B estimates depth from visual cues. Multimodal RSA improves accuracy by aggregating multiple estimates. |
+| Instinct implementation | **Rule-based + VLM single-pass** | Rules for emergency (<5ms), VLM for nuanced visual decisions (~200-500ms). |
+| Swarm consensus | **Multimodal RSA swarm mode** | Robot observations + camera frames are candidates in the population. VLM cross-references visual observations. |
 | Inter-robot protocol | **MQTT** | Native ESP-IDF support, pub/sub fits swarm pattern, lightweight. |
 | World model merge | **Bayesian confidence fusion** | Naturally handles varying sensor quality and temporal decay. |
 
@@ -379,8 +382,8 @@ gantt
 
 | Decision | Options | When Needed |
 |----------|---------|-------------|
-| Qwen3-4B quantization | Q4_K_M vs Q5_K_M vs Q8_0 | Priority 1 (benchmark quality vs. speed) |
-| Inference server | llama.cpp vs vLLM vs Ollama | Priority 1 (test which gives best batch throughput) |
+| Qwen3-VL-8B deployment | Local (llama.cpp/vLLM) vs OpenRouter cloud | Priority 1 (benchmark latency vs. cost) |
+| Inference server | llama.cpp vs vLLM vs Ollama | Priority 1 (test which gives best multimodal batch throughput) |
 | Camera source for ESP32 | ESP32-CAM stream vs USB webcam on host | Priority 2 (affects latency architecture) |
 | Test framework for 3D sim | Jest + mock canvas vs headless Three.js | Priority 3 |
 | MQTT broker | Mosquitto vs HiveMQ vs embedded | Priority 6 |
@@ -389,24 +392,23 @@ gantt
 
 ## Key Research Papers
 
-| Paper | Link | How We Use It |
+| Paper / Model | Link | How We Use It |
 |-------|------|---------------|
-| RSA: Recursive Self-Aggregation | [arxiv.org/html/2509.26626v1](https://arxiv.org/html/2509.26626v1) | Planner brain. Enables Qwen3-4B to match o3-mini/DeepSeek-R1. |
+| Qwen3-VL-8B-Instruct | [huggingface.co](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified vision-language backbone. Perceives images + reasons in one pass. |
+| RSA: Recursive Self-Aggregation | [arxiv.org/html/2509.26626v1](https://arxiv.org/html/2509.26626v1) | Multimodal planner brain. Cross-references visual observations across candidates. |
 | JEPA | [openreview.net](https://openreview.net/forum?id=BZ5a1r-kVsf) | Mental model. Predict-before-act paradigm for abstract state. |
-| MobileNet V2 | [arxiv.org/abs/1801.04381](https://arxiv.org/abs/1801.04381) | Vision pipeline. Fast local object detection at ~30ms. |
-| MobileNet SSD | [arxiv.org/abs/1704.04861](https://arxiv.org/abs/1704.04861) | Object detection backbone for structured scene understanding. |
 
 ---
 
 ## Files to Touch Next
 
-These are the specific integration points for Priority 1 (wiring up the Dual-Brain):
+These are the specific integration points for Priority 1 (wiring up the Dual-Brain with Qwen3-VL-8B):
 
 | File | What to Do |
 |------|-----------|
-| **New:** `lib/runtime/inference/local-llm-provider.ts` | Implement `RSAInferenceProvider` calling local llama.cpp/vLLM server |
+| **New:** `lib/runtime/inference/local-vlm-provider.ts` | Implement `RSAMultimodalProvider` calling local Qwen3-VL-8B server or OpenRouter |
 | **Modify:** `lib/runtime/esp32-agent-runtime.ts` | Replace single-LLM-call loop with `DualBrainController.decide()` |
 | **Modify:** `lib/evolution/black-box-recorder.ts` | Add `brainDecision` field to frame recording (which brain, latency, escalation) |
-| **New:** `lib/runtime/vision/tfjs-coco-backend.ts` | Implement `ObjectDetectionBackend` with `@tensorflow-models/coco-ssd` |
+| **New:** `lib/runtime/inference/vlm-backend-adapter.ts` | Implement `VLMBackend` wrapping OpenAI-compatible vision API for `VLMVisionDetector` |
 | **Modify:** `lib/runtime/world-model.ts` | Add `mergeWith()` method (~line 775) for Priority 5 |
 | **Modify:** `lib/hardware/esp32-device-manager.ts` | Wire `FleetConfig` to actual fleet coordinator for Priority 6 |

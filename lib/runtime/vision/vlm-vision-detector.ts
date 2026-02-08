@@ -1,30 +1,24 @@
 /**
  * VLM (Vision-Language Model) Vision Detector for LLMos
  *
- * Replaces the MobileNet SSD + Qwen3-4B text-only pipeline with a unified
- * Qwen3-VL-8B-Instruct multimodal model that processes images directly.
+ * Uses Qwen3-VL-8B-Instruct, a unified multimodal vision-language model
+ * that processes camera frames directly — no separate object detector needed.
  *
- * Old Architecture (two-model pipeline):
- *   Camera Frame → MobileNet SSD (30ms) → VisionFrame JSON → Qwen3-4B (text)
- *
- * New Architecture (single unified VLM):
+ * Architecture:
  *   Camera Frame → Qwen3-VL-8B-Instruct (image + text) → VisionFrame JSON + Reasoning
  *
- * Advantages:
- * - No separate object detection model needed
- * - Richer scene understanding (not limited to COCO-SSD's 80 classes)
+ * Capabilities:
+ * - Direct image understanding — sees and reasons about raw camera frames
+ * - Richer scene understanding — not limited to fixed object class vocabularies
  * - Native OCR in 32 languages, spatial reasoning, GUI understanding
  * - Handles unusual objects, signage, text in environment
  * - 131K context window supports vision history for temporal reasoning
  * - Single model for both perception AND instinct-level reasoning
+ * - Multimodal RSA: each RSA candidate independently analyzes the scene,
+ *   aggregation cross-references spatial observations for better accuracy
  *
- * Trade-offs:
- * - Slower per-frame than MobileNet's 30ms (~200-500ms per VLM call)
- * - Requires API access or local deployment of 8B param model
- * - For emergency collision avoidance, reactive rules still bypass the VLM
- *
- * The VLM detector outputs the same VisionFrame interface used by the
- * dual-brain controller, so the rest of the system works unchanged.
+ * For emergency collision avoidance, reactive rules in the dual-brain
+ * controller bypass the VLM entirely (rule-based, <5ms).
  *
  * References:
  * - Qwen3-VL: https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct

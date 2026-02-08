@@ -1,22 +1,13 @@
 /**
- * MobileNet Object Detection Pipeline for LLMos (Legacy/Fallback)
+ * Vision Types and Utilities for LLMos
  *
- * Provides fast, local object detection using MobileNet SSD
- * running via TensorFlow.js or ONNX Runtime in the browser/Electron.
+ * Defines the VisionFrame structured output format consumed by the
+ * Dual-Brain cognitive architecture. Also provides utility functions
+ * for depth estimation and scene analysis.
  *
- * NOTE: The primary vision pipeline now uses Qwen3-VL-8B-Instruct
- * (see vlm-vision-detector.ts) which unifies vision + language into
- * a single multimodal model. MobileNet is retained as a lightweight
- * fallback for environments without VLM access or when sub-50ms
- * latency is required (e.g., emergency collision avoidance).
- *
- * Legacy Architecture (MobileNet):
- * Camera Frame → MobileNet SSD (30ms) → Structured JSON (VisionFrame)
- *
- * Primary Architecture (VLM):
- * Camera Frame → Qwen3-VL-8B (~200-500ms) → VisionFrame + Reasoning
- *
- * VisionFrame structure (shared by both pipelines):
+ * Architecture:
+ * Camera Frame → Qwen3-VL-8B-Instruct (~200-500ms) → VisionFrame + Reasoning
+ *                                                          ↓
  *                            ┌───────────────────────────────────┐
  *                            │         VisionFrame               │
  *                            │  {                                │
@@ -31,7 +22,7 @@
  *                            (Qwen3-VL-8B)      (Qwen3-VL-8B + RSA)
  *
  * Key design decision: Output structured JSON, not raw tensors.
- * Both the instinct (single-pass LLM) and planner (RSA) consume
+ * Both the instinct (single-pass VLM) and planner (RSA) consume
  * the same VisionFrame — they reason over semantics, not pixels.
  *
  * Depth estimation uses bbox-area-ratio for known object classes

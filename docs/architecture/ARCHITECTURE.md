@@ -1248,6 +1248,8 @@ LLMos agents use a **Dual-Brain** architecture that separates fast reactive deci
 
 The key insight: a single LLM call is too slow for split-second obstacle avoidance but too shallow for multi-step exploration planning. The Dual-Brain solves this by running **two cognitive layers in parallel**, each optimized for its time scale.
 
+The vision backbone is [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct), a unified multimodal model that processes raw camera frames directly — no separate object detector needed. It serves as both the perception layer and the instinct brain, while RSA enables deep planning by recursively aggregating multiple VLM reasoning chains.
+
 ```mermaid
 graph TB
     subgraph "Sensing Layer"
@@ -1255,21 +1257,20 @@ graph TB
         SEN[Distance Sensors]
     end
 
-    subgraph "Perception Layer"
-        MN[MobileNet SSD<br/>~30ms<br/>Object Detection]
-        DF[Depth from BBox<br/>Known Object Sizes]
-        VF[VisionFrame JSON<br/>Structured Detections]
+    subgraph "Perception + Cognition (Unified VLM)"
+        VLM[Qwen3-VL-8B-Instruct<br/>Direct image + text<br/>~200-500ms]
+        VF[VisionFrame JSON<br/>objects + depth + scene + reasoning]
     end
 
     subgraph "Dual-Brain Controller"
         direction TB
         subgraph "INSTINCT — System 1"
             RI[Reactive Rules<br/>&lt;5ms]
-            LI[LLM Single-Pass<br/>Qwen3-4B ~200ms]
+            LI[VLM Single-Pass<br/>Qwen3-VL-8B ~200-500ms]
         end
 
         subgraph "PLANNER — System 2"
-            RSA[RSA Engine<br/>Qwen3-4B + RSA<br/>3-22 seconds]
+            RSA[Multimodal RSA Engine<br/>Qwen3-VL-8B + RSA<br/>3-8 seconds]
         end
 
         ESC{Escalation<br/>Check}
@@ -1281,10 +1282,9 @@ graph TB
         PHY[Physical Adapter<br/>ESP32]
     end
 
-    CAM --> MN
-    SEN --> DF
-    MN --> VF
-    DF --> VF
+    CAM --> VLM
+    SEN --> VLM
+    VLM --> VF
 
     VF --> RI
     VF --> ESC
@@ -1299,7 +1299,7 @@ graph TB
 
     style RSA fill:#f9f,stroke:#333
     style RI fill:#bfb,stroke:#333
-    style MN fill:#bbf,stroke:#333
+    style VLM fill:#bbf,stroke:#333
 ```
 
 ### Brain Decision Flow
@@ -1307,15 +1307,15 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant Sensors
-    participant MobileNet
+    participant VLM as Qwen3-VL-8B
     participant Instinct as Instinct Brain
     participant Escalation as Escalation Check
-    participant Planner as Planner Brain (RSA)
+    participant Planner as Planner Brain (Multimodal RSA)
     participant HAL
 
-    loop Every ~100ms (10Hz sensing cycle)
-        Sensors->>MobileNet: Camera frame + distance readings
-        MobileNet->>Instinct: VisionFrame JSON
+    loop Every ~200-500ms (2-5Hz sensing cycle)
+        Sensors->>VLM: Camera frame + distance readings
+        VLM->>Instinct: VisionFrame JSON + scene reasoning
 
         Instinct->>Instinct: Reactive rules (<5ms)
 
@@ -1324,11 +1324,11 @@ sequenceDiagram
         else No clear rule
             Instinct->>Escalation: Check escalation conditions
             alt Should escalate
-                Escalation->>Planner: Run RSA (N=4, K=2, T=2)
-                Note over Planner: ~2.5-8 seconds
+                Escalation->>Planner: Run Multimodal RSA (N=4, K=2, T=2)
+                Note over Planner: Each candidate sees the image<br/>~3-8 seconds
                 Planner->>HAL: Execute planned action sequence
             else Stay in instinct
-                Instinct->>Instinct: LLM single-pass (~200ms)
+                Instinct->>Instinct: VLM single-pass (~200-500ms)
                 Instinct->>HAL: Execute action
             end
         end
@@ -1341,7 +1341,7 @@ The Instinct brain escalates to the Planner when:
 
 | Condition | Trigger | RSA Preset |
 |-----------|---------|------------|
-| **Imminent unknown** | MobileNet confidence < 50% on nearby object | `quick` |
+| **Imminent unknown** | VLM detection confidence < 50% on nearby object | `quick` |
 | **Stuck** | No movement for > 5 seconds | `quick` |
 | **Complex goal** | Goal contains "find", "explore", "collect", "bring" | `standard` |
 | **Low confidence** | Instinct confidence < 40% | `quick` |
@@ -1351,7 +1351,7 @@ The Instinct brain escalates to the Planner when:
 
 ### RSA (Recursive Self-Aggregation) Engine
 
-RSA is a test-time scaling method from [Venkatraman et al., 2025](https://arxiv.org/html/2509.26626v1) that makes a small local model (Qwen3-4B) match cloud-scale reasoning quality.
+RSA is a test-time scaling method from [Venkatraman et al., 2025](https://arxiv.org/html/2509.26626v1) that makes a local model (Qwen3-VL-8B) match cloud-scale reasoning quality. With a VLM, RSA operates on **multimodal reasoning chains** — each candidate independently analyzes the camera frame, and aggregation cross-references spatial observations across candidates for better accuracy.
 
 ```mermaid
 graph LR
@@ -1384,63 +1384,55 @@ graph LR
 - **K=2 already gives massive improvement** over K=1 (self-refinement). For quick replans, K=2 is sufficient.
 - **Population preserves correct fragments**: Even wrong candidates contain correct intermediate steps (e.g., correct obstacle detection but wrong path). RSA extracts and recombines them.
 - **Consensus measures convergence**: When the population agrees, stop early (no need to run all T steps).
+- **Multimodal RSA**: With Qwen3-VL-8B, candidates independently analyze the same image. Aggregation cross-references spatial claims, verifying against the original image — producing better depth estimates and scene understanding than any single pass.
 
 #### RSA Presets for Robotics
 
 | Preset | N | K | T | Inferences | Latency | Use Case |
 |--------|---|---|---|------------|---------|----------|
-| `quick` | 4 | 2 | 2 | 12 | ~2.5s | Stuck recovery, quick replan |
+| `quick` | 4 | 2 | 2 | 12 | ~3s | Stuck recovery, quick replan |
 | `standard` | 8 | 3 | 4 | 40 | ~8s | New area exploration, goal planning |
 | `deep` | 16 | 4 | 6 | 112 | ~22s | Skill generation, complex reasoning |
 | `swarm` | fleet_size | all | 3 | 3×fleet | ~6s | Multi-robot world model merge |
 
-### MobileNet Vision Pipeline
+### Qwen3-VL-8B Vision Pipeline
 
-[MobileNet SSD](https://arxiv.org/abs/1801.04381) runs locally via TensorFlow.js or ONNX Runtime, producing structured JSON that both brains consume.
+[Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) processes raw camera frames directly, producing structured VisionFrame JSON with scene understanding, depth estimation, and OCR — all in a single model pass.
 
 ```mermaid
 graph TB
     subgraph "Camera Input"
-        FRAME[Camera Frame<br/>640×480 @ 30fps]
+        FRAME[Camera Frame<br/>640×480]
     end
 
-    subgraph "MobileNet SSD (~30ms)"
-        DETECT[Object Detection]
-        CLASSIFY[Classification<br/>COCO 80 classes]
-        BBOX[Bounding Boxes]
-    end
-
-    subgraph "Depth Estimation"
-        KOS[Known Object Size<br/>Pinhole camera model]
-        BAR[BBox Area Ratio<br/>Empirical power law]
-        FP[Floor Position<br/>Y-coordinate heuristic]
+    subgraph "Qwen3-VL-8B-Instruct (~200-500ms)"
+        VLM[Unified Vision-Language Model<br/>Direct image understanding]
+        OD[Object Detection<br/>Unlimited object vocabulary]
+        DE[Depth Estimation<br/>VLM spatial reasoning]
+        OCR[OCR + Text Reading<br/>32 languages]
+        SA[Scene Analysis<br/>Navigation paths, obstacles]
     end
 
     subgraph "VisionFrame Output"
         DET["detections: [<br/>  { label, confidence,<br/>    bbox, depth_cm, region }<br/>]"]
-        SCN["scene: {<br/>  openings: ['center','right'],<br/>  blocked: ['left']<br/>}"]
+        SCN["scene: {<br/>  openings: ['center','right'],<br/>  blocked: ['left'],<br/>  environment: 'indoor'<br/>}"]
     end
 
-    FRAME --> DETECT
-    DETECT --> CLASSIFY
-    DETECT --> BBOX
-    BBOX --> KOS
-    BBOX --> BAR
-    BBOX --> FP
-    CLASSIFY --> DET
-    KOS --> DET
-    BAR --> DET
-    FP --> DET
-    DET --> SCN
+    FRAME --> VLM
+    VLM --> OD
+    VLM --> DE
+    VLM --> OCR
+    VLM --> SA
+    OD --> DET
+    DE --> DET
+    SA --> SCN
 
     style DET fill:#ffd,stroke:#333
     style SCN fill:#ffd,stroke:#333
+    style VLM fill:#bbf,stroke:#333
 ```
 
-**Depth estimation methods (ranked by accuracy):**
-1. **Known Object Size** — If we know a chair is ~45cm wide and it occupies 30% of the frame, we can calculate distance via the pinhole camera equation: `depth = (realWidth × focalLength) / bboxWidth`
-2. **BBox Area Ratio** — Larger bounding box area → closer object. Uses empirical power-law: `depth ≈ k / sqrt(area)`
-3. **Floor Position** — Objects lower in the frame are closer (assumes forward-facing camera)
+**Depth estimation**: Qwen3-VL-8B estimates object distances directly from visual cues (perspective, occlusion, relative size, scene context). With multimodal RSA, multiple independent depth estimates from different candidates are cross-referenced during aggregation for improved accuracy.
 
 ### Swarm Intelligence via RSA
 
@@ -1480,7 +1472,7 @@ sequenceDiagram
 
 ```
 lib/runtime/
-├── rsa-engine.ts              # RSA algorithm implementation
+├── rsa-engine.ts              # RSA algorithm (text + multimodal)
 ├── dual-brain-controller.ts   # Dual-Brain orchestration
 ├── jepa-mental-model.ts       # JEPA-inspired abstract state
 ├── world-model.ts             # Grid-based spatial model
@@ -1488,7 +1480,8 @@ lib/runtime/
 ├── robot4-runtime.ts          # Firmware simulator
 ├── esp32-agent-runtime.ts     # ESP32 agent runtime
 └── vision/
-    └── mobilenet-detector.ts  # Local MobileNet detection pipeline
+    ├── vlm-vision-detector.ts # Qwen3-VL-8B unified vision detector
+    └── mobilenet-detector.ts  # Vision types + utility functions
 ```
 
 ---
