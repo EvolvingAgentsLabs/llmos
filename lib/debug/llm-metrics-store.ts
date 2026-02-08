@@ -398,6 +398,8 @@ export function formatDuration(ms: number): string {
 export function estimateCost(promptTokens: number, completionTokens: number, model: string): number {
   // Approximate costs per 1M tokens (varies by model)
   const costs: Record<string, { input: number; output: number }> = {
+    'qwen/qwen3-vl-8b-instruct': { input: 0.08, output: 0.50 },
+    'qwen3-vl:8b-instruct': { input: 0, output: 0 }, // Local Ollama - free
     'anthropic/claude-3.5-sonnet': { input: 3, output: 15 },
     'anthropic/claude-3-opus': { input: 15, output: 75 },
     'anthropic/claude-3-sonnet': { input: 3, output: 15 },
@@ -407,7 +409,7 @@ export function estimateCost(promptTokens: number, completionTokens: number, mod
     'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
   };
 
-  const modelCost = costs[model] || { input: 3, output: 15 }; // Default to Sonnet pricing
+  const modelCost = costs[model] || { input: 0.08, output: 0.50 }; // Default to Qwen3 VL pricing
   return (promptTokens * modelCost.input + completionTokens * modelCost.output) / 1000000;
 }
 

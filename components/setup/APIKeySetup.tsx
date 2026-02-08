@@ -1,21 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { LLMStorage, AVAILABLE_MODELS, PROVIDER_BASE_URLS, type ModelId } from '@/lib/llm-client';
+import { LLMStorage, AVAILABLE_MODELS, MODEL_PROVIDER_CONFIG, PROVIDER_BASE_URLS, type ModelId } from '@/lib/llm-client';
 import { UserStorage, User, Team } from '@/lib/user-storage';
 
 interface APIKeySetupProps {
   onComplete: () => void;
 }
 
-type SetupStep = 'welcome' | 'api-key' | 'model';
+type SetupStep = 'welcome' | 'model' | 'api-key';
 
 // Setup Orb - Simple CSS animated orb for setup screens
 function SetupOrb({ step }: { step: SetupStep }) {
   const stepProgress = {
     'welcome': 0,
-    'api-key': 50,
-    'model': 100,
+    'model': 50,
+    'api-key': 100,
   };
   const progress = stepProgress[step];
 
@@ -38,7 +38,7 @@ function SetupOrb({ step }: { step: SetupStep }) {
       {/* Step indicator */}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-white/90 text-xs font-bold">
-          {step === 'welcome' ? '👋' : step === 'model' ? '✓' : `${Math.round(progress)}%`}
+          {step === 'welcome' ? '\u{1F44B}' : step === 'api-key' ? '\u2713' : `${Math.round(progress)}%`}
         </span>
       </div>
     </div>
@@ -48,19 +48,30 @@ function SetupOrb({ step }: { step: SetupStep }) {
 export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
   // LLM config state
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('google/gemini-3-flash-preview');
-  const [customModelName, setCustomModelName] = useState('');
+  const [modelName, setModelName] = useState('qwen/qwen3-vl-8b-instruct');
 
   // UI state
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
   const [error, setError] = useState('');
   const [isValid, setIsValid] = useState(false);
 
+  const selectedConfig = MODEL_PROVIDER_CONFIG[modelName];
+  const isOllama = selectedConfig?.provider === 'ollama';
+
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     setError('');
-    // OpenRouter API key validation (basic check for sk- prefix)
+    // OpenRouter API key validation (basic check)
     setIsValid(value.length > 20);
+  };
+
+  const handleModelNext = () => {
+    if (isOllama) {
+      // Ollama doesn't need API key, go straight to completion
+      handleComplete();
+    } else {
+      setCurrentStep('api-key');
+    }
   };
 
   const handleApiKeyNext = () => {
@@ -69,31 +80,29 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       return;
     }
     setError('');
-    setCurrentStep('model');
+    handleComplete();
   };
 
   const handleComplete = () => {
-    const finalModel = modelName === 'custom' ? customModelName : modelName;
-
-    if (!finalModel.trim()) {
-      setError('Please enter a model name');
+    const config = MODEL_PROVIDER_CONFIG[modelName];
+    if (!config) {
+      setError('Please select a valid model');
       return;
     }
 
     console.log('[APIKeySetup] Saving configuration:');
-    console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
-    console.log('  - Model:', finalModel);
-    console.log('  - Provider: openrouter (OpenAI-compatible API)');
-    console.log('  - Base URL:', PROVIDER_BASE_URLS.openrouter);
+    console.log('  - Model:', modelName);
+    console.log('  - Provider:', config.provider);
+    console.log('  - Base URL:', config.baseUrl);
 
-    // Save LLM config to localStorage (using OpenRouter's OpenAI-compatible endpoint)
-    LLMStorage.saveProvider('openrouter');
-    LLMStorage.saveApiKey(apiKey);
-    LLMStorage.saveBaseUrl(PROVIDER_BASE_URLS.openrouter);
-    // Save the model name directly - it will be validated in createLLMClient
-    LLMStorage.saveModel(finalModel as any);
-    if (modelName === 'custom') {
-      LLMStorage.saveCustomModel(customModelName);
+    // Save LLM config to localStorage
+    LLMStorage.saveProvider(config.provider);
+    LLMStorage.saveBaseUrl(config.baseUrl);
+    LLMStorage.saveModel(modelName);
+
+    if (!isOllama && apiKey) {
+      LLMStorage.saveApiKey(apiKey);
+      console.log('  - API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
     }
 
     console.log('[APIKeySetup] Configuration saved to localStorage');
@@ -126,9 +135,9 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       <h1 className="text-2xl font-medium mb-2 text-fg-primary">Welcome to LLMos</h1>
       <p className="text-lg text-accent-primary mb-1">Autonomous AI Runtime</p>
       <p className="text-fg-secondary text-sm mb-8">
-        Let's get you set up in 2 quick steps
+        Let's get you set up in a few quick steps
       </p>
-      <button onClick={() => setCurrentStep('api-key')} className="btn-primary w-full py-3">
+      <button onClick={() => setCurrentStep('model')} className="btn-primary w-full py-3">
         Get Started
       </button>
       <div className="mt-6 p-3 bg-bg-tertiary border border-border-primary rounded">
@@ -139,13 +148,80 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     </div>
   );
 
+  const renderModel = () => (
+    <>
+      <SetupOrb step="model" />
+      <div className="mb-6">
+        <h1 className="text-lg font-medium mb-2 text-fg-primary">Choose Model</h1>
+        <p className="text-fg-secondary text-sm">
+          {isOllama ? 'Step 1 of 1' : 'Step 1 of 2'} - Select your Qwen3 VL provider
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <label className="block text-xs text-fg-secondary mb-1">
+          Model
+        </label>
+        <div className="space-y-2">
+          <button
+            onClick={() => setModelName('qwen/qwen3-vl-8b-instruct')}
+            className={`w-full text-left p-3 rounded border transition-colors ${
+              modelName === 'qwen/qwen3-vl-8b-instruct'
+                ? 'border-accent-primary bg-accent-primary/10'
+                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
+            }`}
+          >
+            <code className="text-sm text-accent-info">qwen/qwen3-vl-8b-instruct</code>
+            <p className="text-xs text-fg-tertiary mt-1">OpenRouter • 131k context • Requires API key</p>
+          </button>
+
+          <button
+            onClick={() => setModelName('qwen3-vl:8b-instruct')}
+            className={`w-full text-left p-3 rounded border transition-colors ${
+              modelName === 'qwen3-vl:8b-instruct'
+                ? 'border-accent-primary bg-accent-primary/10'
+                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
+            }`}
+          >
+            <code className="text-sm text-accent-info">qwen3-vl:8b-instruct</code>
+            <p className="text-xs text-fg-tertiary mt-1">Ollama (Local) • 131k context • Free, no API key needed</p>
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-accent-error/10 border border-accent-error rounded">
+          <p className="text-xs text-accent-error">{error}</p>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button onClick={() => setCurrentStep('welcome')} className="btn-secondary flex-1 py-2">
+          Back
+        </button>
+        <button onClick={handleModelNext} className="btn-primary flex-1 py-2">
+          {isOllama ? 'Start' : 'Continue'}
+        </button>
+      </div>
+
+      {isOllama && (
+        <div className="mt-4 p-3 bg-bg-tertiary border border-border-primary rounded">
+          <p className="text-xs text-fg-secondary">
+            Make sure Ollama is running locally and you have pulled the model:{' '}
+            <code className="text-accent-info">ollama pull qwen3-vl:8b-instruct</code>
+          </p>
+        </div>
+      )}
+    </>
+  );
+
   const renderApiKey = () => (
     <>
       <SetupOrb step="api-key" />
       <div className="mb-6">
         <h1 className="text-lg font-medium mb-2 text-fg-primary">API Key</h1>
         <p className="text-fg-secondary text-sm">
-          Step 1 of 2
+          Step 2 of 2
         </p>
       </div>
 
@@ -185,96 +261,10 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => setCurrentStep('welcome')} className="btn-secondary flex-1 py-2">
+        <button onClick={() => setCurrentStep('model')} className="btn-secondary flex-1 py-2">
           Back
         </button>
         <button onClick={handleApiKeyNext} className="btn-primary flex-1 py-2">
-          Continue
-        </button>
-      </div>
-    </>
-  );
-
-  const renderModel = () => (
-    <>
-      <SetupOrb step="model" />
-      <div className="mb-6">
-        <h1 className="text-lg font-medium mb-2 text-fg-primary">Choose Model</h1>
-        <p className="text-fg-secondary text-sm">
-          Step 2 of 2 - Almost ready!
-        </p>
-      </div>
-
-      <div className="mb-6">
-        <label className="block text-xs text-fg-secondary mb-1">
-          Model
-        </label>
-        <div className="space-y-2">
-          <button
-            onClick={() => setModelName('google/gemini-3-flash-preview')}
-            className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'google/gemini-3-flash-preview'
-                ? 'border-accent-primary bg-accent-primary/10'
-                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-            }`}
-          >
-            <code className="text-sm text-accent-info">google/gemini-3-flash-preview</code>
-            <p className="text-xs text-fg-tertiary mt-1">Google • 1M context • Recommended</p>
-          </button>
-
-          <button
-            onClick={() => setModelName('anthropic/claude-haiku-4.5')}
-            className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'anthropic/claude-haiku-4.5'
-                ? 'border-accent-primary bg-accent-primary/10'
-                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-            }`}
-          >
-            <code className="text-sm text-accent-info">anthropic/claude-haiku-4.5</code>
-            <p className="text-xs text-fg-tertiary mt-1">Anthropic • High quality</p>
-          </button>
-
-          <button
-            onClick={() => setModelName('custom')}
-            className={`w-full text-left p-3 rounded border transition-colors ${
-              modelName === 'custom'
-                ? 'border-accent-primary bg-accent-primary/10'
-                : 'border-border-primary bg-bg-tertiary hover:border-border-secondary'
-            }`}
-          >
-            <code className="text-sm text-accent-info">Custom Model</code>
-            <p className="text-xs text-fg-tertiary mt-1">Enter your own model ID</p>
-          </button>
-
-          {modelName === 'custom' && (
-            <div className="mt-2 pl-3">
-              <input
-                type="text"
-                value={customModelName}
-                onChange={(e) => setCustomModelName(e.target.value)}
-                placeholder="e.g., meta-llama/llama-3.1-8b-instruct:free"
-                className="input w-full text-sm"
-                autoFocus
-              />
-              <p className="text-xs text-fg-tertiary mt-1">
-                Find models at <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">openrouter.ai/models</a>
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-accent-error/10 border border-accent-error rounded">
-          <p className="text-xs text-accent-error">{error}</p>
-        </div>
-      )}
-
-      <div className="flex gap-3">
-        <button onClick={() => setCurrentStep('api-key')} className="btn-secondary flex-1 py-2">
-          Back
-        </button>
-        <button onClick={handleComplete} className="btn-primary flex-1 py-2">
           Start
         </button>
       </div>
@@ -285,8 +275,8 @@ export default function APIKeySetup({ onComplete }: APIKeySetupProps) {
     <div className="min-h-screen flex items-center justify-center bg-bg-primary p-4">
       <div className="card max-w-md w-full p-8">
         {currentStep === 'welcome' && renderWelcome()}
-        {currentStep === 'api-key' && renderApiKey()}
         {currentStep === 'model' && renderModel()}
+        {currentStep === 'api-key' && renderApiKey()}
       </div>
     </div>
   );
