@@ -9,16 +9,16 @@
  * ┌──────────────────────────────────────────────────────────────┐
  * │                    HOST COMPUTER                             │
  * │                                                              │
- * │  Camera ──→ MobileNet ──→ Structured JSON (VisionFrame)      │
- * │              (30ms)                                          │
+ * │  Camera ──→ Qwen3-VL-8B ──→ VisionFrame + Reasoning          │
+ * │              (direct multimodal, ~200-500ms)                  │
  * │                    │                                         │
  * │         ┌─────────┴──────────┐                               │
  * │         ▼                    ▼                                │
  * │  ┌──────────────┐    ┌───────────────────────┐               │
  * │  │   INSTINCT   │    │      PLANNER          │               │
- * │  │  Qwen3-4B    │    │   Qwen3-4B + RSA      │               │
+ * │  │ Qwen3-VL-8B  │    │  Qwen3-VL-8B + RSA    │               │
  * │  │  single-pass │    │   N=4, K=2, T=3       │               │
- * │  │  ~200ms      │    │   ~3-5 seconds         │               │
+ * │  │  ~200-500ms  │    │   ~3-8 seconds         │               │
  * │  └──────┬───────┘    └──────────┬──────────────┘              │
  * │         └───────────┬───────────┘                             │
  * │                     ▼                                         │
@@ -33,7 +33,7 @@
  *
  * References:
  * - RSA Paper: https://arxiv.org/html/2509.26626v1
- * - MobileNet: https://arxiv.org/abs/1704.04861
+ * - Qwen3-VL: https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct
  * - JEPA: https://openreview.net/forum?id=BZ5a1r-kVsf
  */
 
@@ -238,7 +238,7 @@ export class DualBrainController {
    * 1. Check reactive instinct (rule-based, <5ms)
    * 2. If no reactive rule applies, check escalation conditions
    * 3. If escalation needed → run planner (RSA)
-   * 4. Otherwise → run LLM instinct (single-pass Qwen3-4B)
+   * 4. Otherwise → run LLM instinct (single-pass Qwen3-VL-8B)
    */
   async decide(context: {
     sensorData: { front: number; left: number; right: number; back: number };

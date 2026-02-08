@@ -15,9 +15,9 @@
  * 4. RECURSE:    Repeat for T steps, refining the population each time
  *
  * In the LLMos Dual-Brain architecture, RSA serves as the PLANNER brain:
- * - Called on escalation from the INSTINCT layer (Qwen3-4B single-pass)
+ * - Called on escalation from the INSTINCT layer (Qwen3-VL-8B single-pass)
  * - Runs at 0.1-1Hz for deep planning, goal decomposition, skill generation
- * - Uses structured JSON from MobileNet vision as input context
+ * - Uses VisionFrame JSON from Qwen3-VL-8B multimodal analysis as input context
  *
  * Key insight from the paper: Even K=2 gives massive improvement over
  * K=1 (self-refinement). You don't need large K to benefit.
@@ -53,7 +53,7 @@ export interface RSAConfig {
 
 /**
  * Preset configurations for different robotics use cases.
- * Latency estimates assume ~200ms per Qwen3-4B inference on RTX 3060+.
+ * Latency estimates assume ~200-500ms per Qwen3-VL-8B inference on RTX 3060+.
  */
 export const RSA_PRESETS: Record<string, RSAConfig> = {
   /** Quick replan when robot gets stuck. ~2.5s latency. */
@@ -152,7 +152,7 @@ export interface RSAResult {
 
 /**
  * Interface for the LLM inference backend.
- * This allows RSA to work with any model provider (local Qwen3-4B, cloud API, etc.)
+ * This allows RSA to work with any model provider (local Qwen3-VL-8B, cloud API, etc.)
  */
 export interface RSAInferenceProvider {
   /** Generate a single completion given a prompt. */
