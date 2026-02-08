@@ -69,6 +69,24 @@ export interface SensorReadings {
   bumper: { front: boolean; back: boolean };
   battery: { voltage: number; percentage: number };
   pose: { x: number; y: number; rotation: number };
+  // Pushable objects detected nearby
+  nearbyPushables?: {
+    id: string;
+    label: string;
+    distance: number;
+    angle: number;
+    color: string;
+    dockedIn?: string;
+  }[];
+  // Dock zones detected nearby
+  nearbyDockZones?: {
+    id: string;
+    label: string;
+    distance: number;
+    angle: number;
+    color: string;
+    hasObject: boolean;
+  }[];
 }
 
 export interface CameraAnalysis {
@@ -233,9 +251,31 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       const leftDist = sensors.distance.left;
       const rightDist = sensors.distance.right;
 
+      let sceneDesc = describeScene(frontDist, leftDist, rightDist);
+
+      // Add pushable objects to scene description
+      if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+        const objDescs = sensors.nearbyPushables.map(p => {
+          const dir = p.angle > 30 ? 'to the right' : p.angle < -30 ? 'to the left' : 'ahead';
+          const status = p.dockedIn ? ' (DOCKED in target zone!)' : '';
+          return `${p.label} (${p.color}) ${dir} at ${p.distance}cm${status}`;
+        });
+        sceneDesc += ` | Pushable objects: ${objDescs.join('; ')}`;
+      }
+
+      // Add dock zones to scene description
+      if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+        const dockDescs = sensors.nearbyDockZones.map(d => {
+          const dir = d.angle > 30 ? 'to the right' : d.angle < -30 ? 'to the left' : 'ahead';
+          const status = d.hasObject ? ' (OBJECT INSIDE - GOAL COMPLETE!)' : ' (empty - push object here)';
+          return `${d.label} ${dir} at ${d.distance}cm${status}`;
+        });
+        sceneDesc += ` | Dock zones: ${dockDescs.join('; ')}`;
+      }
+
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
-        scene: describeScene(frontDist, leftDist, rightDist),
+        scene: sceneDesc,
         obstacles: {
           front: frontDist < 50,
           left: leftDist < 40,
@@ -641,6 +681,8 @@ export class ESP32AgentRuntime {
           bumper: state.robot.sensors.bumper,
           battery: state.robot.battery,
           pose: state.robot.pose,
+          nearbyPushables: state.robot.sensors.nearbyPushables,
+          nearbyDockZones: state.robot.sensors.nearbyDockZones,
         };
       },
     };
@@ -787,7 +829,7 @@ export class ESP32AgentRuntime {
    */
   private async callLLM(sensors: SensorReadings): Promise<string> {
     // Build structured user prompt with sensor data
-    const sensorContext = {
+    const sensorContext: Record<string, any> = {
       cycle: this.state.iteration,
       current_step: this.state.currentStep,
       sensor_data: {
@@ -805,6 +847,30 @@ export class ESP32AgentRuntime {
       current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
     };
+
+    // Include pushable objects sensor data if available
+    if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+      sensorContext.nearby_pushable_objects = sensors.nearbyPushables.map(p => ({
+        id: p.id,
+        label: p.label,
+        distance_cm: p.distance,
+        angle_degrees: p.angle,
+        color: p.color,
+        docked_in: p.dockedIn || null,
+      }));
+    }
+
+    // Include dock zones sensor data if available
+    if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+      sensorContext.nearby_dock_zones = sensors.nearbyDockZones.map(d => ({
+        id: d.id,
+        label: d.label,
+        distance_cm: d.distance,
+        angle_degrees: d.angle,
+        color: d.color,
+        has_object_inside: d.hasObject,
+      }));
+    }
 
     const userPrompt = `CYCLE ${this.state.iteration} - SENSOR UPDATE:
 ${JSON.stringify(sensorContext, null, 2)}

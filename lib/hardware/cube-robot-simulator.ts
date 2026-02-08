@@ -115,6 +115,26 @@ export interface SensorData {
     points: number;
   }[];
 
+  // Nearby pushable objects (for physics-based scenarios)
+  nearbyPushables?: {
+    id: string;
+    label: string;
+    distance: number;    // Distance in cm
+    angle: number;       // Angle relative to robot heading (-180 to 180 degrees)
+    color: string;
+    dockedIn?: string;   // ID of dock zone if object is inside one
+  }[];
+
+  // Nearby dock zones (for goal-based scenarios)
+  nearbyDockZones?: {
+    id: string;
+    label: string;
+    distance: number;    // Distance in cm
+    angle: number;       // Angle relative to robot heading (-180 to 180 degrees)
+    color: string;
+    hasObject: boolean;  // Whether any pushable object is inside this dock
+  }[];
+
   // Velocity (for trajectory prediction)
   velocity: {
     linear: number;   // m/s (forward/backward speed)
@@ -165,6 +185,44 @@ export interface Collectible {
   points?: number; // Points value (default: 10)
 }
 
+// Pushable physics object - can be pushed by the robot
+export interface PushableObject {
+  id: string;
+  x: number;
+  y: number;
+  size: number;      // Side length for cube (meters)
+  mass: number;      // Mass in kg (affects push resistance)
+  friction: number;  // Friction coefficient (0-1, higher = harder to push)
+  color: string;     // Display color
+  label?: string;    // Optional label (e.g., "Red Cube")
+}
+
+// Dock zone - target area where objects should be pushed to
+export interface DockZone {
+  id: string;
+  x: number;
+  y: number;
+  width: number;     // Zone width in meters
+  height: number;    // Zone height in meters
+  color: string;     // Display color
+  label?: string;    // Optional label (e.g., "Green Dock")
+}
+
+// Runtime state for a pushable object (includes velocity)
+export interface PushableObjectState {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;       // Velocity X (m/s)
+  vy: number;       // Velocity Y (m/s)
+  size: number;
+  mass: number;
+  friction: number;
+  color: string;
+  label?: string;
+  dockedIn?: string; // ID of dock zone if object is inside one
+}
+
 export interface FloorMap {
   bounds: {
     minX: number;
@@ -177,6 +235,8 @@ export interface FloorMap {
   lines: LineTrack[];
   checkpoints: Vector2D[];
   collectibles?: Collectible[];  // Optional collectible items (coins, balls, etc.)
+  pushableObjects?: PushableObject[];  // Objects that can be pushed by the robot
+  dockZones?: DockZone[];              // Target zones for pushing objects into
   startPosition: RobotPose;
 }
 
@@ -186,6 +246,7 @@ export interface CubeRobotConfig {
   onCollision?: (position: Vector2D) => void;
   onCheckpoint?: (index: number) => void;
   onCollectible?: (collectible: Collectible, totalCollected: number, totalPoints: number) => void;
+  onObjectDocked?: (objectId: string, dockZoneId: string) => void;  // When a pushable object enters a dock zone
 }
 
 export interface CubeRobotState {
@@ -203,6 +264,19 @@ export interface CubeRobotState {
     totalPoints: number;      // Total points scored
     totalCount: number;       // Total items in map
   };
+  // Pushable objects tracking
+  pushableObjects?: PushableObjectState[];
+  // Dock zone status
+  dockZones?: {
+    id: string;
+    label?: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+    dockedObjectIds: string[];  // IDs of pushable objects currently inside this dock
+  }[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -240,6 +314,10 @@ export class CubeRobotSimulator {
   private collectedItems: Set<string> = new Set();
   private totalPoints = 0;
 
+  // Pushable objects runtime state
+  private pushableObjectStates: PushableObjectState[] = [];
+  private dockedObjects: Map<string, string> = new Map(); // objectId -> dockZoneId
+
   constructor(config: CubeRobotConfig = {}) {
     this.config = {
       physicsRate: config.physicsRate ?? 100,
@@ -247,6 +325,7 @@ export class CubeRobotSimulator {
       onCollision: config.onCollision ?? (() => {}),
       onCheckpoint: config.onCheckpoint ?? (() => {}),
       onCollectible: config.onCollectible ?? (() => {}),
+      onObjectDocked: config.onObjectDocked ?? (() => {}),
     };
 
     this.map = this.createDefaultMap();
@@ -328,6 +407,21 @@ export class CubeRobotSimulator {
     this.collectedItems.clear();
     this.totalPoints = 0;
     this.startTime = Date.now();
+
+    // Initialize pushable object states from map
+    this.pushableObjectStates = (this.map.pushableObjects || []).map(obj => ({
+      id: obj.id,
+      x: obj.x,
+      y: obj.y,
+      vx: 0,
+      vy: 0,
+      size: obj.size,
+      mass: obj.mass,
+      friction: obj.friction,
+      color: obj.color,
+      label: obj.label,
+    }));
+    this.dockedObjects.clear();
   }
 
   /**
@@ -406,6 +500,20 @@ export class CubeRobotSimulator {
       .filter(c => !this.collectedItems.has(c.id))
       .map(c => c.id);
 
+    // Build dock zone status
+    const dockZones = (this.map.dockZones || []).map(dz => ({
+      id: dz.id,
+      label: dz.label,
+      x: dz.x,
+      y: dz.y,
+      width: dz.width,
+      height: dz.height,
+      color: dz.color,
+      dockedObjectIds: this.pushableObjectStates
+        .filter(obj => obj.dockedIn === dz.id)
+        .map(obj => obj.id),
+    }));
+
     return {
       pose: { ...this.pose },
       velocity: { ...this.velocity },
@@ -420,6 +528,10 @@ export class CubeRobotSimulator {
         totalPoints: this.totalPoints,
         totalCount: collectibles.length,
       } : undefined,
+      pushableObjects: this.pushableObjectStates.length > 0
+        ? this.pushableObjectStates.map(obj => ({ ...obj }))
+        : undefined,
+      dockZones: dockZones.length > 0 ? dockZones : undefined,
     };
   }
 
@@ -503,6 +615,12 @@ export class CubeRobotSimulator {
 
     // Check collectibles
     this.checkCollectibles();
+
+    // Update pushable objects physics
+    this.updatePushableObjects(dt);
+
+    // Check dock zones
+    this.checkDockZones();
 
     // Notify state change
     this.config.onStateChange(this.getState());
@@ -653,6 +771,148 @@ export class CubeRobotSimulator {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // PUSHABLE OBJECT PHYSICS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private updatePushableObjects(dt: number): void {
+    if (this.pushableObjectStates.length === 0) return;
+
+    const robotRadius = ROBOT_SPECS.BODY_SIZE / 2;
+
+    for (const obj of this.pushableObjectStates) {
+      const objRadius = obj.size / 2;
+
+      // Check robot-to-object collision (circle-to-circle approximation)
+      const dx = obj.x - this.pose.x;
+      const dy = obj.y - this.pose.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = robotRadius + objRadius;
+
+      if (dist < minDist && dist > 0.001) {
+        // Robot is pushing the object
+        // Calculate push direction (from robot to object)
+        const pushDirX = dx / dist;
+        const pushDirY = dy / dist;
+
+        // Push force based on robot velocity projected onto push direction
+        const robotVx = this.velocity.linear * Math.sin(this.pose.rotation);
+        const robotVy = this.velocity.linear * Math.cos(this.pose.rotation);
+        const pushForce = robotVx * pushDirX + robotVy * pushDirY;
+
+        if (pushForce > 0) {
+          // Transfer momentum: robot pushes object
+          // Force = (robot_mass * velocity_component) / object_mass
+          const pushStrength = (ROBOT_SPECS.MASS * pushForce) / obj.mass;
+          obj.vx += pushDirX * pushStrength * dt * 20; // Scale factor for responsiveness
+          obj.vy += pushDirY * pushStrength * dt * 20;
+        }
+
+        // Separate robot and object to prevent overlap
+        const overlap = minDist - dist;
+        obj.x += pushDirX * overlap * 0.5;
+        obj.y += pushDirY * overlap * 0.5;
+      }
+
+      // Apply friction to slow down object
+      const speed = Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy);
+      if (speed > 0.001) {
+        const frictionDecel = obj.friction * 9.81 * dt; // friction * gravity * dt
+        const newSpeed = Math.max(0, speed - frictionDecel);
+        const ratio = newSpeed / speed;
+        obj.vx *= ratio;
+        obj.vy *= ratio;
+      } else {
+        obj.vx = 0;
+        obj.vy = 0;
+      }
+
+      // Update object position
+      obj.x += obj.vx * dt;
+      obj.y += obj.vy * dt;
+
+      // Clamp to bounds
+      obj.x = Math.max(
+        this.map.bounds.minX + objRadius,
+        Math.min(this.map.bounds.maxX - objRadius, obj.x)
+      );
+      obj.y = Math.max(
+        this.map.bounds.minY + objRadius,
+        Math.min(this.map.bounds.maxY - objRadius, obj.y)
+      );
+
+      // Bounce off walls
+      for (const wall of this.map.walls) {
+        const wallDist = this.pointToLineDistance(obj.x, obj.y, wall.x1, wall.y1, wall.x2, wall.y2);
+        if (wallDist < objRadius) {
+          // Reflect velocity off wall normal
+          const wallDx = wall.x2 - wall.x1;
+          const wallDy = wall.y2 - wall.y1;
+          const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+          if (wallLen > 0) {
+            const normalX = -wallDy / wallLen;
+            const normalY = wallDx / wallLen;
+            const dotProduct = obj.vx * normalX + obj.vy * normalY;
+            obj.vx -= 2 * dotProduct * normalX * 0.5; // Damped reflection
+            obj.vy -= 2 * dotProduct * normalY * 0.5;
+          }
+        }
+      }
+
+      // Bounce off obstacles
+      for (const obs of this.map.obstacles) {
+        const obsDist = Math.sqrt((obj.x - obs.x) ** 2 + (obj.y - obs.y) ** 2);
+        if (obsDist < objRadius + obs.radius && obsDist > 0.001) {
+          const normalX = (obj.x - obs.x) / obsDist;
+          const normalY = (obj.y - obs.y) / obsDist;
+          // Push object out of obstacle
+          const obsOverlap = objRadius + obs.radius - obsDist;
+          obj.x += normalX * obsOverlap;
+          obj.y += normalY * obsOverlap;
+          // Damped reflection
+          const dotProduct = obj.vx * normalX + obj.vy * normalY;
+          if (dotProduct < 0) {
+            obj.vx -= 2 * dotProduct * normalX * 0.5;
+            obj.vy -= 2 * dotProduct * normalY * 0.5;
+          }
+        }
+      }
+    }
+  }
+
+  private checkDockZones(): void {
+    if (!this.map.dockZones || this.pushableObjectStates.length === 0) return;
+
+    for (const obj of this.pushableObjectStates) {
+      const objRadius = obj.size / 2;
+      let currentDock: string | undefined = undefined;
+
+      for (const dz of this.map.dockZones) {
+        // Check if the center of the object is within the dock zone
+        const inZone =
+          obj.x >= dz.x - dz.width / 2 + objRadius &&
+          obj.x <= dz.x + dz.width / 2 - objRadius &&
+          obj.y >= dz.y - dz.height / 2 + objRadius &&
+          obj.y <= dz.y + dz.height / 2 - objRadius;
+
+        if (inZone) {
+          currentDock = dz.id;
+          // Notify if newly docked
+          if (!this.dockedObjects.has(obj.id) || this.dockedObjects.get(obj.id) !== dz.id) {
+            this.dockedObjects.set(obj.id, dz.id);
+            this.config.onObjectDocked(obj.id, dz.id);
+          }
+          break;
+        }
+      }
+
+      obj.dockedIn = currentDock;
+      if (!currentDock) {
+        this.dockedObjects.delete(obj.id);
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SENSOR SIMULATION
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -664,6 +924,8 @@ export class CubeRobotSimulator {
       bumper: { ...this.bumperState },
       encoders: { ...this.encoders },
       nearbyCollectibles: this.getNearbyCollectibles(),
+      nearbyPushables: this.getNearbyPushables(),
+      nearbyDockZones: this.getNearbyDockZones(),
       velocity: { ...this.velocity }, // Include velocity for trajectory prediction
     };
   }
@@ -714,6 +976,80 @@ export class CubeRobotSimulator {
     return nearby.slice(0, maxItems);
   }
 
+  /**
+   * Get nearby pushable objects within sensor range (2m)
+   */
+  private getNearbyPushables(): SensorData['nearbyPushables'] {
+    if (this.pushableObjectStates.length === 0) return undefined;
+
+    const maxRange = 2.0;
+    const nearby: { id: string; label: string; distance: number; angle: number; color: string; dockedIn?: string }[] = [];
+
+    for (const obj of this.pushableObjectStates) {
+      const dx = obj.x - this.pose.x;
+      const dy = obj.y - this.pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > maxRange) continue;
+
+      // Calculate angle relative to robot heading
+      // In this coordinate system: forward = (sin(θ), cos(θ))
+      const absoluteAngle = Math.atan2(dx, dy);
+      let relativeAngle = absoluteAngle - this.pose.rotation;
+      while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+      while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+
+      nearby.push({
+        id: obj.id,
+        label: obj.label || obj.id,
+        distance: Math.round(distance * 100),
+        angle: Math.round(relativeAngle * 180 / Math.PI),
+        color: obj.color,
+        dockedIn: obj.dockedIn,
+      });
+    }
+
+    nearby.sort((a, b) => a.distance - b.distance);
+    return nearby.length > 0 ? nearby : undefined;
+  }
+
+  /**
+   * Get nearby dock zones within sensor range (3m)
+   */
+  private getNearbyDockZones(): SensorData['nearbyDockZones'] {
+    if (!this.map.dockZones || this.map.dockZones.length === 0) return undefined;
+
+    const maxRange = 3.0;
+    const nearby: { id: string; label: string; distance: number; angle: number; color: string; hasObject: boolean }[] = [];
+
+    for (const dz of this.map.dockZones) {
+      const dx = dz.x - this.pose.x;
+      const dy = dz.y - this.pose.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > maxRange) continue;
+
+      const absoluteAngle = Math.atan2(dx, dy);
+      let relativeAngle = absoluteAngle - this.pose.rotation;
+      while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+      while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+
+      const hasObject = this.pushableObjectStates.some(obj => obj.dockedIn === dz.id);
+
+      nearby.push({
+        id: dz.id,
+        label: dz.label || dz.id,
+        distance: Math.round(distance * 100),
+        angle: Math.round(relativeAngle * 180 / Math.PI),
+        color: dz.color,
+        hasObject,
+      });
+    }
+
+    nearby.sort((a, b) => a.distance - b.distance);
+    return nearby.length > 0 ? nearby : undefined;
+  }
+
   private getDistanceSensors(): SensorData['distance'] {
     const sensorAngles = {
       front: 0,
@@ -751,6 +1087,14 @@ export class CubeRobotSimulator {
     // Check obstacles
     for (const obs of this.map.obstacles) {
       const dist = this.rayCircleIntersection(x, y, angle, obs.x, obs.y, obs.radius);
+      if (dist !== null && dist < minDist) {
+        minDist = dist;
+      }
+    }
+
+    // Check pushable objects (detected as circular obstacles for distance sensors)
+    for (const obj of this.pushableObjectStates) {
+      const dist = this.rayCircleIntersection(x, y, angle, obj.x, obj.y, obj.size / 2);
       if (dist !== null && dist < minDist) {
         minDist = dist;
       }
@@ -1361,6 +1705,55 @@ export const FLOOR_MAPS = {
       { id: 'ball-1', type: 'ball', x: 0, y: -1.5, radius: 0.12, color: '#FF6B6B', points: 100 },
     ],
     startPosition: { x: 0, y: -2.2, rotation: Math.PI / 2 },  // Start behind the ball
+  }),
+
+  /**
+   * Standard 5m x 5m cube physics challenge
+   * Goal: Find the red cube, navigate to it, and push it to the green dock station
+   * Features physics-based pushing mechanics with a pushable red cube (~robot size)
+   * and a green dock zone target area on the floor
+   */
+  standard5x5CubePhysics: (): FloorMap => ({
+    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+    walls: [
+      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },  // Bottom
+      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },     // Right
+      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },     // Top
+      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },   // Left
+    ],
+    obstacles: [
+      // A few obstacles to make navigation interesting
+      { x: -1.2, y: 0.5, radius: 0.2 },
+      { x: 1.0, y: -0.8, radius: 0.18 },
+    ],
+    lines: [],
+    checkpoints: [],
+    pushableObjects: [
+      // Red cube in the center - similar size to the robot (0.08m body)
+      {
+        id: 'red-cube',
+        x: 0,
+        y: 0,
+        size: 0.10,          // 10cm cube (similar to robot's 8cm)
+        mass: 0.15,          // 150g (lighter than robot's 250g so it can be pushed)
+        friction: 0.4,       // Moderate friction
+        color: '#e53935',    // Bright red
+        label: 'Red Cube',
+      },
+    ],
+    dockZones: [
+      // Green dock station on the floor (bottom-right area)
+      {
+        id: 'green-dock',
+        x: 2.0,
+        y: -2.0,
+        width: 0.5,          // 50cm wide
+        height: 0.5,         // 50cm deep
+        color: '#4caf50',    // Green
+        label: 'Green Dock',
+      },
+    ],
+    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },  // Start at bottom-left, facing center
   }),
 
   /**

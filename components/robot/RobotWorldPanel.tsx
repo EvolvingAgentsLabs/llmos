@@ -192,6 +192,31 @@ function PiPTopView({
       ctx.fill();
     });
 
+    // Draw dock zones
+    floorMap.dockZones?.forEach(dz => {
+      const pos = toCanvas(dz.x - dz.width / 2, dz.y - dz.height / 2);
+      const w = dz.width * scale;
+      const h = dz.height * scale;
+      ctx.fillStyle = dz.color;
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(pos.x, pos.y, w, h);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = dz.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pos.x, pos.y, w, h);
+    });
+
+    // Draw pushable objects
+    robotState?.pushableObjects?.forEach(obj => {
+      const pos = toCanvas(obj.x, obj.y);
+      const halfSize = obj.size * scale / 2;
+      ctx.fillStyle = obj.color;
+      ctx.fillRect(pos.x - halfSize, pos.y - halfSize, halfSize * 2, halfSize * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pos.x - halfSize, pos.y - halfSize, halfSize * 2, halfSize * 2);
+    });
+
     // Draw robot
     if (robotState) {
       const robotPos = toCanvas(robotState.pose.x, robotState.pose.y);
@@ -636,6 +661,20 @@ function PiPRobotCamera({
             {floorMap.collectibles && floorMap.collectibles.length > 0 && (
               <PiPCollectibles collectibles={floorMap.collectibles} collectedIds={collectedIds} />
             )}
+            {/* Pushable objects in PiP view */}
+            {robotState?.pushableObjects?.map(obj => (
+              <mesh key={obj.id} position={[obj.x, obj.size / 2, obj.y]} castShadow>
+                <boxGeometry args={[obj.size, obj.size, obj.size]} />
+                <meshStandardMaterial color={obj.color} emissive={obj.color} emissiveIntensity={0.3} />
+              </mesh>
+            ))}
+            {/* Dock zones in PiP view */}
+            {floorMap.dockZones?.map(dz => (
+              <mesh key={dz.id} position={[dz.x, 0.003, dz.y]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[dz.width, dz.height]} />
+                <meshStandardMaterial color={dz.color} transparent opacity={0.3} emissive={dz.color} emissiveIntensity={0.2} />
+              </mesh>
+            ))}
 
             {/* Background and fog */}
             <color attach="background" args={['#0d1117']} />
@@ -1322,6 +1361,8 @@ export default function RobotWorldPanel({
               collectedIds={robotState?.collectibles?.collected || []}
               rayNavigation={rayNavigation}
               showRayVisualization={showRayVisualization}
+              pushableObjects={robotState?.pushableObjects || []}
+              dockZones={floorMap?.dockZones || []}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

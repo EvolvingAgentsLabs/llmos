@@ -48,7 +48,7 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
 
   const [showFileBrowser, setShowFileBrowser] = useState(true);
   const [showChat, setShowChat] = useState(true);
-  const [currentMap, setCurrentMap] = useState('standard5x5Empty');
+  const [currentMap, setCurrentMap] = useState('standard5x5CubePhysics');
   const [selectedRobotProgram, setSelectedRobotProgram] = useState<string | null>(null);
   const [rightPanelMode, setRightPanelMode] = useState<'chat' | 'agent'>('agent');
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
@@ -738,6 +738,13 @@ export default function RobotWorkspace({ activeVolume, onVolumeChange }: RobotWo
                     <div className="text-[10px] uppercase tracking-wider text-[#6e7681] px-2 py-1 mt-3">
                       Standard Maps
                     </div>
+                    <FileTreeItem
+                      name="5m × 5m Cube Physics"
+                      type="map"
+                      icon="🧊"
+                      isActive={currentMap === 'standard5x5CubePhysics'}
+                      onClick={() => setCurrentMap('standard5x5CubePhysics')}
+                    />
                     <FileTreeItem
                       name="5m × 5m Empty"
                       type="map"
