@@ -951,7 +951,7 @@ export class ESP32AgentRuntime {
           }
           return;
         }
-        // Scan complete - fall through to normal loop which will now run with OBSERVE step
+        // Scan complete - schedule next iteration which will run with PLAN step
         // and the scan results injected into conversation history
         this.emitStateChange();
         if (this.state.running) {
@@ -1280,12 +1280,16 @@ Respond with ONLY valid JSON in the required structured format.`;
     );
 
     // Simple cycle advancement logic:
-    // - After OBSERVE (take_picture), advance to PLAN
-    // - After MOVE (forward/backward commands), advance to STOP
-    // - After STOP (stop commands), advance to OBSERVE
-    if (this.state.currentStep === 'OBSERVE' && tookPicture) {
+    // - After OBSERVE, advance to PLAN (pre-loop camera capture always provides a fresh image)
+    // - After PLAN/ROTATE with movement commands, advance to MOVE
+    // - After MOVE with stop commands, advance to STOP
+    // - After STOP, advance to OBSERVE
+    if (this.state.currentStep === 'OBSERVE') {
+      // Pre-loop camera capture (line ~963) always provides a fresh camera image
+      // with every LLM call, so the LLM has already observed the environment.
+      // Auto-advance to PLAN so the cycle never gets stuck at OBSERVE.
       this.state.currentStep = 'PLAN';
-      this.log('Cycle: OBSERVE → PLAN (took picture)', 'info');
+      this.log('Cycle: OBSERVE → PLAN (camera image auto-provided)', 'info');
     } else if ((this.state.currentStep === 'PLAN' || this.state.currentStep === 'ROTATE') && executedMove) {
       this.state.currentStep = 'MOVE';
       this.log('Cycle: → MOVE (wheels moving)', 'info');
@@ -1461,8 +1465,9 @@ Respond with ONLY valid JSON in the required structured format.`;
       // Build scan summary and inject into conversation history for LLM awareness
       this.injectScanResultsIntoHistory(scan);
 
-      // Transition back to OBSERVE so LLM can plan based on scan results
-      this.state.currentStep = 'OBSERVE';
+      // Transition to PLAN so LLM can act on scan results immediately.
+      // The scan already performed comprehensive observation - no need to OBSERVE again.
+      this.state.currentStep = 'PLAN';
       return true;
     }
 
