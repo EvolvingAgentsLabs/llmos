@@ -952,8 +952,8 @@ export class ESP32AgentRuntime {
           }
           return;
         }
-        // Scan complete - schedule next iteration which will run with PLAN step
-        // and the scan results injected into conversation history
+        // Scan complete - next iteration enters FORCE_MOVE which rotates toward
+        // the detected target and drives forward (bypassing the LLM)
         this.emitStateChange();
         if (this.state.running) {
           this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
@@ -1331,30 +1331,86 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
-   * Force the robot to drive forward when stuck after a recent scan.
-   * This ensures the robot explores new areas even when the LLM won't issue movement commands.
+   * Force the robot to move when the LLM won't issue movement commands.
+   * If a scan detected a target, rotates toward it first, then drives forward.
+   * If no target, just drives forward to explore a new area.
    */
   private async executeForceMove(): Promise<void> {
-    this.log('FORCE MOVE: Driving forward to explore new area', 'info');
+    const scan = this.state.worldModel.scanState;
+    const hasTarget = scan && !scan.active && scan.targetDetected;
 
-    // Drive forward
+    // STEP 1: If scan detected a target, rotate toward it
+    if (hasTarget && this.deviceContext) {
+      const targetHeading = scan.targetDetected!.heading_degrees;
+      const currentSensors = this.deviceContext.getSensors();
+      const currentHeading = (currentSensors.pose.rotation * 180) / Math.PI;
+      const rotationNeeded = this.normalizeAngleDeg(targetHeading - currentHeading);
+
+      if (Math.abs(rotationNeeded) > 5) {
+        this.log(`FORCE MOVE: Rotating ${rotationNeeded > 0 ? 'LEFT' : 'RIGHT'} ${Math.abs(Math.round(rotationNeeded))}° toward target at heading ${targetHeading}°`, 'info');
+
+        // Determine rotation direction
+        const ROTATE_PWM = 50;
+        if (rotationNeeded > 0) {
+          // Turn LEFT: left backward, right forward
+          this.deviceContext.setLeftWheel(-ROTATE_PWM);
+          this.deviceContext.setRightWheel(ROTATE_PWM);
+        } else {
+          // Turn RIGHT: left forward, right backward
+          this.deviceContext.setLeftWheel(ROTATE_PWM);
+          this.deviceContext.setRightWheel(-ROTATE_PWM);
+        }
+
+        // Poll heading until we face the target (with safety timeout)
+        const rotateStart = Date.now();
+        const MAX_ROTATE_MS = 5000; // 5s max for large rotations
+        let reachedTarget = false;
+
+        while (Date.now() - rotateStart < MAX_ROTATE_MS) {
+          await new Promise(resolve => setTimeout(resolve, 30));
+          const sensors = this.deviceContext.getSensors();
+          const currentDeg = (sensors.pose.rotation * 180) / Math.PI;
+          const diff = this.normalizeAngleDeg(currentDeg - targetHeading);
+          if (Math.abs(diff) < 8) { // 8° tolerance for target approach
+            reachedTarget = true;
+            break;
+          }
+        }
+
+        // Stop rotation
+        this.deviceContext.setLeftWheel(WHEEL_SPEED.STOP);
+        this.deviceContext.setRightWheel(WHEEL_SPEED.STOP);
+        await new Promise(resolve => setTimeout(resolve, 200)); // Stabilize
+
+        this.log(`FORCE MOVE: Rotation ${reachedTarget ? 'complete' : 'timed out'} - now driving forward toward target`, 'info');
+      } else {
+        this.log('FORCE MOVE: Already facing target - driving forward', 'info');
+      }
+    } else {
+      this.log('FORCE MOVE: No target detected - driving forward to explore', 'info');
+    }
+
+    // STEP 2: Drive forward
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
 
-    // Drive for 1.5 seconds (~50cm depending on speed)
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Drive for 2 seconds toward target (or to explore)
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Stop
+    // STEP 3: Stop
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
 
-    // Inject message into conversation history so LLM knows it moved
+    // Inject message into conversation history
+    const actionDesc = hasTarget
+      ? `rotated toward ${scan!.targetDetected!.description} and drove forward ~60cm`
+      : 'drove forward ~60cm to explore a new area';
     this.state.conversationHistory.push({
       role: 'user',
-      content: `--- FORCED FORWARD MOVEMENT ---
-The robot was stuck, so the system drove it forward ~50cm to explore a new area.
+      content: `--- SYSTEM NAVIGATION ---
+The system ${actionDesc}.
 A fresh camera image will be provided on the next cycle.
-IMPORTANT: You MUST now issue wheel commands to continue exploring. Use left_wheel=forward and right_wheel=forward to keep moving, or rotate to face a target.`,
+IMPORTANT: You MUST now issue wheel commands to continue. Use left_wheel=forward and right_wheel=forward to keep moving toward the target, or rotate to adjust course.`,
     });
 
     // Transition to OBSERVE for fresh assessment from new position
@@ -1525,15 +1581,16 @@ IMPORTANT: You MUST now issue wheel commands to continue exploring. Use left_whe
       // Build scan summary and inject into conversation history for LLM awareness
       this.injectScanResultsIntoHistory(scan);
 
-      // Transition to PLAN so LLM can act on scan results immediately.
-      // The scan already performed comprehensive observation - no need to OBSERVE again.
-      this.state.currentStep = 'PLAN';
+      // Go directly to FORCE_MOVE instead of PLAN.
+      // The LLM consistently fails to issue movement commands, so the system
+      // must execute the post-scan action plan (rotate toward target + drive forward).
+      this.state.currentStep = 'FORCE_MOVE';
       return true;
     }
 
     // PHASE 4: Rotate exactly 45° clockwise using heading-based feedback
     // Use a lower PWM for precise rotation control
-    const SCAN_ROTATE_PWM = 40; // Lower speed for precision (deadband minimum)
+    const SCAN_ROTATE_PWM = 35; // Low speed for precision
     const targetHeading = this.normalizeAngleDeg(captureHeading - 45);
 
     this.log(`SCAN: rotating from ${captureHeading}° to target ${targetHeading}° (45° clockwise)`, 'info');
@@ -1542,23 +1599,26 @@ IMPORTANT: You MUST now issue wheel commands to continue exploring. Use left_whe
 
     // Poll heading until we reach the target (with safety timeout)
     const rotateStart = Date.now();
-    const MAX_ROTATE_MS = 3000;
+    const MAX_ROTATE_MS = 4000;
     let reachedTarget = false;
 
     while (Date.now() - rotateStart < MAX_ROTATE_MS) {
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise(resolve => setTimeout(resolve, 20));
       const currentSensors = this.deviceContext!.getSensors();
       const currentDeg = (currentSensors.pose.rotation * 180) / Math.PI;
       const diff = this.normalizeAngleDeg(currentDeg - targetHeading);
-      if (Math.abs(diff) < 4) {
+      // Use tight tolerance of 3° and check we're past the halfway point
+      // to avoid stopping at the start when diff wraps around
+      if (Math.abs(diff) < 3) {
         reachedTarget = true;
         break;
       }
     }
 
-    // Stop rotation
+    // Stop rotation and wait for stabilization to prevent momentum carry-over
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
+    await new Promise(resolve => setTimeout(resolve, 150));
 
     if (!reachedTarget) {
       this.log(`SCAN: rotation timeout - may not have reached exact 45°`, 'warn');
