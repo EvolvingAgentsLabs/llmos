@@ -134,7 +134,7 @@ export interface CameraAnalysis {
 // STRUCTURED RESPONSE TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP' | 'SCAN';
+export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP' | 'SCAN' | 'FORCE_MOVE';
 
 export interface WorldModelObstacle {
   direction: 'front' | 'left' | 'right' | 'back';
@@ -148,6 +148,7 @@ export interface WorldModel {
   // Track last known position for stuck detection
   lastPosition?: { x: number; y: number; rotation: number };
   stuckCounter?: number;
+  lastScanTime?: number;  // Timestamp of last completed scan
   explored_areas: string[];
   unexplored_directions: string[];
   // 360-degree scan state
@@ -960,6 +961,16 @@ export class ESP32AgentRuntime {
         return;
       }
 
+      // FORCE_MOVE MODE: Drive forward to explore when stuck after a recent scan
+      if (this.state.currentStep === 'FORCE_MOVE') {
+        await this.executeForceMove();
+        this.emitStateChange();
+        if (this.state.running) {
+          this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
+        }
+        return;
+      }
+
       // STEP 1.5: Always capture a fresh camera image before calling LLM
       // This ensures the LLM always gets a current visual of the scene
       try {
@@ -1256,11 +1267,23 @@ Respond with ONLY valid JSON in the required structured format.`;
       this.state.worldModel.stuckCounter = 0;
     }
 
-    // FORCE 360-SCAN if stuck for 3+ cycles - instead of blindly moving forward,
-    // do a systematic 360-degree scan to find the target
+    // STUCK RECOVERY: Alternate between 360-SCAN and FORCE_MOVE
+    // If a recent scan was done, force forward movement to explore new area.
+    // Otherwise, do a 360° scan first.
     if ((this.state.worldModel.stuckCounter || 0) >= 3) {
-      this.log('STUCK DETECTED - Initiating 360-degree SCAN to find target!', 'warn');
-      this.initiateScan(sensors);
+      const lastScanTime = this.state.worldModel.lastScanTime || 0;
+      const timeSinceScan = Date.now() - lastScanTime;
+
+      if (timeSinceScan > 15000) {
+        // No recent scan - perform 360° scan to find target
+        this.log('STUCK DETECTED - Initiating 360-degree SCAN to find target!', 'warn');
+        this.initiateScan(sensors);
+        this.state.worldModel.lastScanTime = Date.now();
+      } else {
+        // Recent scan already done - force forward movement to explore new area
+        this.log('STUCK DETECTED after recent scan - FORCING FORWARD MOVEMENT to explore!', 'warn');
+        this.state.currentStep = 'FORCE_MOVE';
+      }
       this.state.worldModel.stuckCounter = 0;
       return; // Skip normal cycle advancement
     }
@@ -1279,20 +1302,25 @@ Respond with ONLY valid JSON in the required structured format.`;
       tc.args.direction !== 'stop'
     );
 
-    // Simple cycle advancement logic:
-    // - After OBSERVE, advance to PLAN (pre-loop camera capture always provides a fresh image)
-    // - After PLAN/ROTATE with movement commands, advance to MOVE
-    // - After MOVE with stop commands, advance to STOP
-    // - After STOP, advance to OBSERVE
+    // Cycle advancement logic:
+    // - OBSERVE → PLAN (pre-loop camera capture always provides a fresh image)
+    // - PLAN/ROTATE + movement → MOVE
+    // - PLAN/ROTATE + stop only → MOVE (auto-advance so LLM gets a MOVE prompt next)
+    // - MOVE + stop → STOP
+    // - STOP → OBSERVE
     if (this.state.currentStep === 'OBSERVE') {
-      // Pre-loop camera capture (line ~963) always provides a fresh camera image
-      // with every LLM call, so the LLM has already observed the environment.
-      // Auto-advance to PLAN so the cycle never gets stuck at OBSERVE.
+      // Pre-loop camera capture always provides a fresh camera image with every LLM call,
+      // so the LLM has already observed the environment. Auto-advance to PLAN.
       this.state.currentStep = 'PLAN';
       this.log('Cycle: OBSERVE → PLAN (camera image auto-provided)', 'info');
     } else if ((this.state.currentStep === 'PLAN' || this.state.currentStep === 'ROTATE') && executedMove) {
       this.state.currentStep = 'MOVE';
       this.log('Cycle: → MOVE (wheels moving)', 'info');
+    } else if ((this.state.currentStep === 'PLAN' || this.state.currentStep === 'ROTATE') && executedStop && !executedMove) {
+      // LLM issued stop during PLAN/ROTATE - auto-advance to MOVE to give it
+      // a direct "MOVE" prompt on the next cycle, which should trigger forward commands.
+      this.state.currentStep = 'MOVE';
+      this.log('Cycle: PLAN → MOVE (auto-advance, LLM planned but did not move)', 'info');
     } else if (this.state.currentStep === 'MOVE' && executedStop) {
       this.state.currentStep = 'STOP';
       this.log('Cycle: MOVE → STOP (wheels stopped)', 'info');
@@ -1300,6 +1328,38 @@ Respond with ONLY valid JSON in the required structured format.`;
       this.state.currentStep = 'OBSERVE';
       this.log('Cycle: STOP → OBSERVE (restarting cycle)', 'info');
     }
+  }
+
+  /**
+   * Force the robot to drive forward when stuck after a recent scan.
+   * This ensures the robot explores new areas even when the LLM won't issue movement commands.
+   */
+  private async executeForceMove(): Promise<void> {
+    this.log('FORCE MOVE: Driving forward to explore new area', 'info');
+
+    // Drive forward
+    this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
+    this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
+
+    // Drive for 1.5 seconds (~50cm depending on speed)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Stop
+    this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
+    this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
+
+    // Inject message into conversation history so LLM knows it moved
+    this.state.conversationHistory.push({
+      role: 'user',
+      content: `--- FORCED FORWARD MOVEMENT ---
+The robot was stuck, so the system drove it forward ~50cm to explore a new area.
+A fresh camera image will be provided on the next cycle.
+IMPORTANT: You MUST now issue wheel commands to continue exploring. Use left_wheel=forward and right_wheel=forward to keep moving, or rotate to face a target.`,
+    });
+
+    // Transition to OBSERVE for fresh assessment from new position
+    this.state.currentStep = 'OBSERVE';
+    this.log('FORCE MOVE complete - transitioning to OBSERVE', 'info');
   }
 
   /**
@@ -1490,7 +1550,7 @@ Respond with ONLY valid JSON in the required structured format.`;
       const currentSensors = this.deviceContext!.getSensors();
       const currentDeg = (currentSensors.pose.rotation * 180) / Math.PI;
       const diff = this.normalizeAngleDeg(currentDeg - targetHeading);
-      if (Math.abs(diff) < 6) {
+      if (Math.abs(diff) < 4) {
         reachedTarget = true;
         break;
       }
