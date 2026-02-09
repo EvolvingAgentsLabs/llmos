@@ -847,12 +847,12 @@ export class CubeRobotSimulator {
 
       // Clamp to bounds
       obj.x = Math.max(
-        this.map.bounds.minX + objRadius,
-        Math.min(this.map.bounds.maxX - objRadius, obj.x)
+        this.map.bounds.minX + objHalf,
+        Math.min(this.map.bounds.maxX - objHalf, obj.x)
       );
       obj.y = Math.max(
-        this.map.bounds.minY + objRadius,
-        Math.min(this.map.bounds.maxY - objRadius, obj.y)
+        this.map.bounds.minY + objHalf,
+        Math.min(this.map.bounds.maxY - objHalf, obj.y)
       );
 
       // Bounce off walls (use half-size for box collision + wall thickness)
