@@ -151,6 +151,14 @@ export interface WorldModel {
   lastScanTime?: number;  // Timestamp of last completed scan
   explored_areas: string[];
   unexplored_directions: string[];
+  // Known objects with absolute world positions (updated each cycle from sensors)
+  known_objects: Array<{
+    id: string;
+    label: string;
+    world_x: number;
+    world_y: number;
+    last_seen_cycle: number;
+  }>;
   // 360-degree scan state
   scanState?: {
     active: boolean;
@@ -804,6 +812,7 @@ export class ESP32AgentRuntime {
         obstacles: [],
         explored_areas: [],
         unexplored_directions: ['front', 'left', 'right', 'back'],
+        known_objects: [],
       },
       errors: [],
       stats: {
@@ -952,8 +961,8 @@ export class ESP32AgentRuntime {
           }
           return;
         }
-        // Scan complete - next iteration enters FORCE_MOVE which rotates toward
-        // the detected target and drives forward (bypassing the LLM)
+        // Scan complete - next iteration runs PLAN step with enriched world model
+        // containing detected objects and scan results for the LLM
         this.emitStateChange();
         if (this.state.running) {
           this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
@@ -1072,25 +1081,85 @@ export class ESP32AgentRuntime {
    * Call LLM for decision with conversation history
    */
   private async callLLM(sensors: SensorReadings): Promise<string> {
-    // Build structured user prompt with sensor data
-    // NOTE: Distance sensors have been removed. The robot relies on camera vision only.
+    const headingDeg = Math.round((sensors.pose.rotation * 180) / Math.PI);
+    const robotX = sensors.pose.x;
+    const robotY = sensors.pose.y;
+
+    // ── Update world model from actual sensor data ──
+    this.state.worldModel.robot_position = {
+      x: Number(robotX.toFixed(3)),
+      y: Number(robotY.toFixed(3)),
+      rotation: headingDeg,
+    };
+
+    // Convert detected objects to world coordinates and update known_objects
+    const allDetected: Array<{ id: string; label: string; distance: number; angle: number; color: string; docked_in?: string | null }> = [];
+    for (const p of sensors.nearbyPushables || []) {
+      allDetected.push({ id: p.id, label: p.label, distance: p.distance, angle: p.angle, color: p.color, docked_in: p.dockedIn || null });
+    }
+    for (const d of sensors.nearbyDockZones || []) {
+      allDetected.push({ id: d.id, label: d.label, distance: d.distance, angle: d.angle, color: d.color });
+    }
+
+    for (const obj of allDetected) {
+      const objWorldAngleRad = sensors.pose.rotation + (obj.angle * Math.PI) / 180;
+      const distM = obj.distance / 100;
+      const worldX = Number((robotX + Math.cos(objWorldAngleRad) * distM).toFixed(3));
+      const worldY = Number((robotY + Math.sin(objWorldAngleRad) * distM).toFixed(3));
+      const existing = this.state.worldModel.known_objects.find(o => o.id === obj.id);
+      if (existing) {
+        existing.world_x = worldX;
+        existing.world_y = worldY;
+        existing.last_seen_cycle = this.state.iteration;
+      } else {
+        this.state.worldModel.known_objects.push({
+          id: obj.id, label: obj.label, world_x: worldX, world_y: worldY, last_seen_cycle: this.state.iteration,
+        });
+      }
+    }
+
+    // ── Build sensor context with world model ──
     const sensorContext: Record<string, any> = {
       cycle: this.state.iteration,
       current_step: this.state.currentStep,
-      robot_pose: {
-        x: sensors.pose.x.toFixed(3),
-        y: sensors.pose.y.toFixed(3),
-        heading_degrees: Math.round((sensors.pose.rotation * 180) / Math.PI),
-      },
-      has_camera_image: !!this.state.lastPicture?.imageDataUrl,
-      current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
+      has_camera_image: !!this.state.lastPicture?.imageDataUrl,
+      robot: {
+        x: Number(robotX.toFixed(3)),
+        y: Number(robotY.toFixed(3)),
+        heading_degrees: headingDeg,
+      },
     };
+
+    // Nearby objects with both relative AND absolute positions
+    if (allDetected.length > 0) {
+      sensorContext.nearby_objects = allDetected.map(obj => {
+        const known = this.state.worldModel.known_objects.find(o => o.id === obj.id);
+        return {
+          id: obj.id,
+          label: obj.label,
+          relative_distance_cm: obj.distance,
+          relative_angle_degrees: obj.angle,
+          world_x: known?.world_x,
+          world_y: known?.world_y,
+          ...(('docked_in' in obj) ? { docked_in: obj.docked_in } : {}),
+        };
+      });
+    }
+
+    // All known objects in world (including from previous scans)
+    if (this.state.worldModel.known_objects.length > 0) {
+      sensorContext.world_model = {
+        known_objects: this.state.worldModel.known_objects.map(o => ({
+          id: o.id, label: o.label, world_x: o.world_x, world_y: o.world_y,
+          last_seen_cycle: o.last_seen_cycle,
+        })),
+      };
+    }
 
     // Include last scan results if a scan was recently completed
     if (this.state.worldModel.scanState && !this.state.worldModel.scanState.active && this.state.worldModel.scanState.scanResults.length > 0) {
       sensorContext.last_scan_results = {
-        total_headings_scanned: this.state.worldModel.scanState.scanResults.length,
         target_detected: this.state.worldModel.scanState.targetDetected || null,
         scan_summary: this.state.worldModel.scanState.scanResults.map(r => ({
           heading: r.heading_degrees,
@@ -1099,35 +1168,11 @@ export class ESP32AgentRuntime {
       };
     }
 
-    // Include pushable objects sensor data if available
-    if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
-      sensorContext.nearby_pushable_objects = sensors.nearbyPushables.map(p => ({
-        id: p.id,
-        label: p.label,
-        distance_cm: p.distance,
-        angle_degrees: p.angle,
-        color: p.color,
-        docked_in: p.dockedIn || null,
-      }));
-    }
-
-    // Include dock zones sensor data if available
-    if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
-      sensorContext.nearby_dock_zones = sensors.nearbyDockZones.map(d => ({
-        id: d.id,
-        label: d.label,
-        distance_cm: d.distance,
-        angle_degrees: d.angle,
-        color: d.color,
-        has_object_inside: d.hasObject,
-      }));
-    }
-
-    const userPrompt = `CYCLE ${this.state.iteration} - SENSOR UPDATE:
+    const userPrompt = `CYCLE ${this.state.iteration} | Step: ${this.state.currentStep}
 ${JSON.stringify(sensorContext, null, 2)}
 
-Continue the behavior cycle. Current step: ${this.state.currentStep}
-Respond with ONLY valid JSON in the required structured format.`;
+You MUST respond with wheel_commands that move the robot. Do NOT just stop.
+Respond with ONLY valid JSON.`;
 
     // Add to conversation history
     this.state.conversationHistory.push({
@@ -1331,89 +1376,29 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
-   * Force the robot to move when the LLM won't issue movement commands.
-   * If a scan detected a target, rotates toward it first, then drives forward.
-   * If no target, just drives forward to explore a new area.
+   * Last-resort fallback: drive forward briefly when stuck after a recent scan.
+   * This only triggers when the LLM has failed to move for many consecutive cycles.
    */
   private async executeForceMove(): Promise<void> {
-    const scan = this.state.worldModel.scanState;
-    const hasTarget = scan && !scan.active && scan.targetDetected;
+    this.log('FORCE MOVE (last resort): Driving forward to break deadlock', 'info');
 
-    // STEP 1: If scan detected a target, rotate toward it
-    if (hasTarget && this.deviceContext) {
-      const targetHeading = scan.targetDetected!.heading_degrees;
-      const currentSensors = this.deviceContext.getSensors();
-      const currentHeading = (currentSensors.pose.rotation * 180) / Math.PI;
-      const rotationNeeded = this.normalizeAngleDeg(targetHeading - currentHeading);
-
-      if (Math.abs(rotationNeeded) > 5) {
-        this.log(`FORCE MOVE: Rotating ${rotationNeeded > 0 ? 'LEFT' : 'RIGHT'} ${Math.abs(Math.round(rotationNeeded))}° toward target at heading ${targetHeading}°`, 'info');
-
-        // Determine rotation direction
-        const ROTATE_PWM = 50;
-        if (rotationNeeded > 0) {
-          // Turn LEFT: left backward, right forward
-          this.deviceContext.setLeftWheel(-ROTATE_PWM);
-          this.deviceContext.setRightWheel(ROTATE_PWM);
-        } else {
-          // Turn RIGHT: left forward, right backward
-          this.deviceContext.setLeftWheel(ROTATE_PWM);
-          this.deviceContext.setRightWheel(-ROTATE_PWM);
-        }
-
-        // Poll heading until we face the target (with safety timeout)
-        const rotateStart = Date.now();
-        const MAX_ROTATE_MS = 5000; // 5s max for large rotations
-        let reachedTarget = false;
-
-        while (Date.now() - rotateStart < MAX_ROTATE_MS) {
-          await new Promise(resolve => setTimeout(resolve, 30));
-          const sensors = this.deviceContext.getSensors();
-          const currentDeg = (sensors.pose.rotation * 180) / Math.PI;
-          const diff = this.normalizeAngleDeg(currentDeg - targetHeading);
-          if (Math.abs(diff) < 8) { // 8° tolerance for target approach
-            reachedTarget = true;
-            break;
-          }
-        }
-
-        // Stop rotation
-        this.deviceContext.setLeftWheel(WHEEL_SPEED.STOP);
-        this.deviceContext.setRightWheel(WHEEL_SPEED.STOP);
-        await new Promise(resolve => setTimeout(resolve, 200)); // Stabilize
-
-        this.log(`FORCE MOVE: Rotation ${reachedTarget ? 'complete' : 'timed out'} - now driving forward toward target`, 'info');
-      } else {
-        this.log('FORCE MOVE: Already facing target - driving forward', 'info');
-      }
-    } else {
-      this.log('FORCE MOVE: No target detected - driving forward to explore', 'info');
-    }
-
-    // STEP 2: Drive forward
+    // Drive forward briefly
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // Drive for 2 seconds toward target (or to explore)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // STEP 3: Stop
+    // Stop
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
 
     // Inject message into conversation history
-    const actionDesc = hasTarget
-      ? `rotated toward ${scan!.targetDetected!.description} and drove forward ~60cm`
-      : 'drove forward ~60cm to explore a new area';
     this.state.conversationHistory.push({
       role: 'user',
-      content: `--- SYSTEM NAVIGATION ---
-The system ${actionDesc}.
-A fresh camera image will be provided on the next cycle.
-IMPORTANT: You MUST now issue wheel commands to continue. Use left_wheel=forward and right_wheel=forward to keep moving toward the target, or rotate to adjust course.`,
+      content: `--- SYSTEM: FORCED FORWARD MOVEMENT ---
+The robot was stuck so the system drove it forward ~50cm.
+Look at the camera image and decide your next action. You MUST issue wheel_commands with forward or backward — not just stop.`,
     });
 
-    // Transition to OBSERVE for fresh assessment from new position
     this.state.currentStep = 'OBSERVE';
     this.log('FORCE MOVE complete - transitioning to OBSERVE', 'info');
   }
@@ -1581,10 +1566,8 @@ IMPORTANT: You MUST now issue wheel commands to continue. Use left_wheel=forward
       // Build scan summary and inject into conversation history for LLM awareness
       this.injectScanResultsIntoHistory(scan);
 
-      // Go directly to FORCE_MOVE instead of PLAN.
-      // The LLM consistently fails to issue movement commands, so the system
-      // must execute the post-scan action plan (rotate toward target + drive forward).
-      this.state.currentStep = 'FORCE_MOVE';
+      // Transition to PLAN so LLM can act on scan results with full world model context.
+      this.state.currentStep = 'PLAN';
       return true;
     }
 
