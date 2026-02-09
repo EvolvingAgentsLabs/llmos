@@ -19,6 +19,17 @@
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
 import { LLMStorage, DEFAULT_BASE_URL } from '../llm/storage';
+import {
+  useDiagnosticsStore,
+  analyzePerception,
+  analyzeDecision,
+  analyzePhysics,
+  analyzeCameraPerspective,
+  analyzeRepresentation,
+  type PerceptionSnapshot,
+  type DecisionSnapshot,
+  type PhysicsSnapshot,
+} from '../debug/agent-diagnostics';
 
 // Fixed speed constants - simple and predictable
 export const WHEEL_SPEED = {
@@ -699,6 +710,9 @@ export class ESP32AgentRuntime {
 
     this.log(`Starting agent: ${this.config.name}`, 'info');
 
+    // Clear diagnostics from previous run
+    useDiagnosticsStore.getState().clear();
+
     // Initialize device context
     this.deviceContext = this.initDeviceContext();
 
@@ -804,6 +818,11 @@ export class ESP32AgentRuntime {
       // AUTOMATIC CYCLE PROGRESSION & STUCK DETECTION
       // This ensures the robot advances through the cycle even if LLM doesn't set next_step correctly
       this.handleAutomaticCycleProgression(sensors, toolCalls);
+
+      // ═══════════════════════════════════════════════════════════════════
+      // DIAGNOSTIC INSTRUMENTATION
+      // ═══════════════════════════════════════════════════════════════════
+      this.emitDiagnostics(sensors, llmLatency, toolCalls);
 
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
@@ -1250,6 +1269,288 @@ Respond with ONLY valid JSON in the required structured format.`;
     }
 
     return calls;
+  }
+
+  /**
+   * Emit diagnostic data for the current cycle.
+   * Feeds the AgentDiagnosticsPanel with perception, decision, physics, and camera analysis.
+   */
+  private emitDiagnostics(
+    sensors: SensorReadings,
+    llmLatency: number,
+    toolCalls: Array<{ tool: string; args: Record<string, any> }>
+  ): void {
+    try {
+      const diag = useDiagnosticsStore.getState();
+      const cycle = this.state.iteration;
+      const goal = this.config.goal || 'explore safely';
+
+      // ── PERCEPTION SNAPSHOT ──────────────────────────────────────────
+      const sceneDesc = this.state.lastPicture?.scene || '';
+      const recommendation = this.state.lastPicture?.recommendation || '';
+
+      const perceptionSnapshot: PerceptionSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        sensors: {
+          front: sensors.distance.front,
+          frontLeft: sensors.distance.frontLeft,
+          frontRight: sensors.distance.frontRight,
+          left: sensors.distance.left,
+          right: sensors.distance.right,
+          back: sensors.distance.back,
+          backLeft: sensors.distance.backLeft,
+          backRight: sensors.distance.backRight,
+        },
+        frontBlocked: sensors.distance.front < 40,
+        leftBlocked: sensors.distance.left < 40,
+        rightBlocked: sensors.distance.right < 40,
+        backBlocked: sensors.distance.back < 40,
+        pushableObjectsDetected: sensors.nearbyPushables?.length || 0,
+        dockZonesDetected: sensors.nearbyDockZones?.length || 0,
+        sceneDescription: sceneDesc,
+        recommendation,
+      };
+      diag.addPerception(perceptionSnapshot);
+
+      const perceptionAnalysis = analyzePerception(
+        perceptionSnapshot.sensors,
+        perceptionSnapshot.pushableObjectsDetected,
+        perceptionSnapshot.dockZonesDetected,
+        goal
+      );
+      diag.updateHealth({ perception: perceptionAnalysis.score });
+
+      for (const issue of perceptionAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'perception',
+          severity: issue.includes('DANGER') ? 'critical' : issue.includes('not detected') ? 'warning' : 'info',
+          title: 'Perception Issue',
+          detail: issue,
+        });
+      }
+
+      // ── DECISION SNAPSHOT ────────────────────────────────────────────
+      const structured = this.state.lastStructuredResponse;
+      const prevDecision = diag.decisionHistory[diag.decisionHistory.length - 1] || null;
+
+      const wheelCmds = structured?.wheel_commands || { left_wheel: 'stop', right_wheel: 'stop' };
+      const prevWheelCmds = prevDecision?.wheelCommands || { left: '', right: '' };
+      const repeatsLast =
+        wheelCmds.left_wheel === prevWheelCmds.left &&
+        wheelCmds.right_wheel === prevWheelCmds.right;
+
+      // Check if decision matches sensor recommendation
+      const recLower = recommendation.toLowerCase();
+      const targetDir = structured?.decision?.target_direction || null;
+      let matchesSensorRec = true;
+      if (recLower.includes('back up') && targetDir === 'forward') matchesSensorRec = false;
+      if (recLower.includes('turn right') && targetDir === 'left') matchesSensorRec = false;
+      if (recLower.includes('turn left') && targetDir === 'right') matchesSensorRec = false;
+
+      const decisionSnapshot: DecisionSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        reasoning: structured?.decision?.reasoning || '(no reasoning)',
+        actionType: structured?.decision?.action_type || 'unknown',
+        targetDirection: targetDir,
+        wheelCommands: {
+          left: wheelCmds.left_wheel,
+          right: wheelCmds.right_wheel,
+        },
+        responseTimeMs: llmLatency,
+        parsedSuccessfully: structured !== null,
+        toolCallsExtracted: toolCalls.length,
+        matchesSensorRecommendation: matchesSensorRec,
+        repeatsLastAction: repeatsLast,
+      };
+      diag.addDecision(decisionSnapshot);
+
+      const decisionAnalysis = analyzeDecision(decisionSnapshot, perceptionSnapshot, prevDecision);
+      diag.updateHealth({ decisionQuality: decisionAnalysis.score });
+
+      for (const issue of decisionAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'decision',
+          severity: issue.includes('FAILED') || issue.includes('collide')
+            ? 'error'
+            : issue.includes('slow') || issue.includes('stuck')
+            ? 'warning'
+            : 'info',
+          title: 'Decision Issue',
+          detail: issue,
+        });
+      }
+
+      // ── PHYSICS SNAPSHOT ─────────────────────────────────────────────
+      const prevPhysics = diag.physicsHistory[diag.physicsHistory.length - 1] || null;
+      const pose = sensors.pose;
+      const distanceMoved = prevPhysics
+        ? Math.sqrt(
+            (pose.x - prevPhysics.pose.x) ** 2 +
+            (pose.y - prevPhysics.pose.y) ** 2
+          )
+        : 0;
+      const rotationChanged = prevPhysics
+        ? Math.abs(pose.rotation - prevPhysics.pose.rotation)
+        : 0;
+
+      // Check pushable objects
+      const prevPushablePositions = prevPhysics?.pushableObjectsMoved; // just tracking the flag
+      const objectsDockedNow = sensors.nearbyPushables?.filter(p => p.dockedIn).length || 0;
+
+      const physicsSnapshot: PhysicsSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        pose: { x: pose.x, y: pose.y, rotation: pose.rotation },
+        velocity: {
+          linear: this.state.worldModel.lastPosition
+            ? distanceMoved / ((this.config.loopIntervalMs || 2000) / 1000)
+            : 0,
+          angular: rotationChanged / ((this.config.loopIntervalMs || 2000) / 1000),
+        },
+        distanceMoved,
+        rotationChanged,
+        frontBumper: sensors.bumper.front,
+        backBumper: sensors.bumper.back,
+        closestWallDistance: Math.min(
+          sensors.distance.front,
+          sensors.distance.left,
+          sensors.distance.right,
+          sensors.distance.back
+        ),
+        closestObstacleDistance: Math.min(
+          sensors.distance.front,
+          sensors.distance.frontLeft,
+          sensors.distance.frontRight,
+          sensors.distance.left,
+          sensors.distance.right
+        ),
+        pushableObjectsMoved: false, // Will be set by next cycle comparison
+        objectsInDockZones: objectsDockedNow,
+      };
+      diag.addPhysics(physicsSnapshot);
+
+      const physicsAnalysis = analyzePhysics(physicsSnapshot, prevPhysics);
+      const movementScore = distanceMoved > 0.01 ? 80 : distanceMoved > 0.005 ? 50 : 20;
+      diag.updateHealth({ movement: Math.max(movementScore, physicsAnalysis.score) });
+
+      for (const issue of physicsAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'physics',
+          severity: issue.includes('collision') || issue.includes('bumper') ? 'error' : 'warning',
+          title: 'Physics Issue',
+          detail: issue,
+          data: { pose, distanceMoved },
+        });
+      }
+
+      // ── CAMERA / PERSPECTIVE SNAPSHOT ────────────────────────────────
+      const cameraAnalysis = analyzeCameraPerspective(
+        perceptionSnapshot.sensors,
+        goal,
+        { x: pose.x, y: pose.y, rotation: pose.rotation },
+        sensors.nearbyPushables?.map(p => ({
+          distance: p.distance,
+          angle: p.angle,
+          dockedIn: p.dockedIn,
+        })),
+        sensors.nearbyDockZones?.map(d => ({
+          distance: d.distance,
+          angle: d.angle,
+          hasObject: d.hasObject,
+        }))
+      );
+      cameraAnalysis.cycle = cycle;
+      diag.addCamera(cameraAnalysis);
+
+      // ── REPRESENTATION ANALYSIS (once on first cycle) ────────────────
+      if (cycle === 1) {
+        // We don't have direct access to the map here, but we can infer from sensors
+        const repIssues = analyzeRepresentation(
+          4, // Assume standard 4-wall arena (boundary walls)
+          0, // We can't detect exact obstacle count from sensors alone
+          sensors.nearbyPushables?.length || 0,
+          sensors.nearbyDockZones?.length || 0,
+          { width: 5, height: 5 } // Default arena size
+        );
+        for (const issue of repIssues) {
+          diag.addRepresentationIssue(issue);
+        }
+        for (const issue of repIssues) {
+          diag.addEvent({
+            cycle,
+            category: 'representation',
+            severity: 'info',
+            title: 'Representation Note',
+            detail: issue,
+          });
+        }
+      }
+
+      // ── STUCK DETECTION EVENT ────────────────────────────────────────
+      const stuckCycles = diag.stuckCycles;
+      if (stuckCycles >= 3) {
+        diag.addEvent({
+          cycle,
+          category: 'stuck',
+          severity: 'critical',
+          title: `Robot stuck for ${stuckCycles} cycles`,
+          detail: `Position: (${pose.x.toFixed(3)}, ${pose.y.toFixed(3)}), ` +
+            `distance moved: ${distanceMoved.toFixed(4)}m. ` +
+            `Front: ${sensors.distance.front}cm, Left: ${sensors.distance.left}cm, Right: ${sensors.distance.right}cm`,
+          data: { stuckCycles, pose, distanceMoved },
+        });
+      }
+
+      // ── GOAL PROGRESS ────────────────────────────────────────────────
+      let goalProgress = 0;
+      if (goal.toLowerCase().includes('dock') || goal.toLowerCase().includes('push')) {
+        // Goal is to push object to dock
+        if (objectsDockedNow > 0) {
+          goalProgress = 100;
+          diag.addEvent({
+            cycle,
+            category: 'navigation',
+            severity: 'ok',
+            title: 'GOAL ACHIEVED: Object docked!',
+            detail: `${objectsDockedNow} object(s) in dock zone(s)`,
+          });
+        } else if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+          // Can see the pushable - partial progress
+          const closest = sensors.nearbyPushables[0];
+          goalProgress = closest.distance < 30 ? 60 : closest.distance < 100 ? 40 : 20;
+        }
+      } else if (goal.toLowerCase().includes('explore')) {
+        // Exploration goal - based on area coverage
+        const uniquePositions = diag.physicsHistory.length;
+        goalProgress = Math.min(100, uniquePositions * 2);
+      }
+      diag.updateHealth({ goalProgress });
+
+      // ── OVERALL CYCLE EVENT ──────────────────────────────────────────
+      const overallSeverity: 'ok' | 'info' | 'warning' | 'error' =
+        diag.health.overall >= 70 ? 'ok' :
+        diag.health.overall >= 40 ? 'warning' : 'error';
+
+      diag.addEvent({
+        cycle,
+        category: 'navigation',
+        severity: overallSeverity,
+        title: `Cycle ${cycle}: ${structured?.decision?.action_type || 'unknown'} -> ${targetDir || 'none'}`,
+        detail: `Front: ${sensors.distance.front}cm | Moved: ${(distanceMoved * 100).toFixed(1)}cm | LLM: ${llmLatency}ms | Health: ${diag.health.overall}%`,
+        data: {
+          health: diag.health,
+          wheelCommands: wheelCmds,
+        },
+      });
+    } catch (e) {
+      // Diagnostics should never crash the agent
+      console.warn('[Diagnostics] Error emitting diagnostics:', e);
+    }
   }
 
   private log(message: string, level: 'info' | 'warn' | 'error'): void {

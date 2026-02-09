@@ -18,7 +18,10 @@ import {
   DEFAULT_AGENT_PROMPTS,
 } from '@/lib/runtime/esp32-agent-runtime';
 import { getDeviceManager } from '@/lib/hardware/esp32-device-manager';
-import { Cpu, ChevronDown, ChevronRight, MessageSquare, User, Bot } from 'lucide-react';
+import { Cpu, ChevronDown, ChevronRight, MessageSquare, User, Bot, Activity } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const AgentDiagnosticsPanel = dynamic(() => import('./AgentDiagnosticsPanel'), { ssr: false });
 
 interface RobotAgentPanelProps {
   deviceId?: string;
@@ -36,6 +39,7 @@ export default function RobotAgentPanel({
   const [agentGoal, setAgentGoal] = useState('Find the Red Cube in the arena. Navigate to it. Push it towards the Green Dock station (bottom-right area). Use your sensors to detect nearby pushable objects and dock zones. Align behind the cube relative to the dock direction, then drive forward to push it into the green zone.');
   const [loopInterval, setLoopInterval] = useState(2000);
   const [showMessages, setShowMessages] = useState(true);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const agentRef = useRef<ESP32AgentRuntime | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -214,7 +218,25 @@ export default function RobotAgentPanel({
               <span>Stop Agent</span>
             </button>
           )}
+          <button
+            onClick={() => setShowDiagnostics(!showDiagnostics)}
+            className={`px-3 py-2 text-sm rounded flex items-center gap-1.5 font-medium transition-colors ${
+              showDiagnostics
+                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                : 'bg-[#21262d] hover:bg-[#30363d] text-[#8b949e]'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>Diagnostics</span>
+          </button>
         </div>
+
+        {/* Agent Diagnostics Panel */}
+        {showDiagnostics && (
+          <div className="mt-2 rounded-lg border border-purple-500/30 overflow-hidden" style={{ height: '500px' }}>
+            <AgentDiagnosticsPanel />
+          </div>
+        )}
 
         {/* Info about the simple robot */}
         <div className="mt-4 p-3 rounded-lg bg-[#161b22] border border-[#30363d]">
