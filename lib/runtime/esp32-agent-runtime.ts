@@ -755,6 +755,8 @@ export class ESP32AgentRuntime {
   private loopHandle: any = null;
   private leftWheelPower = 0;
   private rightWheelPower = 0;
+  private previousPosition: { x: number; y: number } | null = null;
+  private stuckCycleCount = 0;
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
@@ -864,6 +866,8 @@ export class ESP32AgentRuntime {
     this.state.running = true;
     this.state.iteration = 0;
     this.state.errors = [];
+    this.stuckCycleCount = 0;
+    this.previousPosition = null;
     this.emitStateChange();
 
     // Start the control loop
@@ -922,6 +926,27 @@ export class ESP32AgentRuntime {
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
+      // STEP 1.1: Stuck detection - check if robot position has changed
+      const currentPos = { x: sensors.pose.x, y: sensors.pose.y };
+      if (this.previousPosition) {
+        const distFromLast = Math.sqrt(
+          (currentPos.x - this.previousPosition.x) ** 2 +
+          (currentPos.y - this.previousPosition.y) ** 2
+        );
+        if (distFromLast < 0.01) { // Less than 1cm movement = stuck
+          this.stuckCycleCount++;
+        } else {
+          this.stuckCycleCount = 0;
+        }
+      }
+      this.previousPosition = currentPos;
+
+      // If stuck for too long, clear conversation history to break the stop pattern
+      if (this.stuckCycleCount >= 5 && this.state.conversationHistory.length > 2) {
+        this.log(`Stuck for ${this.stuckCycleCount} cycles - clearing conversation history to break pattern`, 'warn');
+        this.state.conversationHistory = [];
+      }
+
       // STEP 1.5: Always capture a fresh camera image before calling LLM
       // This ensures the LLM always gets a current visual of the scene
       try {
@@ -965,7 +990,23 @@ export class ESP32AgentRuntime {
         this.state.stats.llmCallCount;
 
       // STEP 3: Parse and execute tool calls
-      const toolCalls = this.parseToolCalls(llmResponse);
+      let toolCalls = this.parseToolCalls(llmResponse);
+
+      // STEP 3.1: Force movement if robot is stuck and LLM returned stop commands
+      if (this.stuckCycleCount >= 3) {
+        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
+        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
+        if (allStop) {
+          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing rotation to explore`, 'warn');
+          // Alternate rotation direction every few cycles to cover more area
+          const rotateLeft = (this.stuckCycleCount % 6) < 3;
+          toolCalls = [
+            { tool: 'left_wheel', args: { direction: rotateLeft ? 'backward' : 'forward' } },
+            { tool: 'right_wheel', args: { direction: rotateLeft ? 'forward' : 'backward' } },
+          ];
+        }
+      }
+
       this.state.lastToolCalls = [];
 
       for (const { tool, args } of toolCalls) {
@@ -1095,11 +1136,28 @@ export class ESP32AgentRuntime {
       };
     }
 
-    const userPrompt = `CYCLE ${this.state.iteration} | Step: ${this.state.currentStep}
+    // Auto-advance step: if we already have sensor data, don't stay on OBSERVE
+    let effectiveStep = this.state.currentStep;
+    if (effectiveStep === 'OBSERVE' && this.state.iteration > 1) {
+      effectiveStep = 'PLAN';
+    }
+    if (this.stuckCycleCount >= 3) {
+      effectiveStep = 'ROTATE'; // Force rotation step when stuck
+    }
+
+    let userPrompt = `CYCLE ${this.state.iteration} | Step: ${effectiveStep}
 ${JSON.stringify(sensorContext, null, 2)}
 
 You MUST respond with wheel_commands that move the robot. Do NOT just stop.
 Respond with ONLY valid JSON.`;
+
+    // Add urgent stuck warning when robot hasn't moved
+    if (this.stuckCycleCount >= 3) {
+      userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles! Your position is unchanged.`;
+      userPrompt += `\nYou MUST issue wheel_commands that ROTATE the robot to scan for the target.`;
+      userPrompt += `\nUse: "left_wheel": "backward", "right_wheel": "forward" (rotate left) or "left_wheel": "forward", "right_wheel": "backward" (rotate right).`;
+      userPrompt += `\nDo NOT output "stop" for both wheels. The robot MUST move NOW.`;
+    }
 
     // Add to conversation history
     this.state.conversationHistory.push({
