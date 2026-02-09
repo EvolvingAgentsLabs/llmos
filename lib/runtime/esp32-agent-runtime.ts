@@ -160,6 +160,7 @@ export interface WorldModel {
       heading_degrees: number;
       scene_description: string;
       detected_objects: string[];  // e.g., ['red_cube', 'yellow_dock', 'wall']
+      imageDataUrl?: string;       // Camera image captured at this heading
     }>;
     targetDetected?: {
       object: string;
@@ -1316,8 +1317,17 @@ Respond with ONLY valid JSON in the required structured format.`;
   }
 
   /**
+   * Normalize an angle to the range (-180, 180] degrees
+   */
+  private normalizeAngleDeg(angle: number): number {
+    while (angle > 180) angle -= 360;
+    while (angle <= -180) angle += 360;
+    return angle;
+  }
+
+  /**
    * Execute one step of the 360-degree scan.
-   * Each step: stop → take picture → analyze → rotate 45 degrees
+   * Each step: stop → take picture → analyze → rotate exactly 45° using heading feedback.
    * Returns true if scan is complete, false if more steps needed.
    */
   private async executeScanStep(sensors: SensorReadings): Promise<boolean> {
@@ -1325,29 +1335,30 @@ Respond with ONLY valid JSON in the required structured format.`;
     if (!scan || !scan.active) return true;
 
     const stepIndex = scan.currentScanStep;
-    const currentHeading = Math.round((sensors.pose.rotation * 180) / Math.PI);
 
-    this.log(`SCAN step ${stepIndex + 1}/${scan.totalScanSteps} at heading ${currentHeading}°`, 'info');
-
-    // Stop wheels first
+    // PHASE 1: Stop and stabilize
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-    // Wait briefly for robot to stabilize
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Re-read sensors after stopping for accurate heading
+    const stoppedSensors = this.deviceContext!.getSensors();
+    const captureHeading = Math.round((stoppedSensors.pose.rotation * 180) / Math.PI);
 
-    // Take a picture at current heading
-    let sceneDescription = '';
-    let detectedObjects: string[] = [];
+    this.log(`SCAN step ${stepIndex + 1}/${scan.totalScanSteps} at heading ${captureHeading}°`, 'info');
 
+    // PHASE 2: Capture camera image at this heading
+    let capturedImageDataUrl: string | undefined;
     try {
       if (cameraCaptureManager.hasCanvas()) {
         const capture = cameraCaptureManager.capture(
           'robot-pov',
-          { x: sensors.pose.x, y: sensors.pose.y, rotation: sensors.pose.rotation },
+          { x: stoppedSensors.pose.x, y: stoppedSensors.pose.y, rotation: stoppedSensors.pose.rotation },
           { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
         );
         if (capture) {
+          capturedImageDataUrl = capture.dataUrl;
+          // Update lastPicture with this scan capture
           if (!this.state.lastPicture) {
             this.state.lastPicture = {
               timestamp: Date.now(),
@@ -1367,26 +1378,28 @@ Respond with ONLY valid JSON in the required structured format.`;
       console.warn('[ESP32Agent] Scan camera capture failed:', e);
     }
 
-    // Check sensor data for nearby objects at this heading
-    if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
-      for (const p of sensors.nearbyPushables) {
-        // Object is roughly in front if angle is within ±45 degrees
+    // PHASE 3: Analyze sensor data for nearby objects at this heading
+    let sceneDescription = '';
+    let detectedObjects: string[] = [];
+
+    if (stoppedSensors.nearbyPushables && stoppedSensors.nearbyPushables.length > 0) {
+      for (const p of stoppedSensors.nearbyPushables) {
         if (Math.abs(p.angle) < 45) {
           detectedObjects.push(`${p.label || p.id} (${p.distance}cm, angle=${p.angle}°)`);
           if (p.label?.toLowerCase().includes('red') || p.color === '#e53935') {
             sceneDescription += `RED CUBE detected at ${p.distance}cm, angle ${p.angle}°! `;
             scan.targetDetected = {
               object: 'red_cube',
-              heading_degrees: currentHeading,
-              description: `Red Cube at heading ${currentHeading}°, distance ${p.distance}cm, angle ${p.angle}°`,
+              heading_degrees: captureHeading,
+              description: `Red Cube at heading ${captureHeading}°, distance ${p.distance}cm, angle ${p.angle}°`,
             };
           }
         }
       }
     }
 
-    if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
-      for (const d of sensors.nearbyDockZones) {
+    if (stoppedSensors.nearbyDockZones && stoppedSensors.nearbyDockZones.length > 0) {
+      for (const d of stoppedSensors.nearbyDockZones) {
         if (Math.abs(d.angle) < 45) {
           detectedObjects.push(`${d.label || d.id} (${d.distance}cm, angle=${d.angle}°)`);
         }
@@ -1399,11 +1412,12 @@ Respond with ONLY valid JSON in the required structured format.`;
         : 'No target objects visible at this heading';
     }
 
-    // Record scan result
+    // Record scan result (including the captured image)
     scan.scanResults.push({
-      heading_degrees: currentHeading,
+      heading_degrees: captureHeading,
       scene_description: sceneDescription,
       detected_objects: detectedObjects,
+      imageDataUrl: capturedImageDataUrl,
     });
 
     scan.currentScanStep++;
@@ -1419,6 +1433,31 @@ Respond with ONLY valid JSON in the required structured format.`;
         this.log('No target detected during scan - will move to new position and scan again', 'warn');
       }
 
+      // Create composite image from all scan captures and set as lastPicture
+      // so the next LLM call includes the panoramic view
+      try {
+        const compositeDataUrl = await this.createScanCompositeImage(scan.scanResults);
+        if (compositeDataUrl) {
+          if (!this.state.lastPicture) {
+            this.state.lastPicture = {
+              timestamp: Date.now(),
+              scene: '360° panoramic scan composite',
+              imageDataUrl: compositeDataUrl,
+              obstacles: { front: false, frontLeft: false, frontRight: false, left: false, right: false, back: false, backLeft: false, backRight: false, frontDistance: 200 },
+              distances: { front: 200, frontLeft: 200, frontRight: 200, left: 200, right: 200, back: 200, backLeft: 200, backRight: 200 },
+              recommendation: 'Analyze the 360° panoramic view to find the red cube and yellow dock.',
+            };
+          } else {
+            this.state.lastPicture.imageDataUrl = compositeDataUrl;
+            this.state.lastPicture.scene = '360° panoramic scan composite';
+            this.state.lastPicture.timestamp = Date.now();
+          }
+          this.log('Created 360° composite image for LLM analysis', 'info');
+        }
+      } catch (e) {
+        console.warn('[ESP32Agent] Failed to create scan composite image:', e);
+      }
+
       // Build scan summary and inject into conversation history for LLM awareness
       this.injectScanResultsIntoHistory(scan);
 
@@ -1427,25 +1466,93 @@ Respond with ONLY valid JSON in the required structured format.`;
       return true;
     }
 
-    // Not complete - rotate 45 degrees for next step
-    // Rotate right: left wheel forward, right wheel backward for ~0.4 seconds
-    this.log(`SCAN: rotating 45° for next step (step ${scan.currentScanStep + 1})`, 'info');
-    this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
-    this.deviceContext?.setRightWheel(WHEEL_SPEED.BACKWARD);
+    // PHASE 4: Rotate exactly 45° clockwise using heading-based feedback
+    // Use a lower PWM for precise rotation control
+    const SCAN_ROTATE_PWM = 40; // Lower speed for precision (deadband minimum)
+    const targetHeading = this.normalizeAngleDeg(captureHeading - 45);
 
-    // Rotation time: ~45 degrees at wheel speed 80
-    // With wheel base 0.07m and wheel radius 0.0325m, angular velocity ≈ differential speed / wheel_base
-    // At PWM 80 (roughly 30% of max RPM 300 = ~90 RPM), linear velocity per wheel ≈ 0.3 m/s
-    // Angular velocity ω = (v_right - v_left) / wheel_base = (0.3 - (-0.3)) / 0.07 ≈ 8.6 rad/s
-    // 45 degrees = π/4 ≈ 0.785 rad → time ≈ 0.09s (very fast with these speeds)
-    // In practice the simulation runs differently, so use 400ms which gives good results
-    await new Promise(resolve => setTimeout(resolve, 400));
+    this.log(`SCAN: rotating from ${captureHeading}° to target ${targetHeading}° (45° clockwise)`, 'info');
+    this.deviceContext?.setLeftWheel(SCAN_ROTATE_PWM);
+    this.deviceContext?.setRightWheel(-SCAN_ROTATE_PWM);
 
-    // Stop after rotation
+    // Poll heading until we reach the target (with safety timeout)
+    const rotateStart = Date.now();
+    const MAX_ROTATE_MS = 3000;
+    let reachedTarget = false;
+
+    while (Date.now() - rotateStart < MAX_ROTATE_MS) {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const currentSensors = this.deviceContext!.getSensors();
+      const currentDeg = (currentSensors.pose.rotation * 180) / Math.PI;
+      const diff = this.normalizeAngleDeg(currentDeg - targetHeading);
+      if (Math.abs(diff) < 6) {
+        reachedTarget = true;
+        break;
+      }
+    }
+
+    // Stop rotation
     this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
     this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
 
+    if (!reachedTarget) {
+      this.log(`SCAN: rotation timeout - may not have reached exact 45°`, 'warn');
+    }
+
     return false;
+  }
+
+  /**
+   * Create a composite image from all scan captures arranged in a grid.
+   * Each image is scaled down and arranged in a 4×2 grid with heading labels.
+   * This gives the LLM a panoramic view of the entire 360° environment.
+   */
+  private async createScanCompositeImage(
+    scanResults: Array<{ heading_degrees: number; imageDataUrl?: string }>
+  ): Promise<string | null> {
+    const withImages = scanResults.filter(r => r.imageDataUrl);
+    if (withImages.length === 0) return null;
+
+    const TILE_W = 128, TILE_H = 96;
+    const COLS = 4, ROWS = Math.ceil(withImages.length / 4);
+    const canvas = document.createElement('canvas');
+    canvas.width = COLS * TILE_W;
+    canvas.height = ROWS * TILE_H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Fill background
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < withImages.length && i < COLS * ROWS; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = col * TILE_W;
+      const y = row * TILE_H;
+
+      // Load and draw the scan image
+      try {
+        const img = new Image();
+        img.src = withImages[i].imageDataUrl!;
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+        ctx.drawImage(img, x, y, TILE_W, TILE_H);
+      } catch {
+        // Skip failed images
+      }
+
+      // Draw heading label overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(x, y, TILE_W, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`Step ${i + 1}: ${withImages[i].heading_degrees}°`, x + 3, y + 12);
+    }
+
+    return canvas.toDataURL('image/jpeg', 0.75);
   }
 
   /**
@@ -1453,22 +1560,46 @@ Respond with ONLY valid JSON in the required structured format.`;
    * can make an informed decision about where to go next
    */
   private injectScanResultsIntoHistory(scan: NonNullable<WorldModel['scanState']>): void {
+    // Get current robot heading for relative instructions
+    const currentSensors = this.deviceContext?.getSensors();
+    const currentHeading = currentSensors
+      ? Math.round((currentSensors.pose.rotation * 180) / Math.PI)
+      : scan.scanResults[scan.scanResults.length - 1]?.heading_degrees || 0;
+
     let summary = '--- 360° ENVIRONMENT SCAN COMPLETE ---\n';
+    summary += `A composite image of all ${scan.scanResults.length} scan directions is attached. Each tile shows a camera view at a different heading.\n`;
     summary += `Scanned ${scan.scanResults.length} directions (every 45°):\n\n`;
 
     for (const result of scan.scanResults) {
-      summary += `  Heading ${result.heading_degrees}°: ${result.scene_description}\n`;
+      const hasImage = result.imageDataUrl ? ' [IMAGE CAPTURED]' : '';
+      summary += `  Heading ${result.heading_degrees}°: ${result.scene_description}${hasImage}\n`;
       if (result.detected_objects.length > 0) {
         summary += `    Objects: ${result.detected_objects.join(', ')}\n`;
       }
     }
 
+    summary += `\nYour current heading is: ${currentHeading}°\n`;
+
     if (scan.targetDetected) {
+      const targetHeading = scan.targetDetected.heading_degrees;
+      const rotationNeeded = this.normalizeAngleDeg(targetHeading - currentHeading);
+      const turnDir = rotationNeeded > 0 ? 'LEFT' : 'RIGHT';
+      const turnAmount = Math.abs(Math.round(rotationNeeded));
+
       summary += `\n🎯 TARGET DETECTED: ${scan.targetDetected.description}\n`;
-      summary += `ACTION REQUIRED: Rotate to heading ~${scan.targetDetected.heading_degrees}° and drive toward the target.\n`;
+      summary += `\n=== ACTION PLAN ===\n`;
+      summary += `1. ROTATE: Turn ${turnDir} ~${turnAmount}° to face heading ${targetHeading}°\n`;
+      summary += `   (${turnDir === 'LEFT' ? 'left_wheel=backward, right_wheel=forward' : 'left_wheel=forward, right_wheel=backward'})\n`;
+      summary += `2. MOVE: Drive FORWARD toward the target\n`;
+      summary += `   (left_wheel=forward, right_wheel=forward)\n`;
+      summary += `3. STOP: After moving, stop both wheels and take a new picture to reassess\n`;
+      summary += `\nIMPORTANT: Execute steps in order. First rotate, then move forward, then stop.\n`;
     } else {
-      summary += `\nNo target found in current position. Move to a different location and try again.\n`;
-      summary += `STRATEGY: Move forward to a new area, then the system will scan again if needed.\n`;
+      summary += `\nNo target found in current position.\n`;
+      summary += `\n=== ACTION PLAN ===\n`;
+      summary += `1. MOVE: Drive forward to explore a new area (left_wheel=forward, right_wheel=forward)\n`;
+      summary += `2. STOP: After moving ~50cm, stop both wheels\n`;
+      summary += `3. The system will scan again automatically if needed\n`;
     }
 
     this.state.conversationHistory.push({

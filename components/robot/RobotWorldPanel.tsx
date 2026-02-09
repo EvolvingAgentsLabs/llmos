@@ -348,7 +348,7 @@ function FirstPersonCameraController({ robotState }: { robotState: SimulatorStat
   );
 }
 
-// 3D Floor for PiP view
+// 3D Floor for PiP view - matches main arena floor for consistent robot camera vision
 function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
   const width = bounds.maxX - bounds.minX;
   const height = bounds.maxY - bounds.minY;
@@ -368,7 +368,7 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#58a6ff" : "#30363d"} />
+          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#8B6914" : "#b8960e"} />
         </line>
       );
     }
@@ -384,7 +384,7 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#58a6ff" : "#30363d"} />
+          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#8B6914" : "#b8960e"} />
         </line>
       );
     }
@@ -396,7 +396,7 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color="#1a1a2e" metalness={0.3} roughness={0.7} />
+        <meshStandardMaterial color="#d4a800" metalness={0.1} roughness={0.8} />
       </mesh>
       {gridLines}
     </group>
@@ -492,11 +492,11 @@ function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
             <boxGeometry args={[length, 0.3, 0.05]} />
             <meshStandardMaterial
               map={hazardTexture}
-              color="#eeeeee"
-              emissive="#aa8800"
-              emissiveIntensity={0.15}
-              metalness={0.2}
-              roughness={0.6}
+              color="#FFF8E1"
+              emissive="#FFC107"
+              emissiveIntensity={0.25}
+              metalness={0.1}
+              roughness={0.5}
             />
           </mesh>
         );
@@ -649,10 +649,10 @@ function PiPRobotCamera({
             {/* Register this canvas for AI vision capture */}
             <PiPCanvasCaptureRegistration />
 
-            {/* Lighting */}
-            <ambientLight intensity={0.4} />
-            <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
-            <pointLight position={[-5, 5, -5]} intensity={0.3} />
+            {/* Lighting - brighter to match main arena view */}
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[5, 10, 5]} intensity={1.2} castShadow />
+            <pointLight position={[-5, 5, -5]} intensity={0.4} />
 
             {/* Scene elements (same as main view but without robot) */}
             <PiPFloor bounds={floorMap.bounds} />
@@ -661,24 +661,46 @@ function PiPRobotCamera({
             {floorMap.collectibles && floorMap.collectibles.length > 0 && (
               <PiPCollectibles collectibles={floorMap.collectibles} collectedIds={collectedIds} />
             )}
-            {/* Pushable objects in PiP view */}
+            {/* Pushable objects in PiP view - brighter for camera detection */}
             {robotState?.pushableObjects?.map(obj => (
-              <mesh key={obj.id} position={[obj.x, obj.size / 2, obj.y]} castShadow>
-                <boxGeometry args={[obj.size, obj.size, obj.size]} />
-                <meshStandardMaterial color={obj.color} emissive={obj.color} emissiveIntensity={0.3} />
-              </mesh>
+              <group key={obj.id}>
+                <mesh position={[obj.x, obj.size / 2, obj.y]} castShadow>
+                  <boxGeometry args={[obj.size, obj.size, obj.size]} />
+                  <meshStandardMaterial color={obj.color} emissive={obj.color} emissiveIntensity={0.5} metalness={0.2} roughness={0.4} />
+                </mesh>
+                <pointLight position={[obj.x, obj.size + 0.05, obj.y]} color={obj.color} intensity={0.2} distance={0.5} />
+              </group>
             ))}
-            {/* Dock zones in PiP view */}
+            {/* Dock zones in PiP view - bright and visible with corner markers */}
             {floorMap.dockZones?.map(dz => (
-              <mesh key={dz.id} position={[dz.x, 0.003, dz.y]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[dz.width, dz.height]} />
-                <meshStandardMaterial color={dz.color} transparent opacity={0.3} emissive={dz.color} emissiveIntensity={0.2} />
-              </mesh>
+              <group key={dz.id}>
+                {/* Dock zone floor plane */}
+                <mesh position={[dz.x, 0.004, dz.y]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[dz.width, dz.height]} />
+                  <meshStandardMaterial color={dz.color} transparent opacity={0.5} emissive={dz.color} emissiveIntensity={0.4} />
+                </mesh>
+                {/* Corner markers - tall and visible for camera detection */}
+                {[[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([cx, cy], i) => (
+                  <mesh
+                    key={i}
+                    position={[
+                      dz.x + cx * dz.width / 2,
+                      0.06,
+                      dz.y + cy * dz.height / 2
+                    ]}
+                  >
+                    <boxGeometry args={[0.05, 0.12, 0.05]} />
+                    <meshStandardMaterial color={dz.color} emissive={dz.color} emissiveIntensity={0.8} />
+                  </mesh>
+                ))}
+                {/* Point light to make dock zone glow */}
+                <pointLight position={[dz.x, 0.15, dz.y]} color={dz.color} intensity={0.4} distance={1} />
+              </group>
             ))}
 
-            {/* Background and fog */}
-            <color attach="background" args={['#0d1117']} />
-            <fog attach="fog" args={['#0d1117', 2, 8]} />
+            {/* Background and fog - lighter to match main arena visibility */}
+            <color attach="background" args={['#2a2a3e']} />
+            <fog attach="fog" args={['#2a2a3e', 3, 10]} />
           </Canvas>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-[#1a1a2e] to-[#0f3460]">
