@@ -19,6 +19,7 @@
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
 import { LLMStorage, DEFAULT_BASE_URL } from '../llm/storage';
+import { cameraCaptureManager } from '../runtime/camera-capture';
 import {
   useDiagnosticsStore,
   analyzePerception,
@@ -103,13 +104,30 @@ export interface SensorReadings {
 export interface CameraAnalysis {
   timestamp: number;
   scene: string;
+  imageDataUrl?: string; // Real camera image from Three.js canvas
   obstacles: {
     front: boolean;
+    frontLeft: boolean;
+    frontRight: boolean;
     left: boolean;
     right: boolean;
+    back: boolean;
+    backLeft: boolean;
+    backRight: boolean;
     frontDistance: number;
   };
+  distances: {
+    front: number;
+    frontLeft: number;
+    frontRight: number;
+    left: number;
+    right: number;
+    back: number;
+    backLeft: number;
+    backRight: number;
+  };
   recommendation: string;
+  spatialContext?: string; // Arena layout and object positions
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -183,69 +201,153 @@ function getWheelPower(direction: WheelDirection): number {
 }
 
 /**
- * Helper: Describe the scene from sensor readings
+ * Helper: Describe the scene from all 8 sensor readings
  */
-function describeScene(front: number, left: number, right: number): string {
-  const parts: string[] = [];
+function describeScene(dist: {
+  front: number; frontLeft: number; frontRight: number;
+  left: number; right: number;
+  back: number; backLeft: number; backRight: number;
+}): string {
+  const descDir = (name: string, value: number): string => {
+    if (value > 100) return `${name}: clear (${Math.round(value)}cm)`;
+    if (value > 50) return `${name}: obstacle at ${Math.round(value)}cm`;
+    if (value > 20) return `${name}: CLOSE obstacle at ${Math.round(value)}cm`;
+    return `${name}: DANGER ${Math.round(value)}cm`;
+  };
 
-  if (front > 100) {
-    parts.push('Clear path ahead');
-  } else if (front > 50) {
-    parts.push(`Obstacle ahead at ~${Math.round(front)}cm`);
-  } else {
-    parts.push(`Close obstacle ahead at ~${Math.round(front)}cm`);
-  }
-
-  if (left < 40) {
-    parts.push('obstacle on left');
-  } else {
-    parts.push('left side clear');
-  }
-
-  if (right < 40) {
-    parts.push('obstacle on right');
-  } else {
-    parts.push('right side clear');
-  }
-
-  return parts.join(', ');
+  return [
+    descDir('Front', dist.front),
+    descDir('Front-Left', dist.frontLeft),
+    descDir('Front-Right', dist.frontRight),
+    descDir('Left', dist.left),
+    descDir('Right', dist.right),
+    descDir('Back', dist.back),
+    descDir('Back-Left', dist.backLeft),
+    descDir('Back-Right', dist.backRight),
+  ].join(' | ');
 }
 
 /**
- * Helper: Suggest direction based on sensors
+ * Helper: Suggest direction based on all 8 sensors
  */
-function suggestDirection(front: number, left: number, right: number): string {
+function suggestDirection(dist: {
+  front: number; frontLeft: number; frontRight: number;
+  left: number; right: number;
+  back: number; backLeft: number; backRight: number;
+}): string {
   // CRITICAL: Check for dangerous proximity FIRST - must back up before turning
-  if (front < 20) {
-    return 'DANGER: Too close to obstacle! Back up immediately, then turn';
+  if (dist.front < 20) {
+    if (dist.back > 40) {
+      return 'DANGER: Too close to obstacle! Back up immediately, then turn';
+    }
+    return 'DANGER: Boxed in! Obstacle very close front AND back. Try rotating in place';
   }
 
   // If close but not critical, suggest backing up first
-  if (front < 40) {
-    if (right > left && right > 50) {
-      return 'Obstacle close ahead - back up slightly, then turn right';
+  if (dist.front < 40) {
+    // Use diagonal sensors to pick best turn direction
+    const leftScore = dist.frontLeft + dist.left;
+    const rightScore = dist.frontRight + dist.right;
+    if (rightScore > leftScore && dist.right > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn right (front-right clearer)';
     }
-    if (left > right && left > 50) {
-      return 'Obstacle close ahead - back up slightly, then turn left';
+    if (leftScore > rightScore && dist.left > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn left (front-left clearer)';
     }
-    return 'Obstacle close ahead - back up first to get room to turn';
+    if (dist.back > 40) {
+      return 'Obstacle close ahead - back up first to get room to turn';
+    }
+    return 'Tight space - rotate in place to find opening';
   }
 
-  // Path is clear - go forward
-  if (front > 80) {
+  // Path is clear - go forward, but warn about diagonal obstacles
+  if (dist.front > 80) {
+    if (dist.frontLeft < 30) return 'Path ahead mostly clear - veer slightly right (obstacle front-left)';
+    if (dist.frontRight < 30) return 'Path ahead mostly clear - veer slightly left (obstacle front-right)';
     return 'Path ahead is clear - go forward';
   }
 
   // Moderate distance (40-80cm) - can turn safely without backing up
-  if (left > right && left > 50) {
+  const leftScore = dist.frontLeft + dist.left;
+  const rightScore = dist.frontRight + dist.right;
+  if (leftScore > rightScore && dist.left > 50) {
     return 'Turn left - more space on the left side';
   }
-
-  if (right > left && right > 50) {
+  if (rightScore > leftScore && dist.right > 50) {
     return 'Turn right - more space on the right side';
   }
 
   return 'Limited space - turn slowly to find open path';
+}
+
+/**
+ * Helper: Build spatial context string with arena layout, object positions, and relationships.
+ * This gives the LLM a map-like understanding of the environment.
+ */
+function buildSpatialContext(sensors: SensorReadings): string {
+  const pose = sensors.pose;
+  const headingDeg = Math.round((pose.rotation * 180) / Math.PI);
+  const cardinalDir =
+    headingDeg > -45 && headingDeg <= 45 ? 'North (+Y)' :
+    headingDeg > 45 && headingDeg <= 135 ? 'East (+X)' :
+    headingDeg > -135 && headingDeg <= -45 ? 'West (-X)' : 'South (-Y)';
+
+  const lines: string[] = [
+    `=== SPATIAL CONTEXT ===`,
+    `Arena: 5m x 5m (bounds: -2.5 to +2.5 on both axes)`,
+    `Robot position: (${pose.x.toFixed(2)}m, ${pose.y.toFixed(2)}m)`,
+    `Robot heading: ${headingDeg}deg (facing ${cardinalDir})`,
+    ``,
+    `Distance readings (all 8 directions):`,
+    `  Front: ${Math.round(sensors.distance.front)}cm | Front-Left: ${Math.round(sensors.distance.frontLeft)}cm | Front-Right: ${Math.round(sensors.distance.frontRight)}cm`,
+    `  Left: ${Math.round(sensors.distance.left)}cm | Right: ${Math.round(sensors.distance.right)}cm`,
+    `  Back: ${Math.round(sensors.distance.back)}cm | Back-Left: ${Math.round(sensors.distance.backLeft)}cm | Back-Right: ${Math.round(sensors.distance.backRight)}cm`,
+  ];
+
+  // Nearby objects with absolute positions
+  if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+    lines.push('');
+    lines.push('Nearby pushable objects:');
+    for (const p of sensors.nearbyPushables) {
+      // Calculate absolute position from robot pose + relative angle/distance
+      const absAngle = pose.rotation + (p.angle * Math.PI) / 180;
+      const objX = pose.x + (p.distance / 100) * Math.sin(absAngle);
+      const objY = pose.y + (p.distance / 100) * Math.cos(absAngle);
+      const dockStatus = p.dockedIn ? ` [DOCKED in ${p.dockedIn}]` : '';
+      lines.push(`  - ${p.label} (${p.color}): distance=${p.distance}cm, angle=${p.angle}deg, approx pos=(${objX.toFixed(2)}m, ${objY.toFixed(2)}m)${dockStatus}`);
+    }
+  }
+
+  if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+    lines.push('');
+    lines.push('Nearby dock zones (target areas):');
+    for (const d of sensors.nearbyDockZones) {
+      const absAngle = pose.rotation + (d.angle * Math.PI) / 180;
+      const dockX = pose.x + (d.distance / 100) * Math.sin(absAngle);
+      const dockY = pose.y + (d.distance / 100) * Math.cos(absAngle);
+      const objStatus = d.hasObject ? ' [HAS OBJECT - GOAL COMPLETE]' : ' [EMPTY - push object here]';
+      lines.push(`  - ${d.label}: distance=${d.distance}cm, angle=${d.angle}deg, approx pos=(${dockX.toFixed(2)}m, ${dockY.toFixed(2)}m)${objStatus}`);
+    }
+  }
+
+  // Tactical advice based on spatial layout
+  lines.push('');
+  lines.push('Tactical notes:');
+  if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0 && sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+    const obj = sensors.nearbyPushables[0];
+    const dock = sensors.nearbyDockZones[0];
+    if (!obj.dockedIn) {
+      lines.push(`  To push ${obj.label} into ${dock.label}: position yourself on the opposite side of the object from the dock, then drive forward through the object toward the dock.`);
+      const angleDiff = dock.angle - obj.angle;
+      if (Math.abs(angleDiff) < 20) {
+        lines.push(`  Object and dock are roughly aligned from your position - good pushing angle!`);
+      } else {
+        lines.push(`  Object and dock are at different angles (${Math.round(obj.angle)}deg vs ${Math.round(dock.angle)}deg) - you may need to reposition.`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -254,15 +356,14 @@ function suggestDirection(front: number, left: number, right: number): string {
 export const DEVICE_TOOLS: DeviceTool[] = [
   {
     name: 'take_picture',
-    description: 'Take a picture with the camera to see the environment. Returns what the robot sees ahead, to the left, and to the right. Use this before planning your next move.',
+    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene, all 8 distance sensor readings, nearby objects, and a spatial map of the arena. Use this before planning your next move.',
     parameters: {},
     execute: async (args, ctx) => {
       const sensors = ctx.getSensors();
-      const frontDist = sensors.distance.front;
-      const leftDist = sensors.distance.left;
-      const rightDist = sensors.distance.right;
+      const dist = sensors.distance;
 
-      let sceneDesc = describeScene(frontDist, leftDist, rightDist);
+      // Build full 8-direction scene description
+      let sceneDesc = describeScene(dist);
 
       // Add pushable objects to scene description
       if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
@@ -284,16 +385,56 @@ export const DEVICE_TOOLS: DeviceTool[] = [
         sceneDesc += ` | Dock zones: ${dockDescs.join('; ')}`;
       }
 
+      // Capture real camera image from the Three.js canvas
+      let imageDataUrl: string | undefined;
+      try {
+        if (cameraCaptureManager.hasCanvas()) {
+          const capture = cameraCaptureManager.capture(
+            'robot-pov',
+            sensors.pose ? { x: sensors.pose.x, y: sensors.pose.y, rotation: sensors.pose.rotation } : undefined,
+            { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
+          );
+          if (capture) {
+            imageDataUrl = capture.dataUrl;
+          }
+        }
+      } catch (e) {
+        // Camera capture is optional - don't fail the tool
+        console.warn('[take_picture] Canvas capture failed:', e);
+      }
+
+      // Build spatial context: arena layout + object positions relative to robot
+      let spatialContext = buildSpatialContext(sensors);
+
+      const recommendation = suggestDirection(dist);
+
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
         scene: sceneDesc,
+        imageDataUrl,
         obstacles: {
-          front: frontDist < 50,
-          left: leftDist < 40,
-          right: rightDist < 40,
-          frontDistance: frontDist,
+          front: dist.front < 50,
+          frontLeft: dist.frontLeft < 40,
+          frontRight: dist.frontRight < 40,
+          left: dist.left < 40,
+          right: dist.right < 40,
+          back: dist.back < 40,
+          backLeft: dist.backLeft < 40,
+          backRight: dist.backRight < 40,
+          frontDistance: dist.front,
         },
-        recommendation: suggestDirection(frontDist, leftDist, rightDist),
+        distances: {
+          front: Math.round(dist.front),
+          frontLeft: Math.round(dist.frontLeft),
+          frontRight: Math.round(dist.frontRight),
+          left: Math.round(dist.left),
+          right: Math.round(dist.right),
+          back: Math.round(dist.back),
+          backLeft: Math.round(dist.backLeft),
+          backRight: Math.round(dist.backRight),
+        },
+        recommendation,
+        spatialContext,
       };
 
       return {
@@ -853,15 +994,20 @@ export class ESP32AgentRuntime {
       current_step: this.state.currentStep,
       sensor_data: {
         front_distance_cm: Math.round(sensors.distance.front),
+        front_left_distance_cm: Math.round(sensors.distance.frontLeft),
+        front_right_distance_cm: Math.round(sensors.distance.frontRight),
         left_distance_cm: Math.round(sensors.distance.left),
         right_distance_cm: Math.round(sensors.distance.right),
         back_distance_cm: Math.round(sensors.distance.back),
+        back_left_distance_cm: Math.round(sensors.distance.backLeft),
+        back_right_distance_cm: Math.round(sensors.distance.backRight),
         robot_pose: sensors.pose,
       },
       last_observation: this.state.lastPicture ? {
         scene: this.state.lastPicture.scene,
         recommendation: this.state.lastPicture.recommendation,
-        front_distance: this.state.lastPicture.obstacles.frontDistance,
+        distances: this.state.lastPicture.distances,
+        spatial_context: this.state.lastPicture.spatialContext,
       } : null,
       current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
@@ -923,7 +1069,10 @@ Respond with ONLY valid JSON in the required structured format.`;
       return this.createFallbackResponse('stop', 'LLM not configured');
     }
 
-    // Call the LLM API with conversation history
+    // Collect camera image if available (from last take_picture)
+    const cameraImageDataUrl = this.state.lastPicture?.imageDataUrl || null;
+
+    // Call the LLM API with conversation history and optional vision image
     try {
       const response = await fetch('/api/robot-llm', {
         method: 'POST',
@@ -934,6 +1083,7 @@ Respond with ONLY valid JSON in the required structured format.`;
           userPrompt: userPrompt,
           tools: toolsDescription,
           conversationHistory: this.state.conversationHistory,
+          cameraImageDataUrl,
           llmConfig: {
             apiKey,
             model,
@@ -974,11 +1124,19 @@ Respond with ONLY valid JSON in the required structured format.`;
     const resultsSummary = toolCalls.map(tc => {
       if (tc.tool === 'take_picture' && tc.result.success && tc.result.data) {
         const data = tc.result.data as CameraAnalysis;
-        return `TOOL RESULT [take_picture]:\n${JSON.stringify({
+        const cameraResult: Record<string, any> = {
           scene: data.scene,
+          distances: data.distances,
           obstacles: data.obstacles,
-          recommendation: data.recommendation
-        }, null, 2)}`;
+          recommendation: data.recommendation,
+        };
+        if (data.spatialContext) {
+          cameraResult.spatial_context = data.spatialContext;
+        }
+        if (data.imageDataUrl) {
+          cameraResult.has_camera_image = true; // Don't put base64 in text - it's sent via vision API
+        }
+        return `TOOL RESULT [take_picture]:\n${JSON.stringify(cameraResult, null, 2)}`;
       }
       return `TOOL RESULT [${tc.tool}]: ${JSON.stringify(tc.result.data)}`;
     }).join('\n\n');

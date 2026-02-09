@@ -128,13 +128,13 @@ function SensorRadar({
   // Sensor directions in radians (0 = up/front)
   const sensorDirs: Array<{ key: string; angle: number; value: number; reported: boolean }> = [
     { key: 'front', angle: 0, value: sensors.front, reported: true },
-    { key: 'frontRight', angle: Math.PI / 4, value: sensors.frontRight, reported: false },
+    { key: 'frontRight', angle: Math.PI / 4, value: sensors.frontRight, reported: true },
     { key: 'right', angle: Math.PI / 2, value: sensors.right, reported: true },
-    { key: 'backRight', angle: (3 * Math.PI) / 4, value: sensors.backRight, reported: false },
-    { key: 'back', angle: Math.PI, value: sensors.back, reported: false },
-    { key: 'backLeft', angle: -(3 * Math.PI) / 4, value: sensors.backLeft, reported: false },
+    { key: 'backRight', angle: (3 * Math.PI) / 4, value: sensors.backRight, reported: true },
+    { key: 'back', angle: Math.PI, value: sensors.back, reported: true },
+    { key: 'backLeft', angle: -(3 * Math.PI) / 4, value: sensors.backLeft, reported: true },
     { key: 'left', angle: -Math.PI / 2, value: sensors.left, reported: true },
-    { key: 'frontLeft', angle: -Math.PI / 4, value: sensors.frontLeft, reported: false },
+    { key: 'frontLeft', angle: -Math.PI / 4, value: sensors.frontLeft, reported: true },
   ];
 
   return (
@@ -204,9 +204,9 @@ function SensorRadar({
         fill="#58a6ff"
       />
 
-      {/* Legend for reported vs unreported */}
+      {/* Legend */}
       <text x={2} y={size - 2} fontSize="6" fill="#6e7681">
-        Solid = reported to LLM | Dashed = not reported
+        All 8 sensors reported to LLM (100% coverage)
       </text>
     </svg>
   );
@@ -1017,36 +1017,36 @@ export default function AgentDiagnosticsPanel() {
               </p>
             )}
 
-            {/* Improvement suggestions */}
+            {/* Fixed issues */}
             <div className="mt-4">
               <h3 className="text-[10px] font-medium text-[#22c55e] uppercase tracking-wider mb-2">
-                Suggested Improvements
+                Implemented Fixes
               </h3>
               <div className="space-y-1.5 text-[10px]">
-                <div className="p-2 bg-green-500/5 border border-green-500/20 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">1. Expand take_picture FOV:</strong> Add frontLeft, frontRight,
-                  and back sensor readings to the camera tool output. Currently only 3 of 8 sensors
-                  are reported to the LLM (37.5% coverage).
+                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
+                  <strong className="text-green-400">1. Full 8-sensor FOV:</strong> take_picture now reports all 8
+                  distance sensors (front, frontLeft, frontRight, left, right, back, backLeft,
+                  backRight) - 100% coverage vs the previous 37.5%.
                 </div>
-                <div className="p-2 bg-green-500/5 border border-green-500/20 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">2. Add visual camera:</strong> The robot&apos;s &quot;camera&quot;
-                  produces text descriptions from sensor data, not actual images. Adding a rendered
-                  camera view (from Three.js) would give the LLM real spatial understanding.
+                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
+                  <strong className="text-green-400">2. Real camera image:</strong> A real Three.js rendered screenshot
+                  is captured each cycle and sent to the LLM via the vision API (multimodal). The LLM
+                  now sees the actual 3D scene alongside sensor data.
                 </div>
-                <div className="p-2 bg-green-500/5 border border-green-500/20 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">3. Physics/visual consistency:</strong> Pushable objects are
-                  rendered as cubes but physics uses circle-circle collision. This creates a
-                  mismatch between what the user sees and what the robot &quot;feels&quot;.
+                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
+                  <strong className="text-green-400">3. Box collision physics:</strong> Pushable cube objects now use
+                  AABB (axis-aligned bounding box) collision matching their visual cube shape.
+                  Raycasting also uses box intersection instead of circle approximation.
                 </div>
-                <div className="p-2 bg-green-500/5 border border-green-500/20 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">4. Wall thickness:</strong> Walls have zero thickness in
-                  physics but are rendered with visual height/width. Adding wall thickness to
-                  physics would improve realism and collision behavior.
+                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
+                  <strong className="text-green-400">4. Wall thickness (3cm):</strong> Walls now have 3cm physical
+                  thickness. Collision detection and raycasting account for the wall surface offset,
+                  improving realism and preventing edge-case pass-through.
                 </div>
-                <div className="p-2 bg-green-500/5 border border-green-500/20 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">5. Spatial context for LLM:</strong> The LLM receives distance
-                  numbers but has no concept of arena layout, wall shapes, or spatial relationships
-                  between objects. Adding a mini-map or coordinate-based object list would help.
+                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
+                  <strong className="text-green-400">5. Spatial context:</strong> Each take_picture now includes a
+                  spatial context block with arena dimensions, robot absolute position/heading,
+                  object absolute positions, and tactical pushing advice.
                 </div>
               </div>
             </div>

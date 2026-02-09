@@ -42,6 +42,9 @@ export const ROBOT_SPECS = {
 
   // Mass
   MASS: 0.25,                // 250g
+
+  // Wall thickness (meters) - walls are no longer zero-thickness line segments
+  WALL_THICKNESS: 0.03,      // 3cm thick walls
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -652,13 +655,14 @@ export class CubeRobotSimulator {
 
   private checkCollision(x: number, y: number): { front: boolean; back: boolean } {
     const robotRadius = ROBOT_SPECS.BODY_SIZE / 2;
+    const wallHalfThickness = ROBOT_SPECS.WALL_THICKNESS / 2;
     let frontCollision = false;
     let backCollision = false;
 
-    // Check walls
+    // Check walls - account for wall thickness (walls are no longer infinitely thin)
     for (const wall of this.map.walls) {
       const dist = this.pointToLineDistance(x, y, wall.x1, wall.y1, wall.x2, wall.y2);
-      if (dist < robotRadius) {
+      if (dist < robotRadius + wallHalfThickness) {
         // Determine if front or back collision
         const wallAngle = Math.atan2(wall.y2 - wall.y1, wall.x2 - wall.x1);
         const angleDiff = Math.abs(this.normalizeAngle(this.pose.rotation - wallAngle));
@@ -777,22 +781,35 @@ export class CubeRobotSimulator {
   private updatePushableObjects(dt: number): void {
     if (this.pushableObjectStates.length === 0) return;
 
-    const robotRadius = ROBOT_SPECS.BODY_SIZE / 2;
+    const robotHalf = ROBOT_SPECS.BODY_SIZE / 2;
 
     for (const obj of this.pushableObjectStates) {
-      const objRadius = obj.size / 2;
+      const objHalf = obj.size / 2;
 
-      // Check robot-to-object collision (circle-to-circle approximation)
-      const dx = obj.x - this.pose.x;
-      const dy = obj.y - this.pose.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const minDist = robotRadius + objRadius;
+      // Check robot-to-object collision using AABB (axis-aligned bounding box)
+      // This matches the visual cube rendering instead of using circle-circle
+      const overlapX = (robotHalf + objHalf) - Math.abs(obj.x - this.pose.x);
+      const overlapY = (robotHalf + objHalf) - Math.abs(obj.y - this.pose.y);
 
-      if (dist < minDist && dist > 0.001) {
-        // Robot is pushing the object
-        // Calculate push direction (from robot to object)
-        const pushDirX = dx / dist;
-        const pushDirY = dy / dist;
+      if (overlapX > 0 && overlapY > 0) {
+        // AABB collision detected - push along the axis with least overlap
+        const dx = obj.x - this.pose.x;
+        const dy = obj.y - this.pose.y;
+
+        // Determine push axis (smallest overlap = separation axis)
+        let pushDirX = 0;
+        let pushDirY = 0;
+        let overlap = 0;
+
+        if (overlapX < overlapY) {
+          // Separate along X axis
+          pushDirX = dx > 0 ? 1 : -1;
+          overlap = overlapX;
+        } else {
+          // Separate along Y axis
+          pushDirY = dy > 0 ? 1 : -1;
+          overlap = overlapY;
+        }
 
         // Push force based on robot velocity projected onto push direction
         const robotVx = this.velocity.linear * Math.sin(this.pose.rotation);
@@ -801,14 +818,12 @@ export class CubeRobotSimulator {
 
         if (pushForce > 0) {
           // Transfer momentum: robot pushes object
-          // Force = (robot_mass * velocity_component) / object_mass
           const pushStrength = (ROBOT_SPECS.MASS * pushForce) / obj.mass;
-          obj.vx += pushDirX * pushStrength * dt * 20; // Scale factor for responsiveness
+          obj.vx += pushDirX * pushStrength * dt * 20;
           obj.vy += pushDirY * pushStrength * dt * 20;
         }
 
         // Separate robot and object to prevent overlap
-        const overlap = minDist - dist;
         obj.x += pushDirX * overlap * 0.5;
         obj.y += pushDirY * overlap * 0.5;
       }
@@ -840,10 +855,11 @@ export class CubeRobotSimulator {
         Math.min(this.map.bounds.maxY - objRadius, obj.y)
       );
 
-      // Bounce off walls
+      // Bounce off walls (use half-size for box collision + wall thickness)
+      const wallHalfThick = ROBOT_SPECS.WALL_THICKNESS / 2;
       for (const wall of this.map.walls) {
         const wallDist = this.pointToLineDistance(obj.x, obj.y, wall.x1, wall.y1, wall.x2, wall.y2);
-        if (wallDist < objRadius) {
+        if (wallDist < objHalf + wallHalfThick) {
           // Reflect velocity off wall normal
           const wallDx = wall.x2 - wall.x1;
           const wallDy = wall.y2 - wall.y1;
@@ -861,11 +877,11 @@ export class CubeRobotSimulator {
       // Bounce off obstacles
       for (const obs of this.map.obstacles) {
         const obsDist = Math.sqrt((obj.x - obs.x) ** 2 + (obj.y - obs.y) ** 2);
-        if (obsDist < objRadius + obs.radius && obsDist > 0.001) {
+        if (obsDist < objHalf + obs.radius && obsDist > 0.001) {
           const normalX = (obj.x - obs.x) / obsDist;
           const normalY = (obj.y - obs.y) / obsDist;
           // Push object out of obstacle
-          const obsOverlap = objRadius + obs.radius - obsDist;
+          const obsOverlap = objHalf + obs.radius - obsDist;
           obj.x += normalX * obsOverlap;
           obj.y += normalY * obsOverlap;
           // Damped reflection
@@ -1075,12 +1091,16 @@ export class CubeRobotSimulator {
 
   private raycast(x: number, y: number, angle: number, maxDist: number): number {
     let minDist = maxDist;
+    const wallHalfThickness = ROBOT_SPECS.WALL_THICKNESS / 2;
 
-    // Check walls
+    // Check walls - subtract half wall thickness so ray hits the wall surface
     for (const wall of this.map.walls) {
       const dist = this.rayLineIntersection(x, y, angle, wall.x1, wall.y1, wall.x2, wall.y2);
-      if (dist !== null && dist < minDist) {
-        minDist = dist;
+      if (dist !== null) {
+        const surfaceDist = Math.max(0, dist - wallHalfThickness);
+        if (surfaceDist < minDist) {
+          minDist = surfaceDist;
+        }
       }
     }
 
@@ -1092,9 +1112,9 @@ export class CubeRobotSimulator {
       }
     }
 
-    // Check pushable objects (detected as circular obstacles for distance sensors)
+    // Check pushable objects using AABB ray intersection (matches cube visual)
     for (const obj of this.pushableObjectStates) {
-      const dist = this.rayCircleIntersection(x, y, angle, obj.x, obj.y, obj.size / 2);
+      const dist = this.rayBoxIntersection(x, y, angle, obj.x, obj.y, obj.size);
       if (dist !== null && dist < minDist) {
         minDist = dist;
       }
@@ -1159,6 +1179,60 @@ export class CubeRobotSimulator {
     if (t1 >= 0) return t1;
     if (t2 >= 0) return t2;
     return null;
+  }
+
+  /**
+   * Ray-AABB intersection for cube pushable objects.
+   * Uses slab method for axis-aligned bounding box intersection.
+   */
+  private rayBoxIntersection(
+    rx: number, ry: number, angle: number,
+    bx: number, by: number, size: number
+  ): number | null {
+    const half = size / 2;
+    const minX = bx - half;
+    const maxX = bx + half;
+    const minY = by - half;
+    const maxY = by + half;
+
+    // Ray direction: sin for X, cos for Y (angle=0 faces +Y)
+    const dx = Math.sin(angle);
+    const dy = Math.cos(angle);
+
+    let tmin = -Infinity;
+    let tmax = Infinity;
+
+    // X slab
+    if (Math.abs(dx) > 1e-8) {
+      const t1 = (minX - rx) / dx;
+      const t2 = (maxX - rx) / dx;
+      const tlo = Math.min(t1, t2);
+      const thi = Math.max(t1, t2);
+      tmin = Math.max(tmin, tlo);
+      tmax = Math.min(tmax, thi);
+    } else {
+      // Ray parallel to X slab
+      if (rx < minX || rx > maxX) return null;
+    }
+
+    // Y slab
+    if (Math.abs(dy) > 1e-8) {
+      const t1 = (minY - ry) / dy;
+      const t2 = (maxY - ry) / dy;
+      const tlo = Math.min(t1, t2);
+      const thi = Math.max(t1, t2);
+      tmin = Math.max(tmin, tlo);
+      tmax = Math.min(tmax, thi);
+    } else {
+      // Ray parallel to Y slab
+      if (ry < minY || ry > maxY) return null;
+    }
+
+    if (tmax < 0 || tmin > tmax) return null;
+
+    // Return the nearest positive intersection
+    const t = tmin >= 0 ? tmin : tmax;
+    return t >= 0 ? t : null;
   }
 
   private pointToLineDistance(

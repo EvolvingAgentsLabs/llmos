@@ -494,23 +494,10 @@ export function analyzeCameraPerspective(
   const issues: string[] = [];
   const blindSpots: string[] = [];
 
-  // The robot has 8 distance sensors but the "camera" (take_picture) only reports
-  // front, left, right distances. This means:
-  const cameraReportedDirs = ['front', 'left', 'right'];
-  const allDirs = ['front', 'frontLeft', 'frontRight', 'left', 'right', 'back', 'backLeft', 'backRight'];
-  const unreportedDirs = allDirs.filter(d => !cameraReportedDirs.includes(d));
-
-  // The take_picture tool only uses front/left/right distance
-  // frontLeft, frontRight, back, backLeft, backRight are NOT reported to the LLM
-  blindSpots.push(...unreportedDirs.map(d => `${d} (sensor exists but not reported to LLM)`));
-
-  issues.push(
-    'take_picture only reports front/left/right distances (3 of 8 sensors). ' +
-    'The LLM cannot see frontLeft, frontRight, back, backLeft, backRight readings.'
-  );
-
-  // FOV coverage: 3 out of 8 directions = 37.5%
-  let fovCoveragePercent = 37.5;
+  // All 8 distance sensors are now reported to the LLM via take_picture
+  // No blind spots in sensor coverage
+  // FOV coverage: 8 out of 8 directions = 100% sensor coverage
+  let fovCoveragePercent = 100;
 
   // Check if goal target is detectable
   let canSeeGoalTarget = false;
@@ -549,24 +536,22 @@ export function analyzeCameraPerspective(
   }
 
   if (goalLower.includes('explore')) {
-    // For exploration, the limited FOV is a bigger problem
     issues.push(
-      'Exploration goal: Limited 3-sensor FOV means robot must rotate to scan. ' +
-      'This is inefficient. Consider adding frontLeft/frontRight to take_picture.'
+      'Exploration goal: All 8 sensors reported. Robot has full 360-degree distance awareness. ' +
+      'Spatial context with arena coordinates helps plan efficient exploration paths.'
     );
   }
 
-  // Perspective issue: the camera is simulated from sensor data, not an actual image
+  // Camera perspective: real Three.js image is now captured and sent via vision API
   issues.push(
-    'Camera perspective is synthetic (sensor-derived text), not a real camera image. ' +
-    'The LLM receives text descriptions like "Clear path ahead" instead of visual data. ' +
-    'This limits spatial understanding compared to real camera feeds.'
+    'Camera sends a real rendered image from the Three.js scene via the vision API, ' +
+    'plus all 8 distance sensor readings as text. The LLM gets both visual and numeric data.'
   );
 
-  // Wall representation issue
+  // Spatial context is now included
   issues.push(
-    'Walls are represented as line segments. Distance sensors detect them correctly, but ' +
-    'the LLM has no concept of wall shape, length, or orientation - only distance readings.'
+    'Spatial context includes arena dimensions, robot absolute position/heading, ' +
+    'object positions, and tactical pushing advice. The LLM has map-level awareness.'
   );
 
   const sceneFromCamera = `Front: ${sensors.front}cm, Left: ${sensors.left}cm, Right: ${sensors.right}cm`;
@@ -598,17 +583,16 @@ export function analyzeRepresentation(
 
   // Wall representation
   if (wallCount === 4) {
-    // Standard rectangular arena
     issues.push(
-      'WALLS: Represented as 4 line segments (rectangular boundary). ' +
-      'Line segments have zero thickness - the hazard-stripe visual is purely cosmetic. ' +
-      'Collision detection uses point-to-line distance which works but doesn\'t model wall thickness.'
+      'WALLS: 4 wall segments (rectangular boundary) with 3cm physical thickness. ' +
+      'Collision and raycasting account for wall surface offset. ' +
+      'Walls are detected by distance sensors and visible in camera image.'
     );
   } else if (wallCount > 4) {
     issues.push(
-      `WALLS: ${wallCount} wall segments including ${wallCount - 4} internal walls. ` +
-      'Internal walls are also zero-thickness lines. Robot detects them via distance sensors ' +
-      'but the LLM has no concept of wall connectivity or maze structure.'
+      `WALLS: ${wallCount} wall segments including ${wallCount - 4} internal walls, all with 3cm thickness. ` +
+      'Robot detects them via distance sensors. Spatial context provides arena coordinates ' +
+      'so the LLM can reason about wall locations relative to robot position.'
     );
   }
 
@@ -624,10 +608,10 @@ export function analyzeRepresentation(
   // Pushable objects
   if (pushableCount > 0) {
     issues.push(
-      `PUSHABLE OBJECTS: ${pushableCount} physics objects. Detected as both sensor obstacles ` +
-      'AND reported separately via nearbyPushables. Physics uses circle-circle collision ' +
-      'approximation even though objects are cubes visually. This mismatch between visual ' +
-      '(cube) and physics (circle) representation may confuse spatial reasoning.'
+      `PUSHABLE OBJECTS: ${pushableCount} physics objects. Uses AABB (box) collision matching ` +
+      'the cube visual rendering. Raycasting also uses box intersection. Objects are detected ' +
+      'via distance sensors AND reported with position/angle via nearbyPushables. Spatial context ' +
+      'includes approximate absolute positions for LLM spatial reasoning.'
     );
   }
 
@@ -652,8 +636,8 @@ export function analyzeRepresentation(
   // Coordinate system
   issues.push(
     'COORDINATES: Physics uses sin(θ) for X and cos(θ) for Y (rotation=0 faces +Y/+Z). ' +
-    'This is consistent internally but the LLM is told pose.rotation in degrees. ' +
-    'The LLM must infer "which way am I facing" from changing sensor readings, not from coordinates.'
+    'Spatial context now provides heading in degrees with cardinal direction label ' +
+    '(e.g., "135deg facing East") so the LLM can reason about absolute orientation.'
   );
 
   return issues;
