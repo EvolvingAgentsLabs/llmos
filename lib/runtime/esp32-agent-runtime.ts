@@ -134,7 +134,7 @@ export interface CameraAnalysis {
 // STRUCTURED RESPONSE TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP';
+export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP' | 'SCAN';
 
 export interface WorldModelObstacle {
   direction: 'front' | 'left' | 'right' | 'back';
@@ -150,6 +150,23 @@ export interface WorldModel {
   stuckCounter?: number;
   explored_areas: string[];
   unexplored_directions: string[];
+  // 360-degree scan state
+  scanState?: {
+    active: boolean;
+    startHeading: number;       // Heading when scan started (degrees)
+    currentScanStep: number;    // 0-7 (8 steps at 45 degrees each)
+    totalScanSteps: number;     // 8 by default
+    scanResults: Array<{
+      heading_degrees: number;
+      scene_description: string;
+      detected_objects: string[];  // e.g., ['red_cube', 'yellow_dock', 'wall']
+    }>;
+    targetDetected?: {
+      object: string;
+      heading_degrees: number;
+      description: string;
+    };
+  };
 }
 
 export interface StructuredObservation {
@@ -352,7 +369,7 @@ function buildSpatialContext(sensors: SensorReadings): string {
 export const DEVICE_TOOLS: DeviceTool[] = [
   {
     name: 'take_picture',
-    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene showing what the robot sees, along with nearby objects and spatial context. Use this to visually plan your next move - look for the red cube, green dock, walls, and obstacles in the image.',
+    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene showing what the robot sees, along with nearby objects and spatial context. Use this to visually plan your next move - look for the red cube, yellow dock, walls, and obstacles in the image.',
     parameters: {},
     execute: async (args, ctx) => {
       const sensors = ctx.getSensors();
@@ -401,7 +418,7 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       // Build spatial context: arena layout + object positions relative to robot
       let spatialContext = buildSpatialContext(sensors);
 
-      const recommendation = 'Use the camera image to decide your next move. Look for the red cube and green dock zone.';
+      const recommendation = 'Use the camera image to decide your next move. Look for the red cube and yellow dock zone.';
 
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
@@ -494,7 +511,7 @@ export const DEFAULT_AGENT_PROMPTS = {
 ## CAMERA-BASED NAVIGATION
 **You receive a camera image with EVERY sensor update.** Use it to:
 - **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
-- **See the GREEN DOCK** - A green zone on the floor (bottom-right area of arena). This is where you push the cube to.
+- **See the YELLOW DOCK** - A bright yellow zone on the floor in a visible corner of the arena. This is where you push the cube to.
 - **See WALLS** - Gray/dark barriers at the edges of the arena.
 - **See OBSTACLES** - Cylindrical obstacles in the arena.
 - **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
@@ -502,24 +519,30 @@ export const DEFAULT_AGENT_PROMPTS = {
 ## STRICT BEHAVIOR CYCLE
 Follow this cycle EXACTLY:
 1. **OBSERVE** → Look at the camera image to understand your surroundings
-2. **ANALYZE** → Identify where the red cube, green dock, and obstacles are in the image
+2. **ANALYZE** → Identify where the red cube, yellow dock, and obstacles are in the image
 3. **PLAN** → Decide how to approach: navigate toward the red cube, position behind it, then push toward dock
 4. **ROTATE** → Turn to face target direction (if needed)
 5. **MOVE** → Go forward toward target
 6. **STOP** → Halt wheels, return to step 1
 
+**AUTOMATIC 360° SCAN**: When you get stuck (no progress for 3 cycles), the system will automatically perform a 360-degree scan:
+- Rotates in 8 steps of ~45° each, taking a camera image at each heading
+- Detects objects (red cube, yellow dock, obstacles) at each heading
+- Injects a scan summary into your conversation with detected object positions
+- After scan, you receive a full panoramic report - use it to plan your next move!
+
 ## PUSHING STRATEGY
 1. First, navigate TO the red cube
-2. Position yourself on the OPPOSITE side of the cube from the green dock
-3. Drive FORWARD to push the cube toward the green dock
-4. The dock is in the bottom-right area of the arena (positive X, negative Y)
+2. Position yourself on the OPPOSITE side of the cube from the yellow dock
+3. Drive FORWARD to push the cube toward the yellow dock
+4. The dock is in a corner of the arena - look for the bright yellow zone
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
 
 {
   "cycle": <number>,
-  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP>",
+  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP|SCAN>",
   "goal": "<your goal>",
   "world_model": {
     "robot_position": {"x": <number>, "y": <number>, "rotation": <degrees>},
@@ -550,7 +573,7 @@ EVERY response MUST be valid JSON with this EXACT structure:
 - **ALWAYS look at the attached camera image** before deciding your action
 - The image shows your first-person view from the robot's perspective
 - If you see the RED CUBE in the image, drive TOWARD it
-- If you see the GREEN DOCK, remember its location for pushing
+- If you see the YELLOW DOCK, remember its location for pushing
 - If you see a WALL or OBSTACLE ahead, turn to avoid it
 - If you don't see the red cube, ROTATE to scan the environment
 
@@ -916,6 +939,26 @@ export class ESP32AgentRuntime {
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
+      // SCAN MODE: If in SCAN step, execute scan logic instead of normal LLM loop
+      if (this.state.currentStep === 'SCAN') {
+        const scanComplete = await this.executeScanStep(sensors);
+        if (!scanComplete) {
+          // More scan steps needed - schedule next iteration quickly
+          this.emitStateChange();
+          if (this.state.running) {
+            this.loopHandle = setTimeout(() => this.runLoop(), 500); // Faster interval during scan
+          }
+          return;
+        }
+        // Scan complete - fall through to normal loop which will now run with OBSERVE step
+        // and the scan results injected into conversation history
+        this.emitStateChange();
+        if (this.state.running) {
+          this.loopHandle = setTimeout(() => this.runLoop(), this.config.loopIntervalMs);
+        }
+        return;
+      }
+
       // STEP 1.5: Always capture a fresh camera image before calling LLM
       // This ensures the LLM always gets a current visual of the scene
       try {
@@ -1031,6 +1074,18 @@ export class ESP32AgentRuntime {
       current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
     };
+
+    // Include last scan results if a scan was recently completed
+    if (this.state.worldModel.scanState && !this.state.worldModel.scanState.active && this.state.worldModel.scanState.scanResults.length > 0) {
+      sensorContext.last_scan_results = {
+        total_headings_scanned: this.state.worldModel.scanState.scanResults.length,
+        target_detected: this.state.worldModel.scanState.targetDetected || null,
+        scan_summary: this.state.worldModel.scanState.scanResults.map(r => ({
+          heading: r.heading_degrees,
+          objects: r.detected_objects,
+        })),
+      };
+    }
 
     // Include pushable objects sensor data if available
     if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
@@ -1152,7 +1207,7 @@ Respond with ONLY valid JSON in the required structured format.`;
         }
         if (data.imageDataUrl) {
           cameraResult.has_camera_image = true; // Don't put base64 in text - it's sent via vision API
-          cameraResult.note = 'A camera image is attached to this message. Use it to see obstacles, the red cube, and green dock.';
+          cameraResult.note = 'A camera image is attached to this message. Use it to see obstacles, the red cube, and yellow dock.';
         }
         return `TOOL RESULT [take_picture]:\n${JSON.stringify(cameraResult, null, 2)}`;
       }
@@ -1200,19 +1255,19 @@ Respond with ONLY valid JSON in the required structured format.`;
       this.state.worldModel.stuckCounter = 0;
     }
 
-    // FORCE MOVEMENT if stuck for 3+ cycles - try moving forward to break deadlock
+    // FORCE 360-SCAN if stuck for 3+ cycles - instead of blindly moving forward,
+    // do a systematic 360-degree scan to find the target
     if ((this.state.worldModel.stuckCounter || 0) >= 3) {
-      this.log('STUCK DETECTED - Forcing forward movement to break deadlock!', 'warn');
-
-      // Force the robot to move forward - the camera-based LLM will correct course next cycle
-      this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
-      this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
-
-      // Reset stuck counter after forcing movement
+      this.log('STUCK DETECTED - Initiating 360-degree SCAN to find target!', 'warn');
+      this.initiateScan(sensors);
       this.state.worldModel.stuckCounter = 0;
+      return; // Skip normal cycle advancement
+    }
 
-      // Also advance the cycle step to MOVE to sync with what we did
-      this.state.currentStep = 'MOVE';
+    // If currently in SCAN mode, handle scan progression
+    if (this.state.currentStep === 'SCAN') {
+      // SCAN is handled by executeScanStep() in the runLoop - don't interfere here
+      return;
     }
 
     // AUTOMATIC CYCLE ADVANCEMENT based on what tools were executed
@@ -1240,6 +1295,188 @@ Respond with ONLY valid JSON in the required structured format.`;
       this.state.currentStep = 'OBSERVE';
       this.log('Cycle: STOP → OBSERVE (restarting cycle)', 'info');
     }
+  }
+
+  /**
+   * Initiate a 360-degree scan: rotate in 45-degree increments, taking a picture at each step
+   * to build a panoramic understanding of the environment and detect the target
+   */
+  private initiateScan(sensors: SensorReadings): void {
+    const currentHeading = Math.round((sensors.pose.rotation * 180) / Math.PI);
+    this.state.worldModel.scanState = {
+      active: true,
+      startHeading: currentHeading,
+      currentScanStep: 0,
+      totalScanSteps: 8,  // 8 steps x 45 degrees = 360 degrees
+      scanResults: [],
+      targetDetected: undefined,
+    };
+    this.state.currentStep = 'SCAN';
+    this.log(`SCAN initiated: starting at heading ${currentHeading}°, will rotate 8x45°=360°`, 'info');
+  }
+
+  /**
+   * Execute one step of the 360-degree scan.
+   * Each step: stop → take picture → analyze → rotate 45 degrees
+   * Returns true if scan is complete, false if more steps needed.
+   */
+  private async executeScanStep(sensors: SensorReadings): Promise<boolean> {
+    const scan = this.state.worldModel.scanState;
+    if (!scan || !scan.active) return true;
+
+    const stepIndex = scan.currentScanStep;
+    const currentHeading = Math.round((sensors.pose.rotation * 180) / Math.PI);
+
+    this.log(`SCAN step ${stepIndex + 1}/${scan.totalScanSteps} at heading ${currentHeading}°`, 'info');
+
+    // Stop wheels first
+    this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
+    this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
+
+    // Wait briefly for robot to stabilize
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Take a picture at current heading
+    let sceneDescription = '';
+    let detectedObjects: string[] = [];
+
+    try {
+      if (cameraCaptureManager.hasCanvas()) {
+        const capture = cameraCaptureManager.capture(
+          'robot-pov',
+          { x: sensors.pose.x, y: sensors.pose.y, rotation: sensors.pose.rotation },
+          { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
+        );
+        if (capture) {
+          if (!this.state.lastPicture) {
+            this.state.lastPicture = {
+              timestamp: Date.now(),
+              scene: '',
+              imageDataUrl: capture.dataUrl,
+              obstacles: { front: false, frontLeft: false, frontRight: false, left: false, right: false, back: false, backLeft: false, backRight: false, frontDistance: 200 },
+              distances: { front: 200, frontLeft: 200, frontRight: 200, left: 200, right: 200, back: 200, backLeft: 200, backRight: 200 },
+              recommendation: '',
+            };
+          } else {
+            this.state.lastPicture.imageDataUrl = capture.dataUrl;
+            this.state.lastPicture.timestamp = Date.now();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ESP32Agent] Scan camera capture failed:', e);
+    }
+
+    // Check sensor data for nearby objects at this heading
+    if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+      for (const p of sensors.nearbyPushables) {
+        // Object is roughly in front if angle is within ±45 degrees
+        if (Math.abs(p.angle) < 45) {
+          detectedObjects.push(`${p.label || p.id} (${p.distance}cm, angle=${p.angle}°)`);
+          if (p.label?.toLowerCase().includes('red') || p.color === '#e53935') {
+            sceneDescription += `RED CUBE detected at ${p.distance}cm, angle ${p.angle}°! `;
+            scan.targetDetected = {
+              object: 'red_cube',
+              heading_degrees: currentHeading,
+              description: `Red Cube at heading ${currentHeading}°, distance ${p.distance}cm, angle ${p.angle}°`,
+            };
+          }
+        }
+      }
+    }
+
+    if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+      for (const d of sensors.nearbyDockZones) {
+        if (Math.abs(d.angle) < 45) {
+          detectedObjects.push(`${d.label || d.id} (${d.distance}cm, angle=${d.angle}°)`);
+        }
+      }
+    }
+
+    if (!sceneDescription) {
+      sceneDescription = detectedObjects.length > 0
+        ? `Objects visible: ${detectedObjects.join(', ')}`
+        : 'No target objects visible at this heading';
+    }
+
+    // Record scan result
+    scan.scanResults.push({
+      heading_degrees: currentHeading,
+      scene_description: sceneDescription,
+      detected_objects: detectedObjects,
+    });
+
+    scan.currentScanStep++;
+
+    // Check if scan is complete
+    if (scan.currentScanStep >= scan.totalScanSteps) {
+      scan.active = false;
+      this.log(`SCAN complete! ${scan.scanResults.length} headings scanned.`, 'info');
+
+      if (scan.targetDetected) {
+        this.log(`TARGET FOUND during scan: ${scan.targetDetected.description}`, 'info');
+      } else {
+        this.log('No target detected during scan - will move to new position and scan again', 'warn');
+      }
+
+      // Build scan summary and inject into conversation history for LLM awareness
+      this.injectScanResultsIntoHistory(scan);
+
+      // Transition back to OBSERVE so LLM can plan based on scan results
+      this.state.currentStep = 'OBSERVE';
+      return true;
+    }
+
+    // Not complete - rotate 45 degrees for next step
+    // Rotate right: left wheel forward, right wheel backward for ~0.4 seconds
+    this.log(`SCAN: rotating 45° for next step (step ${scan.currentScanStep + 1})`, 'info');
+    this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
+    this.deviceContext?.setRightWheel(WHEEL_SPEED.BACKWARD);
+
+    // Rotation time: ~45 degrees at wheel speed 80
+    // With wheel base 0.07m and wheel radius 0.0325m, angular velocity ≈ differential speed / wheel_base
+    // At PWM 80 (roughly 30% of max RPM 300 = ~90 RPM), linear velocity per wheel ≈ 0.3 m/s
+    // Angular velocity ω = (v_right - v_left) / wheel_base = (0.3 - (-0.3)) / 0.07 ≈ 8.6 rad/s
+    // 45 degrees = π/4 ≈ 0.785 rad → time ≈ 0.09s (very fast with these speeds)
+    // In practice the simulation runs differently, so use 400ms which gives good results
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    // Stop after rotation
+    this.deviceContext?.setLeftWheel(WHEEL_SPEED.STOP);
+    this.deviceContext?.setRightWheel(WHEEL_SPEED.STOP);
+
+    return false;
+  }
+
+  /**
+   * Inject 360-scan results into the LLM conversation history so the agent
+   * can make an informed decision about where to go next
+   */
+  private injectScanResultsIntoHistory(scan: NonNullable<WorldModel['scanState']>): void {
+    let summary = '--- 360° ENVIRONMENT SCAN COMPLETE ---\n';
+    summary += `Scanned ${scan.scanResults.length} directions (every 45°):\n\n`;
+
+    for (const result of scan.scanResults) {
+      summary += `  Heading ${result.heading_degrees}°: ${result.scene_description}\n`;
+      if (result.detected_objects.length > 0) {
+        summary += `    Objects: ${result.detected_objects.join(', ')}\n`;
+      }
+    }
+
+    if (scan.targetDetected) {
+      summary += `\n🎯 TARGET DETECTED: ${scan.targetDetected.description}\n`;
+      summary += `ACTION REQUIRED: Rotate to heading ~${scan.targetDetected.heading_degrees}° and drive toward the target.\n`;
+    } else {
+      summary += `\nNo target found in current position. Move to a different location and try again.\n`;
+      summary += `STRATEGY: Move forward to a new area, then the system will scan again if needed.\n`;
+    }
+
+    this.state.conversationHistory.push({
+      role: 'user',
+      content: summary,
+    });
+
+    this.log(`Injected scan results into conversation history`, 'info');
   }
 
   /**

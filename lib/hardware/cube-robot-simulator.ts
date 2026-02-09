@@ -208,7 +208,7 @@ export interface DockZone {
   width: number;     // Zone width in meters
   height: number;    // Zone height in meters
   color: string;     // Display color
-  label?: string;    // Optional label (e.g., "Green Dock")
+  label?: string;    // Optional label (e.g., "Yellow Dock")
 }
 
 // Runtime state for a pushable object (includes velocity)
@@ -1783,16 +1783,16 @@ export const FLOOR_MAPS = {
 
   /**
    * Standard 5m x 5m cube physics challenge
-   * Goal: Find the red cube, navigate to it, and push it to the green dock station
+   * Goal: Find the red cube, navigate to it, and push it to the yellow dock station
    * Features physics-based pushing mechanics with a pushable red cube (~robot size)
-   * and a green dock zone target area on the floor
+   * and a yellow dock zone target area in a visible corner
    */
   standard5x5CubePhysics: (): FloorMap => {
     // Generate random starting position in empty space of the arena
-    // Avoid: red cube (0,0), green dock (2.0,-2.0), obstacles (-1.2,0.5) and (1.0,-0.8), walls
+    // Avoid: red cube (0,0), yellow dock (2.2,-2.2), obstacles (-1.2,0.5) and (1.0,-0.8), walls
     const exclusionZones = [
       { x: 0, y: 0, radius: 0.6 },       // Red cube + margin
-      { x: 2.0, y: -2.0, radius: 0.6 },  // Green dock + margin
+      { x: 2.2, y: -2.2, radius: 0.7 },  // Yellow dock + margin
       { x: -1.2, y: 0.5, radius: 0.5 },  // Obstacle 1 + margin
       { x: 1.0, y: -0.8, radius: 0.5 },  // Obstacle 2 + margin
     ];
@@ -1849,15 +1849,15 @@ export const FLOOR_MAPS = {
         },
       ],
       dockZones: [
-        // Green dock station on the floor (bottom-right area)
+        // Yellow dock station in a highly visible corner of the arena
         {
-          id: 'green-dock',
-          x: 2.0,
-          y: -2.0,
-          width: 0.5,          // 50cm wide
-          height: 0.5,         // 50cm deep
-          color: '#4caf50',    // Green
-          label: 'Green Dock',
+          id: 'yellow-dock',
+          x: 2.2,
+          y: -2.2,
+          width: 0.6,          // 60cm wide (larger for visibility)
+          height: 0.6,         // 60cm deep
+          color: '#FFD600',    // Bright yellow
+          label: 'Yellow Dock',
         },
       ],
       startPosition: { x: startX, y: startY, rotation: startRotation },
