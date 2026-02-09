@@ -1787,48 +1787,82 @@ export const FLOOR_MAPS = {
    * Features physics-based pushing mechanics with a pushable red cube (~robot size)
    * and a green dock zone target area on the floor
    */
-  standard5x5CubePhysics: (): FloorMap => ({
-    bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
-    walls: [
-      { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },  // Bottom
-      { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },     // Right
-      { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },     // Top
-      { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },   // Left
-    ],
-    obstacles: [
-      // A few obstacles to make navigation interesting
-      { x: -1.2, y: 0.5, radius: 0.2 },
-      { x: 1.0, y: -0.8, radius: 0.18 },
-    ],
-    lines: [],
-    checkpoints: [],
-    pushableObjects: [
-      // Red cube in the center - similar size to the robot (0.08m body)
-      {
-        id: 'red-cube',
-        x: 0,
-        y: 0,
-        size: 0.10,          // 10cm cube (similar to robot's 8cm)
-        mass: 0.15,          // 150g (lighter than robot's 250g so it can be pushed)
-        friction: 0.4,       // Moderate friction
-        color: '#e53935',    // Bright red
-        label: 'Red Cube',
-      },
-    ],
-    dockZones: [
-      // Green dock station on the floor (bottom-right area)
-      {
-        id: 'green-dock',
-        x: 2.0,
-        y: -2.0,
-        width: 0.5,          // 50cm wide
-        height: 0.5,         // 50cm deep
-        color: '#4caf50',    // Green
-        label: 'Green Dock',
-      },
-    ],
-    startPosition: { x: -2.0, y: -2.0, rotation: Math.PI / 4 },  // Start at bottom-left, facing center
-  }),
+  standard5x5CubePhysics: (): FloorMap => {
+    // Generate random starting position in empty space of the arena
+    // Avoid: red cube (0,0), green dock (2.0,-2.0), obstacles (-1.2,0.5) and (1.0,-0.8), walls
+    const exclusionZones = [
+      { x: 0, y: 0, radius: 0.6 },       // Red cube + margin
+      { x: 2.0, y: -2.0, radius: 0.6 },  // Green dock + margin
+      { x: -1.2, y: 0.5, radius: 0.5 },  // Obstacle 1 + margin
+      { x: 1.0, y: -0.8, radius: 0.5 },  // Obstacle 2 + margin
+    ];
+    const margin = 0.4; // Margin from walls
+    const minX = -2.5 + margin;
+    const maxX = 2.5 - margin;
+    const minY = -2.5 + margin;
+    const maxY = 2.5 - margin;
+
+    let startX = 0, startY = 0;
+    let valid = false;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      startX = minX + Math.random() * (maxX - minX);
+      startY = minY + Math.random() * (maxY - minY);
+      valid = exclusionZones.every(zone => {
+        const dx = startX - zone.x;
+        const dy = startY - zone.y;
+        return Math.sqrt(dx * dx + dy * dy) > zone.radius;
+      });
+      if (valid) break;
+    }
+    // Fallback if no valid position found (unlikely)
+    if (!valid) { startX = -2.0; startY = 2.0; }
+
+    // Random orientation (0 to 2*PI)
+    const startRotation = Math.random() * Math.PI * 2;
+
+    return {
+      bounds: { minX: -2.5, maxX: 2.5, minY: -2.5, maxY: 2.5 },
+      walls: [
+        { x1: -2.5, y1: -2.5, x2: 2.5, y2: -2.5 },  // Bottom
+        { x1: 2.5, y1: -2.5, x2: 2.5, y2: 2.5 },     // Right
+        { x1: 2.5, y1: 2.5, x2: -2.5, y2: 2.5 },     // Top
+        { x1: -2.5, y1: 2.5, x2: -2.5, y2: -2.5 },   // Left
+      ],
+      obstacles: [
+        // A few obstacles to make navigation interesting
+        { x: -1.2, y: 0.5, radius: 0.2 },
+        { x: 1.0, y: -0.8, radius: 0.18 },
+      ],
+      lines: [],
+      checkpoints: [],
+      pushableObjects: [
+        // Red cube in the center - similar size to the robot (0.08m body)
+        {
+          id: 'red-cube',
+          x: 0,
+          y: 0,
+          size: 0.10,          // 10cm cube (similar to robot's 8cm)
+          mass: 0.15,          // 150g (lighter than robot's 250g so it can be pushed)
+          friction: 0.4,       // Moderate friction
+          color: '#e53935',    // Bright red
+          label: 'Red Cube',
+        },
+      ],
+      dockZones: [
+        // Green dock station on the floor (bottom-right area)
+        {
+          id: 'green-dock',
+          x: 2.0,
+          y: -2.0,
+          width: 0.5,          // 50cm wide
+          height: 0.5,         // 50cm deep
+          color: '#4caf50',    // Green
+          label: 'Green Dock',
+        },
+      ],
+      startPosition: { x: startX, y: startY, rotation: startRotation },
+    };
+  },
 
   /**
    * Standard 5m x 5m gem hunt challenge

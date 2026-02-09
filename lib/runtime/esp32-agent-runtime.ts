@@ -298,10 +298,7 @@ function buildSpatialContext(sensors: SensorReadings): string {
     `Robot position: (${pose.x.toFixed(2)}m, ${pose.y.toFixed(2)}m)`,
     `Robot heading: ${headingDeg}deg (facing ${cardinalDir})`,
     ``,
-    `Distance readings (all 8 directions):`,
-    `  Front: ${Math.round(sensors.distance.front)}cm | Front-Left: ${Math.round(sensors.distance.frontLeft)}cm | Front-Right: ${Math.round(sensors.distance.frontRight)}cm`,
-    `  Left: ${Math.round(sensors.distance.left)}cm | Right: ${Math.round(sensors.distance.right)}cm`,
-    `  Back: ${Math.round(sensors.distance.back)}cm | Back-Left: ${Math.round(sensors.distance.backLeft)}cm | Back-Right: ${Math.round(sensors.distance.backRight)}cm`,
+    `NOTE: You have NO distance sensors. Use the camera image to see your surroundings.`,
   ];
 
   // Nearby objects with absolute positions
@@ -309,7 +306,6 @@ function buildSpatialContext(sensors: SensorReadings): string {
     lines.push('');
     lines.push('Nearby pushable objects:');
     for (const p of sensors.nearbyPushables) {
-      // Calculate absolute position from robot pose + relative angle/distance
       const absAngle = pose.rotation + (p.angle * Math.PI) / 180;
       const objX = pose.x + (p.distance / 100) * Math.sin(absAngle);
       const objY = pose.y + (p.distance / 100) * Math.cos(absAngle);
@@ -356,14 +352,13 @@ function buildSpatialContext(sensors: SensorReadings): string {
 export const DEVICE_TOOLS: DeviceTool[] = [
   {
     name: 'take_picture',
-    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene, all 8 distance sensor readings, nearby objects, and a spatial map of the arena. Use this before planning your next move.',
+    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene showing what the robot sees, along with nearby objects and spatial context. Use this to visually plan your next move - look for the red cube, green dock, walls, and obstacles in the image.',
     parameters: {},
     execute: async (args, ctx) => {
       const sensors = ctx.getSensors();
-      const dist = sensors.distance;
 
-      // Build full 8-direction scene description
-      let sceneDesc = describeScene(dist);
+      // Build scene description from nearby objects (no distance sensors)
+      let sceneDesc = 'Camera image captured. Look at the image to understand your surroundings.';
 
       // Add pushable objects to scene description
       if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
@@ -406,32 +401,20 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       // Build spatial context: arena layout + object positions relative to robot
       let spatialContext = buildSpatialContext(sensors);
 
-      const recommendation = suggestDirection(dist);
+      const recommendation = 'Use the camera image to decide your next move. Look for the red cube and green dock zone.';
 
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
         scene: sceneDesc,
         imageDataUrl,
         obstacles: {
-          front: dist.front < 50,
-          frontLeft: dist.frontLeft < 40,
-          frontRight: dist.frontRight < 40,
-          left: dist.left < 40,
-          right: dist.right < 40,
-          back: dist.back < 40,
-          backLeft: dist.backLeft < 40,
-          backRight: dist.backRight < 40,
-          frontDistance: dist.front,
+          front: false, frontLeft: false, frontRight: false,
+          left: false, right: false, back: false, backLeft: false, backRight: false,
+          frontDistance: 200,
         },
         distances: {
-          front: Math.round(dist.front),
-          frontLeft: Math.round(dist.frontLeft),
-          frontRight: Math.round(dist.frontRight),
-          left: Math.round(dist.left),
-          right: Math.round(dist.right),
-          back: Math.round(dist.back),
-          backLeft: Math.round(dist.backLeft),
-          backRight: Math.round(dist.backRight),
+          front: 200, frontLeft: 200, frontRight: 200,
+          left: 200, right: 200, back: 200, backLeft: 200, backRight: 200,
         },
         recommendation,
         spatialContext,
@@ -492,10 +475,10 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DEFAULT_AGENT_PROMPTS = {
-  simple: `You are a structured autonomous robot with a camera and two wheels.
+  simple: `You are a structured autonomous robot with a CAMERA and two wheels. You navigate using ONLY your camera image - you have NO distance sensors.
 
 ## Your Tools
-1. **take_picture** - See environment (call during OBSERVE step)
+1. **take_picture** - Capture a fresh camera image to see your environment
 2. **left_wheel** - Control left wheel: "forward", "backward", or "stop"
 3. **right_wheel** - Control right wheel: "forward", "backward", or "stop"
 
@@ -508,20 +491,28 @@ export const DEFAULT_AGENT_PROMPTS = {
 | Rotate Right  | forward    | backward    |
 | Stop          | stop       | stop        |
 
+## CAMERA-BASED NAVIGATION
+**You receive a camera image with EVERY sensor update.** Use it to:
+- **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
+- **See the GREEN DOCK** - A green zone on the floor (bottom-right area of arena). This is where you push the cube to.
+- **See WALLS** - Gray/dark barriers at the edges of the arena.
+- **See OBSTACLES** - Cylindrical obstacles in the arena.
+- **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
+
 ## STRICT BEHAVIOR CYCLE
 Follow this cycle EXACTLY:
-1. **OBSERVE** → Call take_picture to see environment
-2. **ANALYZE** → Update world_model with new obstacle/position data
-3. **PLAN** → Choose direction based on obstacles and GOAL
+1. **OBSERVE** → Look at the camera image to understand your surroundings
+2. **ANALYZE** → Identify where the red cube, green dock, and obstacles are in the image
+3. **PLAN** → Decide how to approach: navigate toward the red cube, position behind it, then push toward dock
 4. **ROTATE** → Turn to face target direction (if needed)
-5. **MOVE** → Go forward (if path clear)
+5. **MOVE** → Go forward toward target
 6. **STOP** → Halt wheels, return to step 1
 
-## Obstacle Avoidance Rules (PRIORITY)
-1. **< 20cm**: DANGER! Backup immediately
-2. **20-40cm**: Stop and rotate away
-3. **40-80cm**: Safe to rotate
-4. **> 80cm**: Clear, can move forward
+## PUSHING STRATEGY
+1. First, navigate TO the red cube
+2. Position yourself on the OPPOSITE side of the cube from the green dock
+3. Drive FORWARD to push the cube toward the green dock
+4. The dock is in the bottom-right area of the arena (positive X, negative Y)
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
@@ -541,10 +532,10 @@ EVERY response MUST be valid JSON with this EXACT structure:
     "front_distance_cm": <number>,
     "left_clear": <boolean>,
     "right_clear": <boolean>,
-    "scene_description": "<what you see>"
+    "scene_description": "<describe what you SEE in the camera image>"
   },
   "decision": {
-    "reasoning": "<why this action>",
+    "reasoning": "<why this action based on what you SEE>",
     "target_direction": "<forward|left|right|backward|null>",
     "action_type": "<observe|rotate|move|stop|backup>"
   },
@@ -555,22 +546,29 @@ EVERY response MUST be valid JSON with this EXACT structure:
   "next_step": "<next step in cycle>"
 }
 
+## CRITICAL: USE THE CAMERA IMAGE
+- **ALWAYS look at the attached camera image** before deciding your action
+- The image shows your first-person view from the robot's perspective
+- If you see the RED CUBE in the image, drive TOWARD it
+- If you see the GREEN DOCK, remember its location for pushing
+- If you see a WALL or OBSTACLE ahead, turn to avoid it
+- If you don't see the red cube, ROTATE to scan the environment
+
 ## LEARNING FROM PREVIOUS ACTIONS
 **CRITICAL: Analyze your conversation history before deciding!**
-- If the last movement resulted in a COLLISION or getting TOO CLOSE to an obstacle → you MUST choose a DIFFERENT direction
-- If the last decision led to the same sensor readings (no progress) → TRY A DIFFERENT approach
+- If the last movement made no progress → TRY A DIFFERENT approach
 - If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
-- If backing up didn't help → try rotating first, THEN backing up
-- Compare current sensor data with previous readings to detect if you're stuck in a loop
+- Compare what you see in the camera with what you expected
 - NEVER repeat the exact same wheel_commands if they failed to make progress
+- If stuck, try: rotate 90 degrees, then reassess from camera
 
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
-2. Update world_model EVERY cycle with new information
-3. Safety first - backup when < 20cm from obstacle
-4. Build internal map of arena over time
-5. Consider GOAL when planning direction
-6. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT`,
+2. ALWAYS base decisions on the CAMERA IMAGE - it is your primary sensor
+3. Drive TOWARD the red cube when you see it - do NOT turn away from it
+4. Consider GOAL when planning direction
+5. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
+6. Keep moving! Stopping without reason wastes time.`,
 
   reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
 
@@ -918,6 +916,37 @@ export class ESP32AgentRuntime {
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
+      // STEP 1.5: Always capture a fresh camera image before calling LLM
+      // This ensures the LLM always gets a current visual of the scene
+      try {
+        if (cameraCaptureManager.hasCanvas()) {
+          const capture = cameraCaptureManager.capture(
+            'robot-pov',
+            sensors.pose ? { x: sensors.pose.x, y: sensors.pose.y, rotation: sensors.pose.rotation } : undefined,
+            { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
+          );
+          if (capture) {
+            // Update lastPicture with fresh camera image so callLLM can use it
+            if (!this.state.lastPicture) {
+              this.state.lastPicture = {
+                timestamp: Date.now(),
+                scene: '',
+                imageDataUrl: capture.dataUrl,
+                obstacles: { front: false, frontLeft: false, frontRight: false, left: false, right: false, back: false, backLeft: false, backRight: false, frontDistance: 200 },
+                distances: { front: 200, frontLeft: 200, frontRight: 200, left: 200, right: 200, back: 200, backLeft: 200, backRight: 200 },
+                recommendation: '',
+              };
+            } else {
+              this.state.lastPicture.imageDataUrl = capture.dataUrl;
+              this.state.lastPicture.timestamp = Date.now();
+            }
+          }
+        }
+      } catch (e) {
+        // Camera capture is optional - don't fail the loop
+        console.warn('[ESP32Agent] Pre-loop camera capture failed:', e);
+      }
+
       // STEP 2: Call LLM for decision
       const llmStart = Date.now();
       const llmResponse = await this.callLLM(sensors);
@@ -989,26 +1018,16 @@ export class ESP32AgentRuntime {
    */
   private async callLLM(sensors: SensorReadings): Promise<string> {
     // Build structured user prompt with sensor data
+    // NOTE: Distance sensors have been removed. The robot relies on camera vision only.
     const sensorContext: Record<string, any> = {
       cycle: this.state.iteration,
       current_step: this.state.currentStep,
-      sensor_data: {
-        front_distance_cm: Math.round(sensors.distance.front),
-        front_left_distance_cm: Math.round(sensors.distance.frontLeft),
-        front_right_distance_cm: Math.round(sensors.distance.frontRight),
-        left_distance_cm: Math.round(sensors.distance.left),
-        right_distance_cm: Math.round(sensors.distance.right),
-        back_distance_cm: Math.round(sensors.distance.back),
-        back_left_distance_cm: Math.round(sensors.distance.backLeft),
-        back_right_distance_cm: Math.round(sensors.distance.backRight),
-        robot_pose: sensors.pose,
+      robot_pose: {
+        x: sensors.pose.x.toFixed(3),
+        y: sensors.pose.y.toFixed(3),
+        heading_degrees: Math.round((sensors.pose.rotation * 180) / Math.PI),
       },
-      last_observation: this.state.lastPicture ? {
-        scene: this.state.lastPicture.scene,
-        recommendation: this.state.lastPicture.recommendation,
-        distances: this.state.lastPicture.distances,
-        spatial_context: this.state.lastPicture.spatialContext,
-      } : null,
+      has_camera_image: !!this.state.lastPicture?.imageDataUrl,
       current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
     };
@@ -1126,8 +1145,6 @@ Respond with ONLY valid JSON in the required structured format.`;
         const data = tc.result.data as CameraAnalysis;
         const cameraResult: Record<string, any> = {
           scene: data.scene,
-          distances: data.distances,
-          obstacles: data.obstacles,
           recommendation: data.recommendation,
         };
         if (data.spatialContext) {
@@ -1135,6 +1152,7 @@ Respond with ONLY valid JSON in the required structured format.`;
         }
         if (data.imageDataUrl) {
           cameraResult.has_camera_image = true; // Don't put base64 in text - it's sent via vision API
+          cameraResult.note = 'A camera image is attached to this message. Use it to see obstacles, the red cube, and green dock.';
         }
         return `TOOL RESULT [take_picture]:\n${JSON.stringify(cameraResult, null, 2)}`;
       }
@@ -1173,38 +1191,22 @@ Respond with ONLY valid JSON in the required structured format.`;
       tc.args.direction === 'stop'
     );
 
-    // Check if paths are clear
-    const frontClear = sensors.distance.front > 80;
-    const leftClear = sensors.distance.left > 50;
-    const rightClear = sensors.distance.right > 50;
-
-    // Stuck detection: robot hasn't moved, executed stop, but has clear paths
-    if (!hasMoved && executedStop && (frontClear || leftClear || rightClear)) {
+    // Stuck detection: robot hasn't moved and executed stop (position-based, no distance sensors)
+    if (!hasMoved && executedStop) {
       this.state.worldModel.stuckCounter = (this.state.worldModel.stuckCounter || 0) + 1;
-      this.log(`Stuck detection: counter=${this.state.worldModel.stuckCounter}, front=${sensors.distance.front}cm`, 'warn');
+      this.log(`Stuck detection: counter=${this.state.worldModel.stuckCounter}`, 'warn');
     } else if (hasMoved) {
       // Reset stuck counter if robot moved
       this.state.worldModel.stuckCounter = 0;
     }
 
-    // FORCE MOVEMENT if stuck for 3+ cycles with clear paths
+    // FORCE MOVEMENT if stuck for 3+ cycles - try moving forward to break deadlock
     if ((this.state.worldModel.stuckCounter || 0) >= 3) {
-      this.log('STUCK DETECTED - Forcing movement!', 'warn');
+      this.log('STUCK DETECTED - Forcing forward movement to break deadlock!', 'warn');
 
-      // Force the robot to move by directly controlling wheels
-      if (frontClear) {
-        this.log('Forcing forward movement - path is clear', 'info');
-        this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
-        this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
-      } else if (rightClear) {
-        this.log('Forcing right turn - front blocked, right clear', 'info');
-        this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
-        this.deviceContext?.setRightWheel(WHEEL_SPEED.BACKWARD);
-      } else if (leftClear) {
-        this.log('Forcing left turn - front and right blocked, left clear', 'info');
-        this.deviceContext?.setLeftWheel(WHEEL_SPEED.BACKWARD);
-        this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
-      }
+      // Force the robot to move forward - the camera-based LLM will correct course next cycle
+      this.deviceContext?.setLeftWheel(WHEEL_SPEED.FORWARD);
+      this.deviceContext?.setRightWheel(WHEEL_SPEED.FORWARD);
 
       // Reset stuck counter after forcing movement
       this.state.worldModel.stuckCounter = 0;
