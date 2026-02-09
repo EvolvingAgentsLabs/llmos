@@ -55,7 +55,7 @@ const CATEGORY_COLORS: Record<ObjectCategory, string> = {
   furniture: '#8B5CF6',    // Purple
   collectible: '#F59E0B',  // Amber
   obstacle: '#EF4444',     // Red
-  wall: '#6B7280',         // Gray
+  wall: '#1565C0',         // Blue (matches 3D wall color)
   door: '#10B981',         // Emerald
   container: '#3B82F6',    // Blue
   surface: '#84CC16',      // Lime
