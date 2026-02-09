@@ -19,6 +19,18 @@
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
 import { LLMStorage, DEFAULT_BASE_URL } from '../llm/storage';
+import { cameraCaptureManager } from '../runtime/camera-capture';
+import {
+  useDiagnosticsStore,
+  analyzePerception,
+  analyzeDecision,
+  analyzePhysics,
+  analyzeCameraPerspective,
+  analyzeRepresentation,
+  type PerceptionSnapshot,
+  type DecisionSnapshot,
+  type PhysicsSnapshot,
+} from '../debug/agent-diagnostics';
 
 // Fixed speed constants - simple and predictable
 export const WHEEL_SPEED = {
@@ -92,13 +104,30 @@ export interface SensorReadings {
 export interface CameraAnalysis {
   timestamp: number;
   scene: string;
+  imageDataUrl?: string; // Real camera image from Three.js canvas
   obstacles: {
     front: boolean;
+    frontLeft: boolean;
+    frontRight: boolean;
     left: boolean;
     right: boolean;
+    back: boolean;
+    backLeft: boolean;
+    backRight: boolean;
     frontDistance: number;
   };
+  distances: {
+    front: number;
+    frontLeft: number;
+    frontRight: number;
+    left: number;
+    right: number;
+    back: number;
+    backLeft: number;
+    backRight: number;
+  };
   recommendation: string;
+  spatialContext?: string; // Arena layout and object positions
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -172,69 +201,153 @@ function getWheelPower(direction: WheelDirection): number {
 }
 
 /**
- * Helper: Describe the scene from sensor readings
+ * Helper: Describe the scene from all 8 sensor readings
  */
-function describeScene(front: number, left: number, right: number): string {
-  const parts: string[] = [];
+function describeScene(dist: {
+  front: number; frontLeft: number; frontRight: number;
+  left: number; right: number;
+  back: number; backLeft: number; backRight: number;
+}): string {
+  const descDir = (name: string, value: number): string => {
+    if (value > 100) return `${name}: clear (${Math.round(value)}cm)`;
+    if (value > 50) return `${name}: obstacle at ${Math.round(value)}cm`;
+    if (value > 20) return `${name}: CLOSE obstacle at ${Math.round(value)}cm`;
+    return `${name}: DANGER ${Math.round(value)}cm`;
+  };
 
-  if (front > 100) {
-    parts.push('Clear path ahead');
-  } else if (front > 50) {
-    parts.push(`Obstacle ahead at ~${Math.round(front)}cm`);
-  } else {
-    parts.push(`Close obstacle ahead at ~${Math.round(front)}cm`);
-  }
-
-  if (left < 40) {
-    parts.push('obstacle on left');
-  } else {
-    parts.push('left side clear');
-  }
-
-  if (right < 40) {
-    parts.push('obstacle on right');
-  } else {
-    parts.push('right side clear');
-  }
-
-  return parts.join(', ');
+  return [
+    descDir('Front', dist.front),
+    descDir('Front-Left', dist.frontLeft),
+    descDir('Front-Right', dist.frontRight),
+    descDir('Left', dist.left),
+    descDir('Right', dist.right),
+    descDir('Back', dist.back),
+    descDir('Back-Left', dist.backLeft),
+    descDir('Back-Right', dist.backRight),
+  ].join(' | ');
 }
 
 /**
- * Helper: Suggest direction based on sensors
+ * Helper: Suggest direction based on all 8 sensors
  */
-function suggestDirection(front: number, left: number, right: number): string {
+function suggestDirection(dist: {
+  front: number; frontLeft: number; frontRight: number;
+  left: number; right: number;
+  back: number; backLeft: number; backRight: number;
+}): string {
   // CRITICAL: Check for dangerous proximity FIRST - must back up before turning
-  if (front < 20) {
-    return 'DANGER: Too close to obstacle! Back up immediately, then turn';
+  if (dist.front < 20) {
+    if (dist.back > 40) {
+      return 'DANGER: Too close to obstacle! Back up immediately, then turn';
+    }
+    return 'DANGER: Boxed in! Obstacle very close front AND back. Try rotating in place';
   }
 
   // If close but not critical, suggest backing up first
-  if (front < 40) {
-    if (right > left && right > 50) {
-      return 'Obstacle close ahead - back up slightly, then turn right';
+  if (dist.front < 40) {
+    // Use diagonal sensors to pick best turn direction
+    const leftScore = dist.frontLeft + dist.left;
+    const rightScore = dist.frontRight + dist.right;
+    if (rightScore > leftScore && dist.right > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn right (front-right clearer)';
     }
-    if (left > right && left > 50) {
-      return 'Obstacle close ahead - back up slightly, then turn left';
+    if (leftScore > rightScore && dist.left > 50) {
+      return 'Obstacle close ahead - back up slightly, then turn left (front-left clearer)';
     }
-    return 'Obstacle close ahead - back up first to get room to turn';
+    if (dist.back > 40) {
+      return 'Obstacle close ahead - back up first to get room to turn';
+    }
+    return 'Tight space - rotate in place to find opening';
   }
 
-  // Path is clear - go forward
-  if (front > 80) {
+  // Path is clear - go forward, but warn about diagonal obstacles
+  if (dist.front > 80) {
+    if (dist.frontLeft < 30) return 'Path ahead mostly clear - veer slightly right (obstacle front-left)';
+    if (dist.frontRight < 30) return 'Path ahead mostly clear - veer slightly left (obstacle front-right)';
     return 'Path ahead is clear - go forward';
   }
 
   // Moderate distance (40-80cm) - can turn safely without backing up
-  if (left > right && left > 50) {
+  const leftScore = dist.frontLeft + dist.left;
+  const rightScore = dist.frontRight + dist.right;
+  if (leftScore > rightScore && dist.left > 50) {
     return 'Turn left - more space on the left side';
   }
-
-  if (right > left && right > 50) {
+  if (rightScore > leftScore && dist.right > 50) {
     return 'Turn right - more space on the right side';
   }
 
   return 'Limited space - turn slowly to find open path';
+}
+
+/**
+ * Helper: Build spatial context string with arena layout, object positions, and relationships.
+ * This gives the LLM a map-like understanding of the environment.
+ */
+function buildSpatialContext(sensors: SensorReadings): string {
+  const pose = sensors.pose;
+  const headingDeg = Math.round((pose.rotation * 180) / Math.PI);
+  const cardinalDir =
+    headingDeg > -45 && headingDeg <= 45 ? 'North (+Y)' :
+    headingDeg > 45 && headingDeg <= 135 ? 'East (+X)' :
+    headingDeg > -135 && headingDeg <= -45 ? 'West (-X)' : 'South (-Y)';
+
+  const lines: string[] = [
+    `=== SPATIAL CONTEXT ===`,
+    `Arena: 5m x 5m (bounds: -2.5 to +2.5 on both axes)`,
+    `Robot position: (${pose.x.toFixed(2)}m, ${pose.y.toFixed(2)}m)`,
+    `Robot heading: ${headingDeg}deg (facing ${cardinalDir})`,
+    ``,
+    `Distance readings (all 8 directions):`,
+    `  Front: ${Math.round(sensors.distance.front)}cm | Front-Left: ${Math.round(sensors.distance.frontLeft)}cm | Front-Right: ${Math.round(sensors.distance.frontRight)}cm`,
+    `  Left: ${Math.round(sensors.distance.left)}cm | Right: ${Math.round(sensors.distance.right)}cm`,
+    `  Back: ${Math.round(sensors.distance.back)}cm | Back-Left: ${Math.round(sensors.distance.backLeft)}cm | Back-Right: ${Math.round(sensors.distance.backRight)}cm`,
+  ];
+
+  // Nearby objects with absolute positions
+  if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+    lines.push('');
+    lines.push('Nearby pushable objects:');
+    for (const p of sensors.nearbyPushables) {
+      // Calculate absolute position from robot pose + relative angle/distance
+      const absAngle = pose.rotation + (p.angle * Math.PI) / 180;
+      const objX = pose.x + (p.distance / 100) * Math.sin(absAngle);
+      const objY = pose.y + (p.distance / 100) * Math.cos(absAngle);
+      const dockStatus = p.dockedIn ? ` [DOCKED in ${p.dockedIn}]` : '';
+      lines.push(`  - ${p.label} (${p.color}): distance=${p.distance}cm, angle=${p.angle}deg, approx pos=(${objX.toFixed(2)}m, ${objY.toFixed(2)}m)${dockStatus}`);
+    }
+  }
+
+  if (sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+    lines.push('');
+    lines.push('Nearby dock zones (target areas):');
+    for (const d of sensors.nearbyDockZones) {
+      const absAngle = pose.rotation + (d.angle * Math.PI) / 180;
+      const dockX = pose.x + (d.distance / 100) * Math.sin(absAngle);
+      const dockY = pose.y + (d.distance / 100) * Math.cos(absAngle);
+      const objStatus = d.hasObject ? ' [HAS OBJECT - GOAL COMPLETE]' : ' [EMPTY - push object here]';
+      lines.push(`  - ${d.label}: distance=${d.distance}cm, angle=${d.angle}deg, approx pos=(${dockX.toFixed(2)}m, ${dockY.toFixed(2)}m)${objStatus}`);
+    }
+  }
+
+  // Tactical advice based on spatial layout
+  lines.push('');
+  lines.push('Tactical notes:');
+  if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0 && sensors.nearbyDockZones && sensors.nearbyDockZones.length > 0) {
+    const obj = sensors.nearbyPushables[0];
+    const dock = sensors.nearbyDockZones[0];
+    if (!obj.dockedIn) {
+      lines.push(`  To push ${obj.label} into ${dock.label}: position yourself on the opposite side of the object from the dock, then drive forward through the object toward the dock.`);
+      const angleDiff = dock.angle - obj.angle;
+      if (Math.abs(angleDiff) < 20) {
+        lines.push(`  Object and dock are roughly aligned from your position - good pushing angle!`);
+      } else {
+        lines.push(`  Object and dock are at different angles (${Math.round(obj.angle)}deg vs ${Math.round(dock.angle)}deg) - you may need to reposition.`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -243,15 +356,14 @@ function suggestDirection(front: number, left: number, right: number): string {
 export const DEVICE_TOOLS: DeviceTool[] = [
   {
     name: 'take_picture',
-    description: 'Take a picture with the camera to see the environment. Returns what the robot sees ahead, to the left, and to the right. Use this before planning your next move.',
+    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene, all 8 distance sensor readings, nearby objects, and a spatial map of the arena. Use this before planning your next move.',
     parameters: {},
     execute: async (args, ctx) => {
       const sensors = ctx.getSensors();
-      const frontDist = sensors.distance.front;
-      const leftDist = sensors.distance.left;
-      const rightDist = sensors.distance.right;
+      const dist = sensors.distance;
 
-      let sceneDesc = describeScene(frontDist, leftDist, rightDist);
+      // Build full 8-direction scene description
+      let sceneDesc = describeScene(dist);
 
       // Add pushable objects to scene description
       if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
@@ -273,16 +385,56 @@ export const DEVICE_TOOLS: DeviceTool[] = [
         sceneDesc += ` | Dock zones: ${dockDescs.join('; ')}`;
       }
 
+      // Capture real camera image from the Three.js canvas
+      let imageDataUrl: string | undefined;
+      try {
+        if (cameraCaptureManager.hasCanvas()) {
+          const capture = cameraCaptureManager.capture(
+            'robot-pov',
+            sensors.pose ? { x: sensors.pose.x, y: sensors.pose.y, rotation: sensors.pose.rotation } : undefined,
+            { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
+          );
+          if (capture) {
+            imageDataUrl = capture.dataUrl;
+          }
+        }
+      } catch (e) {
+        // Camera capture is optional - don't fail the tool
+        console.warn('[take_picture] Canvas capture failed:', e);
+      }
+
+      // Build spatial context: arena layout + object positions relative to robot
+      let spatialContext = buildSpatialContext(sensors);
+
+      const recommendation = suggestDirection(dist);
+
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
         scene: sceneDesc,
+        imageDataUrl,
         obstacles: {
-          front: frontDist < 50,
-          left: leftDist < 40,
-          right: rightDist < 40,
-          frontDistance: frontDist,
+          front: dist.front < 50,
+          frontLeft: dist.frontLeft < 40,
+          frontRight: dist.frontRight < 40,
+          left: dist.left < 40,
+          right: dist.right < 40,
+          back: dist.back < 40,
+          backLeft: dist.backLeft < 40,
+          backRight: dist.backRight < 40,
+          frontDistance: dist.front,
         },
-        recommendation: suggestDirection(frontDist, leftDist, rightDist),
+        distances: {
+          front: Math.round(dist.front),
+          frontLeft: Math.round(dist.frontLeft),
+          frontRight: Math.round(dist.frontRight),
+          left: Math.round(dist.left),
+          right: Math.round(dist.right),
+          back: Math.round(dist.back),
+          backLeft: Math.round(dist.backLeft),
+          backRight: Math.round(dist.backRight),
+        },
+        recommendation,
+        spatialContext,
       };
 
       return {
@@ -699,6 +851,9 @@ export class ESP32AgentRuntime {
 
     this.log(`Starting agent: ${this.config.name}`, 'info');
 
+    // Clear diagnostics from previous run
+    useDiagnosticsStore.getState().clear();
+
     // Initialize device context
     this.deviceContext = this.initDeviceContext();
 
@@ -805,6 +960,11 @@ export class ESP32AgentRuntime {
       // This ensures the robot advances through the cycle even if LLM doesn't set next_step correctly
       this.handleAutomaticCycleProgression(sensors, toolCalls);
 
+      // ═══════════════════════════════════════════════════════════════════
+      // DIAGNOSTIC INSTRUMENTATION
+      // ═══════════════════════════════════════════════════════════════════
+      this.emitDiagnostics(sensors, llmLatency, toolCalls);
+
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
       this.state.stats.avgLoopTimeMs =
@@ -834,15 +994,20 @@ export class ESP32AgentRuntime {
       current_step: this.state.currentStep,
       sensor_data: {
         front_distance_cm: Math.round(sensors.distance.front),
+        front_left_distance_cm: Math.round(sensors.distance.frontLeft),
+        front_right_distance_cm: Math.round(sensors.distance.frontRight),
         left_distance_cm: Math.round(sensors.distance.left),
         right_distance_cm: Math.round(sensors.distance.right),
         back_distance_cm: Math.round(sensors.distance.back),
+        back_left_distance_cm: Math.round(sensors.distance.backLeft),
+        back_right_distance_cm: Math.round(sensors.distance.backRight),
         robot_pose: sensors.pose,
       },
       last_observation: this.state.lastPicture ? {
         scene: this.state.lastPicture.scene,
         recommendation: this.state.lastPicture.recommendation,
-        front_distance: this.state.lastPicture.obstacles.frontDistance,
+        distances: this.state.lastPicture.distances,
+        spatial_context: this.state.lastPicture.spatialContext,
       } : null,
       current_world_model: this.state.worldModel,
       goal: this.config.goal || 'explore safely',
@@ -904,7 +1069,10 @@ Respond with ONLY valid JSON in the required structured format.`;
       return this.createFallbackResponse('stop', 'LLM not configured');
     }
 
-    // Call the LLM API with conversation history
+    // Collect camera image if available (from last take_picture)
+    const cameraImageDataUrl = this.state.lastPicture?.imageDataUrl || null;
+
+    // Call the LLM API with conversation history and optional vision image
     try {
       const response = await fetch('/api/robot-llm', {
         method: 'POST',
@@ -915,6 +1083,7 @@ Respond with ONLY valid JSON in the required structured format.`;
           userPrompt: userPrompt,
           tools: toolsDescription,
           conversationHistory: this.state.conversationHistory,
+          cameraImageDataUrl,
           llmConfig: {
             apiKey,
             model,
@@ -955,11 +1124,19 @@ Respond with ONLY valid JSON in the required structured format.`;
     const resultsSummary = toolCalls.map(tc => {
       if (tc.tool === 'take_picture' && tc.result.success && tc.result.data) {
         const data = tc.result.data as CameraAnalysis;
-        return `TOOL RESULT [take_picture]:\n${JSON.stringify({
+        const cameraResult: Record<string, any> = {
           scene: data.scene,
+          distances: data.distances,
           obstacles: data.obstacles,
-          recommendation: data.recommendation
-        }, null, 2)}`;
+          recommendation: data.recommendation,
+        };
+        if (data.spatialContext) {
+          cameraResult.spatial_context = data.spatialContext;
+        }
+        if (data.imageDataUrl) {
+          cameraResult.has_camera_image = true; // Don't put base64 in text - it's sent via vision API
+        }
+        return `TOOL RESULT [take_picture]:\n${JSON.stringify(cameraResult, null, 2)}`;
       }
       return `TOOL RESULT [${tc.tool}]: ${JSON.stringify(tc.result.data)}`;
     }).join('\n\n');
@@ -1250,6 +1427,288 @@ Respond with ONLY valid JSON in the required structured format.`;
     }
 
     return calls;
+  }
+
+  /**
+   * Emit diagnostic data for the current cycle.
+   * Feeds the AgentDiagnosticsPanel with perception, decision, physics, and camera analysis.
+   */
+  private emitDiagnostics(
+    sensors: SensorReadings,
+    llmLatency: number,
+    toolCalls: Array<{ tool: string; args: Record<string, any> }>
+  ): void {
+    try {
+      const diag = useDiagnosticsStore.getState();
+      const cycle = this.state.iteration;
+      const goal = this.config.goal || 'explore safely';
+
+      // ── PERCEPTION SNAPSHOT ──────────────────────────────────────────
+      const sceneDesc = this.state.lastPicture?.scene || '';
+      const recommendation = this.state.lastPicture?.recommendation || '';
+
+      const perceptionSnapshot: PerceptionSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        sensors: {
+          front: sensors.distance.front,
+          frontLeft: sensors.distance.frontLeft,
+          frontRight: sensors.distance.frontRight,
+          left: sensors.distance.left,
+          right: sensors.distance.right,
+          back: sensors.distance.back,
+          backLeft: sensors.distance.backLeft,
+          backRight: sensors.distance.backRight,
+        },
+        frontBlocked: sensors.distance.front < 40,
+        leftBlocked: sensors.distance.left < 40,
+        rightBlocked: sensors.distance.right < 40,
+        backBlocked: sensors.distance.back < 40,
+        pushableObjectsDetected: sensors.nearbyPushables?.length || 0,
+        dockZonesDetected: sensors.nearbyDockZones?.length || 0,
+        sceneDescription: sceneDesc,
+        recommendation,
+      };
+      diag.addPerception(perceptionSnapshot);
+
+      const perceptionAnalysis = analyzePerception(
+        perceptionSnapshot.sensors,
+        perceptionSnapshot.pushableObjectsDetected,
+        perceptionSnapshot.dockZonesDetected,
+        goal
+      );
+      diag.updateHealth({ perception: perceptionAnalysis.score });
+
+      for (const issue of perceptionAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'perception',
+          severity: issue.includes('DANGER') ? 'critical' : issue.includes('not detected') ? 'warning' : 'info',
+          title: 'Perception Issue',
+          detail: issue,
+        });
+      }
+
+      // ── DECISION SNAPSHOT ────────────────────────────────────────────
+      const structured = this.state.lastStructuredResponse;
+      const prevDecision = diag.decisionHistory[diag.decisionHistory.length - 1] || null;
+
+      const wheelCmds = structured?.wheel_commands || { left_wheel: 'stop', right_wheel: 'stop' };
+      const prevWheelCmds = prevDecision?.wheelCommands || { left: '', right: '' };
+      const repeatsLast =
+        wheelCmds.left_wheel === prevWheelCmds.left &&
+        wheelCmds.right_wheel === prevWheelCmds.right;
+
+      // Check if decision matches sensor recommendation
+      const recLower = recommendation.toLowerCase();
+      const targetDir = structured?.decision?.target_direction || null;
+      let matchesSensorRec = true;
+      if (recLower.includes('back up') && targetDir === 'forward') matchesSensorRec = false;
+      if (recLower.includes('turn right') && targetDir === 'left') matchesSensorRec = false;
+      if (recLower.includes('turn left') && targetDir === 'right') matchesSensorRec = false;
+
+      const decisionSnapshot: DecisionSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        reasoning: structured?.decision?.reasoning || '(no reasoning)',
+        actionType: structured?.decision?.action_type || 'unknown',
+        targetDirection: targetDir,
+        wheelCommands: {
+          left: wheelCmds.left_wheel,
+          right: wheelCmds.right_wheel,
+        },
+        responseTimeMs: llmLatency,
+        parsedSuccessfully: structured !== null,
+        toolCallsExtracted: toolCalls.length,
+        matchesSensorRecommendation: matchesSensorRec,
+        repeatsLastAction: repeatsLast,
+      };
+      diag.addDecision(decisionSnapshot);
+
+      const decisionAnalysis = analyzeDecision(decisionSnapshot, perceptionSnapshot, prevDecision);
+      diag.updateHealth({ decisionQuality: decisionAnalysis.score });
+
+      for (const issue of decisionAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'decision',
+          severity: issue.includes('FAILED') || issue.includes('collide')
+            ? 'error'
+            : issue.includes('slow') || issue.includes('stuck')
+            ? 'warning'
+            : 'info',
+          title: 'Decision Issue',
+          detail: issue,
+        });
+      }
+
+      // ── PHYSICS SNAPSHOT ─────────────────────────────────────────────
+      const prevPhysics = diag.physicsHistory[diag.physicsHistory.length - 1] || null;
+      const pose = sensors.pose;
+      const distanceMoved = prevPhysics
+        ? Math.sqrt(
+            (pose.x - prevPhysics.pose.x) ** 2 +
+            (pose.y - prevPhysics.pose.y) ** 2
+          )
+        : 0;
+      const rotationChanged = prevPhysics
+        ? Math.abs(pose.rotation - prevPhysics.pose.rotation)
+        : 0;
+
+      // Check pushable objects
+      const prevPushablePositions = prevPhysics?.pushableObjectsMoved; // just tracking the flag
+      const objectsDockedNow = sensors.nearbyPushables?.filter(p => p.dockedIn).length || 0;
+
+      const physicsSnapshot: PhysicsSnapshot = {
+        cycle,
+        timestamp: Date.now(),
+        pose: { x: pose.x, y: pose.y, rotation: pose.rotation },
+        velocity: {
+          linear: this.state.worldModel.lastPosition
+            ? distanceMoved / ((this.config.loopIntervalMs || 2000) / 1000)
+            : 0,
+          angular: rotationChanged / ((this.config.loopIntervalMs || 2000) / 1000),
+        },
+        distanceMoved,
+        rotationChanged,
+        frontBumper: sensors.bumper.front,
+        backBumper: sensors.bumper.back,
+        closestWallDistance: Math.min(
+          sensors.distance.front,
+          sensors.distance.left,
+          sensors.distance.right,
+          sensors.distance.back
+        ),
+        closestObstacleDistance: Math.min(
+          sensors.distance.front,
+          sensors.distance.frontLeft,
+          sensors.distance.frontRight,
+          sensors.distance.left,
+          sensors.distance.right
+        ),
+        pushableObjectsMoved: false, // Will be set by next cycle comparison
+        objectsInDockZones: objectsDockedNow,
+      };
+      diag.addPhysics(physicsSnapshot);
+
+      const physicsAnalysis = analyzePhysics(physicsSnapshot, prevPhysics);
+      const movementScore = distanceMoved > 0.01 ? 80 : distanceMoved > 0.005 ? 50 : 20;
+      diag.updateHealth({ movement: Math.max(movementScore, physicsAnalysis.score) });
+
+      for (const issue of physicsAnalysis.issues) {
+        diag.addEvent({
+          cycle,
+          category: 'physics',
+          severity: issue.includes('collision') || issue.includes('bumper') ? 'error' : 'warning',
+          title: 'Physics Issue',
+          detail: issue,
+          data: { pose, distanceMoved },
+        });
+      }
+
+      // ── CAMERA / PERSPECTIVE SNAPSHOT ────────────────────────────────
+      const cameraAnalysis = analyzeCameraPerspective(
+        perceptionSnapshot.sensors,
+        goal,
+        { x: pose.x, y: pose.y, rotation: pose.rotation },
+        sensors.nearbyPushables?.map(p => ({
+          distance: p.distance,
+          angle: p.angle,
+          dockedIn: p.dockedIn,
+        })),
+        sensors.nearbyDockZones?.map(d => ({
+          distance: d.distance,
+          angle: d.angle,
+          hasObject: d.hasObject,
+        }))
+      );
+      cameraAnalysis.cycle = cycle;
+      diag.addCamera(cameraAnalysis);
+
+      // ── REPRESENTATION ANALYSIS (once on first cycle) ────────────────
+      if (cycle === 1) {
+        // We don't have direct access to the map here, but we can infer from sensors
+        const repIssues = analyzeRepresentation(
+          4, // Assume standard 4-wall arena (boundary walls)
+          0, // We can't detect exact obstacle count from sensors alone
+          sensors.nearbyPushables?.length || 0,
+          sensors.nearbyDockZones?.length || 0,
+          { width: 5, height: 5 } // Default arena size
+        );
+        for (const issue of repIssues) {
+          diag.addRepresentationIssue(issue);
+        }
+        for (const issue of repIssues) {
+          diag.addEvent({
+            cycle,
+            category: 'representation',
+            severity: 'info',
+            title: 'Representation Note',
+            detail: issue,
+          });
+        }
+      }
+
+      // ── STUCK DETECTION EVENT ────────────────────────────────────────
+      const stuckCycles = diag.stuckCycles;
+      if (stuckCycles >= 3) {
+        diag.addEvent({
+          cycle,
+          category: 'stuck',
+          severity: 'critical',
+          title: `Robot stuck for ${stuckCycles} cycles`,
+          detail: `Position: (${pose.x.toFixed(3)}, ${pose.y.toFixed(3)}), ` +
+            `distance moved: ${distanceMoved.toFixed(4)}m. ` +
+            `Front: ${sensors.distance.front}cm, Left: ${sensors.distance.left}cm, Right: ${sensors.distance.right}cm`,
+          data: { stuckCycles, pose, distanceMoved },
+        });
+      }
+
+      // ── GOAL PROGRESS ────────────────────────────────────────────────
+      let goalProgress = 0;
+      if (goal.toLowerCase().includes('dock') || goal.toLowerCase().includes('push')) {
+        // Goal is to push object to dock
+        if (objectsDockedNow > 0) {
+          goalProgress = 100;
+          diag.addEvent({
+            cycle,
+            category: 'navigation',
+            severity: 'ok',
+            title: 'GOAL ACHIEVED: Object docked!',
+            detail: `${objectsDockedNow} object(s) in dock zone(s)`,
+          });
+        } else if (sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+          // Can see the pushable - partial progress
+          const closest = sensors.nearbyPushables[0];
+          goalProgress = closest.distance < 30 ? 60 : closest.distance < 100 ? 40 : 20;
+        }
+      } else if (goal.toLowerCase().includes('explore')) {
+        // Exploration goal - based on area coverage
+        const uniquePositions = diag.physicsHistory.length;
+        goalProgress = Math.min(100, uniquePositions * 2);
+      }
+      diag.updateHealth({ goalProgress });
+
+      // ── OVERALL CYCLE EVENT ──────────────────────────────────────────
+      const overallSeverity: 'ok' | 'info' | 'warning' | 'error' =
+        diag.health.overall >= 70 ? 'ok' :
+        diag.health.overall >= 40 ? 'warning' : 'error';
+
+      diag.addEvent({
+        cycle,
+        category: 'navigation',
+        severity: overallSeverity,
+        title: `Cycle ${cycle}: ${structured?.decision?.action_type || 'unknown'} -> ${targetDir || 'none'}`,
+        detail: `Front: ${sensors.distance.front}cm | Moved: ${(distanceMoved * 100).toFixed(1)}cm | LLM: ${llmLatency}ms | Health: ${diag.health.overall}%`,
+        data: {
+          health: diag.health,
+          wheelCommands: wheelCmds,
+        },
+      });
+    } catch (e) {
+      // Diagnostics should never crash the agent
+      console.warn('[Diagnostics] Error emitting diagnostics:', e);
+    }
   }
 
   private log(message: string, level: 'info' | 'warn' | 'error'): void {

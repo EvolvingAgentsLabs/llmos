@@ -41,19 +41,31 @@ interface RobotLLMRequest {
   userPrompt: string;
   tools: string;
   conversationHistory?: ConversationMessage[];
+  cameraImageDataUrl?: string | null; // Base64 camera image for vision
   llmConfig: LLMConfig;
 }
 
-interface Message {
+// OpenAI-compatible message with text or multimodal content
+interface TextMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
+
+interface MultimodalMessage {
+  role: 'user';
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+  >;
+}
+
+type Message = TextMessage | MultimodalMessage;
 
 export async function POST(request: NextRequest) {
   try {
     const body: RobotLLMRequest = await request.json();
 
-    const { deviceId, systemPrompt, userPrompt, tools, conversationHistory, llmConfig } = body;
+    const { deviceId, systemPrompt, userPrompt, tools, conversationHistory, cameraImageDataUrl, llmConfig } = body;
 
     // Validate required fields
     if (!deviceId || !systemPrompt || !userPrompt) {
@@ -97,8 +109,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Add the current user prompt
-    messages.push({ role: 'user', content: userPrompt });
+    // Add the current user prompt - with vision image if available
+    if (cameraImageDataUrl && cameraImageDataUrl.startsWith('data:image/')) {
+      // Multimodal message: text + camera image
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt },
+          {
+            type: 'image_url',
+            image_url: {
+              url: cameraImageDataUrl,
+              detail: 'low', // Use low detail to save tokens - robot just needs spatial awareness
+            },
+          },
+        ],
+      } as MultimodalMessage);
+    } else {
+      // Text-only message
+      messages.push({ role: 'user', content: userPrompt });
+    }
 
     // Create OpenAI client with passed config
     const client = new OpenAI({
