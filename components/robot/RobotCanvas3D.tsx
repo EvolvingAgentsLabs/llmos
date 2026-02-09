@@ -697,7 +697,7 @@ function ArenaFloor({
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#58a6ff" : "#30363d"} />
+          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#8B6914" : "#b8960e"} />
         </line>
       );
     }
@@ -713,7 +713,7 @@ function ArenaFloor({
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#58a6ff" : "#30363d"} />
+          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#8B6914" : "#b8960e"} />
         </line>
       );
     }
@@ -732,9 +732,9 @@ function ArenaFloor({
       >
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial
-          color={isSelected ? '#2a3040' : '#1a1a2e'}
-          metalness={0.3}
-          roughness={0.7}
+          color={isSelected ? '#e6c200' : '#d4a800'}
+          metalness={0.1}
+          roughness={0.8}
         />
       </mesh>
       {gridLines}
@@ -742,33 +742,55 @@ function ArenaFloor({
   );
 }
 
-// Create hazard stripe texture (yellow and black diagonal lines)
+// Create wall texture with yellow background and contrasting black chevron/arrow pattern
+// The chevron pattern is highly distinctive for vision-based navigation:
+// - Arrows point upward providing directional cues
+// - High contrast yellow/black is easily detected by vision models
+// - The V-shape pattern is distinct from flat stripes, making walls unmistakable
 function createHazardStripeTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 64;
+  canvas.width = 128;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  // Fill with yellow background
-  ctx.fillStyle = '#FFD700'; // Gold/yellow
-  ctx.fillRect(0, 0, 64, 64);
+  // Fill with bright yellow background
+  ctx.fillStyle = '#FFC107'; // Amber yellow
+  ctx.fillRect(0, 0, 128, 128);
 
-  // Draw black diagonal stripes
+  // Draw black chevron/arrow pattern pointing upward
+  // This provides directional cues for vision-based navigation
   ctx.strokeStyle = '#1a1a1a'; // Near black
-  ctx.lineWidth = 12;
+  ctx.lineWidth = 10;
 
-  // Draw multiple diagonal lines to create stripe pattern
-  for (let i = -64; i < 128; i += 24) {
+  // Chevron rows (V shapes pointing up)
+  for (let row = 0; row < 3; row++) {
+    const y = 20 + row * 44;
+    // Left half of chevron
     ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + 64, 64);
+    ctx.moveTo(0, y + 30);
+    ctx.lineTo(64, y);
+    ctx.stroke();
+    // Right half of chevron
+    ctx.beginPath();
+    ctx.moveTo(128, y + 30);
+    ctx.lineTo(64, y);
     ctx.stroke();
   }
+
+  // Add thin horizontal reference lines at top and bottom for scale
+  ctx.strokeStyle = '#333333';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 2);
+  ctx.lineTo(128, 2);
+  ctx.moveTo(0, 126);
+  ctx.lineTo(128, 126);
+  ctx.stroke();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(4, 1); // Repeat pattern along wall length
+  texture.repeat.set(6, 1); // More repeats for better visibility at distance
 
   return texture;
 }
@@ -812,17 +834,17 @@ function Walls({
               <boxGeometry args={[length, 0.3, 0.05]} />
               <meshStandardMaterial
                 map={hazardTexture}
-                color={isSelected ? '#ffffff' : '#eeeeee'}
-                emissive={isSelected ? '#FFD700' : '#aa8800'}
-                emissiveIntensity={isSelected ? 0.4 : 0.15}
-                metalness={0.2}
-                roughness={0.6}
+                color={isSelected ? '#ffffff' : '#FFF8E1'}
+                emissive={isSelected ? '#FFD700' : '#FFC107'}
+                emissiveIntensity={isSelected ? 0.5 : 0.25}
+                metalness={0.1}
+                roughness={0.5}
               />
             </mesh>
             {isSelected && (
               <mesh position={[centerX, 0.15, centerY]} rotation={[0, angle, 0]}>
                 <boxGeometry args={[length + 0.02, 0.32, 0.07]} />
-                <meshBasicMaterial color="#FFD700" transparent opacity={0.3} side={THREE.BackSide} />
+                <meshBasicMaterial color="#FFC107" transparent opacity={0.3} side={THREE.BackSide} />
               </mesh>
             )}
           </group>
@@ -1384,21 +1406,21 @@ function DockZoneMesh({
         />
       </mesh>
 
-      {/* Corner markers */}
+      {/* Corner markers - tall and visible for camera-based detection */}
       {[[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([cx, cy], i) => (
         <mesh
           key={i}
           position={[
             dz.x + cx * dz.width / 2,
-            0.01,
+            0.06,
             dz.y + cy * dz.height / 2
           ]}
         >
-          <boxGeometry args={[0.03, 0.02, 0.03]} />
+          <boxGeometry args={[0.05, 0.12, 0.05]} />
           <meshStandardMaterial
             color={dz.color}
             emissive={dz.color}
-            emissiveIntensity={0.6}
+            emissiveIntensity={0.8}
           />
         </mesh>
       ))}
@@ -1721,13 +1743,13 @@ function SelectionInfoPanel({ selectedObject }: { selectedObject: SelectedObject
 
   const typeColors: Record<string, string> = {
     robot: 'bg-blue-500/20 border-blue-500/50 text-blue-400',
-    wall: 'bg-gray-500/20 border-gray-500/50 text-gray-400',
+    wall: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
     obstacle: 'bg-red-500/20 border-red-500/50 text-red-400',
     checkpoint: 'bg-green-500/20 border-green-500/50 text-green-400',
     floor: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
     collectible: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
     pushable: 'bg-orange-500/20 border-orange-500/50 text-orange-400',
-    'dock-zone': 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+    'dock-zone': 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
   };
 
   return (

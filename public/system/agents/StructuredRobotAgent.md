@@ -39,6 +39,12 @@ This agent controls a robot using a **strict structured behavior cycle** with ex
 │  Step 6: STOP        → Halt all movement                                │
 │  Step 7: REPEAT      → Go back to Step 1                                │
 │                                                                          │
+│  AUTO-SCAN (triggered when stuck for 3+ cycles):                        │
+│  SCAN Step → Rotate 360° in 8x45° increments                           │
+│           → Take camera image at each heading                           │
+│           → Detect objects (red cube, yellow dock, obstacles)            │
+│           → Build panoramic awareness → Resume at OBSERVE               │
+│                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +80,7 @@ Control individual wheels: `"forward"`, `"backward"`, or `"stop"`
 ```json
 {
   "cycle": <number>,
-  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP>",
+  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP|SCAN>",
   "goal": "<current goal>",
   "world_model": {
     "robot_position": {"x": <number>, "y": <number>, "rotation": <degrees>},
@@ -138,6 +144,16 @@ Control individual wheels: `"forward"`, `"backward"`, or `"stop"`
 ### Step 6: STOP
 - Stop all wheels: left_wheel=stop, right_wheel=stop
 - Prepare for next observation
+
+### AUTO-SCAN (triggered automatically when stuck)
+When the robot hasn't made progress for 3+ cycles, the system automatically initiates a 360° scan:
+1. **Rotate in 8 steps** of ~45° each (full 360° coverage)
+2. **Capture camera image** at each heading to detect objects
+3. **Detect targets**: red cube, yellow dock, obstacles, walls
+4. **Build panoramic report** injected into conversation history
+5. **Resume at OBSERVE** with full environmental awareness
+
+The scan results include heading and detected objects at each position, allowing the agent to make an informed decision about where to navigate next.
 
 ## Obstacle Avoidance Rules (PRIORITY ORDER)
 
