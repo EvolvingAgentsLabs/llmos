@@ -697,7 +697,7 @@ function ArenaFloor({
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#8B6914" : "#b8960e"} />
+          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#909090" : "#A0A0A0"} />
         </line>
       );
     }
@@ -713,7 +713,7 @@ function ArenaFloor({
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#8B6914" : "#b8960e"} />
+          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#909090" : "#A0A0A0"} />
         </line>
       );
     }
@@ -732,7 +732,7 @@ function ArenaFloor({
       >
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial
-          color={isSelected ? '#e6c200' : '#d4a800'}
+          color={isSelected ? '#C8C8C8' : '#B0B0B0'}
           metalness={0.1}
           roughness={0.8}
         />
@@ -742,27 +742,25 @@ function ArenaFloor({
   );
 }
 
-// Create wall texture with yellow background and contrasting black chevron/arrow pattern
-// The chevron pattern is highly distinctive for vision-based navigation:
-// - Arrows point upward providing directional cues
-// - High contrast yellow/black is easily detected by vision models
-// - The V-shape pattern is distinct from flat stripes, making walls unmistakable
+// Create wall texture with blue background and contrasting white chevron/arrow pattern
+// CV-optimized: Blue walls are maximally separated from red obstacles on the color wheel
+// The chevron pattern provides directional cues and is distinct from obstacle stripes
 function createHazardStripeTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  // Fill with bright yellow background
-  ctx.fillStyle = '#FFC107'; // Amber yellow
+  // Fill with strong blue background - maximally distant from red obstacles in hue space
+  ctx.fillStyle = '#1565C0'; // Strong blue
   ctx.fillRect(0, 0, 128, 128);
 
-  // Draw black chevron/arrow pattern pointing upward
-  // This provides directional cues for vision-based navigation
-  ctx.strokeStyle = '#1a1a1a'; // Near black
+  // Draw white chevron/arrow pattern pointing upward
+  // White on blue provides high contrast and is distinct from red/white obstacle stripes
+  ctx.strokeStyle = '#FFFFFF'; // White
   ctx.lineWidth = 10;
 
-  // Chevron rows (V shapes pointing up)
+  // Chevron rows (V shapes pointing up) - directional cues for navigation
   for (let row = 0; row < 3; row++) {
     const y = 20 + row * 44;
     // Left half of chevron
@@ -778,7 +776,7 @@ function createHazardStripeTexture(): THREE.CanvasTexture {
   }
 
   // Add thin horizontal reference lines at top and bottom for scale
-  ctx.strokeStyle = '#333333';
+  ctx.strokeStyle = '#90CAF9'; // Light blue
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(0, 2);
@@ -795,8 +793,8 @@ function createHazardStripeTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// Wall components with hazard stripe pattern (yellow/black diagonal lines)
-// This makes walls clearly distinguishable from the sky for robot vision
+// Wall components with blue/white chevron pattern
+// CV-optimized: blue hue is maximally separated from red obstacles and green dock zones
 function Walls({
   walls,
   selectedIndex,
@@ -834,8 +832,8 @@ function Walls({
               <boxGeometry args={[length, 0.3, 0.05]} />
               <meshStandardMaterial
                 map={hazardTexture}
-                color={isSelected ? '#ffffff' : '#FFF8E1'}
-                emissive={isSelected ? '#FFD700' : '#FFC107'}
+                color={isSelected ? '#ffffff' : '#E3F2FD'}
+                emissive={isSelected ? '#42A5F5' : '#1565C0'}
                 emissiveIntensity={isSelected ? 0.5 : 0.25}
                 metalness={0.1}
                 roughness={0.5}
@@ -844,7 +842,7 @@ function Walls({
             {isSelected && (
               <mesh position={[centerX, 0.15, centerY]} rotation={[0, angle, 0]}>
                 <boxGeometry args={[length + 0.02, 0.32, 0.07]} />
-                <meshBasicMaterial color="#FFC107" transparent opacity={0.3} side={THREE.BackSide} />
+                <meshBasicMaterial color="#42A5F5" transparent opacity={0.3} side={THREE.BackSide} />
               </mesh>
             )}
           </group>
@@ -854,23 +852,24 @@ function Walls({
   );
 }
 
-// Create obstacle hazard texture (red and white diagonal lines)
-// Uses contrasting colors to distinguish obstacles from walls for AI detection
+// Create obstacle hazard texture (red with white diagonal stripes)
+// CV-optimized: Red is maximally separated from blue walls (180deg on color wheel)
+// Diagonal stripe pattern is visually distinct from wall chevrons for easy classification
 function createObstacleHazardTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d')!;
 
-  // Fill with red background
-  ctx.fillStyle = '#e53935'; // Bright red
+  // Fill with strong red background - danger color, max separation from blue walls
+  ctx.fillStyle = '#D32F2F'; // Strong red
   ctx.fillRect(0, 0, 64, 64);
 
-  // Draw white diagonal stripes (opposite direction from walls for distinction)
+  // Draw white diagonal stripes - different pattern from wall chevrons for CV distinction
   ctx.strokeStyle = '#ffffff'; // White
   ctx.lineWidth = 10;
 
-  // Draw diagonal lines in opposite direction (right-to-left instead of left-to-right)
+  // Diagonal lines (right-to-left) - distinct from wall chevrons (V-shapes)
   for (let i = -64; i < 128; i += 20) {
     ctx.beginPath();
     ctx.moveTo(64 - i, 0);
@@ -886,8 +885,8 @@ function createObstacleHazardTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// Obstacle components with hazard stripe pattern (red/white diagonal lines)
-// This makes obstacles clearly distinguishable from walls for robot vision
+// Obstacle components with red/white diagonal stripe pattern
+// CV-optimized: red hue is maximally separated from blue walls, diagonal pattern distinct from chevrons
 function Obstacles({
   obstacles,
   selectedIndex,
@@ -918,8 +917,8 @@ function Obstacles({
               <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
               <meshStandardMaterial
                 map={obstacleTexture}
-                color={isSelected ? '#ffffff' : '#eeeeee'}
-                emissive={isSelected ? '#ff4444' : '#cc0000'}
+                color={isSelected ? '#ffffff' : '#FFCDD2'}
+                emissive={isSelected ? '#EF5350' : '#D32F2F'}
                 emissiveIntensity={isSelected ? 0.4 : 0.2}
                 metalness={0.3}
                 roughness={0.5}
@@ -1486,7 +1485,7 @@ function MiniMap({
         case 'free': color = '#2d333b'; break;
         case 'explored': color = '#3fb950'; break;
         case 'obstacle': color = '#f85149'; break;
-        case 'wall': color = '#FFD700'; break; // Yellow hazard color to match 3D walls
+        case 'wall': color = '#1565C0'; break; // Blue to match 3D wall color
         case 'collectible': color = '#ffd700'; break;
         case 'collected': color = '#6e7681'; break;
       }
@@ -1743,7 +1742,7 @@ function SelectionInfoPanel({ selectedObject }: { selectedObject: SelectedObject
 
   const typeColors: Record<string, string> = {
     robot: 'bg-blue-500/20 border-blue-500/50 text-blue-400',
-    wall: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
+    wall: 'bg-blue-500/20 border-blue-500/50 text-blue-400',
     obstacle: 'bg-red-500/20 border-red-500/50 text-red-400',
     checkpoint: 'bg-green-500/20 border-green-500/50 text-green-400',
     floor: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
@@ -2092,9 +2091,9 @@ const RobotCanvas3D = forwardRef<RobotCanvas3DHandle, RobotCanvas3DProps>(functi
         {/* Canvas capture registration */}
         <CanvasCaptureRegistration />
 
-        {/* Background */}
-        <color attach="background" args={['#0d1117']} />
-        <fog attach="fog" args={['#0d1117', 5, 20]} />
+        {/* Background - dark neutral for max contrast with colored scene elements */}
+        <color attach="background" args={['#1A1A2E']} />
+        <fog attach="fog" args={['#1A1A2E', 5, 20]} />
       </Canvas>
 
       {/* Selection info panel overlay */}

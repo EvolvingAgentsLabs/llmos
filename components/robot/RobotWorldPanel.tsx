@@ -368,7 +368,7 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#8B6914" : "#b8960e"} />
+          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#909090" : "#A0A0A0"} />
         </line>
       );
     }
@@ -384,7 +384,7 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#8B6914" : "#b8960e"} />
+          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#909090" : "#A0A0A0"} />
         </line>
       );
     }
@@ -396,27 +396,27 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color="#d4a800" metalness={0.1} roughness={0.8} />
+        <meshStandardMaterial color="#B0B0B0" metalness={0.1} roughness={0.8} />
       </mesh>
       {gridLines}
     </group>
   );
 }
 
-// Create hazard stripe texture (yellow and black diagonal lines) for walls
-// This makes walls clearly distinguishable for robot vision/AI detection
+// Create wall stripe texture (blue with white diagonal lines)
+// CV-optimized: blue hue maximally separated from red obstacles on color wheel
 function createHazardStripeTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d')!;
 
-  // Fill with yellow background
-  ctx.fillStyle = '#FFD700'; // Gold/yellow
+  // Fill with strong blue background
+  ctx.fillStyle = '#1565C0'; // Strong blue
   ctx.fillRect(0, 0, 64, 64);
 
-  // Draw black diagonal stripes
-  ctx.strokeStyle = '#1a1a1a'; // Near black
+  // Draw white diagonal stripes
+  ctx.strokeStyle = '#FFFFFF'; // White
   ctx.lineWidth = 12;
 
   // Draw multiple diagonal lines to create stripe pattern
@@ -435,23 +435,23 @@ function createHazardStripeTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// Create obstacle hazard texture (red and white diagonal lines)
-// Uses contrasting colors to distinguish obstacles from walls for AI detection
+// Create obstacle hazard texture (red with white diagonal stripes)
+// CV-optimized: red is maximally separated from blue walls, opposite diagonal direction
 function createObstacleHazardTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d')!;
 
-  // Fill with red background
-  ctx.fillStyle = '#e53935'; // Bright red
+  // Fill with strong red background
+  ctx.fillStyle = '#D32F2F'; // Strong red
   ctx.fillRect(0, 0, 64, 64);
 
   // Draw white diagonal stripes (opposite direction from walls for distinction)
   ctx.strokeStyle = '#ffffff'; // White
   ctx.lineWidth = 10;
 
-  // Draw diagonal lines in opposite direction (right-to-left instead of left-to-right)
+  // Diagonal lines (right-to-left) - opposite from wall stripes (left-to-right)
   for (let i = -64; i < 128; i += 20) {
     ctx.beginPath();
     ctx.moveTo(64 - i, 0);
@@ -467,7 +467,7 @@ function createObstacleHazardTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// 3D Walls for PiP view with hazard stripe pattern
+// 3D Walls for PiP view with blue/white stripe pattern
 function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
   // Create hazard stripe texture once and reuse
   const hazardTexture = useMemo(() => createHazardStripeTexture(), []);
@@ -492,8 +492,8 @@ function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
             <boxGeometry args={[length, 0.3, 0.05]} />
             <meshStandardMaterial
               map={hazardTexture}
-              color="#FFF8E1"
-              emissive="#FFC107"
+              color="#E3F2FD"
+              emissive="#1565C0"
               emissiveIntensity={0.25}
               metalness={0.1}
               roughness={0.5}
@@ -505,7 +505,7 @@ function PiPWalls({ walls }: { walls: FloorMap['walls'] }) {
   );
 }
 
-// 3D Obstacles for PiP view with hazard stripe pattern
+// 3D Obstacles for PiP view with red/white stripe pattern
 function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
   // Create obstacle hazard texture once and reuse
   const obstacleTexture = useMemo(() => createObstacleHazardTexture(), []);
@@ -522,8 +522,8 @@ function PiPObstacles({ obstacles }: { obstacles: FloorMap['obstacles'] }) {
           <cylinderGeometry args={[obstacle.radius, obstacle.radius, obstacle.radius, 16]} />
           <meshStandardMaterial
             map={obstacleTexture}
-            color="#ffffff"
-            emissive="#cc0000"
+            color="#FFCDD2"
+            emissive="#D32F2F"
             emissiveIntensity={0.2}
             metalness={0.3}
             roughness={0.5}
@@ -698,9 +698,9 @@ function PiPRobotCamera({
               </group>
             ))}
 
-            {/* Background and fog - lighter to match main arena visibility */}
-            <color attach="background" args={['#2a2a3e']} />
-            <fog attach="fog" args={['#2a2a3e', 3, 10]} />
+            {/* Background and fog - dark neutral for max contrast with scene elements */}
+            <color attach="background" args={['#1A1A2E']} />
+            <fog attach="fog" args={['#1A1A2E', 3, 10]} />
           </Canvas>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-[#1a1a2e] to-[#0f3460]">

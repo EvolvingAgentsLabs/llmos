@@ -159,7 +159,7 @@ export interface WorldModel {
     scanResults: Array<{
       heading_degrees: number;
       scene_description: string;
-      detected_objects: string[];  // e.g., ['red_cube', 'yellow_dock', 'wall']
+      detected_objects: string[];  // e.g., ['red_cube', 'green_dock', 'wall']
       imageDataUrl?: string;       // Camera image captured at this heading
     }>;
     targetDetected?: {
@@ -370,7 +370,7 @@ function buildSpatialContext(sensors: SensorReadings): string {
 export const DEVICE_TOOLS: DeviceTool[] = [
   {
     name: 'take_picture',
-    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene showing what the robot sees, along with nearby objects and spatial context. Use this to visually plan your next move - look for the red cube, yellow dock, walls, and obstacles in the image.',
+    description: 'Take a picture with the robot camera. Returns a real camera image from the 3D scene showing what the robot sees, along with nearby objects and spatial context. Use this to visually plan your next move - look for the red cube, green dock, blue walls, and red obstacles in the image.',
     parameters: {},
     execute: async (args, ctx) => {
       const sensors = ctx.getSensors();
@@ -419,7 +419,7 @@ export const DEVICE_TOOLS: DeviceTool[] = [
       // Build spatial context: arena layout + object positions relative to robot
       let spatialContext = buildSpatialContext(sensors);
 
-      const recommendation = 'Use the camera image to decide your next move. Look for the red cube and yellow dock zone.';
+      const recommendation = 'Use the camera image to decide your next move. Look for the red cube and green dock zone.';
 
       const analysis: CameraAnalysis = {
         timestamp: Date.now(),
@@ -512,15 +512,15 @@ export const DEFAULT_AGENT_PROMPTS = {
 ## CAMERA-BASED NAVIGATION
 **You receive a camera image with EVERY sensor update.** Use it to:
 - **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
-- **See the YELLOW DOCK** - A bright yellow zone on the floor in a visible corner of the arena. This is where you push the cube to.
-- **See WALLS** - Gray/dark barriers at the edges of the arena.
-- **See OBSTACLES** - Cylindrical obstacles in the arena.
+- **See the GREEN DOCK** - A bright green zone on the floor in a visible corner of the arena with green corner markers. This is where you push the cube to.
+- **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena.
+- **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
 - **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
 
 ## STRICT BEHAVIOR CYCLE
 Follow this cycle EXACTLY:
 1. **OBSERVE** → Look at the camera image to understand your surroundings
-2. **ANALYZE** → Identify where the red cube, yellow dock, and obstacles are in the image
+2. **ANALYZE** → Identify where the red cube, green dock, and obstacles are in the image
 3. **PLAN** → Decide how to approach: navigate toward the red cube, position behind it, then push toward dock
 4. **ROTATE** → Turn to face target direction (if needed)
 5. **MOVE** → Go forward toward target
@@ -528,15 +528,15 @@ Follow this cycle EXACTLY:
 
 **AUTOMATIC 360° SCAN**: When you get stuck (no progress for 3 cycles), the system will automatically perform a 360-degree scan:
 - Rotates in 8 steps of ~45° each, taking a camera image at each heading
-- Detects objects (red cube, yellow dock, obstacles) at each heading
+- Detects objects (red cube, green dock, obstacles) at each heading
 - Injects a scan summary into your conversation with detected object positions
 - After scan, you receive a full panoramic report - use it to plan your next move!
 
 ## PUSHING STRATEGY
 1. First, navigate TO the red cube
-2. Position yourself on the OPPOSITE side of the cube from the yellow dock
-3. Drive FORWARD to push the cube toward the yellow dock
-4. The dock is in a corner of the arena - look for the bright yellow zone
+2. Position yourself on the OPPOSITE side of the cube from the green dock
+3. Drive FORWARD to push the cube toward the green dock
+4. The dock is in a corner of the arena - look for the bright green zone with corner markers
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
@@ -574,7 +574,7 @@ EVERY response MUST be valid JSON with this EXACT structure:
 - **ALWAYS look at the attached camera image** before deciding your action
 - The image shows your first-person view from the robot's perspective
 - If you see the RED CUBE in the image, drive TOWARD it
-- If you see the YELLOW DOCK, remember its location for pushing
+- If you see the GREEN DOCK, remember its location for pushing
 - If you see a WALL or OBSTACLE ahead, turn to avoid it
 - If you don't see the red cube, ROTATE to scan the environment
 
@@ -1208,7 +1208,7 @@ Respond with ONLY valid JSON in the required structured format.`;
         }
         if (data.imageDataUrl) {
           cameraResult.has_camera_image = true; // Don't put base64 in text - it's sent via vision API
-          cameraResult.note = 'A camera image is attached to this message. Use it to see obstacles, the red cube, and yellow dock.';
+          cameraResult.note = 'A camera image is attached to this message. Use it to see red obstacles, blue walls, the red cube, and green dock.';
         }
         return `TOOL RESULT [take_picture]:\n${JSON.stringify(cameraResult, null, 2)}`;
       }
@@ -1445,7 +1445,7 @@ Respond with ONLY valid JSON in the required structured format.`;
               imageDataUrl: compositeDataUrl,
               obstacles: { front: false, frontLeft: false, frontRight: false, left: false, right: false, back: false, backLeft: false, backRight: false, frontDistance: 200 },
               distances: { front: 200, frontLeft: 200, frontRight: 200, left: 200, right: 200, back: 200, backLeft: 200, backRight: 200 },
-              recommendation: 'Analyze the 360° panoramic view to find the red cube and yellow dock.',
+              recommendation: 'Analyze the 360° panoramic view to find the red cube and green dock.',
             };
           } else {
             this.state.lastPicture.imageDataUrl = compositeDataUrl;
