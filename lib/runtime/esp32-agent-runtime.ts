@@ -365,6 +365,20 @@ function buildSpatialContext(sensors: SensorReadings): string {
       }
     }
   }
+  // Cube-to-cube pushing advice
+  if (sensors.nearbyPushables && sensors.nearbyPushables.length >= 2) {
+    const redCube = sensors.nearbyPushables.find(p => p.id === 'red-cube');
+    const yellowCube = sensors.nearbyPushables.find(p => p.id === 'yellow-cube');
+    if (redCube && yellowCube) {
+      lines.push(`  To push ${redCube.label} toward ${yellowCube.label}: position yourself on the opposite side of the Red Cube from the Yellow Cube, then drive forward to push.`);
+      const angleDiff = yellowCube.angle - redCube.angle;
+      if (Math.abs(angleDiff) < 20) {
+        lines.push(`  Both cubes are roughly aligned from your position - good pushing angle!`);
+      } else {
+        lines.push(`  Cubes are at different angles (Red=${Math.round(redCube.angle)}deg, Yellow=${Math.round(yellowCube.angle)}deg) - reposition to align.`);
+      }
+    }
+  }
 
   return lines.join('\n');
 }
@@ -498,27 +512,34 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DEFAULT_AGENT_PROMPTS = {
-  simple: `You are a structured autonomous robot with a CAMERA and two wheels. You navigate using ONLY your camera image - you have NO distance sensors.
+  simple: `You are a structured autonomous robot with a CAMERA, two wheels, and SENSOR DATA. You navigate using both your camera image AND the sensor data provided each cycle.
 
 ## BEHAVIOR CYCLE: OBSERVE → ROTATE → MOVE → repeat
-Each cycle you receive sensor data and a camera image. You respond with ONE JSON deciding:
+Each cycle you receive sensor data (including nearby_objects with distances and angles) and a camera image. You respond with ONE JSON deciding:
 1. **ROTATE**: How much to turn (side + degrees). Set degrees to 0 for no rotation.
 2. **MOVE**: Drive forward or backward by a specific number of cm. Set distance_cm to 0 to stay in place.
 The system executes your rotation first, then your movement, then observes again.
 
-## CAMERA-BASED NAVIGATION
-**You receive a camera image with EVERY cycle.** Use it to:
-- **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
-- **See the GREEN DOCK** - A bright green zone on the floor in a visible corner of the arena with green corner markers. This is where you push the cube to.
-- **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena.
-- **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
-- **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
+## SENSOR-BASED NAVIGATION (PRIMARY)
+**Your sensor data includes nearby_objects with precise measurements.** Use these fields:
+- **relative_distance_cm**: How far the object is from you in centimeters
+- **relative_angle_degrees**: The angle to the object relative to your heading. POSITIVE = object is to your LEFT, NEGATIVE = object is to your RIGHT, ZERO = directly ahead.
+- **world_x, world_y**: Absolute position of the object in the arena
+
+**USE SENSOR DATA TO NAVIGATE**: The relative_angle_degrees tells you EXACTLY how much to rotate. If red-cube has relative_angle_degrees of 45, rotate LEFT 45 degrees to face it. If it's -30, rotate RIGHT 30 degrees.
+
+## CAMERA-BASED NAVIGATION (SECONDARY)
+**You also receive a camera image with EVERY cycle.** Use it to confirm sensor data and detect:
+- **RED CUBE** - A bright red box you need to push
+- **YELLOW CUBE** - A bright yellow box that is your target destination
+- **WALLS** - Blue barriers with white chevron patterns at the edges
+- **OBSTACLES** - Red cylindrical obstacles with white diagonal stripes
 
 ## PUSHING STRATEGY
-1. First, navigate TO the red cube
-2. Position yourself on the OPPOSITE side of the cube from the green dock
-3. Drive FORWARD to push the cube toward the green dock
-4. The dock is in a corner of the arena - look for the bright green zone with corner markers
+1. First, find both the Red Cube and Yellow Cube in sensor data (nearby_objects)
+2. Navigate TO the Red Cube using sensor data (relative_angle_degrees and relative_distance_cm)
+3. Position yourself on the OPPOSITE side of the Red Cube from the Yellow Cube
+4. Drive FORWARD to push the Red Cube toward the Yellow Cube until they are close together
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
@@ -526,14 +547,14 @@ EVERY response MUST be valid JSON with this EXACT structure:
 {
   "cycle": <number>,
   "observation": {
-    "scene_description": "<describe what you SEE in the camera image>",
-    "red_cube_visible": <boolean>,
-    "red_cube_direction": "<left|center|right|not_visible>",
-    "green_dock_visible": <boolean>,
+    "scene_description": "<describe what you see>",
+    "target_object_visible": <boolean>,
+    "target_direction": "<left|center|right|not_visible>",
+    "yellow_cube_visible": <boolean>,
     "obstacles_ahead": <boolean>
   },
-  "reasoning": "<explain WHY you chose this rotation and movement>",
-  "goal_detected": <boolean - true if you can see or have a plan for the goal>,
+  "reasoning": "<explain WHY you chose this rotation and movement based on sensor data>",
+  "goal_detected": true,
   "rotate": {
     "side": "<left|right|none>",
     "degrees": <number 0-180, how much to rotate. Use 0 for no rotation>
@@ -544,31 +565,22 @@ EVERY response MUST be valid JSON with this EXACT structure:
   }
 }
 
-## DECISION GUIDELINES
-- If the target (red cube) is to your LEFT → rotate left by the approximate angle
-- If the target is to your RIGHT → rotate right by the approximate angle
-- If the target is AHEAD → rotate 0 degrees, move forward
-- If you see a WALL or OBSTACLE ahead → rotate 45-90 degrees to avoid it
-- If you see NOTHING useful → rotate 30-60 degrees to scan the environment
-- Use relative_angle_degrees from sensor data to decide rotation amount
-- If distance to target is known, use it to set move distance_cm
-- When pushing the cube, move forward with 20-40cm to push gently
-
-## LEARNING FROM PREVIOUS ACTIONS
-**CRITICAL: Analyze your conversation history before deciding!**
-- If the last movement made no progress → TRY A DIFFERENT approach
-- If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
-- Compare what you see in the camera with what you expected
-- NEVER repeat the exact same action if it failed to make progress
-- If stuck, try: rotate 90 degrees, then move forward 30cm
+## DECISION GUIDELINES (use sensor data!)
+- Read "relative_angle_degrees" for the target object from nearby_objects
+- If relative_angle_degrees is POSITIVE → rotate LEFT by that many degrees
+- If relative_angle_degrees is NEGATIVE → rotate RIGHT by the absolute value
+- If relative_angle_degrees is near 0 (within ±10) → go straight forward
+- Use relative_distance_cm to decide how far to move (move slightly less than the full distance)
+- When pushing the Red Cube: position behind it (opposite side from Yellow Cube), then push forward 20-40cm
 
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
-2. ALWAYS base decisions on the CAMERA IMAGE - it is your primary sensor
-3. Drive TOWARD the red cube when you see it - do NOT turn away from it
-4. Consider GOAL when deciding rotation and movement
+2. ALWAYS set "goal_detected": true - you have sensor data to navigate even without seeing the target
+3. Use relative_angle_degrees from nearby_objects as your PRIMARY rotation guide
+4. Drive TOWARD the red cube when you can detect it in sensors
 5. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
-6. ALWAYS provide non-zero movement or rotation. Never output both degrees=0 and distance_cm=0 - keep exploring!`,
+6. ALWAYS provide non-zero movement or rotation - keep making progress!
+7. If no nearby_objects are listed, rotate 45-90 degrees to scan, then move forward 30cm`,
 
   reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
 
@@ -1200,11 +1212,18 @@ export class ESP32AgentRuntime {
       // Also parse structured response for diagnostics compatibility
       this.parseStructuredResponse(llmResponse);
 
-      // If LLM failed to produce a valid plan, or goal not detected, use random values
-      const useRandom = !actionPlan || !actionPlan.goal_detected || this.stuckCycleCount >= 3;
+      // Override goal_detected if sensor data shows relevant objects nearby
+      // This prevents the LLM from incorrectly reporting no goal when objects are in range
+      if (actionPlan && !actionPlan.goal_detected && sensors.nearbyPushables && sensors.nearbyPushables.length > 0) {
+        this.log('Overriding goal_detected=false: pushable objects detected in sensor range', 'info');
+        actionPlan.goal_detected = true;
+      }
+
+      // If LLM failed to produce a valid plan, or stuck too long, use random values
+      // Note: goal_detected=false only triggers random exploration if no objects are in sensor range
+      const useRandom = !actionPlan || this.stuckCycleCount >= 3;
       if (useRandom) {
         const reason = !actionPlan ? 'LLM parse failed' :
-                      !actionPlan.goal_detected ? 'goal not detected' :
                       `stuck for ${this.stuckCycleCount} cycles`;
         this.log(`Using random exploration: ${reason}`, 'warn');
         actionPlan = this.generateRandomActionPlan();
@@ -1948,7 +1967,39 @@ Respond with ONLY valid JSON.`;
 
       // ── GOAL PROGRESS ────────────────────────────────────────────────
       let goalProgress = 0;
-      if (goal.toLowerCase().includes('dock') || goal.toLowerCase().includes('push')) {
+      const goalLower = goal.toLowerCase();
+      if (goalLower.includes('push') && goalLower.includes('cube') && goalLower.includes('close')) {
+        // Goal is to push one cube close to another cube
+        const pushables = sensors.nearbyPushables || [];
+        const redCube = pushables.find(p => p.id === 'red-cube');
+        const yellowCube = pushables.find(p => p.id === 'yellow-cube');
+        if (redCube && yellowCube) {
+          // Estimate distance between the two cubes using world model
+          const redObj = this.state.worldModel.known_objects.find(o => o.id === 'red-cube');
+          const yellowObj = this.state.worldModel.known_objects.find(o => o.id === 'yellow-cube');
+          if (redObj && yellowObj) {
+            const cubeDistance = Math.sqrt((redObj.world_x - yellowObj.world_x) ** 2 + (redObj.world_y - yellowObj.world_y) ** 2);
+            if (cubeDistance < 0.25) {
+              goalProgress = 100;
+              diag.addEvent({
+                cycle,
+                category: 'navigation',
+                severity: 'ok',
+                title: 'GOAL ACHIEVED: Red Cube pushed close to Yellow Cube!',
+                detail: `Cubes are ${(cubeDistance * 100).toFixed(0)}cm apart`,
+              });
+            } else if (cubeDistance < 0.5) {
+              goalProgress = 80;
+            } else if (cubeDistance < 1.0) {
+              goalProgress = 50;
+            } else {
+              goalProgress = 30;
+            }
+          }
+        } else if (redCube || yellowCube) {
+          goalProgress = 15; // Can see at least one cube
+        }
+      } else if (goalLower.includes('dock') || goalLower.includes('push')) {
         // Goal is to push object to dock
         if (objectsDockedNow > 0) {
           goalProgress = 100;
@@ -1964,7 +2015,7 @@ Respond with ONLY valid JSON.`;
           const closest = sensors.nearbyPushables[0];
           goalProgress = closest.distance < 30 ? 60 : closest.distance < 100 ? 40 : 20;
         }
-      } else if (goal.toLowerCase().includes('explore')) {
+      } else if (goalLower.includes('explore')) {
         // Exploration goal - based on area coverage
         const uniquePositions = diag.physicsHistory.length;
         goalProgress = Math.min(100, uniquePositions * 2);

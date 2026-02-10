@@ -36,7 +36,7 @@ export default function RobotAgentPanel({
   const [agentId, setAgentId] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<ESP32AgentState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [agentGoal, setAgentGoal] = useState('Find the Red Cube in the arena. Navigate to it. Push it towards the Yellow Dock station (bright yellow zone in a corner of the arena). Use your sensors and camera to detect nearby pushable objects and dock zones. Align behind the cube relative to the dock direction, then drive forward to push it into the yellow zone.');
+  const [agentGoal, setAgentGoal] = useState('Find the Red Cube and the Yellow Cube in the arena. Navigate to the Red Cube. Push the Red Cube close to the Yellow Cube. Use your sensors to detect both cubes by their labels. Align behind the Red Cube on the side opposite from the Yellow Cube, then drive forward to push the Red Cube toward the Yellow Cube until they are close together.');
   const [loopInterval, setLoopInterval] = useState(2000);
   const [showMessages, setShowMessages] = useState(true);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
