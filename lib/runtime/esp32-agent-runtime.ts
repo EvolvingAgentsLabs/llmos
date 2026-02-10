@@ -321,7 +321,7 @@ function buildSpatialContext(sensors: SensorReadings): string {
     `Robot position: (${pose.x.toFixed(2)}m, ${pose.y.toFixed(2)}m)`,
     `Robot heading: ${headingDeg}deg (facing ${cardinalDir})`,
     ``,
-    `NOTE: You have NO distance sensors. Use the camera image to see your surroundings.`,
+    `NOTE: Use nearby_objects sensor data for precise navigation. Use the camera image for visual confirmation.`,
   ];
 
   // Nearby objects with absolute positions
@@ -498,27 +498,33 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DEFAULT_AGENT_PROMPTS = {
-  simple: `You are a structured autonomous robot with a CAMERA and two wheels. You navigate using ONLY your camera image - you have NO distance sensors.
+  simple: `You are a structured autonomous robot with a CAMERA, position sensors, and two wheels.
 
 ## BEHAVIOR CYCLE: OBSERVE → ROTATE → MOVE → repeat
-Each cycle you receive sensor data and a camera image. You respond with ONE JSON deciding:
+Each cycle you receive sensor data (including nearby object positions) and a camera image. You respond with ONE JSON deciding:
 1. **ROTATE**: How much to turn (side + degrees). Set degrees to 0 for no rotation.
 2. **MOVE**: Drive forward or backward by a specific number of cm. Set distance_cm to 0 to stay in place.
 The system executes your rotation first, then your movement, then observes again.
 
+## SENSOR DATA (provided every cycle)
+You receive structured sensor data including:
+- **robot.x, robot.y, heading_degrees**: Your exact position and heading in the arena
+- **nearby_objects**: Objects detected nearby with relative_distance_cm and relative_angle_degrees FROM YOUR CURRENT HEADING. Positive angle = object is to your RIGHT, negative angle = object is to your LEFT.
+- **world_model.known_objects**: All objects seen so far with world coordinates (may be stale)
+
 ## CAMERA-BASED NAVIGATION
-**You receive a camera image with EVERY cycle.** Use it to:
-- **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
-- **See the GREEN DOCK** - A bright green zone on the floor in a visible corner of the arena with green corner markers. This is where you push the cube to.
-- **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena.
-- **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
-- **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
+**You also receive a camera image with EVERY cycle.** Use it to:
+- **See the RED CUBE** - A bright red box you need to push
+- **See DOCK ZONES** - Colored zones on the floor in corners of the arena (check goal description for the target color)
+- **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena
+- **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes
+- **Judge DISTANCES** - Objects that appear larger are closer
 
 ## PUSHING STRATEGY
 1. First, navigate TO the red cube
-2. Position yourself on the OPPOSITE side of the cube from the green dock
-3. Drive FORWARD to push the cube toward the green dock
-4. The dock is in a corner of the arena - look for the bright green zone with corner markers
+2. Position yourself on the OPPOSITE side of the cube from the dock zone
+3. Drive FORWARD to push the cube toward the dock
+4. The dock is in a corner of the arena - look for the colored zone described in the goal
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
@@ -529,11 +535,11 @@ EVERY response MUST be valid JSON with this EXACT structure:
     "scene_description": "<describe what you SEE in the camera image>",
     "red_cube_visible": <boolean>,
     "red_cube_direction": "<left|center|right|not_visible>",
-    "green_dock_visible": <boolean>,
+    "dock_visible": <boolean>,
     "obstacles_ahead": <boolean>
   },
-  "reasoning": "<explain WHY you chose this rotation and movement>",
-  "goal_detected": <boolean - true if you can see or have a plan for the goal>,
+  "reasoning": "<explain WHY you chose this rotation and movement based on sensor data AND camera>",
+  "goal_detected": true,
   "rotate": {
     "side": "<left|right|none>",
     "degrees": <number 0-180, how much to rotate. Use 0 for no rotation>
@@ -544,31 +550,37 @@ EVERY response MUST be valid JSON with this EXACT structure:
   }
 }
 
+## NAVIGATION USING SENSOR DATA (PRIORITY)
+**IMPORTANT: Use relative_angle_degrees from nearby_objects as your PRIMARY navigation input.**
+- If nearby_objects shows the target at relative_angle_degrees = +40 → rotate RIGHT 40 degrees
+- If nearby_objects shows the target at relative_angle_degrees = -60 → rotate LEFT 60 degrees
+- If relative_angle_degrees is near 0 → target is ahead, move forward
+- Use relative_distance_cm to decide how far to move (but cap at 100cm)
+- If no nearby_objects, use world_model positions: calculate the direction to the known object from your position and heading, then rotate to face it and move toward it
+
 ## DECISION GUIDELINES
 - If the target (red cube) is to your LEFT → rotate left by the approximate angle
 - If the target is to your RIGHT → rotate right by the approximate angle
 - If the target is AHEAD → rotate 0 degrees, move forward
 - If you see a WALL or OBSTACLE ahead → rotate 45-90 degrees to avoid it
-- If you see NOTHING useful → rotate 30-60 degrees to scan the environment
-- Use relative_angle_degrees from sensor data to decide rotation amount
-- If distance to target is known, use it to set move distance_cm
+- If you see NOTHING useful and have no sensor data → rotate 30-60 degrees to scan
 - When pushing the cube, move forward with 20-40cm to push gently
 
 ## LEARNING FROM PREVIOUS ACTIONS
 **CRITICAL: Analyze your conversation history before deciding!**
 - If the last movement made no progress → TRY A DIFFERENT approach
 - If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
-- Compare what you see in the camera with what you expected
 - NEVER repeat the exact same action if it failed to make progress
 - If stuck, try: rotate 90 degrees, then move forward 30cm
 
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
-2. ALWAYS base decisions on the CAMERA IMAGE - it is your primary sensor
-3. Drive TOWARD the red cube when you see it - do NOT turn away from it
-4. Consider GOAL when deciding rotation and movement
-5. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
-6. ALWAYS provide non-zero movement or rotation. Never output both degrees=0 and distance_cm=0 - keep exploring!`,
+2. ALWAYS set "goal_detected": true - you always have a plan based on sensor data or camera
+3. Use SENSOR DATA (nearby_objects, world_model) as your primary navigation guide
+4. Use the CAMERA IMAGE to confirm what you see and detect obstacles
+5. Drive TOWARD the red cube when you know where it is - do NOT turn away from it
+6. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
+7. ALWAYS provide non-zero movement or rotation. Never output both degrees=0 and distance_cm=0 - keep exploring!`,
 
   reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
 
@@ -1200,11 +1212,11 @@ export class ESP32AgentRuntime {
       // Also parse structured response for diagnostics compatibility
       this.parseStructuredResponse(llmResponse);
 
-      // If LLM failed to produce a valid plan, or goal not detected, use random values
-      const useRandom = !actionPlan || !actionPlan.goal_detected || this.stuckCycleCount >= 3;
+      // Only use random exploration if LLM completely failed to parse or robot is stuck
+      // A valid plan is always used, even if goal_detected is false (the LLM's rotation/movement is still better than random)
+      const useRandom = !actionPlan || this.stuckCycleCount >= 3;
       if (useRandom) {
         const reason = !actionPlan ? 'LLM parse failed' :
-                      !actionPlan.goal_detected ? 'goal not detected' :
                       `stuck for ${this.stuckCycleCount} cycles`;
         this.log(`Using random exploration: ${reason}`, 'warn');
         actionPlan = this.generateRandomActionPlan();
@@ -1334,8 +1346,9 @@ export class ESP32AgentRuntime {
     for (const obj of allDetected) {
       const objWorldAngleRad = sensors.pose.rotation + (obj.angle * Math.PI) / 180;
       const distM = obj.distance / 100;
-      const worldX = Number((robotX + Math.cos(objWorldAngleRad) * distM).toFixed(3));
-      const worldY = Number((robotY + Math.sin(objWorldAngleRad) * distM).toFixed(3));
+      // Use sin for X and cos for Y to match simulator coordinate system (rotation=0 → +Y)
+      const worldX = Number((robotX + Math.sin(objWorldAngleRad) * distM).toFixed(3));
+      const worldY = Number((robotY + Math.cos(objWorldAngleRad) * distM).toFixed(3));
       const existing = this.state.worldModel.known_objects.find(o => o.id === obj.id);
       if (existing) {
         existing.world_x = worldX;
@@ -1395,8 +1408,9 @@ Look at the camera image and sensor data. Decide:
 1. ROTATE: Which direction (left/right/none) and how many degrees (0-180)?
 2. MOVE: Forward or backward, and how many cm (5-100)?
 
+IMPORTANT: Use nearby_objects relative_angle_degrees to decide rotation. If the target is at angle +X, rotate RIGHT X degrees. If at angle -X, rotate LEFT X degrees. If no nearby_objects, use world_model positions to calculate direction.
 The system will execute your rotation first, then your movement, then show you the result.
-If you cannot see the goal or have no plan, set "goal_detected": false and the system will use random exploration instead.
+Always set "goal_detected": true and provide your best navigation decision.
 Respond with ONLY valid JSON.`;
 
     // Add stuck warning when robot hasn't moved
