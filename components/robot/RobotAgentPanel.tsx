@@ -255,7 +255,7 @@ export default function RobotAgentPanel({
             </li>
           </ul>
           <p className="mt-2 text-[10px] text-[#8b949e]">
-            Cycle: LOOK (take_picture) - THINK - ORIENT - MOVE - STOP - repeat
+            Cycle: OBSERVE (camera + LLM) → ROTATE (side + degrees) → MOVE (direction + cm) → repeat
           </p>
         </div>
 
