@@ -8,13 +8,14 @@
  *
  * Fixed speed: 80 for forward, -80 for backward, 0 for stop
  *
- * Default behavior cycle:
- * 1. Take picture
- * 2. Plan direction based on what's seen (and main goal if any)
- * 3. Rotate to face desired direction
- * 4. Go straight a short distance
- * 5. Stop
- * 6. Repeat
+ * Behavior cycle (OBSERVE-ROTATE-MOVE loop):
+ * 1. OBSERVE: Take picture + call LLM for decision
+ * 2. ROTATE: Turn by decided degrees (can be 0 for no rotation)
+ * 3. MOVE: Drive forward/backward by decided distance in cm
+ * 4. Repeat from OBSERVE
+ *
+ * If the LLM has no plan or fails to detect the goal, random
+ * rotation and movement values are used to keep the robot exploring.
  */
 
 import { getDeviceManager } from '../hardware/esp32-device-manager';
@@ -135,6 +136,23 @@ export interface CameraAnalysis {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type BehaviorStep = 'OBSERVE' | 'ANALYZE' | 'PLAN' | 'ROTATE' | 'MOVE' | 'STOP';
+
+/**
+ * Action plan returned by the LLM each cycle.
+ * The robot executes: rotate(side, degrees) then move(direction, distance_cm).
+ */
+export interface CycleActionPlan {
+  rotate: {
+    side: 'left' | 'right' | 'none';
+    degrees: number; // 0 means no rotation
+  };
+  move: {
+    direction: 'forward' | 'backward';
+    distance_cm: number; // 0 means no movement
+  };
+  reasoning: string;
+  goal_detected: boolean; // Whether the LLM can see/plan for the goal
+}
 
 export interface WorldModelObstacle {
   direction: 'front' | 'left' | 'right' | 'back';
@@ -482,38 +500,19 @@ export const DEVICE_TOOLS: DeviceTool[] = [
 export const DEFAULT_AGENT_PROMPTS = {
   simple: `You are a structured autonomous robot with a CAMERA and two wheels. You navigate using ONLY your camera image - you have NO distance sensors.
 
-## Your Tools
-1. **take_picture** - Capture a fresh camera image to see your environment
-2. **left_wheel** - Control left wheel: "forward", "backward", or "stop"
-3. **right_wheel** - Control right wheel: "forward", "backward", or "stop"
-
-## Movement Reference
-| Movement      | Left Wheel | Right Wheel |
-|---------------|------------|-------------|
-| Forward       | forward    | forward     |
-| Backward      | backward   | backward    |
-| Rotate Left   | backward   | forward     |
-| Rotate Right  | forward    | backward    |
-| Stop          | stop       | stop        |
+## BEHAVIOR CYCLE: OBSERVE → ROTATE → MOVE → repeat
+Each cycle you receive sensor data and a camera image. You respond with ONE JSON deciding:
+1. **ROTATE**: How much to turn (side + degrees). Set degrees to 0 for no rotation.
+2. **MOVE**: Drive forward or backward by a specific number of cm. Set distance_cm to 0 to stay in place.
+The system executes your rotation first, then your movement, then observes again.
 
 ## CAMERA-BASED NAVIGATION
-**You receive a camera image with EVERY sensor update.** Use it to:
+**You receive a camera image with EVERY cycle.** Use it to:
 - **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
 - **See the GREEN DOCK** - A bright green zone on the floor in a visible corner of the arena with green corner markers. This is where you push the cube to.
 - **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena.
 - **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
 - **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
-
-## BEHAVIOR CYCLE (System-Controlled)
-The system controls which step you are on. Each message tells you the current step. Follow it:
-
-1. **OBSERVE** → Describe what you see in the camera image. Identify the red cube, green dock, walls, obstacles. Wheels are stopped (this is expected).
-2. **PLAN** → Based on your observation, decide your next move. Explain your reasoning. Wheels remain stopped (this is expected during planning).
-3. **MOVE** → Execute your plan NOW. You MUST output wheel_commands that physically move the robot (forward, backward, or rotate). NEVER output "stop" for both wheels during MOVE.
-4. **STOP** → The system stops the wheels automatically. Assess whether your last move made progress.
-
-The system advances steps automatically: OBSERVE → PLAN → MOVE → STOP → OBSERVE → ...
-You do NOT need to set next_step - it is handled for you.
 
 ## PUSHING STRATEGY
 1. First, navigate TO the red cube
@@ -526,8 +525,6 @@ EVERY response MUST be valid JSON with this EXACT structure:
 
 {
   "cycle": <number>,
-  "current_step": "<OBSERVE|PLAN|MOVE|STOP>",
-  "goal": "<your goal>",
   "observation": {
     "scene_description": "<describe what you SEE in the camera image>",
     "red_cube_visible": <boolean>,
@@ -535,46 +532,43 @@ EVERY response MUST be valid JSON with this EXACT structure:
     "green_dock_visible": <boolean>,
     "obstacles_ahead": <boolean>
   },
-  "decision": {
-    "reasoning": "<why this action based on what you SEE>",
-    "target_direction": "<forward|left|right|backward|null>",
-    "action_type": "<observe|rotate|move|stop|backup>"
+  "reasoning": "<explain WHY you chose this rotation and movement>",
+  "goal_detected": <boolean - true if you can see or have a plan for the goal>,
+  "rotate": {
+    "side": "<left|right|none>",
+    "degrees": <number 0-180, how much to rotate. Use 0 for no rotation>
   },
-  "wheel_commands": {
-    "left_wheel": "<forward|backward|stop>",
-    "right_wheel": "<forward|backward|stop>"
+  "move": {
+    "direction": "<forward|backward>",
+    "distance_cm": <number 5-100, how far to move. Use 5-20 for small adjustments, 30-60 for medium moves, 60-100 for long drives>
   }
 }
 
-**Step-specific wheel_commands rules:**
-- OBSERVE step: wheel_commands should be "stop"/"stop" (you are observing)
-- PLAN step: wheel_commands should be "stop"/"stop" (you are planning)
-- MOVE step: wheel_commands MUST move the robot - NEVER "stop"/"stop"
-- STOP step: wheel_commands should be "stop"/"stop" (system handles this)
-
-## CRITICAL: USE THE CAMERA IMAGE
-- **ALWAYS look at the attached camera image** before deciding your action
-- The image shows your first-person view from the robot's perspective
-- If you see the RED CUBE in the image, drive TOWARD it
-- If you see the GREEN DOCK, remember its location for pushing
-- If you see a WALL or OBSTACLE ahead, turn to avoid it
-- If you don't see the red cube, ROTATE to scan the environment
+## DECISION GUIDELINES
+- If the target (red cube) is to your LEFT → rotate left by the approximate angle
+- If the target is to your RIGHT → rotate right by the approximate angle
+- If the target is AHEAD → rotate 0 degrees, move forward
+- If you see a WALL or OBSTACLE ahead → rotate 45-90 degrees to avoid it
+- If you see NOTHING useful → rotate 30-60 degrees to scan the environment
+- Use relative_angle_degrees from sensor data to decide rotation amount
+- If distance to target is known, use it to set move distance_cm
+- When pushing the cube, move forward with 20-40cm to push gently
 
 ## LEARNING FROM PREVIOUS ACTIONS
 **CRITICAL: Analyze your conversation history before deciding!**
 - If the last movement made no progress → TRY A DIFFERENT approach
 - If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
 - Compare what you see in the camera with what you expected
-- NEVER repeat the exact same wheel_commands if they failed to make progress
-- If stuck, try: rotate 90 degrees, then reassess from camera
+- NEVER repeat the exact same action if it failed to make progress
+- If stuck, try: rotate 90 degrees, then move forward 30cm
 
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
 2. ALWAYS base decisions on the CAMERA IMAGE - it is your primary sensor
 3. Drive TOWARD the red cube when you see it - do NOT turn away from it
-4. Consider GOAL when planning direction
+4. Consider GOAL when deciding rotation and movement
 5. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
-6. Keep moving! Stopping without reason wastes time.`,
+6. ALWAYS provide non-zero movement or rotation. Never output both degrees=0 and distance_cm=0 - keep exploring!`,
 
   reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
 
@@ -760,7 +754,6 @@ export class ESP32AgentRuntime {
   private previousHeading: number | null = null;
   private stuckCycleCount = 0;
   private rotationOnlyCount = 0; // Tracks cycles where heading changes but position doesn't
-  private lastEffectiveStep: BehaviorStep = 'OBSERVE'; // The effective step used in the last LLM call
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
@@ -984,7 +977,118 @@ export class ESP32AgentRuntime {
   }
 
   /**
-   * Main control loop
+   * Execute a controlled linear movement for a given distance in cm.
+   * Uses position tracking to stop once the target distance is reached.
+   * Direction can be 'forward' or 'backward'.
+   */
+  private async executeControlledMovement(
+    distanceCm: number,
+    direction: 'forward' | 'backward' = 'forward'
+  ): Promise<number> {
+    if (!this.deviceContext || distanceCm <= 0) return 0;
+
+    const POLL_MS = 50;
+    const TIMEOUT_MS = 3000; // Max 3 seconds per movement
+    const targetM = distanceCm / 100;
+
+    const startSensors = this.deviceContext.getSensors();
+    const startPos = { x: startSensors.pose.x, y: startSensors.pose.y };
+
+    // Set wheel power based on direction
+    const power = direction === 'forward' ? WHEEL_SPEED.FORWARD : WHEEL_SPEED.BACKWARD;
+    this.deviceContext.setLeftWheel(power);
+    this.deviceContext.setRightWheel(power);
+
+    const startTime = Date.now();
+    let distanceMoved = 0;
+
+    while (Date.now() - startTime < TIMEOUT_MS) {
+      await new Promise(resolve => setTimeout(resolve, POLL_MS));
+      if (!this.deviceContext || !this.state.running) break;
+
+      const currentSensors = this.deviceContext.getSensors();
+      distanceMoved = Math.sqrt(
+        (currentSensors.pose.x - startPos.x) ** 2 +
+        (currentSensors.pose.y - startPos.y) ** 2
+      );
+
+      if (distanceMoved >= targetM) {
+        break; // Reached target distance
+      }
+    }
+
+    // Stop wheels after movement
+    this.deviceContext.setLeftWheel(0);
+    this.deviceContext.setRightWheel(0);
+
+    const actualCm = distanceMoved * 100;
+    this.log(`Controlled movement: ${direction} ${actualCm.toFixed(1)}cm (target: ${distanceCm}cm)`, 'info');
+    return actualCm;
+  }
+
+  /**
+   * Generate random action plan for exploration when LLM has no plan or fails.
+   * Produces random but reasonable rotation and movement values.
+   */
+  private generateRandomActionPlan(): CycleActionPlan {
+    const sides: Array<'left' | 'right' | 'none'> = ['left', 'right', 'none'];
+    const randomSide = sides[Math.floor(Math.random() * sides.length)];
+    const randomDegrees = randomSide === 'none' ? 0 : Math.floor(Math.random() * 120) + 15; // 15-135 degrees
+    const randomDirection: 'forward' | 'backward' = Math.random() > 0.2 ? 'forward' : 'backward'; // 80% forward
+    const randomDistance = Math.floor(Math.random() * 50) + 10; // 10-60 cm
+
+    this.log(`Random exploration: rotate ${randomSide} ${randomDegrees}°, move ${randomDirection} ${randomDistance}cm`, 'info');
+
+    return {
+      rotate: { side: randomSide, degrees: randomDegrees },
+      move: { direction: randomDirection, distance_cm: randomDistance },
+      reasoning: 'No plan available - random exploration to discover environment',
+      goal_detected: false,
+    };
+  }
+
+  /**
+   * Parse the LLM response into a CycleActionPlan.
+   * Returns null if parsing fails.
+   */
+  private parseCycleActionPlan(response: string): CycleActionPlan | null {
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Validate required fields
+      if (!parsed.rotate || !parsed.move) return null;
+
+      const side = parsed.rotate.side;
+      if (side !== 'left' && side !== 'right' && side !== 'none') return null;
+
+      const degrees = Number(parsed.rotate.degrees) || 0;
+      const direction = parsed.move.direction === 'backward' ? 'backward' : 'forward';
+      const distanceCm = Math.max(0, Math.min(100, Number(parsed.move.distance_cm) || 0));
+
+      return {
+        rotate: { side, degrees: Math.abs(degrees) },
+        move: { direction, distance_cm: distanceCm },
+        reasoning: parsed.reasoning || parsed.decision?.reasoning || '',
+        goal_detected: parsed.goal_detected ?? true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Main control loop - OBSERVE → ROTATE → MOVE → repeat
+   *
+   * Each cycle:
+   * 1. OBSERVE: Stop wheels, read sensors, capture camera, call LLM
+   * 2. ROTATE: Execute controlled rotation (side + degrees from LLM, or random)
+   * 3. MOVE: Execute controlled movement (direction + distance_cm from LLM, or random)
+   * 4. Repeat
+   *
+   * If the LLM has no plan or the goal is not detected, random values are used.
    */
   private async runLoop(): Promise<void> {
     if (!this.state.running || !this.deviceContext) return;
@@ -1001,39 +1105,40 @@ export class ESP32AgentRuntime {
     }
 
     try {
-      // STEP 0: Stop wheels from previous cycle before reading sensors
-      // This ensures stable sensor readings and prevents uncontrolled continuous rotation
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1: OBSERVE - Stop, read sensors, capture camera, call LLM
+      // ═══════════════════════════════════════════════════════════════════
+      this.state.currentStep = 'OBSERVE';
+      this.emitStateChange();
+
+      // Stop wheels from previous cycle for stable sensor readings
       this.deviceContext.setLeftWheel(0);
       this.deviceContext.setRightWheel(0);
 
-      // STEP 1: Read sensors
+      // Read sensors
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
-      // STEP 1.1: Stuck detection - check if robot position OR heading has changed
+      // Stuck detection - check if robot position OR heading has changed
       const currentPos = { x: sensors.pose.x, y: sensors.pose.y };
-      const currentHeading = sensors.pose.rotation; // radians
+      const currentHeading = sensors.pose.rotation;
       if (this.previousPosition) {
         const distFromLast = Math.sqrt(
           (currentPos.x - this.previousPosition.x) ** 2 +
           (currentPos.y - this.previousPosition.y) ** 2
         );
-        // Check if heading changed significantly (>10 degrees = ~0.17 rad)
         let headingChanged = false;
         if (this.previousHeading !== null) {
           const headingDelta = Math.abs(currentHeading - this.previousHeading);
-          // Normalize for wrapping (e.g. -179° to 179°)
           const normalizedDelta = headingDelta > Math.PI ? (2 * Math.PI - headingDelta) : headingDelta;
           headingChanged = normalizedDelta > 0.17; // ~10 degrees
         }
         const positionUnchanged = distFromLast < 0.01;
         if (positionUnchanged && !headingChanged) {
-          // Truly stuck: no position AND no heading change
           this.stuckCycleCount++;
         } else {
           this.stuckCycleCount = 0;
         }
-        // Track rotation-only stuck: heading changes but position doesn't move
         if (positionUnchanged && headingChanged) {
           this.rotationOnlyCount++;
         } else if (!positionUnchanged) {
@@ -1050,8 +1155,7 @@ export class ESP32AgentRuntime {
         this.state.conversationHistory = [];
       }
 
-      // STEP 1.5: Always capture a fresh camera image before calling LLM
-      // This ensures the LLM always gets a current visual of the scene
+      // Capture a fresh camera image before calling LLM
       try {
         if (cameraCaptureManager.hasCanvas()) {
           const capture = cameraCaptureManager.capture(
@@ -1060,7 +1164,6 @@ export class ESP32AgentRuntime {
             { width: 512, height: 384, quality: 0.85, format: 'jpeg' }
           );
           if (capture) {
-            // Update lastPicture with fresh camera image so callLLM can use it
             if (!this.state.lastPicture) {
               this.state.lastPicture = {
                 timestamp: Date.now(),
@@ -1077,11 +1180,10 @@ export class ESP32AgentRuntime {
           }
         }
       } catch (e) {
-        // Camera capture is optional - don't fail the loop
         console.warn('[ESP32Agent] Pre-loop camera capture failed:', e);
       }
 
-      // STEP 2: Call LLM for decision
+      // Call LLM for decision (single call per cycle)
       const llmStart = Date.now();
       const llmResponse = await this.callLLM(sensors);
       const llmLatency = Date.now() - llmStart;
@@ -1092,140 +1194,99 @@ export class ESP32AgentRuntime {
         (this.state.stats.avgLLMLatencyMs * (this.state.stats.llmCallCount - 1) + llmLatency) /
         this.state.stats.llmCallCount;
 
-      // STEP 3: Parse and execute tool calls
-      let toolCalls = this.parseToolCalls(llmResponse);
+      // Parse action plan from LLM response
+      let actionPlan = this.parseCycleActionPlan(llmResponse);
 
-      // STEP 3.0: MOVE-step wheel validation
-      // During MOVE step, the LLM MUST output movement commands. If it outputs stop, override with forward.
-      // During OBSERVE/PLAN/STOP steps, stop is expected and acceptable.
-      if (this.lastEffectiveStep === 'MOVE') {
-        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
-        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
-        if (allStop) {
-          this.log(`MOVE step but LLM output stop - overriding with forward`, 'warn');
-          toolCalls = toolCalls.filter(tc => tc.tool !== 'left_wheel' && tc.tool !== 'right_wheel');
-          toolCalls.push(
-            { tool: 'left_wheel', args: { direction: 'forward' } },
-            { tool: 'right_wheel', args: { direction: 'forward' } },
-          );
-        }
+      // Also parse structured response for diagnostics compatibility
+      this.parseStructuredResponse(llmResponse);
+
+      // If LLM failed to produce a valid plan, or goal not detected, use random values
+      const useRandom = !actionPlan || !actionPlan.goal_detected || this.stuckCycleCount >= 3;
+      if (useRandom) {
+        const reason = !actionPlan ? 'LLM parse failed' :
+                      !actionPlan.goal_detected ? 'goal not detected' :
+                      `stuck for ${this.stuckCycleCount} cycles`;
+        this.log(`Using random exploration: ${reason}`, 'warn');
+        actionPlan = this.generateRandomActionPlan();
       }
 
-      // STEP 3.1: Force a controlled 45° rotation if robot is truly stuck and LLM returned stop commands
-      let controlledRotationDone = false;
-      if (this.stuckCycleCount >= 3) {
-        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
-        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
-        if (allStop) {
-          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation + forward pulse`, 'warn');
-          const rotateLeft = (this.stuckCycleCount % 6) < 3;
-          await this.executeControlledRotation(45, rotateLeft ? 'left' : 'right');
-          await this.executeForwardPulse(500);
-          controlledRotationDone = true;
-          // Record forced rotation + forward in tool calls for history
-          toolCalls = [
-            { tool: 'left_wheel', args: { direction: 'forward' } },
-            { tool: 'right_wheel', args: { direction: 'forward' } },
-          ];
-        }
+      // At this point actionPlan is guaranteed non-null (either parsed or random)
+      const plan: CycleActionPlan = actionPlan!;
+
+      // Record the action plan for tool history and diagnostics
+      const toolCalls: Array<{ tool: string; args: Record<string, any> }> = [];
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 2: ROTATE - Execute controlled rotation
+      // ═══════════════════════════════════════════════════════════════════
+      this.state.currentStep = 'ROTATE';
+      this.emitStateChange();
+
+      if (plan.rotate.side !== 'none' && plan.rotate.degrees > 0) {
+        const actualDegrees = await this.executeControlledRotation(
+          plan.rotate.degrees,
+          plan.rotate.side
+        );
+        toolCalls.push({
+          tool: 'rotate',
+          args: { side: plan.rotate.side, degrees: plan.rotate.degrees, actual_degrees: actualDegrees },
+        });
       }
 
-      // STEP 3.1b: Force forward movement if robot is only rotating without positional progress
-      if (!controlledRotationDone && this.rotationOnlyCount >= 2) {
-        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
-        const isRotationCommand = wheelCalls.length >= 2 &&
-          wheelCalls.some(tc => tc.args.direction === 'forward') &&
-          wheelCalls.some(tc => tc.args.direction === 'backward');
-        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 3: MOVE - Execute controlled movement
+      // ═══════════════════════════════════════════════════════════════════
+      this.state.currentStep = 'MOVE';
+      this.emitStateChange();
 
-        if (isRotationCommand || allStop) {
-          this.log(`Rotation-only stuck for ${this.rotationOnlyCount} cycles - forcing forward movement`, 'warn');
-          await this.executeForwardPulse(600);
-          controlledRotationDone = true;
-          toolCalls = [
-            { tool: 'left_wheel', args: { direction: 'forward' } },
-            { tool: 'right_wheel', args: { direction: 'forward' } },
-          ];
-        }
+      if (plan.move.distance_cm > 0) {
+        const actualCm = await this.executeControlledMovement(
+          plan.move.distance_cm,
+          plan.move.direction
+        );
+        toolCalls.push({
+          tool: 'move',
+          args: { direction: plan.move.direction, distance_cm: plan.move.distance_cm, actual_cm: actualCm },
+        });
       }
 
-      // STEP 3.2: Detect rotation commands and use controlled rotation instead of raw wheel spinning
-      const leftCall = toolCalls.find(tc => tc.tool === 'left_wheel');
-      const rightCall = toolCalls.find(tc => tc.tool === 'right_wheel');
-      const isRotation = leftCall && rightCall &&
-        ((leftCall.args.direction === 'backward' && rightCall.args.direction === 'forward') ||
-         (leftCall.args.direction === 'forward' && rightCall.args.direction === 'backward'));
+      // Stop wheels after movement
+      this.deviceContext.setLeftWheel(0);
+      this.deviceContext.setRightWheel(0);
 
-      if (isRotation && !controlledRotationDone) {
-        // Use controlled rotation instead of raw wheel commands
-        const direction = leftCall.args.direction === 'backward' ? 'left' : 'right';
+      // Record tool calls for state
+      this.state.lastToolCalls = toolCalls.map(tc => ({
+        tool: tc.tool,
+        args: tc.args,
+        result: { success: true, data: tc.args },
+      }));
+      this.state.stats.totalToolCalls += toolCalls.length;
 
-        // Adaptive rotation: use smaller angle when target is nearby in a similar direction
-        let rotationAngle = 45; // default
-        const nearestTarget = sensors.nearbyPushables?.[0] || sensors.nearbyDockZones?.[0];
-        if (nearestTarget) {
-          const absAngle = Math.abs(nearestTarget.angle);
-          if (absAngle <= 20) {
-            rotationAngle = 15; // Small correction when target is nearly ahead
-          } else if (absAngle <= 45) {
-            rotationAngle = 30; // Medium rotation for moderate angles
-          }
-        }
+      // Add action results to conversation history so LLM knows what happened
+      const resultSummary = [
+        `--- ACTION RESULTS (Cycle ${this.state.iteration}) ---`,
+        plan.rotate.side !== 'none' && plan.rotate.degrees > 0
+          ? `ROTATED: ${plan.rotate.side} ${plan.rotate.degrees}°`
+          : 'ROTATED: none (0°)',
+        plan.move.distance_cm > 0
+          ? `MOVED: ${plan.move.direction} ${plan.move.distance_cm}cm`
+          : 'MOVED: none (0cm)',
+        useRandom ? '(Random exploration - no goal detected)' : '',
+        `Robot now at (${sensors.pose.x.toFixed(3)}, ${sensors.pose.y.toFixed(3)}), heading ${Math.round((sensors.pose.rotation * 180) / Math.PI)}°`,
+      ].filter(Boolean).join('\n');
 
-        await this.executeControlledRotation(rotationAngle, direction);
-        // After rotation, drive forward briefly to ensure the robot makes positional progress
-        await this.executeForwardPulse(400);
-        controlledRotationDone = true;
-      }
-
-      this.state.lastToolCalls = [];
-
-      for (const { tool, args } of toolCalls) {
-        // Skip raw wheel execution if we already did a controlled rotation
-        if (controlledRotationDone && (tool === 'left_wheel' || tool === 'right_wheel')) {
-          // Record the command but don't execute it (already done via controlled rotation)
-          const power = tool === 'left_wheel'
-            ? getWheelPower(args.direction)
-            : getWheelPower(args.direction);
-          this.state.lastToolCalls.push({
-            tool,
-            args,
-            result: { success: true, data: { wheel: tool === 'left_wheel' ? 'left' : 'right', direction: args.direction, power } },
-          });
-          this.state.stats.totalToolCalls++;
-          this.log(`Tool ${tool} (controlled rotation): ${args.direction}`, 'info');
-          continue;
-        }
-
-        const toolDef = DEVICE_TOOLS.find((t) => t.name === tool);
-        if (toolDef) {
-          const result = await toolDef.execute(args, this.deviceContext);
-          this.state.lastToolCalls.push({ tool, args, result });
-          this.state.stats.totalToolCalls++;
-
-          // Store camera analysis
-          if (tool === 'take_picture' && result.success && result.data) {
-            this.state.lastPicture = result.data;
-          }
-
-          this.log(`Tool ${tool}: ${JSON.stringify(result.data)}`, 'info');
-        } else {
-          this.log(`Unknown tool: ${tool}`, 'warn');
-        }
-      }
-
-      // CRITICAL: Add tool results to conversation history so LLM can see them
-      if (this.state.lastToolCalls.length > 0) {
-        this.addToolResultsToHistory(this.state.lastToolCalls);
-      }
+      this.state.conversationHistory.push({
+        role: 'user',
+        content: resultSummary,
+      });
 
       // ═══════════════════════════════════════════════════════════════════
       // DIAGNOSTIC INSTRUMENTATION
       // ═══════════════════════════════════════════════════════════════════
       this.emitDiagnostics(sensors, llmLatency, toolCalls);
 
-      // Advance to next step in the cycle: OBSERVE → PLAN → MOVE → STOP → OBSERVE
-      this.advanceStep();
+      // Step returns to OBSERVE for next cycle
+      this.state.currentStep = 'OBSERVE';
 
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
@@ -1326,55 +1387,28 @@ export class ESP32AgentRuntime {
       };
     }
 
-    // System-controlled step: use current step directly (advanced by advanceStep() at end of loop)
-    // Override to MOVE when stuck, so the system forces movement
-    let effectiveStep = this.state.currentStep;
-    if (this.stuckCycleCount >= 3 || this.rotationOnlyCount >= 2) {
-      effectiveStep = 'MOVE'; // Force MOVE step when stuck - robot must physically move
-    }
-    this.lastEffectiveStep = effectiveStep; // Store for runLoop() to use
-
-    // Step-specific instructions that match the cycle expectations
-    let stepInstruction = '';
-    switch (effectiveStep) {
-      case 'OBSERVE':
-        stepInstruction = `You are OBSERVING. Look at the camera image carefully. Describe what you see: the red cube, green dock, walls, obstacles. Set wheel_commands to "stop"/"stop" (you are just observing). Focus on building situational awareness.`;
-        break;
-      case 'PLAN':
-        stepInstruction = `You are PLANNING. Based on your latest observation, decide what movement to make next. Explain your reasoning in decision.reasoning. Set wheel_commands to "stop"/"stop" (you are just planning). Think about: Where is the red cube? Where is the dock? What direction should you move?`;
-        break;
-      case 'MOVE':
-        stepInstruction = `You are EXECUTING movement. Output wheel_commands that physically move the robot NOW.
-CRITICAL: You MUST set wheel_commands to move - NEVER "stop"/"stop" during MOVE step.
-- If target is ahead (relative_angle between -20 and 20): "left_wheel": "forward", "right_wheel": "forward"
-- If target is to the left (relative_angle < -20): "left_wheel": "backward", "right_wheel": "forward" (rotate left)
-- If target is to the right (relative_angle > 20): "left_wheel": "forward", "right_wheel": "backward" (rotate right)
-- If unsure, default to "forward"/"forward"`;
-        break;
-      case 'STOP':
-        stepInstruction = `Wheels are being stopped by the system. Assess whether your last movement made progress. Set wheel_commands to "stop"/"stop".`;
-        break;
-      default:
-        stepInstruction = `Output wheel_commands based on what you see.`;
-    }
-
-    let userPrompt = `CYCLE ${this.state.iteration} | Step: ${effectiveStep}
+    // Build cycle prompt - single LLM call decides both rotation and movement
+    let userPrompt = `CYCLE ${this.state.iteration} | OBSERVE → decide ROTATE + MOVE
 ${JSON.stringify(sensorContext, null, 2)}
 
-${stepInstruction}
+Look at the camera image and sensor data. Decide:
+1. ROTATE: Which direction (left/right/none) and how many degrees (0-180)?
+2. MOVE: Forward or backward, and how many cm (5-100)?
+
+The system will execute your rotation first, then your movement, then show you the result.
+If you cannot see the goal or have no plan, set "goal_detected": false and the system will use random exploration instead.
 Respond with ONLY valid JSON.`;
 
     // Add stuck warning when robot hasn't moved
     if (this.stuckCycleCount >= 3) {
       userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles!`;
-      userPrompt += `\nYou are in MOVE step. You MUST output movement commands NOW.`;
-      userPrompt += `\nDefault: "left_wheel": "forward", "right_wheel": "forward"`;
+      userPrompt += `\nTry a large rotation (60-120°) followed by a forward movement (30-50cm).`;
     }
 
     // Add rotation-only stuck warning
     if (this.rotationOnlyCount >= 2) {
       userPrompt += `\n\n⚠️ ROTATION-ONLY ALERT: You have been ONLY ROTATING for ${this.rotationOnlyCount} cycles without moving forward!`;
-      userPrompt += `\nYou MUST drive FORWARD: "left_wheel": "forward", "right_wheel": "forward".`;
+      userPrompt += `\nSet a significant forward distance (30-60cm) to make progress.`;
     }
 
     // Add to conversation history
@@ -1537,41 +1571,34 @@ Respond with ONLY valid JSON.`;
   }
 
   /**
-   * Advance the behavior step deterministically: OBSERVE → PLAN → MOVE → STOP → OBSERVE
-   * The system controls step advancement, not the LLM.
+   * Advance the behavior step deterministically.
+   * In the new OBSERVE → ROTATE → MOVE loop, this is handled inline by runLoop().
+   * Kept for backward compatibility but the loop manages steps directly now.
    */
   private advanceStep(): void {
-    const cycle: BehaviorStep[] = ['OBSERVE', 'PLAN', 'MOVE', 'STOP'];
-    const currentIdx = cycle.indexOf(this.state.currentStep);
-    if (currentIdx >= 0) {
-      this.state.currentStep = cycle[(currentIdx + 1) % cycle.length];
-    } else {
-      // If current step is not in the 4-step cycle (e.g. ANALYZE, ROTATE from old cycle),
-      // reset to OBSERVE
-      this.state.currentStep = 'OBSERVE';
-    }
+    // No-op: the new runLoop manages step transitions directly
+    // (OBSERVE → ROTATE → MOVE → back to OBSERVE)
   }
 
   /**
-   * Create a fallback structured response
+   * Create a fallback response in the new OBSERVE-ROTATE-MOVE format.
+   * Returns a response that will be parsed as a random exploration action.
    */
   private createFallbackResponse(action: 'stop' | 'backup', reason: string): string {
-    const fallback: StructuredResponse = {
+    // Return a response with goal_detected=false so the loop will use random exploration
+    const fallback = {
       cycle: this.state.iteration,
-      current_step: 'STOP',
-      goal: this.config.goal || 'explore safely',
-      world_model: this.state.worldModel,
-      observation: null,
-      decision: {
-        reasoning: `Fallback action due to: ${reason}`,
-        target_direction: action === 'backup' ? 'backward' : null,
-        action_type: action,
+      observation: {
+        scene_description: `Fallback: ${reason}`,
+        red_cube_visible: false,
+        red_cube_direction: 'not_visible',
+        green_dock_visible: false,
+        obstacles_ahead: false,
       },
-      wheel_commands: {
-        left_wheel: action === 'backup' ? 'backward' : 'stop',
-        right_wheel: action === 'backup' ? 'backward' : 'stop',
-      },
-      next_step: 'OBSERVE',
+      reasoning: `Fallback action due to: ${reason}`,
+      goal_detected: false,
+      rotate: { side: 'none' as const, degrees: 0 },
+      move: { direction: action === 'backup' ? 'backward' as const : 'forward' as const, distance_cm: action === 'backup' ? 20 : 0 },
     };
     return JSON.stringify(fallback);
   }
