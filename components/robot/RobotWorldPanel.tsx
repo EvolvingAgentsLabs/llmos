@@ -353,38 +353,54 @@ function PiPFloor({ bounds }: { bounds: FloorMap['bounds'] }) {
   const width = bounds.maxX - bounds.minX;
   const height = bounds.maxY - bounds.minY;
 
+  // Grid lines with 0.5m spacing — visible reference for robot navigation and vision LLM distance estimation
+  // Major lines (every 1.0m) are darker/thicker, minor lines (every 0.5m) are lighter
   const gridLines = useMemo(() => {
     const lines: JSX.Element[] = [];
-    const step = 0.5;
+    const step = 0.5; // 0.5 meter grid spacing
 
+    // Vertical grid lines
     for (let x = bounds.minX; x <= bounds.maxX; x += step) {
+      const isMajor = Math.abs(x % 1) < 0.01;
+      const isOrigin = Math.abs(x) < 0.01;
       lines.push(
         <line key={`v${x}`}>
           <bufferGeometry attach="geometry">
             <bufferAttribute
               attach="attributes-position"
               count={2}
-              array={new Float32Array([x, 0.001, bounds.minY, x, 0.001, bounds.maxY])}
+              array={new Float32Array([x, 0.002, bounds.minY, x, 0.002, bounds.maxY])}
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={x % 1 === 0 ? "#909090" : "#A0A0A0"} />
+          <lineBasicMaterial
+            attach="material"
+            color={isOrigin ? "#505050" : isMajor ? "#707070" : "#959595"}
+            linewidth={1}
+          />
         </line>
       );
     }
 
+    // Horizontal grid lines
     for (let z = bounds.minY; z <= bounds.maxY; z += step) {
+      const isMajor = Math.abs(z % 1) < 0.01;
+      const isOrigin = Math.abs(z) < 0.01;
       lines.push(
         <line key={`h${z}`}>
           <bufferGeometry attach="geometry">
             <bufferAttribute
               attach="attributes-position"
               count={2}
-              array={new Float32Array([bounds.minX, 0.001, z, bounds.maxX, 0.001, z])}
+              array={new Float32Array([bounds.minX, 0.002, z, bounds.maxX, 0.002, z])}
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial attach="material" color={z % 1 === 0 ? "#909090" : "#A0A0A0"} />
+          <lineBasicMaterial
+            attach="material"
+            color={isOrigin ? "#505050" : isMajor ? "#707070" : "#959595"}
+            linewidth={1}
+          />
         </line>
       );
     }

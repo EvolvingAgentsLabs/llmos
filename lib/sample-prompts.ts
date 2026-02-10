@@ -210,6 +210,30 @@ Observe emergent intelligent behavior through LLM-guided evolution.`,
     description: 'LLM-guided behavior evolution',
     category: 'AI Robot Agents',
   },
+  {
+    title: 'Camera Scene Analysis Navigator',
+    prompt: `Create an AI agent that uses camera vision to analyze the scene and navigate.
+
+The agent should:
+- Capture camera frames from the robot's first-person view
+- Analyze each frame to describe the scene for robot navigation
+- Describe objects including their sizes, direction, and distance from the robot
+- Use the floor grid lines as distance reference (grid lines are 0.5m apart, thicker lines every 1.0m)
+- Identify obstacles (red-striped cylinders), walls (blue with chevrons), and open spaces
+- Estimate object distances by counting grid squares on the floor (each square = 0.5m)
+- Make navigation decisions based on the visual scene description
+- LED shows: green=clear path, yellow=partially blocked, red=obstacle ahead
+- Log detailed scene descriptions including object shapes, colors, textures, and patterns
+
+The vision analysis should produce structured descriptions like:
+"A red-and-white striped cylinder obstacle is approximately 1.5m ahead (3 grid squares), center-right.
+The floor grid is visible with 0.5m spacing. Blue chevron-patterned wall is 2.0m to the left.
+Clear open space extends 3.0m to the right. Recommended: turn right to avoid obstacle."
+
+Navigate the arena using vision-based scene understanding.`,
+    description: 'Vision-based scene analysis for navigation',
+    category: 'AI Robot Agents',
+  },
 ];
 
 /**
