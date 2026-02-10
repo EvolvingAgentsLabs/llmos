@@ -1,0 +1,67 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "wall",
+      "estimatedDistance": 0.5,
+      "clearance": 0.1,
+      "appearsUnexplored": false,
+      "confidence": 0.9
+    },
+    "centerRegion": {
+      "content": "open_space",
+      "estimatedDistance": 3.0,
+      "clearance": 0.9,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    },
+    "rightRegion": {
+      "content": "open_space",
+      "estimatedDistance": 2.0,
+      "clearance": 0.8,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    }
+  },
+  "objects": [
+    {
+      "type": "wall",
+      "label": "left boundary wall (west side)",
+      "relativePosition": {
+        "direction": "left",
+        "estimatedDistance": 0.5,
+        "verticalPosition": "mid-height"
+      },
+      "estimatedSize": "large",
+      "appearance": "Blue wall with white chevron pattern. Runs vertically along the left side of the view. Approximately 0.5m away.",
+      "confidence": 0.9
+    },
+    {
+      "type": "wall",
+      "label": "bottom boundary wall (south side)",
+      "relativePosition": {
+        "direction": "right",
+        "estimatedDistance": 0.7,
+        "verticalPosition": "mid-height"
+      },
+      "estimatedSize": "large",
+      "appearance": "Blue wall with white chevron pattern. Visible at an angle running along the right-rear of the view.",
+      "confidence": 0.8
+    },
+    {
+      "type": "corner",
+      "label": "arena corner where south and west walls meet",
+      "relativePosition": {
+        "direction": "center-left",
+        "estimatedDistance": 0.7,
+        "verticalPosition": "mid-height"
+      },
+      "estimatedSize": "small",
+      "appearance": "Junction of two blue chevron-patterned walls forming a 90-degree corner",
+      "confidence": 0.85
+    }
+  ],
+  "sceneDescription": "Robot is in the bottom-left corner of the arena facing diagonally northeast. The west boundary wall is 0.5m (1 grid square) to the left with its blue chevron pattern clearly visible. The south boundary wall is visible at an angle to the lower-right. The corner where both walls meet is visible to the center-left. Open arena floor with 0.5m grid pattern stretches ahead toward the center, with approximately 3.0m of clear space straight ahead (6 grid squares).",
+  "navigationAdvice": "Move forward (northeast) into open space. Keep clear of the left wall. The center of the arena is approximately 3.0m ahead with no obstacles.",
+  "gridReference": "Grid lines visible on the floor. The wall to the left is 1 grid square away. Approximately 6 grid squares of open floor visible ahead before reaching the center area.",
+  "overallConfidence": 0.85
+}

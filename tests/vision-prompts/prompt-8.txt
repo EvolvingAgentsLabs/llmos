@@ -1,0 +1,7 @@
+Scenario: Narrow Corridor Between Obstacles
+Robot Position: (0, -0.5) facing North (rotation = PI/2)
+Map: Arena with two obstacles creating a narrow passage: obstacle at (-0.6, 0.5) radius 0.25m and obstacle at (0.6, 0.5) radius 0.25m
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is facing north toward a narrow corridor formed by two cylindrical obstacles. The left obstacle is at (-0.6, 0.5) with radius 0.25m and the right obstacle at (0.6, 0.5) with radius 0.25m. The gap between them is approximately 0.7m (slightly wider than the robot). The obstacles are about 1.0m ahead. The floor grid (0.5m spacing) helps judge the passage width.

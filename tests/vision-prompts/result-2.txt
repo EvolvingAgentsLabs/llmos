@@ -1,0 +1,43 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "partially_blocked",
+      "estimatedDistance": 1.0,
+      "clearance": 0.6,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    },
+    "centerRegion": {
+      "content": "obstacle",
+      "estimatedDistance": 0.65,
+      "clearance": 0.1,
+      "appearsUnexplored": false,
+      "confidence": 0.95
+    },
+    "rightRegion": {
+      "content": "partially_blocked",
+      "estimatedDistance": 1.0,
+      "clearance": 0.6,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    }
+  },
+  "objects": [
+    {
+      "type": "obstacle",
+      "label": "large cylindrical obstacle with red-white diagonal stripes",
+      "relativePosition": {
+        "direction": "center",
+        "estimatedDistance": 0.65,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "large",
+      "appearance": "Cylinder with diagonal red-and-white stripes (caution/hazard pattern). Approximately 0.7m in diameter. Sits on the gray grid floor.",
+      "confidence": 0.95
+    }
+  ],
+  "sceneDescription": "A large red-and-white striped cylindrical obstacle is directly ahead, approximately 0.65m away (just over 1 grid square). The cylinder is about 0.7m in diameter and blocks the center path. The floor grid with 0.5m spacing is visible around the obstacle. Open space is available to both left and right sides, each about 1.0m away from the obstacle edge. Boundary walls are visible in the far distance.",
+  "navigationAdvice": "Obstacle blocks center path. Turn left or right to navigate around it — both sides have approximately equal clearance of 1.0m.",
+  "gridReference": "Grid lines visible on floor. The obstacle is approximately 1.3 grid squares ahead. Grid squares on either side of the obstacle confirm about 2 squares of clearance for passing.",
+  "overallConfidence": 0.9
+}

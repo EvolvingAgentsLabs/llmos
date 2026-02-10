@@ -1,0 +1,7 @@
+Scenario: Obstacle on Left, Open Space Right
+Robot Position: (-0.8, 0) facing North (rotation = PI/2)
+Map: 5m x 5m arena with obstacles. Obstacle at (-1.2, 1.2) radius 0.20m is to the upper-left.
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is in the left portion of the arena facing north. A cylindrical obstacle with red-white stripes is approximately 1.3m away to the upper-left. The right side is completely open with clear floor stretching to the boundary wall. The floor grid (0.5m spacing) is visible.

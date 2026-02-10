@@ -1,0 +1,7 @@
+Scenario: Wall Close Ahead
+Robot Position: (0, 2.0) facing North (rotation = PI/2)
+Map: 5m x 5m arena with boundary walls at +/-2.5m
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is near the top boundary of a 5m x 5m arena, facing north toward the wall that is only 0.5m away (1 grid square). The wall has a blue color with white chevron patterns. The floor grid is visible but limited due to proximity to the wall.

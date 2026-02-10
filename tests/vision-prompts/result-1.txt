@@ -1,0 +1,43 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "open_space",
+      "estimatedDistance": 2.5,
+      "clearance": 1.0,
+      "appearsUnexplored": true,
+      "confidence": 0.9
+    },
+    "centerRegion": {
+      "content": "open_space",
+      "estimatedDistance": 3.0,
+      "clearance": 1.0,
+      "appearsUnexplored": true,
+      "confidence": 0.9
+    },
+    "rightRegion": {
+      "content": "open_space",
+      "estimatedDistance": 2.5,
+      "clearance": 1.0,
+      "appearsUnexplored": true,
+      "confidence": 0.9
+    }
+  },
+  "objects": [
+    {
+      "type": "wall",
+      "label": "boundary wall (far north)",
+      "relativePosition": {
+        "direction": "center",
+        "estimatedDistance": 4.5,
+        "verticalPosition": "mid-height"
+      },
+      "estimatedSize": "large",
+      "appearance": "blue wall with white chevron pattern, spanning full width of arena",
+      "confidence": 0.7
+    }
+  ],
+  "sceneDescription": "Open arena floor stretching ahead with visible 0.5m grid pattern. The floor is gray with darker lines every 1.0m and lighter lines every 0.5m. No obstacles in any direction. A blue chevron-patterned boundary wall is faintly visible approximately 4.5m ahead (9 grid squares). The path is completely clear in all directions — left, center, and right.",
+  "navigationAdvice": "All directions are clear. Proceed forward to explore the arena.",
+  "gridReference": "Floor grid clearly visible with 0.5m spacing. Approximately 9 grid squares visible ahead before reaching the far wall.",
+  "overallConfidence": 0.9
+}

@@ -12,6 +12,9 @@ import * as THREE from 'three';
 import { cameraCaptureManager } from '@/lib/runtime/camera-capture';
 import { getRayNavigationSystem, type PathExplorationResult } from '@/lib/runtime/navigation/ray-navigation';
 
+// Lazy load vision test fixture button
+const VisionTestFixtureButton = dynamic(() => import('./VisionTestFixtureButton'), { ssr: false });
+
 // Lazy load 3D canvas for better performance
 const RobotCanvas3D = dynamic(() => import('./RobotCanvas3D'), {
   ssr: false,
@@ -1375,6 +1378,9 @@ export default function RobotWorldPanel({
           >
             <Settings className={`w-4 h-4 ${showStats ? 'text-[#58a6ff]' : 'text-[#8b949e] hover:text-[#58a6ff]'}`} />
           </button>
+
+          {/* Vision Test Fixture Generator */}
+          <VisionTestFixtureButton />
 
           <button
             className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#30363d] hover:border-[#58a6ff] flex items-center justify-center transition-colors"

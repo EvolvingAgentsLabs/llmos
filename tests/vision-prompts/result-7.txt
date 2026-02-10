@@ -1,0 +1,55 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "open_space",
+      "estimatedDistance": 2.5,
+      "clearance": 0.9,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    },
+    "centerRegion": {
+      "content": "open_space",
+      "estimatedDistance": 3.0,
+      "clearance": 0.95,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    },
+    "rightRegion": {
+      "content": "open_space",
+      "estimatedDistance": 2.5,
+      "clearance": 0.9,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    }
+  },
+  "objects": [
+    {
+      "type": "collectible",
+      "label": "gold coin on floor",
+      "relativePosition": {
+        "direction": "center-right",
+        "estimatedDistance": 1.5,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "small",
+      "appearance": "Small golden disc-shaped object on the floor with emissive glow. Approximately 0.1m in diameter. Floating slightly above the floor surface with a golden light.",
+      "confidence": 0.8
+    },
+    {
+      "type": "collectible",
+      "label": "gold coin on floor",
+      "relativePosition": {
+        "direction": "center-left",
+        "estimatedDistance": 2.0,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "small",
+      "appearance": "Small golden disc-shaped object on the floor with emissive glow. Approximately 0.1m in diameter.",
+      "confidence": 0.75
+    }
+  ],
+  "sceneDescription": "Open arena floor with collectible items visible. A gold coin is on the floor approximately 1.5m ahead and slightly to the right (3 grid squares), emitting a golden glow. Another gold coin is visible about 2.0m ahead and to the left (4 grid squares). The floor grid with 0.5m spacing is clearly visible. No obstacles between the robot and the coins. The path is clear for collection.",
+  "navigationAdvice": "Navigate toward the nearest gold coin (center-right, 1.5m away). Path is clear with no obstacles. After collecting, proceed to the second coin to the left.",
+  "gridReference": "Floor grid clearly visible. The nearest coin is approximately 3 grid squares ahead. The second coin is 4 grid squares away. Grid confirms open path to both collectibles.",
+  "overallConfidence": 0.8
+}
