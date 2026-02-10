@@ -756,6 +756,7 @@ export class ESP32AgentRuntime {
   private leftWheelPower = 0;
   private rightWheelPower = 0;
   private previousPosition: { x: number; y: number } | null = null;
+  private previousHeading: number | null = null;
   private stuckCycleCount = 0;
 
   constructor(config: ESP32AgentConfig) {
@@ -868,6 +869,7 @@ export class ESP32AgentRuntime {
     this.state.errors = [];
     this.stuckCycleCount = 0;
     this.previousPosition = null;
+    this.previousHeading = null;
     this.emitStateChange();
 
     // Start the control loop
@@ -905,6 +907,58 @@ export class ESP32AgentRuntime {
   }
 
   /**
+   * Execute a controlled rotation of approximately the given degrees.
+   * Polls heading sensor and stops once the target angle is reached.
+   * Returns the actual degrees rotated.
+   */
+  private async executeControlledRotation(
+    targetDegrees: number,
+    direction: 'left' | 'right'
+  ): Promise<number> {
+    if (!this.deviceContext) return 0;
+
+    const POLL_MS = 50;
+    const TIMEOUT_MS = 2000;
+    const TOLERANCE_RAD = 0.087; // ~5 degrees
+    const targetRad = (Math.abs(targetDegrees) * Math.PI) / 180;
+
+    const startSensors = this.deviceContext.getSensors();
+    const startHeading = startSensors.pose.rotation;
+
+    // Set rotation wheels
+    const leftPower = direction === 'left' ? WHEEL_SPEED.BACKWARD : WHEEL_SPEED.FORWARD;
+    const rightPower = direction === 'left' ? WHEEL_SPEED.FORWARD : WHEEL_SPEED.BACKWARD;
+    this.deviceContext.setLeftWheel(leftPower);
+    this.deviceContext.setRightWheel(rightPower);
+
+    const startTime = Date.now();
+    let rotatedRad = 0;
+
+    while (Date.now() - startTime < TIMEOUT_MS) {
+      await new Promise(resolve => setTimeout(resolve, POLL_MS));
+      if (!this.deviceContext || !this.state.running) break;
+
+      const currentSensors = this.deviceContext.getSensors();
+      const currentHeading = currentSensors.pose.rotation;
+      let delta = Math.abs(currentHeading - startHeading);
+      if (delta > Math.PI) delta = 2 * Math.PI - delta;
+      rotatedRad = delta;
+
+      if (rotatedRad >= targetRad - TOLERANCE_RAD) {
+        break; // Reached target
+      }
+    }
+
+    // Stop wheels after rotation
+    this.deviceContext.setLeftWheel(0);
+    this.deviceContext.setRightWheel(0);
+
+    const actualDegrees = (rotatedRad * 180) / Math.PI;
+    this.log(`Controlled rotation: ${direction} ${actualDegrees.toFixed(1)}° (target: ${targetDegrees}°)`, 'info');
+    return actualDegrees;
+  }
+
+  /**
    * Main control loop
    */
   private async runLoop(): Promise<void> {
@@ -922,24 +976,39 @@ export class ESP32AgentRuntime {
     }
 
     try {
+      // STEP 0: Stop wheels from previous cycle before reading sensors
+      // This ensures stable sensor readings and prevents uncontrolled continuous rotation
+      this.deviceContext.setLeftWheel(0);
+      this.deviceContext.setRightWheel(0);
+
       // STEP 1: Read sensors
       const sensors = this.deviceContext.getSensors();
       this.state.lastSensorReading = sensors;
 
-      // STEP 1.1: Stuck detection - check if robot position has changed
+      // STEP 1.1: Stuck detection - check if robot position OR heading has changed
       const currentPos = { x: sensors.pose.x, y: sensors.pose.y };
+      const currentHeading = sensors.pose.rotation; // radians
       if (this.previousPosition) {
         const distFromLast = Math.sqrt(
           (currentPos.x - this.previousPosition.x) ** 2 +
           (currentPos.y - this.previousPosition.y) ** 2
         );
-        if (distFromLast < 0.01) { // Less than 1cm movement = stuck
+        // Check if heading changed significantly (>10 degrees = ~0.17 rad)
+        let headingChanged = false;
+        if (this.previousHeading !== null) {
+          const headingDelta = Math.abs(currentHeading - this.previousHeading);
+          // Normalize for wrapping (e.g. -179° to 179°)
+          const normalizedDelta = headingDelta > Math.PI ? (2 * Math.PI - headingDelta) : headingDelta;
+          headingChanged = normalizedDelta > 0.17; // ~10 degrees
+        }
+        if (distFromLast < 0.01 && !headingChanged) { // Truly stuck: no position AND no heading change
           this.stuckCycleCount++;
         } else {
           this.stuckCycleCount = 0;
         }
       }
       this.previousPosition = currentPos;
+      this.previousHeading = currentHeading;
 
       // If stuck for too long, clear conversation history to break the stop pattern
       if (this.stuckCycleCount >= 5 && this.state.conversationHistory.length > 2) {
@@ -992,14 +1061,17 @@ export class ESP32AgentRuntime {
       // STEP 3: Parse and execute tool calls
       let toolCalls = this.parseToolCalls(llmResponse);
 
-      // STEP 3.1: Force movement if robot is stuck and LLM returned stop commands
+      // STEP 3.1: Force a controlled 45° rotation if robot is truly stuck and LLM returned stop commands
+      let controlledRotationDone = false;
       if (this.stuckCycleCount >= 3) {
         const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
         const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
         if (allStop) {
-          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing rotation to explore`, 'warn');
-          // Alternate rotation direction every few cycles to cover more area
+          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation`, 'warn');
           const rotateLeft = (this.stuckCycleCount % 6) < 3;
+          await this.executeControlledRotation(45, rotateLeft ? 'left' : 'right');
+          controlledRotationDone = true;
+          // Record forced rotation in tool calls for history
           toolCalls = [
             { tool: 'left_wheel', args: { direction: rotateLeft ? 'backward' : 'forward' } },
             { tool: 'right_wheel', args: { direction: rotateLeft ? 'forward' : 'backward' } },
@@ -1007,9 +1079,40 @@ export class ESP32AgentRuntime {
         }
       }
 
+      // STEP 3.2: Detect rotation commands and use controlled rotation instead of raw wheel spinning
+      const leftCall = toolCalls.find(tc => tc.tool === 'left_wheel');
+      const rightCall = toolCalls.find(tc => tc.tool === 'right_wheel');
+      const isRotation = leftCall && rightCall &&
+        ((leftCall.args.direction === 'backward' && rightCall.args.direction === 'forward') ||
+         (leftCall.args.direction === 'forward' && rightCall.args.direction === 'backward'));
+
+      if (isRotation && !controlledRotationDone) {
+        // Use controlled 45° rotation instead of raw wheel commands
+        const direction = leftCall.args.direction === 'backward' ? 'left' : 'right';
+        await this.executeControlledRotation(45, direction);
+        controlledRotationDone = true;
+        // Wheels are already stopped by executeControlledRotation, skip raw execution for wheel commands
+      }
+
       this.state.lastToolCalls = [];
 
       for (const { tool, args } of toolCalls) {
+        // Skip raw wheel execution if we already did a controlled rotation
+        if (controlledRotationDone && (tool === 'left_wheel' || tool === 'right_wheel')) {
+          // Record the command but don't execute it (already done via controlled rotation)
+          const power = tool === 'left_wheel'
+            ? getWheelPower(args.direction)
+            : getWheelPower(args.direction);
+          this.state.lastToolCalls.push({
+            tool,
+            args,
+            result: { success: true, data: { wheel: tool === 'left_wheel' ? 'left' : 'right', direction: args.direction, power } },
+          });
+          this.state.stats.totalToolCalls++;
+          this.log(`Tool ${tool} (controlled rotation): ${args.direction}`, 'info');
+          continue;
+        }
+
         const toolDef = DEVICE_TOOLS.find((t) => t.name === tool);
         if (toolDef) {
           const result = await toolDef.execute(args, this.deviceContext);
@@ -1149,14 +1252,17 @@ export class ESP32AgentRuntime {
 ${JSON.stringify(sensorContext, null, 2)}
 
 You MUST respond with wheel_commands that move the robot. Do NOT just stop.
+IMPORTANT: Rotation commands execute as controlled 45° steps (not continuous spinning). After rotating, issue forward commands to actually move.
 Respond with ONLY valid JSON.`;
 
-    // Add urgent stuck warning when robot hasn't moved
+    // Add stuck warning when robot hasn't moved (position AND heading unchanged)
     if (this.stuckCycleCount >= 3) {
-      userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles! Your position is unchanged.`;
-      userPrompt += `\nYou MUST issue wheel_commands that ROTATE the robot to scan for the target.`;
-      userPrompt += `\nUse: "left_wheel": "backward", "right_wheel": "forward" (rotate left) or "left_wheel": "forward", "right_wheel": "backward" (rotate right).`;
-      userPrompt += `\nDo NOT output "stop" for both wheels. The robot MUST move NOW.`;
+      userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles! Position and heading are unchanged.`;
+      userPrompt += `\nRotation commands will automatically execute as controlled 45° steps.`;
+      userPrompt += `\nChoose a direction to rotate based on where the target is, then in the next cycle you can move forward.`;
+      userPrompt += `\nUse: "left_wheel": "backward", "right_wheel": "forward" (rotate left 45°) or "left_wheel": "forward", "right_wheel": "backward" (rotate right 45°).`;
+      userPrompt += `\nOr move forward: "left_wheel": "forward", "right_wheel": "forward".`;
+      userPrompt += `\nDo NOT output "stop" for both wheels.`;
     }
 
     // Add to conversation history
