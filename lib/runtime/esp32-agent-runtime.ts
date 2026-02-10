@@ -758,6 +758,7 @@ export class ESP32AgentRuntime {
   private previousPosition: { x: number; y: number } | null = null;
   private previousHeading: number | null = null;
   private stuckCycleCount = 0;
+  private rotationOnlyCount = 0; // Tracks cycles where heading changes but position doesn't
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
@@ -868,6 +869,7 @@ export class ESP32AgentRuntime {
     this.state.iteration = 0;
     this.state.errors = [];
     this.stuckCycleCount = 0;
+    this.rotationOnlyCount = 0;
     this.previousPosition = null;
     this.previousHeading = null;
     this.emitStateChange();
@@ -959,6 +961,27 @@ export class ESP32AgentRuntime {
   }
 
   /**
+   * Execute a forward drive pulse for a given duration.
+   * Drives both wheels forward then stops. Ensures the robot makes
+   * linear progress after rotation instead of just spinning in place.
+   */
+  private async executeForwardPulse(durationMs: number = 500): Promise<void> {
+    if (!this.deviceContext) return;
+
+    this.deviceContext.setLeftWheel(WHEEL_SPEED.FORWARD);
+    this.deviceContext.setRightWheel(WHEEL_SPEED.FORWARD);
+
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+
+    if (this.deviceContext) {
+      this.deviceContext.setLeftWheel(0);
+      this.deviceContext.setRightWheel(0);
+    }
+
+    this.log(`Forward pulse: ${durationMs}ms`, 'info');
+  }
+
+  /**
    * Main control loop
    */
   private async runLoop(): Promise<void> {
@@ -1001,18 +1024,27 @@ export class ESP32AgentRuntime {
           const normalizedDelta = headingDelta > Math.PI ? (2 * Math.PI - headingDelta) : headingDelta;
           headingChanged = normalizedDelta > 0.17; // ~10 degrees
         }
-        if (distFromLast < 0.01 && !headingChanged) { // Truly stuck: no position AND no heading change
+        const positionUnchanged = distFromLast < 0.01;
+        if (positionUnchanged && !headingChanged) {
+          // Truly stuck: no position AND no heading change
           this.stuckCycleCount++;
         } else {
           this.stuckCycleCount = 0;
+        }
+        // Track rotation-only stuck: heading changes but position doesn't move
+        if (positionUnchanged && headingChanged) {
+          this.rotationOnlyCount++;
+        } else if (!positionUnchanged) {
+          this.rotationOnlyCount = 0;
         }
       }
       this.previousPosition = currentPos;
       this.previousHeading = currentHeading;
 
-      // If stuck for too long, clear conversation history to break the stop pattern
-      if (this.stuckCycleCount >= 5 && this.state.conversationHistory.length > 2) {
-        this.log(`Stuck for ${this.stuckCycleCount} cycles - clearing conversation history to break pattern`, 'warn');
+      // If stuck for too long, clear conversation history to break the pattern
+      if ((this.stuckCycleCount >= 5 || this.rotationOnlyCount >= 4) && this.state.conversationHistory.length > 2) {
+        const reason = this.stuckCycleCount >= 5 ? 'fully stuck' : 'rotation-only stuck';
+        this.log(`${reason} for ${Math.max(this.stuckCycleCount, this.rotationOnlyCount)} cycles - clearing conversation history to break pattern`, 'warn');
         this.state.conversationHistory = [];
       }
 
@@ -1067,14 +1099,34 @@ export class ESP32AgentRuntime {
         const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
         const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
         if (allStop) {
-          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation`, 'warn');
+          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation + forward pulse`, 'warn');
           const rotateLeft = (this.stuckCycleCount % 6) < 3;
           await this.executeControlledRotation(45, rotateLeft ? 'left' : 'right');
+          await this.executeForwardPulse(500);
           controlledRotationDone = true;
-          // Record forced rotation in tool calls for history
+          // Record forced rotation + forward in tool calls for history
           toolCalls = [
-            { tool: 'left_wheel', args: { direction: rotateLeft ? 'backward' : 'forward' } },
-            { tool: 'right_wheel', args: { direction: rotateLeft ? 'forward' : 'backward' } },
+            { tool: 'left_wheel', args: { direction: 'forward' } },
+            { tool: 'right_wheel', args: { direction: 'forward' } },
+          ];
+        }
+      }
+
+      // STEP 3.1b: Force forward movement if robot is only rotating without positional progress
+      if (!controlledRotationDone && this.rotationOnlyCount >= 2) {
+        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
+        const isRotationCommand = wheelCalls.length >= 2 &&
+          wheelCalls.some(tc => tc.args.direction === 'forward') &&
+          wheelCalls.some(tc => tc.args.direction === 'backward');
+        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
+
+        if (isRotationCommand || allStop) {
+          this.log(`Rotation-only stuck for ${this.rotationOnlyCount} cycles - forcing forward movement`, 'warn');
+          await this.executeForwardPulse(600);
+          controlledRotationDone = true;
+          toolCalls = [
+            { tool: 'left_wheel', args: { direction: 'forward' } },
+            { tool: 'right_wheel', args: { direction: 'forward' } },
           ];
         }
       }
@@ -1087,11 +1139,25 @@ export class ESP32AgentRuntime {
          (leftCall.args.direction === 'forward' && rightCall.args.direction === 'backward'));
 
       if (isRotation && !controlledRotationDone) {
-        // Use controlled 45° rotation instead of raw wheel commands
+        // Use controlled rotation instead of raw wheel commands
         const direction = leftCall.args.direction === 'backward' ? 'left' : 'right';
-        await this.executeControlledRotation(45, direction);
+
+        // Adaptive rotation: use smaller angle when target is nearby in a similar direction
+        let rotationAngle = 45; // default
+        const nearestTarget = sensors.nearbyPushables?.[0] || sensors.nearbyDockZones?.[0];
+        if (nearestTarget) {
+          const absAngle = Math.abs(nearestTarget.angle);
+          if (absAngle <= 20) {
+            rotationAngle = 15; // Small correction when target is nearly ahead
+          } else if (absAngle <= 45) {
+            rotationAngle = 30; // Medium rotation for moderate angles
+          }
+        }
+
+        await this.executeControlledRotation(rotationAngle, direction);
+        // After rotation, drive forward briefly to ensure the robot makes positional progress
+        await this.executeForwardPulse(400);
         controlledRotationDone = true;
-        // Wheels are already stopped by executeControlledRotation, skip raw execution for wheel commands
       }
 
       this.state.lastToolCalls = [];
@@ -1245,24 +1311,32 @@ export class ESP32AgentRuntime {
       effectiveStep = 'PLAN';
     }
     if (this.stuckCycleCount >= 3) {
-      effectiveStep = 'ROTATE'; // Force rotation step when stuck
+      effectiveStep = 'ROTATE'; // Force rotation step when fully stuck
+    }
+    if (this.rotationOnlyCount >= 2) {
+      effectiveStep = 'MOVE'; // Force forward movement when rotation-only stuck
     }
 
     let userPrompt = `CYCLE ${this.state.iteration} | Step: ${effectiveStep}
 ${JSON.stringify(sensorContext, null, 2)}
 
 You MUST respond with wheel_commands that move the robot. Do NOT just stop.
-IMPORTANT: Rotation commands execute as controlled 45° steps (not continuous spinning). After rotating, issue forward commands to actually move.
+IMPORTANT: After rotating, the system will automatically drive forward. If the target is nearly ahead (small relative_angle), prefer moving FORWARD ("left_wheel": "forward", "right_wheel": "forward") instead of rotating.
+If relative_angle_degrees to your target is between -20 and 20, GO FORWARD. Only rotate if the angle is larger.
 Respond with ONLY valid JSON.`;
 
     // Add stuck warning when robot hasn't moved (position AND heading unchanged)
     if (this.stuckCycleCount >= 3) {
       userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles! Position and heading are unchanged.`;
-      userPrompt += `\nRotation commands will automatically execute as controlled 45° steps.`;
-      userPrompt += `\nChoose a direction to rotate based on where the target is, then in the next cycle you can move forward.`;
-      userPrompt += `\nUse: "left_wheel": "backward", "right_wheel": "forward" (rotate left 45°) or "left_wheel": "forward", "right_wheel": "backward" (rotate right 45°).`;
-      userPrompt += `\nOr move forward: "left_wheel": "forward", "right_wheel": "forward".`;
+      userPrompt += `\nYou MUST move forward NOW: "left_wheel": "forward", "right_wheel": "forward".`;
       userPrompt += `\nDo NOT output "stop" for both wheels.`;
+    }
+
+    // Add rotation-only stuck warning
+    if (this.rotationOnlyCount >= 2) {
+      userPrompt += `\n\n⚠️ ROTATION-ONLY ALERT: You have been ONLY ROTATING for ${this.rotationOnlyCount} cycles without moving forward!`;
+      userPrompt += `\nYou MUST drive FORWARD now: "left_wheel": "forward", "right_wheel": "forward".`;
+      userPrompt += `\nStop rotating and MOVE FORWARD toward your target.`;
     }
 
     // Add to conversation history
