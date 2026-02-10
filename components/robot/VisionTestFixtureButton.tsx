@@ -245,18 +245,20 @@ function CaptureOnRender({ onCapture }: { onCapture: (dataUrl: string) => void }
   const { gl } = useThree();
   const capturedRef = useRef(false);
   const frameCount = useRef(0);
+  const onCaptureRef = useRef(onCapture);
+  onCaptureRef.current = onCapture;
 
   useFrame(() => {
     frameCount.current++;
-    // Wait a few frames for the scene to stabilize
-    if (frameCount.current >= 5 && !capturedRef.current) {
+    // Wait enough frames for the scene geometry + lighting to stabilize
+    if (frameCount.current >= 10 && !capturedRef.current) {
       capturedRef.current = true;
       try {
         const dataUrl = gl.domElement.toDataURL('image/png');
-        onCapture(dataUrl);
+        onCaptureRef.current(dataUrl);
       } catch (e) {
         console.error('Failed to capture canvas:', e);
-        onCapture('');
+        onCaptureRef.current('');
       }
     }
   });
@@ -314,13 +316,18 @@ export default function VisionTestFixtureButton() {
 
     for (let i = 0; i < totalScenarios; i++) {
       const scenario = VISION_TEST_SCENARIOS[i];
+
+      // IMPORTANT: Set up the capture promise BEFORE triggering the Canvas render.
+      // CaptureOnRender fires after ~10 frames (~167ms at 60fps). If we set up
+      // the promise after setState + delay, the capture can fire before the
+      // resolve ref is in place, causing a deadlock.
+      const capturePromise = waitForCapture();
+
+      // Trigger render of new scenario (Canvas remounts due to key prop)
       setCurrentScenarioIdx(i);
 
-      // Wait a tick for React to render the new scenario
-      await new Promise(r => setTimeout(r, 100));
-
-      // Wait for the canvas capture
-      const imageDataUrl = await waitForCapture();
+      // Wait for CaptureOnRender to capture the canvas
+      const imageDataUrl = await capturePromise;
 
       results.push({
         scenarioId: scenario.id,
