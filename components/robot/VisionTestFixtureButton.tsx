@@ -426,6 +426,7 @@ export default function VisionTestFixtureButton() {
                   </div>
                   <div style={{ width: 600, height: 400 }}>
                     <Canvas
+                      key={`scenario-${currentScenario.id}`}
                       gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
                       dpr={[1, 2]}
                       style={{ width: 600, height: 400 }}

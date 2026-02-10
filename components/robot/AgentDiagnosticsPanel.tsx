@@ -1,27 +1,21 @@
 'use client';
 
 /**
- * Agent Diagnostics Panel
+ * Agent Diagnostics Panel — Simplified
  *
- * Comprehensive real-time UI for understanding what is working and failing
- * in the AI physical agent's behavior. Shows:
- *
- * - Health scores (perception, decision, movement, exploration, goal)
- * - Event timeline with severity coloring
- * - Perception analysis (sensor coverage, blind spots)
- * - Decision analysis (LLM quality, action consistency)
- * - Physics analysis (movement, collisions, stuck detection)
- * - Camera/perspective analysis
- * - Representation issues (walls, objects, coordinate system)
+ * Focused on what the robot actually does:
+ * - Camera: Latest image captured by the robot's camera
+ * - Processing: LLM decisions, reasoning, wheel commands, response times
+ * - World Model: Internal representation of explored/obstacle areas
+ * - Events: Diagnostic event timeline
  */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   useDiagnosticsStore,
   type DiagnosticCategory,
   type DiagnosticSeverity,
   type DiagnosticEvent,
-  type AgentHealthScores,
 } from '@/lib/debug/agent-diagnostics';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -73,10 +67,10 @@ const SEVERITY_ICONS: Record<DiagnosticSeverity, string> = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HEALTH SCORE BAR
+// HEALTH BAR
 // ═══════════════════════════════════════════════════════════════════════════
 
-function HealthBar({ label, score, color }: { label: string; score: number; color?: string }) {
+function HealthBar({ label, score }: { label: string; score: number }) {
   const barColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
   return (
     <div className="flex items-center gap-2">
@@ -84,16 +78,10 @@ function HealthBar({ label, score, color }: { label: string; score: number; colo
       <div className="flex-1 h-2 bg-[#21262d] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${Math.max(2, score)}%`,
-            backgroundColor: color || barColor,
-          }}
+          style={{ width: `${Math.max(2, score)}%`, backgroundColor: barColor }}
         />
       </div>
-      <span
-        className="text-[10px] font-mono w-8 text-right"
-        style={{ color: color || barColor }}
-      >
+      <span className="text-[10px] font-mono w-8 text-right" style={{ color: barColor }}>
         {score}
       </span>
     </div>
@@ -101,119 +89,7 @@ function HealthBar({ label, score, color }: { label: string; score: number; colo
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SENSOR RADAR DISPLAY
-// ═══════════════════════════════════════════════════════════════════════════
-
-function SensorRadar({
-  sensors,
-}: {
-  sensors?: {
-    front: number;
-    frontLeft: number;
-    frontRight: number;
-    left: number;
-    right: number;
-    back: number;
-    backLeft: number;
-    backRight: number;
-  };
-}) {
-  if (!sensors) return null;
-
-  const maxRange = 200;
-  const size = 120;
-  const center = size / 2;
-  const radius = (size / 2) - 10;
-
-  // Sensor directions in radians (0 = up/front)
-  const sensorDirs: Array<{ key: string; angle: number; value: number; reported: boolean }> = [
-    { key: 'front', angle: 0, value: sensors.front, reported: true },
-    { key: 'frontRight', angle: Math.PI / 4, value: sensors.frontRight, reported: true },
-    { key: 'right', angle: Math.PI / 2, value: sensors.right, reported: true },
-    { key: 'backRight', angle: (3 * Math.PI) / 4, value: sensors.backRight, reported: true },
-    { key: 'back', angle: Math.PI, value: sensors.back, reported: true },
-    { key: 'backLeft', angle: -(3 * Math.PI) / 4, value: sensors.backLeft, reported: true },
-    { key: 'left', angle: -Math.PI / 2, value: sensors.left, reported: true },
-    { key: 'frontLeft', angle: -Math.PI / 4, value: sensors.frontLeft, reported: true },
-  ];
-
-  return (
-    <svg width={size} height={size} className="block">
-      {/* Range rings */}
-      {[0.25, 0.5, 0.75, 1.0].map((r) => (
-        <circle
-          key={r}
-          cx={center}
-          cy={center}
-          r={radius * r}
-          fill="none"
-          stroke="#30363d"
-          strokeWidth="0.5"
-          strokeDasharray={r < 1 ? '2 2' : undefined}
-        />
-      ))}
-
-      {/* Range labels */}
-      <text x={center + 2} y={center - radius * 0.5 + 3} fontSize="7" fill="#6e7681">1m</text>
-      <text x={center + 2} y={center - radius + 3} fontSize="7" fill="#6e7681">2m</text>
-
-      {/* Sensor rays */}
-      {sensorDirs.map((s) => {
-        const dist = Math.min(s.value / maxRange, 1.0);
-        const endX = center + Math.sin(s.angle) * radius * dist;
-        const endY = center - Math.cos(s.angle) * radius * dist;
-        const dotColor = s.value < 30 ? '#ef4444' : s.value < 80 ? '#f59e0b' : '#22c55e';
-
-        return (
-          <g key={s.key}>
-            {/* Ray line */}
-            <line
-              x1={center}
-              y1={center}
-              x2={endX}
-              y2={endY}
-              stroke={s.reported ? dotColor : `${dotColor}40`}
-              strokeWidth={s.reported ? 1.5 : 0.75}
-              strokeDasharray={s.reported ? undefined : '2 1'}
-            />
-            {/* Endpoint dot */}
-            <circle
-              cx={endX}
-              cy={endY}
-              r={s.reported ? 3 : 2}
-              fill={dotColor}
-              opacity={s.reported ? 1 : 0.4}
-            />
-            {/* Distance label */}
-            <text
-              x={endX + (Math.sin(s.angle) > 0 ? 4 : -4)}
-              y={endY + 3}
-              fontSize="7"
-              fill={s.reported ? '#e6edf3' : '#6e7681'}
-              textAnchor={Math.sin(s.angle) > 0 ? 'start' : 'end'}
-            >
-              {Math.round(s.value)}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Robot indicator */}
-      <polygon
-        points={`${center},${center - 5} ${center + 3},${center + 3} ${center - 3},${center + 3}`}
-        fill="#58a6ff"
-      />
-
-      {/* Legend */}
-      <text x={2} y={size - 2} fontSize="6" fill="#6e7681">
-        All 8 sensors reported to LLM (100% coverage)
-      </text>
-    </svg>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// EVENT LIST
+// EVENT ITEM
 // ═══════════════════════════════════════════════════════════════════════════
 
 function EventItem({ event }: { event: DiagnosticEvent }) {
@@ -256,17 +132,65 @@ function EventItem({ event }: { event: DiagnosticEvent }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DISTANCE INDICATOR (compact inline sensors display)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function DistanceIndicator({
+  sensors,
+}: {
+  sensors: {
+    front: number;
+    frontLeft: number;
+    frontRight: number;
+    left: number;
+    right: number;
+    back: number;
+    backLeft: number;
+    backRight: number;
+  };
+}) {
+  const colorFor = (v: number) =>
+    v < 30 ? '#ef4444' : v < 80 ? '#f59e0b' : '#22c55e';
+
+  const dirs: [string, number][] = [
+    ['F', sensors.front],
+    ['FL', sensors.frontLeft],
+    ['FR', sensors.frontRight],
+    ['L', sensors.left],
+    ['R', sensors.right],
+    ['BL', sensors.backLeft],
+    ['BR', sensors.backRight],
+    ['B', sensors.back],
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {dirs.map(([label, val]) => (
+        <span
+          key={label}
+          className="text-[9px] font-mono px-1 py-0.5 rounded border border-[#30363d]"
+          style={{ color: colorFor(val) }}
+          title={`${label}: ${Math.round(val)}cm`}
+        >
+          {label}:{Math.round(val)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════════════════════════════════════════
 
-type DiagTab = 'overview' | 'events' | 'perception' | 'decisions' | 'physics' | 'camera' | 'representation';
+type DiagTab = 'camera' | 'processing' | 'world' | 'events';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function AgentDiagnosticsPanel() {
-  const [activeTab, setActiveTab] = useState<DiagTab>('overview');
+  const [activeTab, setActiveTab] = useState<DiagTab>('camera');
   const [categoryFilter, setCategoryFilter] = useState<DiagnosticCategory | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<DiagnosticSeverity | 'all'>('all');
   const eventsEndRef = useRef<HTMLDivElement>(null);
@@ -276,9 +200,10 @@ export default function AgentDiagnosticsPanel() {
   const perceptionHistory = useDiagnosticsStore((s) => s.perceptionHistory);
   const decisionHistory = useDiagnosticsStore((s) => s.decisionHistory);
   const physicsHistory = useDiagnosticsStore((s) => s.physicsHistory);
-  const cameraHistory = useDiagnosticsStore((s) => s.cameraHistory);
   const stuckCycles = useDiagnosticsStore((s) => s.stuckCycles);
   const representationIssues = useDiagnosticsStore((s) => s.representationIssues);
+  const latestCameraImageUrl = useDiagnosticsStore((s) => s.latestCameraImageUrl);
+  const latestCameraTimestamp = useDiagnosticsStore((s) => s.latestCameraTimestamp);
   const clear = useDiagnosticsStore((s) => s.clear);
 
   // Filtered events
@@ -294,23 +219,12 @@ export default function AgentDiagnosticsPanel() {
   const latestPerception = perceptionHistory[perceptionHistory.length - 1] || null;
   const latestDecision = decisionHistory[decisionHistory.length - 1] || null;
   const latestPhysics = physicsHistory[physicsHistory.length - 1] || null;
-  const latestCamera = cameraHistory[cameraHistory.length - 1] || null;
-
-  // Event severity counts
-  const severityCounts = useMemo(() => {
-    const counts = { ok: 0, info: 0, warning: 0, error: 0, critical: 0 };
-    events.forEach((e) => counts[e.severity]++);
-    return counts;
-  }, [events]);
 
   const tabs: { id: DiagTab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'events', label: `Events (${events.length})` },
-    { id: 'perception', label: 'Perception' },
-    { id: 'decisions', label: 'Decisions' },
-    { id: 'physics', label: 'Physics' },
     { id: 'camera', label: 'Camera' },
-    { id: 'representation', label: 'Issues' },
+    { id: 'processing', label: 'Processing' },
+    { id: 'world', label: 'World Model' },
+    { id: 'events', label: `Events (${events.length})` },
   ];
 
   return (
@@ -344,7 +258,7 @@ export default function AgentDiagnosticsPanel() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 px-2 py-1 border-b border-[#30363d] bg-[#161b22] flex-shrink-0 overflow-x-auto">
+      <div className="flex gap-0.5 px-2 py-1 border-b border-[#30363d] bg-[#161b22] flex-shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -362,62 +276,54 @@ export default function AgentDiagnosticsPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* ═════════════ OVERVIEW TAB ═════════════ */}
-        {activeTab === 'overview' && (
+        {/* ═════════════ CAMERA TAB ═════════════ */}
+        {activeTab === 'camera' && (
           <div className="p-3 space-y-3">
-            {/* Health Scores */}
-            <div className="space-y-1.5">
-              <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">Health Scores</h3>
-              <HealthBar label="Perception" score={health.perception} />
-              <HealthBar label="Decisions" score={health.decisionQuality} />
-              <HealthBar label="Movement" score={health.movement} />
-              <HealthBar label="Exploration" score={health.exploration} />
-              <HealthBar label="Goal Progress" score={health.goalProgress} />
-              <div className="pt-1 border-t border-[#21262d]">
-                <HealthBar label="Overall" score={health.overall} />
-              </div>
-            </div>
+            <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
+              Robot Camera View
+            </h3>
 
-            {/* Severity summary */}
-            <div>
-              <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider mb-1.5">
-                Event Summary
-              </h3>
-              <div className="flex gap-2 flex-wrap">
-                {(Object.entries(severityCounts) as Array<[DiagnosticSeverity, number]>).map(
-                  ([sev, count]) =>
-                    count > 0 && (
-                      <span
-                        key={sev}
-                        className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: `${SEVERITY_COLORS[sev]}15`,
-                          color: SEVERITY_COLORS[sev],
-                        }}
-                      >
-                        {SEVERITY_ICONS[sev]} {sev}: {count}
-                      </span>
-                    )
-                )}
+            {/* Latest camera image */}
+            {latestCameraImageUrl ? (
+              <div className="rounded-lg border border-[#30363d] overflow-hidden">
+                <div className="px-2 py-1 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between">
+                  <span className="text-[9px] text-[#8b949e] uppercase tracking-wider">
+                    Latest Capture
+                  </span>
+                  <span className="text-[9px] text-[#6e7681] font-mono">
+                    {new Date(latestCameraTimestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={latestCameraImageUrl}
+                  alt="Robot camera view"
+                  className="w-full"
+                  style={{ imageRendering: 'auto' }}
+                />
               </div>
-            </div>
+            ) : (
+              <div className="p-6 rounded-lg border border-[#30363d] bg-[#161b22] text-center">
+                <p className="text-[10px] text-[#6e7681]">
+                  No camera image yet. Start the agent to capture images.
+                </p>
+              </div>
+            )}
 
-            {/* Sensor radar */}
+            {/* Distance sensors (compact) */}
             {latestPerception && (
               <div>
                 <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider mb-1.5">
-                  Sensor Radar (Cycle {latestPerception.cycle})
+                  Distance Sensors (cm)
                 </h3>
-                <div className="flex justify-center">
-                  <SensorRadar sensors={latestPerception.sensors} />
-                </div>
+                <DistanceIndicator sensors={latestPerception.sensors} />
               </div>
             )}
 
             {/* Quick status */}
             <div>
               <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider mb-1.5">
-                Current Status
+                Status
               </h3>
               <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                 <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
@@ -445,7 +351,7 @@ export default function AgentDiagnosticsPanel() {
                   </span>
                 </div>
                 <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                  <span className="text-[#8b949e]">Last LLM: </span>
+                  <span className="text-[#8b949e]">LLM Latency: </span>
                   <span className="font-mono">
                     {latestDecision ? `${latestDecision.responseTimeMs}ms` : '---'}
                   </span>
@@ -453,159 +359,27 @@ export default function AgentDiagnosticsPanel() {
               </div>
             </div>
 
-            {/* Recent critical events */}
-            {events.filter((e) => e.severity === 'error' || e.severity === 'critical').length > 0 && (
-              <div>
-                <h3 className="text-[10px] font-medium text-red-400 uppercase tracking-wider mb-1.5">
-                  Recent Errors
-                </h3>
-                <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                  {events
-                    .filter((e) => e.severity === 'error' || e.severity === 'critical')
-                    .slice(0, 5)
-                    .map((e) => (
-                      <EventItem key={e.id} event={e} />
-                    ))}
-                </div>
+            {/* Health scores */}
+            <div className="space-y-1.5">
+              <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
+                Health
+              </h3>
+              <HealthBar label="Perception" score={health.perception} />
+              <HealthBar label="Decisions" score={health.decisionQuality} />
+              <HealthBar label="Movement" score={health.movement} />
+              <HealthBar label="Goal" score={health.goalProgress} />
+              <div className="pt-1 border-t border-[#21262d]">
+                <HealthBar label="Overall" score={health.overall} />
               </div>
-            )}
-          </div>
-        )}
-
-        {/* ═════════════ EVENTS TAB ═════════════ */}
-        {activeTab === 'events' && (
-          <div className="flex flex-col h-full">
-            {/* Filters */}
-            <div className="flex gap-2 p-2 border-b border-[#30363d] flex-shrink-0 flex-wrap">
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value as DiagnosticCategory | 'all')}
-                className="text-[10px] bg-[#21262d] border border-[#30363d] rounded px-1.5 py-0.5 text-[#e6edf3]"
-              >
-                <option value="all">All Categories</option>
-                {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <select
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value as DiagnosticSeverity | 'all')}
-                className="text-[10px] bg-[#21262d] border border-[#30363d] rounded px-1.5 py-0.5 text-[#e6edf3]"
-              >
-                <option value="all">All Severities</option>
-                <option value="ok">OK</option>
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="error">Error</option>
-                <option value="critical">Critical</option>
-              </select>
-              <span className="text-[10px] text-[#6e7681] ml-auto">
-                {filteredEvents.length} events
-              </span>
-            </div>
-            {/* Event list */}
-            <div className="flex-1 overflow-y-auto space-y-0.5 p-1">
-              {filteredEvents.length === 0 ? (
-                <div className="text-center text-[#6e7681] text-xs py-8">
-                  No events yet. Start the agent to see diagnostics.
-                </div>
-              ) : (
-                filteredEvents.map((e) => <EventItem key={e.id} event={e} />)
-              )}
-              <div ref={eventsEndRef} />
             </div>
           </div>
         )}
 
-        {/* ═════════════ PERCEPTION TAB ═════════════ */}
-        {activeTab === 'perception' && (
+        {/* ═════════════ PROCESSING TAB ═════════════ */}
+        {activeTab === 'processing' && (
           <div className="p-3 space-y-3">
             <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
-              Perception Analysis
-            </h3>
-
-            {latestPerception ? (
-              <>
-                {/* Sensor radar */}
-                <div className="flex justify-center">
-                  <SensorRadar sensors={latestPerception.sensors} />
-                </div>
-
-                {/* Scene description sent to LLM */}
-                <div className="p-2 bg-[#161b22] rounded border border-[#30363d]">
-                  <p className="text-[10px] text-[#8b949e] mb-1">Scene sent to LLM:</p>
-                  <p className="text-[10px] text-[#e6edf3]">{latestPerception.sceneDescription}</p>
-                </div>
-
-                {/* Recommendation */}
-                <div className="p-2 bg-[#161b22] rounded border border-[#30363d]">
-                  <p className="text-[10px] text-[#8b949e] mb-1">Sensor recommendation:</p>
-                  <p className="text-[10px] text-[#3fb950]">{latestPerception.recommendation}</p>
-                </div>
-
-                {/* Blocking status */}
-                <div className="grid grid-cols-4 gap-1.5 text-[10px]">
-                  {['front', 'left', 'right', 'back'].map((dir) => {
-                    const blocked = latestPerception[
-                      `${dir}Blocked` as keyof typeof latestPerception
-                    ] as boolean;
-                    return (
-                      <div
-                        key={dir}
-                        className={`p-1.5 rounded text-center border ${
-                          blocked
-                            ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                            : 'bg-green-500/10 border-green-500/30 text-green-400'
-                        }`}
-                      >
-                        {dir}: {blocked ? 'BLOCKED' : 'clear'}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Objects detected */}
-                <div className="flex gap-3 text-[10px]">
-                  <span className="text-[#8b949e]">
-                    Pushable objects: <span className="text-[#e6edf3]">{latestPerception.pushableObjectsDetected}</span>
-                  </span>
-                  <span className="text-[#8b949e]">
-                    Dock zones: <span className="text-[#e6edf3]">{latestPerception.dockZonesDetected}</span>
-                  </span>
-                </div>
-
-                {/* Perception history chart (text-based) */}
-                <div>
-                  <h4 className="text-[10px] text-[#8b949e] mb-1">Front Distance History (last 20 cycles)</h4>
-                  <div className="flex items-end gap-0.5 h-12">
-                    {perceptionHistory.slice(-20).map((p, i) => {
-                      const h = Math.max(2, (p.sensors.front / 200) * 48);
-                      const color = p.sensors.front < 30 ? '#ef4444' : p.sensors.front < 80 ? '#f59e0b' : '#22c55e';
-                      return (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-t"
-                          style={{ height: `${h}px`, backgroundColor: color }}
-                          title={`Cycle ${p.cycle}: ${p.sensors.front}cm`}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-[10px] text-[#6e7681] text-center py-4">
-                No perception data yet. Start the agent.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ═════════════ DECISIONS TAB ═════════════ */}
-        {activeTab === 'decisions' && (
-          <div className="p-3 space-y-3">
-            <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
-              LLM Decision Analysis
+              Robot Processing
             </h3>
 
             {latestDecision ? (
@@ -638,8 +412,8 @@ export default function AgentDiagnosticsPanel() {
                   <div className="text-[10px]">
                     <span className="text-[#8b949e]">Reasoning: </span>
                     <span className="text-[#e6edf3] italic">
-                      {latestDecision.reasoning.length > 200
-                        ? latestDecision.reasoning.substring(0, 200) + '...'
+                      {latestDecision.reasoning.length > 300
+                        ? latestDecision.reasoning.substring(0, 300) + '...'
                         : latestDecision.reasoning}
                     </span>
                   </div>
@@ -685,14 +459,51 @@ export default function AgentDiagnosticsPanel() {
                   </div>
                 </div>
 
-                {/* Response time history */}
+                {/* Collision / bumper status */}
+                {latestPhysics && (
+                  <div className="flex gap-2">
+                    <div
+                      className={`flex-1 p-1.5 rounded text-center text-[10px] border ${
+                        latestPhysics.frontBumper
+                          ? 'bg-red-500/20 border-red-500/30 text-red-400'
+                          : 'bg-[#161b22] border-[#30363d] text-[#8b949e]'
+                      }`}
+                    >
+                      Front Bumper: {latestPhysics.frontBumper ? 'HIT' : 'clear'}
+                    </div>
+                    <div
+                      className={`flex-1 p-1.5 rounded text-center text-[10px] border ${
+                        latestPhysics.backBumper
+                          ? 'bg-red-500/20 border-red-500/30 text-red-400'
+                          : 'bg-[#161b22] border-[#30363d] text-[#8b949e]'
+                      }`}
+                    >
+                      Back Bumper: {latestPhysics.backBumper ? 'HIT' : 'clear'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stuck indicator */}
+                {stuckCycles > 0 && (
+                  <div className="p-2 bg-red-600/20 border border-red-600/50 rounded text-[10px] text-red-400">
+                    <strong>STUCK:</strong> {stuckCycles} consecutive cycles without significant movement.
+                    {latestPhysics && ` Moved: ${latestPhysics.distanceMoved.toFixed(4)}m`}
+                  </div>
+                )}
+
+                {/* LLM response time history */}
                 <div>
                   <h4 className="text-[10px] text-[#8b949e] mb-1">LLM Response Time (last 20)</h4>
                   <div className="flex items-end gap-0.5 h-12">
                     {decisionHistory.slice(-20).map((d, i) => {
                       const maxMs = 15000;
                       const h = Math.max(2, (d.responseTimeMs / maxMs) * 48);
-                      const color = d.responseTimeMs > 10000 ? '#ef4444' : d.responseTimeMs > 5000 ? '#f59e0b' : '#22c55e';
+                      const color =
+                        d.responseTimeMs > 10000
+                          ? '#ef4444'
+                          : d.responseTimeMs > 5000
+                          ? '#f59e0b'
+                          : '#22c55e';
                       return (
                         <div
                           key={i}
@@ -705,7 +516,7 @@ export default function AgentDiagnosticsPanel() {
                   </div>
                 </div>
 
-                {/* Decision history table */}
+                {/* Recent decisions table */}
                 <div>
                   <h4 className="text-[10px] text-[#8b949e] mb-1">Recent Decisions</h4>
                   <div className="max-h-48 overflow-y-auto space-y-0.5">
@@ -730,141 +541,150 @@ export default function AgentDiagnosticsPanel() {
                       ))}
                   </div>
                 </div>
+
+                {/* Movement history */}
+                {physicsHistory.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] text-[#8b949e] mb-1">Distance Per Cycle (last 20)</h4>
+                    <div className="flex items-end gap-0.5 h-12">
+                      {physicsHistory.slice(-20).map((p, i) => {
+                        const maxDist = 0.1;
+                        const h = Math.max(1, (p.distanceMoved / maxDist) * 48);
+                        const color = p.distanceMoved < 0.005 ? '#ef4444' : '#22c55e';
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 rounded-t"
+                            style={{ height: `${h}px`, backgroundColor: color }}
+                            title={`Cycle ${p.cycle}: ${(p.distanceMoved * 100).toFixed(1)}cm`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-[10px] text-[#6e7681] text-center py-4">
-                No decision data yet. Start the agent.
+                No processing data yet. Start the agent.
               </p>
             )}
           </div>
         )}
 
-        {/* ═════════════ PHYSICS TAB ═════════════ */}
-        {activeTab === 'physics' && (
+        {/* ═════════════ WORLD MODEL TAB ═════════════ */}
+        {activeTab === 'world' && (
           <div className="p-3 space-y-3">
             <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
-              Physics & Movement
+              Internal World Representation
             </h3>
 
-            {latestPhysics ? (
+            {/* Scene description sent to LLM */}
+            {latestPerception ? (
               <>
-                {/* Position and velocity */}
-                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                  <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">X: </span>
-                    <span className="font-mono">{latestPhysics.pose.x.toFixed(3)}m</span>
-                  </div>
-                  <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">Y: </span>
-                    <span className="font-mono">{latestPhysics.pose.y.toFixed(3)}m</span>
-                  </div>
-                  <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">Linear V: </span>
-                    <span className="font-mono">{latestPhysics.velocity.linear.toFixed(3)} m/s</span>
-                  </div>
-                  <div className="p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">Angular V: </span>
-                    <span className="font-mono">{latestPhysics.velocity.angular.toFixed(3)} rad/s</span>
-                  </div>
+                <div className="p-2 bg-[#161b22] rounded border border-[#30363d]">
+                  <p className="text-[10px] text-[#8b949e] mb-1">Scene sent to LLM:</p>
+                  <p className="text-[10px] text-[#e6edf3]">{latestPerception.sceneDescription}</p>
                 </div>
 
-                {/* Collision indicators */}
-                <div className="flex gap-2">
-                  <div
-                    className={`flex-1 p-1.5 rounded text-center text-[10px] border ${
-                      latestPhysics.frontBumper
-                        ? 'bg-red-500/20 border-red-500/30 text-red-400'
-                        : 'bg-[#161b22] border-[#30363d] text-[#8b949e]'
-                    }`}
-                  >
-                    Front Bumper: {latestPhysics.frontBumper ? 'HIT' : 'clear'}
-                  </div>
-                  <div
-                    className={`flex-1 p-1.5 rounded text-center text-[10px] border ${
-                      latestPhysics.backBumper
-                        ? 'bg-red-500/20 border-red-500/30 text-red-400'
-                        : 'bg-[#161b22] border-[#30363d] text-[#8b949e]'
-                    }`}
-                  >
-                    Back Bumper: {latestPhysics.backBumper ? 'HIT' : 'clear'}
-                  </div>
+                {/* Blocking status */}
+                <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                  {(['front', 'left', 'right', 'back'] as const).map((dir) => {
+                    const blocked = latestPerception[
+                      `${dir}Blocked` as keyof typeof latestPerception
+                    ] as boolean;
+                    return (
+                      <div
+                        key={dir}
+                        className={`p-1.5 rounded text-center border ${
+                          blocked
+                            ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                            : 'bg-green-500/10 border-green-500/30 text-green-400'
+                        }`}
+                      >
+                        {dir}: {blocked ? 'BLOCKED' : 'clear'}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* Proximity warnings */}
-                <div className="flex gap-2 text-[10px]">
-                  <div className="flex-1 p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">Closest wall: </span>
-                    <span
-                      className="font-mono"
-                      style={{
-                        color:
-                          latestPhysics.closestWallDistance < 10
-                            ? '#ef4444'
-                            : latestPhysics.closestWallDistance < 30
-                            ? '#f59e0b'
-                            : '#22c55e',
-                      }}
-                    >
-                      {latestPhysics.closestWallDistance.toFixed(1)}cm
-                    </span>
-                  </div>
-                  <div className="flex-1 p-1.5 bg-[#161b22] rounded border border-[#30363d]">
-                    <span className="text-[#8b949e]">Closest obstacle: </span>
-                    <span
-                      className="font-mono"
-                      style={{
-                        color:
-                          latestPhysics.closestObstacleDistance < 10
-                            ? '#ef4444'
-                            : latestPhysics.closestObstacleDistance < 30
-                            ? '#f59e0b'
-                            : '#22c55e',
-                      }}
-                    >
-                      {latestPhysics.closestObstacleDistance.toFixed(1)}cm
-                    </span>
-                  </div>
+                {/* Objects detected */}
+                <div className="flex gap-3 text-[10px]">
+                  <span className="text-[#8b949e]">
+                    Pushable objects:{' '}
+                    <span className="text-[#e6edf3]">{latestPerception.pushableObjectsDetected}</span>
+                  </span>
+                  <span className="text-[#8b949e]">
+                    Dock zones:{' '}
+                    <span className="text-[#e6edf3]">{latestPerception.dockZonesDetected}</span>
+                  </span>
                 </div>
 
-                {/* Stuck indicator */}
-                {stuckCycles > 0 && (
-                  <div className="p-2 bg-red-600/20 border border-red-600/50 rounded text-[10px] text-red-400">
-                    <strong>STUCK DETECTED:</strong> Robot has not moved significantly for{' '}
-                    {stuckCycles} consecutive cycles. Distance moved per cycle:{' '}
-                    {latestPhysics.distanceMoved.toFixed(4)}m
+                {/* Proximity */}
+                {latestPhysics && (
+                  <div className="flex gap-2 text-[10px]">
+                    <div className="flex-1 p-1.5 bg-[#161b22] rounded border border-[#30363d]">
+                      <span className="text-[#8b949e]">Closest wall: </span>
+                      <span
+                        className="font-mono"
+                        style={{
+                          color:
+                            latestPhysics.closestWallDistance < 10
+                              ? '#ef4444'
+                              : latestPhysics.closestWallDistance < 30
+                              ? '#f59e0b'
+                              : '#22c55e',
+                        }}
+                      >
+                        {latestPhysics.closestWallDistance.toFixed(1)}cm
+                      </span>
+                    </div>
+                    <div className="flex-1 p-1.5 bg-[#161b22] rounded border border-[#30363d]">
+                      <span className="text-[#8b949e]">Closest obstacle: </span>
+                      <span
+                        className="font-mono"
+                        style={{
+                          color:
+                            latestPhysics.closestObstacleDistance < 10
+                              ? '#ef4444'
+                              : latestPhysics.closestObstacleDistance < 30
+                              ? '#f59e0b'
+                              : '#22c55e',
+                        }}
+                      >
+                        {latestPhysics.closestObstacleDistance.toFixed(1)}cm
+                      </span>
+                    </div>
                   </div>
                 )}
 
-                {/* Pushable objects */}
-                <div className="text-[10px]">
-                  <span className="text-[#8b949e]">Objects in dock zones: </span>
-                  <span
-                    className="font-mono"
-                    style={{
-                      color: latestPhysics.objectsInDockZones > 0 ? '#22c55e' : '#8b949e',
-                    }}
-                  >
-                    {latestPhysics.objectsInDockZones}
-                  </span>
-                  {latestPhysics.pushableObjectsMoved && (
-                    <span className="text-[#f59e0b] ml-2">(object was pushed this cycle)</span>
-                  )}
-                </div>
+                {/* Pushable objects in dock zones */}
+                {latestPhysics && latestPhysics.objectsInDockZones > 0 && (
+                  <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[10px] text-green-400">
+                    Objects in dock zones: {latestPhysics.objectsInDockZones}
+                  </div>
+                )}
 
-                {/* Movement history */}
+                {/* Front distance history */}
                 <div>
-                  <h4 className="text-[10px] text-[#8b949e] mb-1">Distance Per Cycle (last 20)</h4>
+                  <h4 className="text-[10px] text-[#8b949e] mb-1">
+                    Front Distance History (last 20)
+                  </h4>
                   <div className="flex items-end gap-0.5 h-12">
-                    {physicsHistory.slice(-20).map((p, i) => {
-                      const maxDist = 0.1;
-                      const h = Math.max(1, (p.distanceMoved / maxDist) * 48);
-                      const color = p.distanceMoved < 0.005 ? '#ef4444' : '#22c55e';
+                    {perceptionHistory.slice(-20).map((p, i) => {
+                      const h = Math.max(2, (p.sensors.front / 200) * 48);
+                      const color =
+                        p.sensors.front < 30
+                          ? '#ef4444'
+                          : p.sensors.front < 80
+                          ? '#f59e0b'
+                          : '#22c55e';
                       return (
                         <div
                           key={i}
                           className="flex-1 rounded-t"
                           style={{ height: `${h}px`, backgroundColor: color }}
-                          title={`Cycle ${p.cycle}: ${(p.distanceMoved * 100).toFixed(1)}cm`}
+                          title={`Cycle ${p.cycle}: ${p.sensors.front}cm`}
                         />
                       );
                     })}
@@ -873,182 +693,78 @@ export default function AgentDiagnosticsPanel() {
               </>
             ) : (
               <p className="text-[10px] text-[#6e7681] text-center py-4">
-                No physics data yet. Start the agent.
+                No world model data yet. Start the agent.
               </p>
             )}
-          </div>
-        )}
 
-        {/* ═════════════ CAMERA TAB ═════════════ */}
-        {activeTab === 'camera' && (
-          <div className="p-3 space-y-3">
-            <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
-              Camera & Perspective Analysis
-            </h3>
-
-            {latestCamera ? (
-              <>
-                {/* FOV coverage */}
-                <div className="p-2 bg-[#161b22] rounded border border-[#30363d]">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-[#8b949e]">FOV Coverage</span>
-                    <span
-                      className="text-[10px] font-mono"
-                      style={{
-                        color: latestCamera.fovCoveragePercent > 60 ? '#22c55e' : '#f59e0b',
-                      }}
-                    >
-                      {latestCamera.fovCoveragePercent.toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-[#21262d] rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${latestCamera.fovCoveragePercent}%`,
-                        backgroundColor:
-                          latestCamera.fovCoveragePercent > 60 ? '#22c55e' : '#f59e0b',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Goal target visibility */}
-                <div
-                  className={`p-2 rounded border text-[10px] ${
-                    latestCamera.canSeeGoalTarget
-                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                  }`}
-                >
-                  Goal Target:{' '}
-                  {latestCamera.canSeeGoalTarget ? (
-                    <>
-                      Visible - {latestCamera.goalTargetDirection} at{' '}
-                      {latestCamera.goalTargetDistance}cm
-                    </>
-                  ) : (
-                    'Not visible in current sensor range'
-                  )}
-                </div>
-
-                {/* Blind spots */}
-                <div>
-                  <h4 className="text-[10px] text-[#f59e0b] mb-1">
-                    Blind Spots ({latestCamera.blindSpots.length})
-                  </h4>
-                  <div className="space-y-0.5">
-                    {latestCamera.blindSpots.map((bs, i) => (
-                      <div
-                        key={i}
-                        className="text-[9px] p-1 bg-yellow-500/5 border border-yellow-500/20 rounded text-yellow-400"
-                      >
-                        {bs}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Issues */}
-                <div>
-                  <h4 className="text-[10px] text-[#ec4899] mb-1">
-                    Perspective Issues ({latestCamera.issues.length})
-                  </h4>
-                  <div className="space-y-1">
-                    {latestCamera.issues.map((issue, i) => (
-                      <div
-                        key={i}
-                        className="text-[10px] p-2 bg-[#161b22] border border-[#30363d] rounded text-[#e6edf3]"
-                      >
-                        {issue}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-[10px] text-[#6e7681] text-center py-4">
-                No camera analysis yet. Start the agent.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ═════════════ REPRESENTATION TAB ═════════════ */}
-        {activeTab === 'representation' && (
-          <div className="p-3 space-y-3">
-            <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider">
-              Representation & Simulator Issues
-            </h3>
-
-            {representationIssues.length > 0 ? (
-              <div className="space-y-2">
-                {representationIssues.map((issue, i) => {
-                  // Determine severity by keyword
-                  const isWarning =
-                    issue.includes('mismatch') ||
-                    issue.includes('zero-thickness') ||
-                    issue.includes('limited') ||
-                    issue.includes('not reported');
-                  const isInfo = !isWarning;
-
-                  return (
+            {/* Representation notes */}
+            {representationIssues.length > 0 && (
+              <div>
+                <h3 className="text-[10px] font-medium text-[#8b949e] uppercase tracking-wider mb-1.5">
+                  Arena Notes
+                </h3>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {representationIssues.map((issue, i) => (
                     <div
                       key={i}
-                      className={`p-2 rounded border text-[10px] ${
-                        isWarning
-                          ? 'bg-yellow-500/10 border-yellow-500/30'
-                          : 'bg-blue-500/10 border-blue-500/30'
-                      }`}
+                      className="p-1.5 rounded border text-[9px] bg-blue-500/10 border-blue-500/30 text-[#e6edf3]"
                     >
-                      <span
-                        style={{ color: isWarning ? '#f59e0b' : '#3b82f6' }}
-                      >
-                        {isWarning ? '\u26A0' : '\u2139'}{' '}
-                      </span>
-                      <span className="text-[#e6edf3]">{issue}</span>
+                      {issue}
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            ) : (
-              <p className="text-[10px] text-[#6e7681] text-center py-4">
-                No representation issues logged yet. Start the agent to analyze the arena.
-              </p>
             )}
+          </div>
+        )}
 
-            {/* Fixed issues */}
-            <div className="mt-4">
-              <h3 className="text-[10px] font-medium text-[#22c55e] uppercase tracking-wider mb-2">
-                Implemented Fixes
-              </h3>
-              <div className="space-y-1.5 text-[10px]">
-                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">1. Full 8-sensor FOV:</strong> take_picture now reports all 8
-                  distance sensors (front, frontLeft, frontRight, left, right, back, backLeft,
-                  backRight) - 100% coverage vs the previous 37.5%.
+        {/* ═════════════ EVENTS TAB ═════════════ */}
+        {activeTab === 'events' && (
+          <div className="flex flex-col h-full">
+            {/* Filters */}
+            <div className="flex gap-2 p-2 border-b border-[#30363d] flex-shrink-0 flex-wrap">
+              <select
+                value={categoryFilter}
+                onChange={(e) =>
+                  setCategoryFilter(e.target.value as DiagnosticCategory | 'all')
+                }
+                className="text-[10px] bg-[#21262d] border border-[#30363d] rounded px-1.5 py-0.5 text-[#e6edf3]"
+              >
+                <option value="all">All Categories</option>
+                {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={severityFilter}
+                onChange={(e) =>
+                  setSeverityFilter(e.target.value as DiagnosticSeverity | 'all')
+                }
+                className="text-[10px] bg-[#21262d] border border-[#30363d] rounded px-1.5 py-0.5 text-[#e6edf3]"
+              >
+                <option value="all">All Severities</option>
+                <option value="ok">OK</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+                <option value="critical">Critical</option>
+              </select>
+              <span className="text-[10px] text-[#6e7681] ml-auto">
+                {filteredEvents.length} events
+              </span>
+            </div>
+            {/* Event list */}
+            <div className="flex-1 overflow-y-auto space-y-0.5 p-1">
+              {filteredEvents.length === 0 ? (
+                <div className="text-center text-[#6e7681] text-xs py-8">
+                  No events yet. Start the agent to see diagnostics.
                 </div>
-                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">2. Real camera image:</strong> A real Three.js rendered screenshot
-                  is captured each cycle and sent to the LLM via the vision API (multimodal). The LLM
-                  now sees the actual 3D scene alongside sensor data.
-                </div>
-                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">3. Box collision physics:</strong> Pushable cube objects now use
-                  AABB (axis-aligned bounding box) collision matching their visual cube shape.
-                  Raycasting also uses box intersection instead of circle approximation.
-                </div>
-                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">4. Wall thickness (3cm):</strong> Walls now have 3cm physical
-                  thickness. Collision detection and raycasting account for the wall surface offset,
-                  improving realism and preventing edge-case pass-through.
-                </div>
-                <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-[#e6edf3]">
-                  <strong className="text-green-400">5. Spatial context:</strong> Each take_picture now includes a
-                  spatial context block with arena dimensions, robot absolute position/heading,
-                  object absolute positions, and tactical pushing advice.
-                </div>
-              </div>
+              ) : (
+                filteredEvents.map((e) => <EventItem key={e.id} event={e} />)
+              )}
+              <div ref={eventsEndRef} />
             </div>
           </div>
         )}
