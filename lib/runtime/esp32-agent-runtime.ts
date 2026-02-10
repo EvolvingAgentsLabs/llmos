@@ -504,14 +504,16 @@ export const DEFAULT_AGENT_PROMPTS = {
 - **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
 - **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
 
-## STRICT BEHAVIOR CYCLE
-Follow this cycle EXACTLY:
-1. **OBSERVE** → Look at the camera image to understand your surroundings
-2. **ANALYZE** → Identify where the red cube, green dock, and obstacles are in the image
-3. **PLAN** → Decide how to approach: navigate toward the red cube, position behind it, then push toward dock
-4. **ROTATE** → Turn to face target direction (if needed)
-5. **MOVE** → Go forward toward target
-6. **STOP** → Halt wheels, return to step 1
+## BEHAVIOR CYCLE (System-Controlled)
+The system controls which step you are on. Each message tells you the current step. Follow it:
+
+1. **OBSERVE** → Describe what you see in the camera image. Identify the red cube, green dock, walls, obstacles. Wheels are stopped (this is expected).
+2. **PLAN** → Based on your observation, decide your next move. Explain your reasoning. Wheels remain stopped (this is expected during planning).
+3. **MOVE** → Execute your plan NOW. You MUST output wheel_commands that physically move the robot (forward, backward, or rotate). NEVER output "stop" for both wheels during MOVE.
+4. **STOP** → The system stops the wheels automatically. Assess whether your last move made progress.
+
+The system advances steps automatically: OBSERVE → PLAN → MOVE → STOP → OBSERVE → ...
+You do NOT need to set next_step - it is handled for you.
 
 ## PUSHING STRATEGY
 1. First, navigate TO the red cube
@@ -524,20 +526,14 @@ EVERY response MUST be valid JSON with this EXACT structure:
 
 {
   "cycle": <number>,
-  "current_step": "<OBSERVE|ANALYZE|PLAN|ROTATE|MOVE|STOP>",
+  "current_step": "<OBSERVE|PLAN|MOVE|STOP>",
   "goal": "<your goal>",
-  "world_model": {
-    "robot_position": {"x": <number>, "y": <number>, "rotation": <degrees>},
-    "obstacles": [{"direction": "<front|left|right|back>", "distance_cm": <number>, "type": "<wall|object|unknown>"}],
-    "explored_areas": ["<descriptions>"],
-    "unexplored_directions": ["<directions>"]
-  },
   "observation": {
-    "front_clear": <boolean>,
-    "front_distance_cm": <number>,
-    "left_clear": <boolean>,
-    "right_clear": <boolean>,
-    "scene_description": "<describe what you SEE in the camera image>"
+    "scene_description": "<describe what you SEE in the camera image>",
+    "red_cube_visible": <boolean>,
+    "red_cube_direction": "<left|center|right|not_visible>",
+    "green_dock_visible": <boolean>,
+    "obstacles_ahead": <boolean>
   },
   "decision": {
     "reasoning": "<why this action based on what you SEE>",
@@ -547,9 +543,14 @@ EVERY response MUST be valid JSON with this EXACT structure:
   "wheel_commands": {
     "left_wheel": "<forward|backward|stop>",
     "right_wheel": "<forward|backward|stop>"
-  },
-  "next_step": "<next step in cycle>"
+  }
 }
+
+**Step-specific wheel_commands rules:**
+- OBSERVE step: wheel_commands should be "stop"/"stop" (you are observing)
+- PLAN step: wheel_commands should be "stop"/"stop" (you are planning)
+- MOVE step: wheel_commands MUST move the robot - NEVER "stop"/"stop"
+- STOP step: wheel_commands should be "stop"/"stop" (system handles this)
 
 ## CRITICAL: USE THE CAMERA IMAGE
 - **ALWAYS look at the attached camera image** before deciding your action
@@ -759,6 +760,7 @@ export class ESP32AgentRuntime {
   private previousHeading: number | null = null;
   private stuckCycleCount = 0;
   private rotationOnlyCount = 0; // Tracks cycles where heading changes but position doesn't
+  private lastEffectiveStep: BehaviorStep = 'OBSERVE'; // The effective step used in the last LLM call
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
@@ -1093,6 +1095,22 @@ export class ESP32AgentRuntime {
       // STEP 3: Parse and execute tool calls
       let toolCalls = this.parseToolCalls(llmResponse);
 
+      // STEP 3.0: MOVE-step wheel validation
+      // During MOVE step, the LLM MUST output movement commands. If it outputs stop, override with forward.
+      // During OBSERVE/PLAN/STOP steps, stop is expected and acceptable.
+      if (this.lastEffectiveStep === 'MOVE') {
+        const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
+        const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
+        if (allStop) {
+          this.log(`MOVE step but LLM output stop - overriding with forward`, 'warn');
+          toolCalls = toolCalls.filter(tc => tc.tool !== 'left_wheel' && tc.tool !== 'right_wheel');
+          toolCalls.push(
+            { tool: 'left_wheel', args: { direction: 'forward' } },
+            { tool: 'right_wheel', args: { direction: 'forward' } },
+          );
+        }
+      }
+
       // STEP 3.1: Force a controlled 45° rotation if robot is truly stuck and LLM returned stop commands
       let controlledRotationDone = false;
       if (this.stuckCycleCount >= 3) {
@@ -1206,6 +1224,9 @@ export class ESP32AgentRuntime {
       // ═══════════════════════════════════════════════════════════════════
       this.emitDiagnostics(sensors, llmLatency, toolCalls);
 
+      // Advance to next step in the cycle: OBSERVE → PLAN → MOVE → STOP → OBSERVE
+      this.advanceStep();
+
       // Update loop timing stats
       const loopTime = Date.now() - loopStart;
       this.state.stats.avgLoopTimeMs =
@@ -1305,38 +1326,55 @@ export class ESP32AgentRuntime {
       };
     }
 
-    // Auto-advance step: if we already have sensor data, don't stay on OBSERVE
+    // System-controlled step: use current step directly (advanced by advanceStep() at end of loop)
+    // Override to MOVE when stuck, so the system forces movement
     let effectiveStep = this.state.currentStep;
-    if (effectiveStep === 'OBSERVE' && this.state.iteration > 1) {
-      effectiveStep = 'PLAN';
+    if (this.stuckCycleCount >= 3 || this.rotationOnlyCount >= 2) {
+      effectiveStep = 'MOVE'; // Force MOVE step when stuck - robot must physically move
     }
-    if (this.stuckCycleCount >= 3) {
-      effectiveStep = 'ROTATE'; // Force rotation step when fully stuck
-    }
-    if (this.rotationOnlyCount >= 2) {
-      effectiveStep = 'MOVE'; // Force forward movement when rotation-only stuck
+    this.lastEffectiveStep = effectiveStep; // Store for runLoop() to use
+
+    // Step-specific instructions that match the cycle expectations
+    let stepInstruction = '';
+    switch (effectiveStep) {
+      case 'OBSERVE':
+        stepInstruction = `You are OBSERVING. Look at the camera image carefully. Describe what you see: the red cube, green dock, walls, obstacles. Set wheel_commands to "stop"/"stop" (you are just observing). Focus on building situational awareness.`;
+        break;
+      case 'PLAN':
+        stepInstruction = `You are PLANNING. Based on your latest observation, decide what movement to make next. Explain your reasoning in decision.reasoning. Set wheel_commands to "stop"/"stop" (you are just planning). Think about: Where is the red cube? Where is the dock? What direction should you move?`;
+        break;
+      case 'MOVE':
+        stepInstruction = `You are EXECUTING movement. Output wheel_commands that physically move the robot NOW.
+CRITICAL: You MUST set wheel_commands to move - NEVER "stop"/"stop" during MOVE step.
+- If target is ahead (relative_angle between -20 and 20): "left_wheel": "forward", "right_wheel": "forward"
+- If target is to the left (relative_angle < -20): "left_wheel": "backward", "right_wheel": "forward" (rotate left)
+- If target is to the right (relative_angle > 20): "left_wheel": "forward", "right_wheel": "backward" (rotate right)
+- If unsure, default to "forward"/"forward"`;
+        break;
+      case 'STOP':
+        stepInstruction = `Wheels are being stopped by the system. Assess whether your last movement made progress. Set wheel_commands to "stop"/"stop".`;
+        break;
+      default:
+        stepInstruction = `Output wheel_commands based on what you see.`;
     }
 
     let userPrompt = `CYCLE ${this.state.iteration} | Step: ${effectiveStep}
 ${JSON.stringify(sensorContext, null, 2)}
 
-You MUST respond with wheel_commands that move the robot. Do NOT just stop.
-IMPORTANT: After rotating, the system will automatically drive forward. If the target is nearly ahead (small relative_angle), prefer moving FORWARD ("left_wheel": "forward", "right_wheel": "forward") instead of rotating.
-If relative_angle_degrees to your target is between -20 and 20, GO FORWARD. Only rotate if the angle is larger.
+${stepInstruction}
 Respond with ONLY valid JSON.`;
 
-    // Add stuck warning when robot hasn't moved (position AND heading unchanged)
+    // Add stuck warning when robot hasn't moved
     if (this.stuckCycleCount >= 3) {
-      userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles! Position and heading are unchanged.`;
-      userPrompt += `\nYou MUST move forward NOW: "left_wheel": "forward", "right_wheel": "forward".`;
-      userPrompt += `\nDo NOT output "stop" for both wheels.`;
+      userPrompt += `\n\n⚠️ STUCK ALERT: You have NOT MOVED for ${this.stuckCycleCount} consecutive cycles!`;
+      userPrompt += `\nYou are in MOVE step. You MUST output movement commands NOW.`;
+      userPrompt += `\nDefault: "left_wheel": "forward", "right_wheel": "forward"`;
     }
 
     // Add rotation-only stuck warning
     if (this.rotationOnlyCount >= 2) {
       userPrompt += `\n\n⚠️ ROTATION-ONLY ALERT: You have been ONLY ROTATING for ${this.rotationOnlyCount} cycles without moving forward!`;
-      userPrompt += `\nYou MUST drive FORWARD now: "left_wheel": "forward", "right_wheel": "forward".`;
-      userPrompt += `\nStop rotating and MOVE FORWARD toward your target.`;
+      userPrompt += `\nYou MUST drive FORWARD: "left_wheel": "forward", "right_wheel": "forward".`;
     }
 
     // Add to conversation history
@@ -1457,14 +1495,8 @@ Respond with ONLY valid JSON.`;
       const parsed: StructuredResponse = JSON.parse(jsonMatch[0]);
       this.state.lastStructuredResponse = parsed;
 
-      // LLM controls the cycle step via its next_step response
-      if (parsed.next_step) {
-        const validSteps: BehaviorStep[] = ['OBSERVE', 'ANALYZE', 'PLAN', 'ROTATE', 'MOVE', 'STOP'];
-        const nextStep = parsed.next_step.toUpperCase() as BehaviorStep;
-        if (validSteps.includes(nextStep)) {
-          this.state.currentStep = nextStep;
-        }
-      }
+      // Note: step advancement is now system-controlled via advanceStep().
+      // The LLM's next_step field is parsed for diagnostics but does NOT control advancement.
 
       // Update world model from response
       if (parsed.world_model) {
@@ -1501,6 +1533,22 @@ Respond with ONLY valid JSON.`;
       this.log(`Parsed structured response: step=${parsed.current_step}, next_step=${parsed.next_step}, action=${parsed.decision?.action_type}`, 'info');
     } catch (error: any) {
       this.log(`Failed to parse structured response: ${error.message}`, 'warn');
+    }
+  }
+
+  /**
+   * Advance the behavior step deterministically: OBSERVE → PLAN → MOVE → STOP → OBSERVE
+   * The system controls step advancement, not the LLM.
+   */
+  private advanceStep(): void {
+    const cycle: BehaviorStep[] = ['OBSERVE', 'PLAN', 'MOVE', 'STOP'];
+    const currentIdx = cycle.indexOf(this.state.currentStep);
+    if (currentIdx >= 0) {
+      this.state.currentStep = cycle[(currentIdx + 1) % cycle.length];
+    } else {
+      // If current step is not in the 4-step cycle (e.g. ANALYZE, ROTATE from old cycle),
+      // reset to OBSERVE
+      this.state.currentStep = 'OBSERVE';
     }
   }
 
