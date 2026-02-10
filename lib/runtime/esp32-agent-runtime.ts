@@ -1210,6 +1210,9 @@ export class ESP32AgentRuntime {
         actionPlan = this.generateRandomActionPlan();
       }
 
+      // At this point actionPlan is guaranteed non-null (either parsed or random)
+      const plan: CycleActionPlan = actionPlan!;
+
       // Record the action plan for tool history and diagnostics
       const toolCalls: Array<{ tool: string; args: Record<string, any> }> = [];
 
@@ -1219,14 +1222,14 @@ export class ESP32AgentRuntime {
       this.state.currentStep = 'ROTATE';
       this.emitStateChange();
 
-      if (actionPlan.rotate.side !== 'none' && actionPlan.rotate.degrees > 0) {
+      if (plan.rotate.side !== 'none' && plan.rotate.degrees > 0) {
         const actualDegrees = await this.executeControlledRotation(
-          actionPlan.rotate.degrees,
-          actionPlan.rotate.side
+          plan.rotate.degrees,
+          plan.rotate.side
         );
         toolCalls.push({
           tool: 'rotate',
-          args: { side: actionPlan.rotate.side, degrees: actionPlan.rotate.degrees, actual_degrees: actualDegrees },
+          args: { side: plan.rotate.side, degrees: plan.rotate.degrees, actual_degrees: actualDegrees },
         });
       }
 
@@ -1236,14 +1239,14 @@ export class ESP32AgentRuntime {
       this.state.currentStep = 'MOVE';
       this.emitStateChange();
 
-      if (actionPlan.move.distance_cm > 0) {
+      if (plan.move.distance_cm > 0) {
         const actualCm = await this.executeControlledMovement(
-          actionPlan.move.distance_cm,
-          actionPlan.move.direction
+          plan.move.distance_cm,
+          plan.move.direction
         );
         toolCalls.push({
           tool: 'move',
-          args: { direction: actionPlan.move.direction, distance_cm: actionPlan.move.distance_cm, actual_cm: actualCm },
+          args: { direction: plan.move.direction, distance_cm: plan.move.distance_cm, actual_cm: actualCm },
         });
       }
 
@@ -1262,11 +1265,11 @@ export class ESP32AgentRuntime {
       // Add action results to conversation history so LLM knows what happened
       const resultSummary = [
         `--- ACTION RESULTS (Cycle ${this.state.iteration}) ---`,
-        actionPlan.rotate.side !== 'none' && actionPlan.rotate.degrees > 0
-          ? `ROTATED: ${actionPlan.rotate.side} ${actionPlan.rotate.degrees}°`
+        plan.rotate.side !== 'none' && plan.rotate.degrees > 0
+          ? `ROTATED: ${plan.rotate.side} ${plan.rotate.degrees}°`
           : 'ROTATED: none (0°)',
-        actionPlan.move.distance_cm > 0
-          ? `MOVED: ${actionPlan.move.direction} ${actionPlan.move.distance_cm}cm`
+        plan.move.distance_cm > 0
+          ? `MOVED: ${plan.move.direction} ${plan.move.distance_cm}cm`
           : 'MOVED: none (0cm)',
         useRandom ? '(Random exploration - no goal detected)' : '',
         `Robot now at (${sensors.pose.x.toFixed(3)}, ${sensors.pose.y.toFixed(3)}), heading ${Math.round((sensors.pose.rotation * 180) / Math.PI)}°`,
