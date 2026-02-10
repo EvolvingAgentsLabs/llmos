@@ -1,0 +1,7 @@
+Scenario: Collectibles Visible on Floor
+Robot Position: (0, -1.5) facing North (rotation = PI/2)
+Map: standard5x5CoinCollection - Arena with collectible coins and gems scattered on floor
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is facing north in an arena with collectible items on the floor. Several gold coins (small glowing discs) and possibly colored gems are visible ahead at various distances. The floor grid (0.5m spacing) is visible. Coins are small round objects at floor level with a golden glow. One coin might be at approximately (0.5, 0) and another at (-0.5, 0.5).

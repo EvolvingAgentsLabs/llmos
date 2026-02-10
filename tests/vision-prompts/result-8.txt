@@ -1,0 +1,55 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "obstacle",
+      "estimatedDistance": 1.0,
+      "clearance": 0.2,
+      "appearsUnexplored": false,
+      "confidence": 0.9
+    },
+    "centerRegion": {
+      "content": "partially_blocked",
+      "estimatedDistance": 1.0,
+      "clearance": 0.4,
+      "appearsUnexplored": true,
+      "confidence": 0.85
+    },
+    "rightRegion": {
+      "content": "obstacle",
+      "estimatedDistance": 1.0,
+      "clearance": 0.2,
+      "appearsUnexplored": false,
+      "confidence": 0.9
+    }
+  },
+  "objects": [
+    {
+      "type": "obstacle",
+      "label": "cylindrical obstacle with red-white stripes (left side)",
+      "relativePosition": {
+        "direction": "center-left",
+        "estimatedDistance": 1.1,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "medium",
+      "appearance": "Cylinder with diagonal red-and-white stripes. Approximately 0.5m in diameter. Positioned to the left of center creating a passage.",
+      "confidence": 0.9
+    },
+    {
+      "type": "obstacle",
+      "label": "cylindrical obstacle with red-white stripes (right side)",
+      "relativePosition": {
+        "direction": "center-right",
+        "estimatedDistance": 1.1,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "medium",
+      "appearance": "Cylinder with diagonal red-and-white stripes. Approximately 0.5m in diameter. Positioned to the right of center creating a passage.",
+      "confidence": 0.9
+    }
+  ],
+  "sceneDescription": "Two medium red-and-white striped cylindrical obstacles form a narrow corridor directly ahead. The left obstacle (0.5m diameter) is approximately 1.1m away, center-left. The right obstacle (0.5m diameter) is approximately 1.1m away, center-right. The gap between them is approximately 0.7m (about 1.4 grid squares wide). Beyond the corridor, open space is visible. The floor grid with 0.5m spacing helps gauge the passage width — it is slightly wider than 1 grid square.",
+  "navigationAdvice": "Narrow corridor ahead (approximately 0.7m gap). Proceed carefully through the center, maintaining equal distance from both obstacles. The passage is navigable but requires precise alignment.",
+  "gridReference": "Floor grid visible between the two obstacles. The gap spans approximately 1.4 grid squares (0.7m). Each obstacle is about 2 grid squares ahead. Grid lines confirm alignment for passing through the center.",
+  "overallConfidence": 0.85
+}

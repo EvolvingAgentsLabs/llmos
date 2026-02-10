@@ -1,0 +1,43 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "wall",
+      "estimatedDistance": 0.5,
+      "clearance": 0.0,
+      "appearsUnexplored": false,
+      "confidence": 0.95
+    },
+    "centerRegion": {
+      "content": "wall",
+      "estimatedDistance": 0.5,
+      "clearance": 0.0,
+      "appearsUnexplored": false,
+      "confidence": 0.95
+    },
+    "rightRegion": {
+      "content": "wall",
+      "estimatedDistance": 0.5,
+      "clearance": 0.0,
+      "appearsUnexplored": false,
+      "confidence": 0.95
+    }
+  },
+  "objects": [
+    {
+      "type": "wall",
+      "label": "boundary wall with blue chevron pattern",
+      "relativePosition": {
+        "direction": "center",
+        "estimatedDistance": 0.5,
+        "verticalPosition": "mid-height"
+      },
+      "estimatedSize": "large",
+      "appearance": "Blue wall with repeating white chevron/arrow pattern pointing upward. Wall spans the entire field of view from left to right. Has thin horizontal blue reference lines at top and bottom edges.",
+      "confidence": 0.95
+    }
+  ],
+  "sceneDescription": "A blue chevron-patterned boundary wall fills the entire field of view, approximately 0.5m ahead (1 grid square). The wall spans from left to right with no gaps. Only 1 grid square of gray floor is visible before the wall. The wall has a distinctive blue background with white upward-pointing chevron arrows and light blue horizontal lines at its edges.",
+  "navigationAdvice": "Wall directly ahead at 0.5m - STOP and turn around. Turn 180 degrees to face the open arena behind.",
+  "gridReference": "Only 1 grid square (0.5m) of floor visible between robot and wall. Grid pattern confirms wall is at the arena boundary.",
+  "overallConfidence": 0.95
+}

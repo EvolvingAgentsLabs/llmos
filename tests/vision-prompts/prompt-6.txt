@@ -1,0 +1,7 @@
+Scenario: Corner View - Two Walls Visible
+Robot Position: (-2.0, -2.0) facing diagonal NE (rotation = PI/4)
+Map: 5m x 5m empty arena
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is in the bottom-left corner of a 5m x 5m arena, facing diagonally toward the center (northeast). The left wall (west boundary at x=-2.5) is approximately 0.5m to the left. The bottom wall (south boundary at y=-2.5) is behind and to the right. Open arena floor with grid pattern stretches ahead toward the center. The robot can see two walls converging at the corner.

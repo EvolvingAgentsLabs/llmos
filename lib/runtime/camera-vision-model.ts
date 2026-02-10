@@ -181,7 +181,11 @@ const DEFAULT_CONFIG: VisionModelConfig = {
 // VISION ANALYSIS PROMPT
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VISION_ANALYSIS_PROMPT = `You are a robot vision system analyzing a first-person camera view. Analyze this image to help the robot understand its environment and update its world model.
+const VISION_ANALYSIS_PROMPT = `You are a robot vision system analyzing a first-person camera view for robot navigation. Your goal is to describe the scene so the robot can navigate safely and understand its surroundings.
+
+I need the description of the scene for robot navigation — describe the objects, their sizes, direction relative to the robot, and estimated distance.
+
+IMPORTANT REFERENCE: The floor has a visible grid pattern. Grid lines are spaced 0.5 meters apart, with thicker/darker lines every 1.0 meter. Use these grid lines as a distance reference to estimate how far objects are from the robot. Count the grid squares between the robot and an object to estimate distance (each square = 0.5m).
 
 IMPORTANT: Respond ONLY with valid JSON. No explanations or additional text.
 
@@ -192,11 +196,15 @@ Analyze the image and identify:
 
 For each region, determine:
 - content: "open_space" | "obstacle" | "wall" | "partially_blocked" | "unknown"
-- estimatedDistance: distance in meters to nearest obstacle (use 3.0 for open space)
+- estimatedDistance: distance in meters to nearest obstacle (use grid lines as reference: each grid square = 0.5m, use 3.0 for open space)
 - clearance: 0.0 to 1.0 (how clear/passable is this direction)
 - appearsUnexplored: true if this area looks like somewhere the robot hasn't been
 
-Also identify any distinct objects you can see.
+Also identify any distinct objects you can see. For each object describe:
+- Its type, shape, and visual appearance (color, texture, pattern)
+- Its approximate size (use grid squares for reference)
+- Its direction from the robot (left, center-left, center, center-right, right)
+- Its estimated distance (count grid squares on the floor)
 
 Respond with this exact JSON structure:
 {
@@ -217,15 +225,17 @@ Respond with this exact JSON structure:
       "label": "<descriptive label>",
       "relativePosition": {
         "direction": "left|center-left|center|center-right|right",
-        "estimatedDistance": <number>,
+        "estimatedDistance": <number in meters, use grid squares as reference>,
         "verticalPosition": "floor|mid-height|high"
       },
       "estimatedSize": "small|medium|large",
-      "appearance": "<color and appearance description>",
+      "appearance": "<color, texture, shape, and pattern description>",
       "confidence": <number 0-1>
     }
   ],
-  "sceneDescription": "<one sentence description of what the robot sees>",
+  "sceneDescription": "<detailed description of the scene for robot navigation, including objects, sizes, directions and distances>",
+  "navigationAdvice": "<brief suggestion for the robot: which direction is safest to move>",
+  "gridReference": "<note about grid lines visible and how they were used for distance estimation>",
   "overallConfidence": <number 0-1>
 }`;
 
@@ -564,7 +574,7 @@ export class CameraVisionModel {
     return [
       {
         type: 'text',
-        text: `${poseInfo}${contextInfo}\n\nAnalyze the robot's camera view shown in the image. This is a first-person perspective from the robot. Provide your analysis as JSON:`,
+        text: `${poseInfo}${contextInfo}\n\nAnalyze the robot's camera view shown in the image. This is a first-person perspective from the robot.\nREFERENCE: The floor has a grid pattern with lines every 0.5m (thicker lines every 1.0m). Use the grid to estimate distances to objects.\nProvide a detailed scene description for robot navigation, including objects, sizes, directions and distances. Output as JSON:`,
       },
       {
         type: 'image_url',

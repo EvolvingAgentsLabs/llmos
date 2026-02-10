@@ -1,0 +1,67 @@
+{
+  "fieldOfView": {
+    "leftRegion": {
+      "content": "partially_blocked",
+      "estimatedDistance": 1.5,
+      "clearance": 0.5,
+      "appearsUnexplored": true,
+      "confidence": 0.8
+    },
+    "centerRegion": {
+      "content": "obstacle",
+      "estimatedDistance": 0.8,
+      "clearance": 0.2,
+      "appearsUnexplored": false,
+      "confidence": 0.9
+    },
+    "rightRegion": {
+      "content": "partially_blocked",
+      "estimatedDistance": 1.5,
+      "clearance": 0.5,
+      "appearsUnexplored": true,
+      "confidence": 0.8
+    }
+  },
+  "objects": [
+    {
+      "type": "obstacle",
+      "label": "small cylindrical obstacle with red-white stripes (near)",
+      "relativePosition": {
+        "direction": "center",
+        "estimatedDistance": 0.8,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "small",
+      "appearance": "Small cylinder with diagonal red-and-white stripes. Approximately 0.24m in diameter.",
+      "confidence": 0.9
+    },
+    {
+      "type": "obstacle",
+      "label": "large central cylindrical obstacle with red-white stripes",
+      "relativePosition": {
+        "direction": "center",
+        "estimatedDistance": 2.0,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "large",
+      "appearance": "Large cylinder with diagonal red-and-white stripes. Approximately 0.7m in diameter. Dominates the center of the arena.",
+      "confidence": 0.85
+    },
+    {
+      "type": "obstacle",
+      "label": "small cylindrical obstacle (left mid-range)",
+      "relativePosition": {
+        "direction": "left",
+        "estimatedDistance": 2.4,
+        "verticalPosition": "floor"
+      },
+      "estimatedSize": "small",
+      "appearance": "Small cylinder with diagonal red-and-white stripes. Approximately 0.24m in diameter.",
+      "confidence": 0.7
+    }
+  ],
+  "sceneDescription": "Complex obstacle field ahead. A small red-white striped obstacle (0.24m diameter) is approximately 0.8m ahead (1.6 grid squares) near the center. Behind it, a large central obstacle (0.7m diameter) is about 2.0m away (4 grid squares). Another small obstacle is visible to the left at about 2.4m. The floor grid with 0.5m lines is partially visible between obstacles. Narrow corridors exist between obstacles on both sides.",
+  "navigationAdvice": "Multiple obstacles ahead. The nearest is 0.8m away in the center. Navigate around the right side where there appears to be a slightly wider corridor between obstacles.",
+  "gridReference": "Floor grid visible between obstacles. The nearest obstacle is approximately 1.6 grid squares ahead. The large central obstacle is 4 grid squares ahead. Grid helps estimate corridor widths between obstacles.",
+  "overallConfidence": 0.8
+}

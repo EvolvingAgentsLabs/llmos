@@ -1,0 +1,7 @@
+Scenario: Empty Arena - Open Space Ahead
+Robot Position: (0, -2.0) facing North (rotation = PI/2)
+Map: 5m x 5m empty arena with boundary walls only
+
+I need the description of the scene for robot navigation, try to describe the objects, sizes, direction and distance.
+
+Context: The robot is at the bottom-center of an empty 5m x 5m arena, facing north. The floor has a grid pattern with lines every 0.5m (thicker lines every 1.0m). Only boundary walls are present at 2.5m in each direction. The robot should see mostly open floor with grid lines stretching ahead, and walls visible in the far distance.

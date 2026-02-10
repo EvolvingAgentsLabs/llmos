@@ -83,7 +83,11 @@ const DEFAULT_VLM_CONFIG: VLMVisionDetectorConfig = {
  * Structured prompt that instructs Qwen3-VL-8B to produce VisionFrame-compatible output.
  * The VLM replaces both MobileNet (object detection) and the instinct LLM (scene understanding).
  */
-const VISION_ANALYSIS_PROMPT = `You are a robot vision system. Analyze this camera frame and output structured JSON.
+const VISION_ANALYSIS_PROMPT = `You are a robot vision system analyzing camera frames for robot navigation. Describe the scene so the robot can navigate safely.
+
+I need the description of the scene for robot navigation — describe the objects, their sizes, direction relative to the robot, and estimated distance.
+
+IMPORTANT REFERENCE: The floor has a visible grid pattern. Grid lines are spaced 0.5 meters (50cm) apart, with thicker/darker lines every 1.0 meter. Use these grid lines as a distance reference to estimate how far objects are from the camera. Count the grid squares between the robot and an object to estimate distance (each square = 50cm).
 
 Detect all visible objects and estimate their properties. Output ONLY valid JSON matching this schema:
 
@@ -95,7 +99,9 @@ Detect all visible objects and estimate their properties. Output ONLY valid JSON
       "bbox": { "x": 0.0-1.0, "y": 0.0-1.0, "width": 0.0-1.0, "height": 0.0-1.0 },
       "estimatedDepthCm": 10-1000,
       "depthMethod": "vlm_estimate",
-      "region": "left|center|right"
+      "region": "left|center|right",
+      "sizeDescription": "approximate width x height in cm",
+      "appearance": "color, texture, shape, pattern description"
     }
   ],
   "scene": {
@@ -103,19 +109,22 @@ Detect all visible objects and estimate their properties. Output ONLY valid JSON
     "blocked": [],
     "floorVisiblePercent": 0.0-1.0,
     "environment": "indoor|outdoor|unknown",
-    "dominantSurface": "floor|carpet|ground|unknown"
+    "dominantSurface": "floor|carpet|ground|unknown",
+    "gridLinesVisible": true,
+    "gridSquareSize": "0.5m"
   },
-  "summary": "Brief natural language description of what you see"
+  "summary": "Detailed description of the scene for robot navigation, including objects, their sizes, directions and distances. Use grid lines as reference for distances."
 }
 
 Rules:
 - bbox coordinates are normalized 0-1 (x=0 is left edge, y=0 is top edge)
 - region: left (<0.33), center (0.33-0.66), right (>0.66) based on bbox center x
-- estimatedDepthCm: estimate how far each object is from the camera in centimeters
+- estimatedDepthCm: estimate how far each object is from the camera in centimeters — use the floor grid lines as reference (each grid square = 50cm)
 - openings: directions with clear paths for robot navigation
 - blocked: directions with obstacles within ~80cm
-- Include ALL visible objects, not just common ones
+- Include ALL visible objects, not just common ones — describe their shape, color, texture, and pattern
 - Read any text/signs visible in the scene
+- For each object, estimate its size using the grid squares as reference
 - Output ONLY the JSON, no markdown fences or explanation`;
 
 // ═══════════════════════════════════════════════════════════════════════════
