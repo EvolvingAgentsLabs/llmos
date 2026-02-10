@@ -560,11 +560,11 @@ function PiPCanvasCaptureRegistration() {
 
   useEffect(() => {
     if (gl.domElement) {
-      // Register this canvas as the source for robot POV captures
-      cameraCaptureManager.registerCanvas(gl.domElement);
+      // Register this canvas as the dedicated robot POV source (takes priority over main arena canvas)
+      cameraCaptureManager.registerRobotPovCanvas(gl.domElement);
     }
     return () => {
-      // Don't unregister on cleanup - main canvas will take over
+      cameraCaptureManager.unregisterRobotPovCanvas();
     };
   }, [gl]);
 

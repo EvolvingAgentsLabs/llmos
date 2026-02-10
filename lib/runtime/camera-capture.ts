@@ -94,44 +94,65 @@ class CameraCaptureManager {
   private captures: Map<string, CameraCapture> = new Map();
   private maxCaptures: number = 50;
   private canvasRef: HTMLCanvasElement | null = null;
+  private robotPovCanvasRef: HTMLCanvasElement | null = null;
   private listeners: Set<(capture: CameraCapture) => void> = new Set();
 
   /**
-   * Register the 3D canvas for capturing
+   * Register the main 3D canvas (arena view) as a fallback for capturing
    */
   registerCanvas(canvas: HTMLCanvasElement): void {
     this.canvasRef = canvas;
   }
 
   /**
-   * Unregister the canvas
+   * Unregister the main canvas
    */
   unregisterCanvas(): void {
     this.canvasRef = null;
   }
 
   /**
-   * Check if canvas is registered
+   * Register the robot's first-person POV canvas (takes priority over main canvas)
    */
-  hasCanvas(): boolean {
-    return this.canvasRef !== null;
+  registerRobotPovCanvas(canvas: HTMLCanvasElement): void {
+    this.robotPovCanvasRef = canvas;
   }
 
   /**
-   * Capture a screenshot from the current canvas state
+   * Unregister the robot POV canvas
+   */
+  unregisterRobotPovCanvas(): void {
+    this.robotPovCanvasRef = null;
+  }
+
+  /**
+   * Check if canvas is registered
+   */
+  hasCanvas(): boolean {
+    return this.robotPovCanvasRef !== null || this.canvasRef !== null;
+  }
+
+  /**
+   * Capture a screenshot from the current canvas state.
+   * For 'robot-pov' captures, prefers the dedicated robot POV canvas over the main arena canvas.
    */
   capture(
     type: CameraCapture['type'],
     robotPose?: CameraCapture['robotPose'],
     config?: CaptureConfig
   ): CameraCapture | null {
-    if (!this.canvasRef) {
+    // For robot-pov captures, prefer the dedicated robot POV canvas
+    const canvas = (type === 'robot-pov' && this.robotPovCanvasRef)
+      ? this.robotPovCanvasRef
+      : (this.robotPovCanvasRef || this.canvasRef);
+
+    if (!canvas) {
       console.warn('No canvas registered for camera capture');
       return null;
     }
 
     try {
-      const dataUrl = captureCanvasScreenshot(this.canvasRef, config);
+      const dataUrl = captureCanvasScreenshot(canvas, config);
       const capture: CameraCapture = {
         id: generateCaptureId(),
         timestamp: Date.now(),
