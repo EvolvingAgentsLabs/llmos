@@ -196,6 +196,22 @@ export class HALToolExecutor {
           args.speed as number | undefined
         );
 
+      case 'hal_rotate':
+        return this.hal!.locomotion.rotate(
+          args.direction as 'left' | 'right',
+          args.degrees as number
+        );
+
+      case 'hal_move_forward':
+        return this.hal!.locomotion.moveForward(
+          args.distance_cm as number
+        );
+
+      case 'hal_move_backward':
+        return this.hal!.locomotion.moveBackward(
+          args.distance_cm as number
+        );
+
       case 'hal_stop':
         return this.hal!.locomotion.stop();
 

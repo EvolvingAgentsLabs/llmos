@@ -45,6 +45,28 @@ export interface LocomotionInterface {
   moveTo(x: number, y: number, z: number, speed?: number): Promise<HALToolResult>;
 
   /**
+   * Rotate in place by specified degrees
+   * @param direction - Rotation direction: 'left' (counter-clockwise) or 'right' (clockwise)
+   * @param degrees - Degrees to rotate (1-360)
+   * @returns Result with final pose after rotation completes
+   */
+  rotate(direction: 'left' | 'right', degrees: number): Promise<HALToolResult>;
+
+  /**
+   * Move forward by specified distance in centimeters
+   * @param distanceCm - Distance to move forward (1-200)
+   * @returns Result with final pose, stops if obstacle detected
+   */
+  moveForward(distanceCm: number): Promise<HALToolResult>;
+
+  /**
+   * Move backward by specified distance in centimeters
+   * @param distanceCm - Distance to move backward (1-200)
+   * @returns Result with final pose, stops if obstacle detected
+   */
+  moveBackward(distanceCm: number): Promise<HALToolResult>;
+
+  /**
    * Stop all locomotion immediately
    */
   stop(): Promise<HALToolResult>;
