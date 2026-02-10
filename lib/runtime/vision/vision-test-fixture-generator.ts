@@ -113,15 +113,15 @@ class ZipBuilder {
     ev.setUint16(20, 0, true);                 // Comment length
 
     // Assemble: local headers + data, central directory, end record
-    const parts: (Uint8Array | ArrayBuffer)[] = [];
+    const parts: BlobPart[] = [];
     for (let i = 0; i < this.files.length; i++) {
-      parts.push(localHeaders[i]);
-      parts.push(this.files[i].data);
+      parts.push(localHeaders[i].buffer as ArrayBuffer);
+      parts.push(this.files[i].data.buffer as ArrayBuffer);
     }
     for (const ch of centralHeaders) {
-      parts.push(ch);
+      parts.push(ch.buffer as ArrayBuffer);
     }
-    parts.push(new Uint8Array(endRecord));
+    parts.push(endRecord);
 
     return new Blob(parts, { type: 'application/zip' });
   }
