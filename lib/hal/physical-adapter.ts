@@ -274,6 +274,84 @@ class PhysicalLocomotion implements LocomotionInterface {
     }
   }
 
+  async rotate(direction: 'left' | 'right', degrees: number): Promise<HALToolResult> {
+    try {
+      const response = await this.connection.sendCommand({
+        type: 'command',
+        command: 'rotate',
+        params: { direction, degrees },
+        timestamp: Date.now(),
+      });
+
+      return {
+        success: response.success,
+        data: response.data,
+        error: response.error,
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    }
+  }
+
+  async moveForward(distanceCm: number): Promise<HALToolResult> {
+    try {
+      const response = await this.connection.sendCommand({
+        type: 'command',
+        command: 'move_forward',
+        params: { distance_cm: distanceCm },
+        timestamp: Date.now(),
+      });
+
+      return {
+        success: response.success,
+        data: response.data,
+        error: response.error,
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    }
+  }
+
+  async moveBackward(distanceCm: number): Promise<HALToolResult> {
+    try {
+      const response = await this.connection.sendCommand({
+        type: 'command',
+        command: 'move_backward',
+        params: { distance_cm: distanceCm },
+        timestamp: Date.now(),
+      });
+
+      return {
+        success: response.success,
+        data: response.data,
+        error: response.error,
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+        mode: 'physical',
+      };
+    }
+  }
+
   async stop(): Promise<HALToolResult> {
     try {
       const response = await this.connection.sendCommand({

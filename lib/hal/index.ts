@@ -183,6 +183,53 @@ export const HAL_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'hal_rotate',
+    description: 'Rotate the robot in place by the specified degrees. The robot spins without moving forward or backward.',
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['left', 'right'],
+          description: 'Rotation direction: left (counter-clockwise) or right (clockwise)',
+        },
+        degrees: {
+          type: 'number',
+          description: 'Degrees to rotate (1-360)',
+        },
+      },
+      required: ['direction', 'degrees'],
+    },
+  },
+  {
+    name: 'hal_move_forward',
+    description: 'Move the robot forward by the specified distance in centimeters. Stops automatically if an obstacle is detected.',
+    parameters: {
+      type: 'object',
+      properties: {
+        distance_cm: {
+          type: 'number',
+          description: 'Distance to move forward in centimeters (1-200)',
+        },
+      },
+      required: ['distance_cm'],
+    },
+  },
+  {
+    name: 'hal_move_backward',
+    description: 'Move the robot backward by the specified distance in centimeters. Stops automatically if an obstacle is detected.',
+    parameters: {
+      type: 'object',
+      properties: {
+        distance_cm: {
+          type: 'number',
+          description: 'Distance to move backward in centimeters (1-200)',
+        },
+      },
+      required: ['distance_cm'],
+    },
+  },
+  {
     name: 'hal_stop',
     description: 'Stop all locomotion immediately',
     parameters: {

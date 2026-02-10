@@ -157,9 +157,24 @@ const COMMAND_SCHEMAS: Record<string, CommandSchema> = {
   hal_rotate: {
     name: 'hal_rotate',
     args: {
-      direction: { type: 'string', required: true, enum: ['left', 'right', 'clockwise', 'counterclockwise'] },
-      speed: { type: 'number', required: false, min: 0, max: 255, default: 50 },
-      degrees: { type: 'number', required: false, min: 0, max: 360 },
+      direction: { type: 'string', required: true, enum: ['left', 'right'] },
+      degrees: { type: 'number', required: true, min: 1, max: 360 },
+    },
+    isMovement: true,
+    requiresSensors: true,
+  },
+  hal_move_forward: {
+    name: 'hal_move_forward',
+    args: {
+      distance_cm: { type: 'number', required: true, min: 1, max: 200 },
+    },
+    isMovement: true,
+    requiresSensors: true,
+  },
+  hal_move_backward: {
+    name: 'hal_move_backward',
+    args: {
+      distance_cm: { type: 'number', required: true, min: 1, max: 200 },
     },
     isMovement: true,
     requiresSensors: true,

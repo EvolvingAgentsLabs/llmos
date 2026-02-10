@@ -96,6 +96,167 @@ class SimulationLocomotion implements LocomotionInterface {
     };
   }
 
+  async rotate(direction: 'left' | 'right', degrees: number): Promise<HALToolResult> {
+    try {
+      const startTime = Date.now();
+      const currentRot = this.simulator.getRotation();
+      const startYaw = currentRot.y;
+      const deltaRad = (Math.abs(degrees) * Math.PI) / 180;
+      const targetYaw = this.normalizeAngle(
+        startYaw + (direction === 'right' ? deltaRad : -deltaRad)
+      );
+
+      const FAST_PWM = 80;
+      const SLOW_PWM = 45;
+      const TOLERANCE = 0.087; // ~5 degrees
+      const SLOW_THRESHOLD = 0.26; // ~15 degrees
+      const POLL_MS = 10;
+      const TIMEOUT = 10000;
+
+      const leftSign = direction === 'right' ? -1 : 1;
+      const rightSign = direction === 'right' ? 1 : -1;
+
+      this.simulator.setMotors(leftSign * FAST_PWM, rightSign * FAST_PWM);
+      this.onUpdate();
+
+      while (Date.now() - startTime < TIMEOUT) {
+        await new Promise(r => setTimeout(r, POLL_MS));
+        const rot = this.simulator.getRotation();
+        const remaining = Math.abs(this.normalizeAngle(targetYaw - rot.y));
+
+        if (remaining < TOLERANCE) {
+          this.simulator.stopMotors();
+          this.onUpdate();
+          const finalRot = this.simulator.getRotation();
+          const finalPos = this.simulator.getPosition();
+          return {
+            success: true,
+            data: {
+              message: `Rotated ${direction} ${degrees}°`,
+              finalPose: { position: finalPos, rotation: finalRot },
+            },
+            timestamp: Date.now(),
+            mode: 'simulation',
+            executionTime: Date.now() - startTime,
+          };
+        }
+
+        if (remaining < SLOW_THRESHOLD) {
+          this.simulator.setMotors(leftSign * SLOW_PWM, rightSign * SLOW_PWM);
+        }
+      }
+
+      this.simulator.stopMotors();
+      this.onUpdate();
+      return {
+        success: false,
+        error: 'Rotation timed out',
+        timestamp: Date.now(),
+        mode: 'simulation',
+        executionTime: Date.now() - startTime,
+      };
+    } catch (error) {
+      this.simulator.stopMotors();
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+        mode: 'simulation',
+      };
+    }
+  }
+
+  async moveForward(distanceCm: number): Promise<HALToolResult> {
+    return this.executeLinearMove(distanceCm, 'forward');
+  }
+
+  async moveBackward(distanceCm: number): Promise<HALToolResult> {
+    return this.executeLinearMove(distanceCm, 'backward');
+  }
+
+  private async executeLinearMove(
+    distanceCm: number,
+    direction: 'forward' | 'backward'
+  ): Promise<HALToolResult> {
+    try {
+      const startTime = Date.now();
+      const startPos = this.simulator.getPosition();
+      const targetM = distanceCm / 100;
+      const pwm = direction === 'forward' ? 80 : -80;
+      const TOLERANCE = 0.01; // 1cm
+      const POLL_MS = 10;
+      const TIMEOUT = 10000;
+
+      this.simulator.setMotors(pwm, pwm);
+      this.onUpdate();
+
+      let lastDist = 0;
+      let stuckCount = 0;
+
+      while (Date.now() - startTime < TIMEOUT) {
+        await new Promise(r => setTimeout(r, POLL_MS));
+        const pos = this.simulator.getPosition();
+        const dx = pos.x - startPos.x;
+        const dy = pos.y - startPos.y;
+        const dz = pos.z - startPos.z;
+        const traveled = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (traveled >= targetM - TOLERANCE) {
+          this.simulator.stopMotors();
+          this.onUpdate();
+          return {
+            success: true,
+            data: {
+              message: `Moved ${direction} ${(traveled * 100).toFixed(1)}cm`,
+              finalPose: { position: pos, rotation: this.simulator.getRotation() },
+            },
+            timestamp: Date.now(),
+            mode: 'simulation',
+            executionTime: Date.now() - startTime,
+          };
+        }
+
+        // Stuck detection
+        if (Math.abs(traveled - lastDist) < 0.001) {
+          stuckCount++;
+          if (stuckCount > 50) {
+            this.simulator.stopMotors();
+            this.onUpdate();
+            return {
+              success: false,
+              error: `Blocked after ${(traveled * 100).toFixed(1)}cm`,
+              data: { finalPose: { position: pos, rotation: this.simulator.getRotation() } },
+              timestamp: Date.now(),
+              mode: 'simulation',
+              executionTime: Date.now() - startTime,
+            };
+          }
+        } else {
+          stuckCount = 0;
+          lastDist = traveled;
+        }
+      }
+
+      this.simulator.stopMotors();
+      this.onUpdate();
+      return {
+        success: false,
+        error: 'Movement timed out',
+        timestamp: Date.now(),
+        mode: 'simulation',
+        executionTime: Date.now() - startTime,
+      };
+    } catch (error) {
+      this.simulator.stopMotors();
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+        mode: 'simulation',
+      };
+    }
+  }
+
   async stop(): Promise<HALToolResult> {
     try {
       this.simulator.stopMotors();
@@ -114,6 +275,12 @@ class SimulationLocomotion implements LocomotionInterface {
         mode: 'simulation',
       };
     }
+  }
+
+  private normalizeAngle(angle: number): number {
+    while (angle > Math.PI) angle -= 2 * Math.PI;
+    while (angle < -Math.PI) angle += 2 * Math.PI;
+    return angle;
   }
 
   async getPose(): Promise<{
