@@ -1783,24 +1783,44 @@ export const FLOOR_MAPS = {
 
   /**
    * Standard 5m x 5m cube physics challenge
-   * Goal: Find the red cube, navigate to it, and push it to the green dock station
+   * Goal: Find the red cube, navigate to it, and push it close to the yellow cube
    * Features physics-based pushing mechanics with a pushable red cube (~robot size)
    * and a green dock zone target area in a visible corner
    */
   standard5x5CubePhysics: (): FloorMap => {
-    // Generate random starting position in empty space of the arena
-    // Avoid: red cube (0,0), green dock (2.2,-2.2), obstacles (-1.2,0.5) and (1.0,-0.8), walls
-    const exclusionZones = [
-      { x: 0, y: 0, radius: 0.6 },       // Red cube + margin
-      { x: 2.2, y: -2.2, radius: 0.7 },  // Green dock + margin
-      { x: -1.2, y: 0.5, radius: 0.5 },  // Obstacle 1 + margin
-      { x: 1.0, y: -0.8, radius: 0.5 },  // Obstacle 2 + margin
-    ];
     const margin = 0.4; // Margin from walls
     const minX = -2.5 + margin;
     const maxX = 2.5 - margin;
     const minY = -2.5 + margin;
     const maxY = 2.5 - margin;
+
+    // Generate random position for the Yellow Cube (target landmark)
+    // Must be away from Red Cube (0,0) and obstacles
+    const yellowCubeExclusions = [
+      { x: 0, y: 0, radius: 1.0 },       // Red cube + large margin to ensure separation
+      { x: -1.2, y: 0.5, radius: 0.5 },  // Obstacle 1 + margin
+      { x: 1.0, y: -0.8, radius: 0.5 },  // Obstacle 2 + margin
+    ];
+    let yellowX = 1.5, yellowY = 1.5;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      yellowX = minX + Math.random() * (maxX - minX);
+      yellowY = minY + Math.random() * (maxY - minY);
+      const yellowValid = yellowCubeExclusions.every(zone => {
+        const dx = yellowX - zone.x;
+        const dy = yellowY - zone.y;
+        return Math.sqrt(dx * dx + dy * dy) > zone.radius;
+      });
+      if (yellowValid) break;
+    }
+
+    // Generate random starting position in empty space of the arena
+    // Avoid: red cube (0,0), yellow cube, obstacles, walls
+    const exclusionZones = [
+      { x: 0, y: 0, radius: 0.6 },              // Red cube + margin
+      { x: yellowX, y: yellowY, radius: 0.6 },   // Yellow cube + margin
+      { x: -1.2, y: 0.5, radius: 0.5 },          // Obstacle 1 + margin
+      { x: 1.0, y: -0.8, radius: 0.5 },          // Obstacle 2 + margin
+    ];
 
     let startX = 0, startY = 0;
     let valid = false;
@@ -1836,7 +1856,7 @@ export const FLOOR_MAPS = {
       lines: [],
       checkpoints: [],
       pushableObjects: [
-        // Red cube in the center - similar size to the robot (0.08m body)
+        // Red cube in the center - the object to push
         {
           id: 'red-cube',
           x: 0,
@@ -1847,19 +1867,19 @@ export const FLOOR_MAPS = {
           color: '#e53935',    // Bright red
           label: 'Red Cube',
         },
-      ],
-      dockZones: [
-        // Green dock station - CV-optimized: green is equidistant from blue walls and red obstacles
+        // Yellow cube at random position - the target landmark
         {
-          id: 'green-dock',
-          x: 2.2,
-          y: -2.2,
-          width: 0.6,          // 60cm wide (larger for visibility)
-          height: 0.6,         // 60cm deep
-          color: '#2E7D32',    // Strong green - max separation from blue walls & red obstacles
-          label: 'Green Dock',
+          id: 'yellow-cube',
+          x: yellowX,
+          y: yellowY,
+          size: 0.10,          // 10cm cube
+          mass: 0.80,          // 800g - heavy so it stays in place as a landmark
+          friction: 0.9,       // High friction - resist being pushed
+          color: '#F9A825',    // Bright yellow
+          label: 'Yellow Cube',
         },
       ],
+      dockZones: [],
       startPosition: { x: startX, y: startY, rotation: startRotation },
     };
   },
