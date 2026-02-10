@@ -169,6 +169,10 @@ interface DiagnosticsState {
   physicsHistory: PhysicsSnapshot[];
   cameraHistory: CameraAnalysisSnapshot[];
 
+  // Latest camera image from robot POV (data URL)
+  latestCameraImageUrl: string | null;
+  latestCameraTimestamp: number;
+
   // Current health scores
   health: AgentHealthScores;
 
@@ -185,6 +189,7 @@ interface DiagnosticsState {
   addDecision: (snapshot: DecisionSnapshot) => void;
   addPhysics: (snapshot: PhysicsSnapshot) => void;
   addCamera: (snapshot: CameraAnalysisSnapshot) => void;
+  updateCameraImage: (imageDataUrl: string) => void;
   updateHealth: (scores: Partial<AgentHealthScores>) => void;
   addRepresentationIssue: (issue: string) => void;
   clear: () => void;
@@ -198,6 +203,8 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
   decisionHistory: [],
   physicsHistory: [],
   cameraHistory: [],
+  latestCameraImageUrl: null,
+  latestCameraTimestamp: 0,
   health: {
     perception: 50,
     decisionQuality: 50,
@@ -282,6 +289,10 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
     });
   },
 
+  updateCameraImage: (imageDataUrl: string) => {
+    set({ latestCameraImageUrl: imageDataUrl, latestCameraTimestamp: Date.now() });
+  },
+
   updateHealth: (scores) => {
     set((state) => {
       const health = { ...state.health, ...scores };
@@ -313,6 +324,8 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
       decisionHistory: [],
       physicsHistory: [],
       cameraHistory: [],
+      latestCameraImageUrl: null,
+      latestCameraTimestamp: 0,
       health: {
         perception: 50,
         decisionQuality: 50,

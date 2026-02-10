@@ -1734,6 +1734,11 @@ Respond with ONLY valid JSON.`;
         });
       }
 
+      // ── CAMERA IMAGE UPDATE ──────────────────────────────────────────
+      if (this.state.lastPicture?.imageDataUrl) {
+        diag.updateCameraImage(this.state.lastPicture.imageDataUrl);
+      }
+
       // ── CAMERA / PERSPECTIVE SNAPSHOT ────────────────────────────────
       const cameraAnalysis = analyzeCameraPerspective(
         perceptionSnapshot.sensors,
