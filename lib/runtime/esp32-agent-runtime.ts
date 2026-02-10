@@ -498,8 +498,8 @@ export const DEFAULT_AGENT_PROMPTS = {
 
 ## CAMERA-BASED NAVIGATION
 **You receive a camera image with EVERY sensor update.** Use it to:
-- **See the RED CUBE** - A bright red box you need to push. It looks like a red square/rectangle in your view.
-- **See the GREEN DOCK** - A bright green zone on the floor in a visible corner of the arena with green corner markers. This is where you push the cube to.
+- **Identify PUSHABLE OBJECTS** - Colored cubes or boxes in the arena (e.g., red, blue) that you may need to interact with based on your goal.
+- **Identify DOCK ZONES** - Colored zones on the floor in corners of the arena with corner markers (e.g., green, yellow). These may be target destinations.
 - **See WALLS** - Blue barriers with white chevron patterns at the edges of the arena.
 - **See OBSTACLES** - Red cylindrical obstacles with white diagonal stripes in the arena.
 - **Judge DISTANCES** - Objects that appear larger are closer. Objects that appear smaller are farther away.
@@ -507,17 +507,17 @@ export const DEFAULT_AGENT_PROMPTS = {
 ## STRICT BEHAVIOR CYCLE
 Follow this cycle EXACTLY:
 1. **OBSERVE** → Look at the camera image to understand your surroundings
-2. **ANALYZE** → Identify where the red cube, green dock, and obstacles are in the image
-3. **PLAN** → Decide how to approach: navigate toward the red cube, position behind it, then push toward dock
+2. **ANALYZE** → Identify objects, dock zones, and obstacles relevant to your goal in the image
+3. **PLAN** → Decide how to approach: navigate toward targets, position strategically, then execute your goal
 4. **ROTATE** → Turn to face target direction (if needed)
 5. **MOVE** → Go forward toward target
 6. **STOP** → Halt wheels, return to step 1
 
 ## PUSHING STRATEGY
-1. First, navigate TO the red cube
-2. Position yourself on the OPPOSITE side of the cube from the green dock
-3. Drive FORWARD to push the cube toward the green dock
-4. The dock is in a corner of the arena - look for the bright green zone with corner markers
+1. First, navigate TO the target object specified in your goal
+2. Position yourself on the OPPOSITE side of the object from the target dock zone
+3. Drive FORWARD to push the object toward the dock zone
+4. Dock zones are in corners of the arena - look for colored zones with corner markers
 
 ## REQUIRED: Structured JSON Response
 EVERY response MUST be valid JSON with this EXACT structure:
@@ -554,10 +554,10 @@ EVERY response MUST be valid JSON with this EXACT structure:
 ## CRITICAL: USE THE CAMERA IMAGE
 - **ALWAYS look at the attached camera image** before deciding your action
 - The image shows your first-person view from the robot's perspective
-- If you see the RED CUBE in the image, drive TOWARD it
-- If you see the GREEN DOCK, remember its location for pushing
+- If you see an object or zone relevant to your goal, drive TOWARD it
+- If you see a dock zone relevant to your goal, remember its location
 - If you see a WALL or OBSTACLE ahead, turn to avoid it
-- If you don't see the red cube, ROTATE to scan the environment
+- **If you are not able to gather enough information to make a decision to achieve your current goal, you MUST drive forward to explore new areas. NEVER remain stopped without a clear reason.**
 
 ## LEARNING FROM PREVIOUS ACTIONS
 **CRITICAL: Analyze your conversation history before deciding!**
@@ -565,15 +565,15 @@ EVERY response MUST be valid JSON with this EXACT structure:
 - If you have been rotating in the same direction multiple times → try the OPPOSITE rotation
 - Compare what you see in the camera with what you expected
 - NEVER repeat the exact same wheel_commands if they failed to make progress
-- If stuck, try: rotate 90 degrees, then reassess from camera
+- If stuck, try: rotate to scan, then drive FORWARD to explore new territory
 
 ## CRITICAL RULES
 1. Output ONLY valid JSON - no extra text before or after
 2. ALWAYS base decisions on the CAMERA IMAGE - it is your primary sensor
-3. Drive TOWARD the red cube when you see it - do NOT turn away from it
-4. Consider GOAL when planning direction
+3. Drive TOWARD objects relevant to your goal - do NOT turn away from them
+4. Consider your GOAL when planning direction
 5. LEARN from failures - if an action didn't work, DO SOMETHING DIFFERENT
-6. Keep moving! Stopping without reason wastes time.`,
+6. Keep moving! If you cannot gather enough information to make a decision to achieve your goal, EXPLORE by driving forward. Stopping wastes time.`,
 
   reactive: `You are a robot controller with a camera, two wheels, and MEMORY. You maintain a mental grid map of the world.
 
@@ -758,6 +758,7 @@ export class ESP32AgentRuntime {
   private previousPosition: { x: number; y: number } | null = null;
   private previousHeading: number | null = null;
   private stuckCycleCount = 0;
+  private lastForcedAction: 'rotation' | 'forward' | null = null;
 
   constructor(config: ESP32AgentConfig) {
     this.config = {
@@ -1005,6 +1006,7 @@ export class ESP32AgentRuntime {
           this.stuckCycleCount++;
         } else {
           this.stuckCycleCount = 0;
+          this.lastForcedAction = null;
         }
       }
       this.previousPosition = currentPos;
@@ -1061,21 +1063,35 @@ export class ESP32AgentRuntime {
       // STEP 3: Parse and execute tool calls
       let toolCalls = this.parseToolCalls(llmResponse);
 
-      // STEP 3.1: Force a controlled 45° rotation if robot is truly stuck and LLM returned stop commands
+      // STEP 3.1: Force movement if robot is truly stuck and LLM returned stop commands
+      // Alternates between rotation and forward movement to act as a simple exploration state machine
       let controlledRotationDone = false;
       if (this.stuckCycleCount >= 3) {
         const wheelCalls = toolCalls.filter(tc => tc.tool === 'left_wheel' || tc.tool === 'right_wheel');
         const allStop = wheelCalls.length === 0 || wheelCalls.every(tc => tc.args.direction === 'stop');
         if (allStop) {
-          this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation`, 'warn');
-          const rotateLeft = (this.stuckCycleCount % 6) < 3;
-          await this.executeControlledRotation(45, rotateLeft ? 'left' : 'right');
-          controlledRotationDone = true;
-          // Record forced rotation in tool calls for history
-          toolCalls = [
-            { tool: 'left_wheel', args: { direction: rotateLeft ? 'backward' : 'forward' } },
-            { tool: 'right_wheel', args: { direction: rotateLeft ? 'forward' : 'backward' } },
-          ];
+          if (this.lastForcedAction === 'rotation') {
+            // Already rotated last time — now force forward movement to explore
+            this.log(`Stuck for ${this.stuckCycleCount} cycles after rotation - forcing forward movement`, 'warn');
+            toolCalls = [
+              { tool: 'left_wheel', args: { direction: 'forward' } },
+              { tool: 'right_wheel', args: { direction: 'forward' } },
+            ];
+            this.lastForcedAction = 'forward';
+            // Don't set controlledRotationDone — let normal execution drive the wheels forward
+          } else {
+            // Force a controlled 45° rotation
+            this.log(`Stuck for ${this.stuckCycleCount} cycles with stop commands - forcing controlled 45° rotation`, 'warn');
+            const rotateLeft = (this.stuckCycleCount % 6) < 3;
+            await this.executeControlledRotation(45, rotateLeft ? 'left' : 'right');
+            controlledRotationDone = true;
+            // Record forced rotation in tool calls for history
+            toolCalls = [
+              { tool: 'left_wheel', args: { direction: rotateLeft ? 'backward' : 'forward' } },
+              { tool: 'right_wheel', args: { direction: rotateLeft ? 'forward' : 'backward' } },
+            ];
+            this.lastForcedAction = 'rotation';
+          }
         }
       }
 
