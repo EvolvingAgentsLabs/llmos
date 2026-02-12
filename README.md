@@ -1,221 +1,311 @@
-# LLMos: The Operating System for Physical AI Agents
+# LLMos
+
+## Loop-Native Bytecode for Physical AI Agents
 
 <div align="center">
 
-![LLMos Desktop](https://img.shields.io/badge/Platform-Electron%20%7C%20Web-blue)
-![Stack](https://img.shields.io/badge/Stack-Next.js%20%7C%20Python%20%7C%20WASM-yellow)
-![Hardware](https://img.shields.io/badge/Hardware-ESP32%20S3-green)
-![Brain](https://img.shields.io/badge/Brain-Dual%20Brain%20RSA-red)
+![Status](https://img.shields.io/badge/Status-Active%20Research-red)
+![Hardware](https://img.shields.io/badge/Target-ESP32%20S3-green)
+![Runtime](https://img.shields.io/badge/Runtime-Distributed%20LLMBytecode-blue)
+![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)
 
-**A hybrid runtime environment where AI agents are first-class citizens that can perceive, reason, act on hardware, and evolve over time — all running locally, no cloud required.**
+**LLMos explores a new execution model for physical AI agents:
+LLMs generating loop-native bytecode that drives real microcontrollers.**
 
 </div>
 
 ---
 
-## What is LLMos?
+# ⚠️ Project Status
 
-LLMos is an "Operating System" designed for the era of physical AI. Unlike traditional robotics frameworks (ROS) or simple LLM chatbots, LLMos treats **Agentic Behaviors** as installable software.
+LLMos is under **active development and architectural refactoring**.
 
-It allows you to program robots using natural language, compiles those intentions into executable "Skills," and provides a **Dual-Brain** cognitive architecture that thinks deeply and reacts instantly.
+* The repository contains working simulation, firmware, HAL, and dual-brain runtime components.
+* The structured protocol currently used between host and microcontroller acts as a **distributed LLM bytecode runtime**.
+* The architecture is evolving toward a formalized embedded bytecode interpreter and eventually direct binary generation.
+* Some parts of the repository reflect earlier iterations and may not match the latest architectural direction.
 
-### Key Capabilities
-
-*   **Natural Language Programming:** Type "Create a robot that avoids walls" and the system generates the code, HAL bindings, and logic.
-*   **Dual-Brain Architecture:** Fast instinct brain ([Qwen3-VL-8B](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) multimodal single-pass, ~200-500ms) handles reactive perception and avoidance. Deep planner brain (Qwen3-VL-8B + [RSA](https://arxiv.org/html/2509.26626v1), 3-8s) handles goal planning and exploration.
-*   **Zero Cloud Dependency:** Runs fully offline on a host computer with GPU. No API costs. No latency.
-*   **Markdown-as-Code:** Agents, Skills, and Tools are defined in human-readable Markdown files that serve as both documentation and executable logic.
-*   **Hybrid Runtime:** Runs entirely in the browser (via WebAssembly/Pyodide), on Desktop (Electron), or deploys to physical hardware (ESP32).
-*   **Swarm Intelligence:** Multiple robots merge world models via [RSA consensus](https://arxiv.org/html/2509.26626v1) — the "MapReduce for physical intelligence."
-*   **Cognitive World Model:** A persistent spatial-temporal grid that allows robots to track object permanence and detect changes over time.
+This is a **research-grade system**, not a production robotics framework.
 
 ---
 
-## Dual-Brain Architecture
+# What Is LLMos?
 
-```mermaid
-graph TB
-    subgraph "Sensing"
-        CAM[Camera]
-        DIST[Distance Sensors]
-    end
+LLMos is an experimental operating environment for **LLM-driven physical agents**.
 
-    subgraph "Perception + Cognition (Unified VLM)"
-        CAM --> VLM[Qwen3-VL-8B-Instruct<br/>Direct image + text<br/>~200-500ms]
-        DIST --> VLM
-        VLM --> VF[VisionFrame JSON<br/>objects + depth + scene + reasoning]
-        VF --> INSTINCT[INSTINCT Brain<br/>Reactive rules + VLM single-pass<br/>~200-500ms]
-        VF --> PLANNER[PLANNER Brain<br/>Qwen3-VL-8B + RSA<br/>3-8 seconds]
-        INSTINCT --> |Escalate when stuck<br/>or complex goal| PLANNER
-    end
+It is built around a simple but non-traditional thesis:
 
-    subgraph "Action"
-        INSTINCT --> HAL[HAL]
-        PLANNER --> HAL
-        HAL --> SIM[Simulator]
-        HAL --> ESP[ESP32 Robot]
-    end
-```
+> Large Language Models should generate deterministic execution instructions for physical agents — not high-level human-oriented code.
 
-The **Qwen3-VL-8B-Instruct** model serves as a unified vision-language backbone — it processes raw camera frames directly (no separate object detector needed), producing structured VisionFrame data with scene understanding, depth estimates, and OCR. This replaces the previous MobileNet SSD + Qwen3-4B two-model pipeline with a single multimodal model.
-
-The **Instinct** brain handles immediate decisions: obstacle avoidance, wall following, simple tracking. The **Planner** brain handles deep reasoning: exploration strategy, skill generation, multi-robot coordination.
-
-[RSA](https://arxiv.org/html/2509.26626v1) (Recursive Self-Aggregation) enables the local model (Qwen3-VL-8B, 8B parameters) to match the reasoning quality of much larger cloud models like o3-mini and DeepSeek-R1 by recursively aggregating multiple candidate reasoning chains.
-
----
-
-## Tech Stack
-
-*   **Frontend/Desktop:** Next.js 14, Electron, Tailwind CSS, React Flow.
-*   **Simulation:** Three.js, React-Three-Fiber.
-*   **Runtime Logic:** TypeScript, Python (via Pyodide), WebAssembly (@wasmer/sdk).
-*   **Intelligence:** [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) (unified vision-language model) + [RSA](https://arxiv.org/html/2509.26626v1) (local).
-*   **Storage:** Browser-native Virtual File System (VFS) with LightningFS.
-*   **Hardware:** ESP32-S3 (C++ Firmware, WASM runtime).
-
----
-
-## Getting Started
-
-### Prerequisites
-*   Node.js 18+
-*   Python 3.10+ (for backend services/compilation)
-*   Git
-*   GPU with 8GB+ VRAM (for local Qwen3-VL-8B inference — optional, cloud API via OpenRouter available at $0.08/M input)
-
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/EvolvingAgentsLabs/llmos
-    cd llmos
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-
-3.  **Run in Development Mode:**
-
-    *   **Web Mode (Simulator Only):**
-        ```bash
-        npm run dev
-        ```
-    *   **Desktop Mode (Electron + Hardware Access):**
-        ```bash
-        npm run electron:dev
-        ```
-
-4.  **Setup Keys:**
-    Upon launch, the setup wizard will ask for your LLM API Key (OpenRouter, Gemini, or OpenAI). This key is stored locally in your browser/desktop storage and is never sent to our servers. For fully offline operation, set up a local Qwen3-VL-8B server (see ROADMAP.md Phase 2).
-
----
-
-## Core Architecture
-
-LLMos is built on five pillars that distinguish it from standard agent frameworks.
-
-### 1. Dual-Brain Cognitive Architecture (`/lib/runtime`)
-Two cognitive layers run in parallel:
-*   **Instinct Brain** — Reactive rules + single-pass Qwen3-VL-8B (~200-500ms). Handles obstacle avoidance, wall following, simple tracking.
-*   **Planner Brain** — RSA-enhanced Qwen3-VL-8B (3-8s). Handles exploration planning, skill generation, swarm coordination.
-*   **Unified VLM Vision** — Qwen3-VL-8B processes raw camera frames directly (no separate object detector). Produces structured VisionFrame JSON with scene understanding, depth estimation, and OCR.
-
-### 2. The Volume System (`/volumes`)
-The file system is the database. Data is organized into hierarchical volumes:
-*   **System Volume:** Read-only core agents, Standard Library tools, and certified Skills.
-*   **Team Volume:** Shared skills and knowledge patterns discovered by the "Dreaming Engine."
-*   **User Volume:** Your local projects, custom agents, and interaction traces.
-
-### 3. HAL (Hardware Abstraction Layer) (`/lib/hal`)
-The HAL allows the exact same Agent code to run in the 3D Simulator and on physical robots.
-*   **Tools:** Defined in Markdown (e.g., `hal_drive.md`, `hal_vision_scan.md`).
-*   **Validation:** A `CommandValidator` intercepts LLM instructions to ensure physical safety before they reach the motors.
-
-### 4. The Applet System (`/components/applets`)
-LLMos includes a dynamic UI system called "Applets." These are micro-applications that Agents can generate on the fly to help users complete tasks.
-
-### 5. Dreaming & Evolution (`/lib/evolution`)
-Robots improve while idle. The "Dreaming Engine" analyzes `BlackBox` recordings of failed interactions:
-1.  **Replay:** Simulates the failure scenario in Three.js.
-2.  **Mutate:** The LLM generates variations of the code to fix the issue.
-3.  **Evaluate:** Successful mutations are patched into the Skill Markdown file.
-
----
-
-## Project Structure
+Instead of:
 
 ```
-llmos/
-├── app/                  # Next.js App Router (UI Pages & API Routes)
-├── components/           # React Components
-│   ├── applets/          # Dynamic Applet UI System
-│   ├── canvas/           # Three.js Visualization & Sim
-│   ├── chat/             # Agent Chat Interface
-│   ├── robot/            # Robot Control Panels
-│   └── visualization/    # Decision Trees & Flow Graphs
-├── electron/             # Electron Main Process & Native Bridges
-├── firmware/             # ESP32 C++ Code & WASM Runtimes
-├── lib/                  # Core Logic
-│   ├── agents/           # Agent Orchestrators & Compilers
-│   ├── evolution/        # Dreaming Engine & Self-Correction
-│   ├── hal/              # Hardware Abstraction Layer
-│   ├── kernel/           # OS Boot Logic & Process Mgmt
-│   ├── runtime/          # Cognitive Runtimes
-│   │   ├── rsa-engine.ts            # RSA + multimodal RSA algorithm
-│   │   ├── dual-brain-controller.ts # Instinct + Planner orchestration
-│   │   ├── jepa-mental-model.ts     # JEPA-inspired abstract state
-│   │   ├── world-model.ts           # Grid-based spatial model
-│   │   └── vision/
-│   │       ├── vlm-vision-detector.ts  # Qwen3-VL-8B unified vision detector
-│   │       └── mobilenet-detector.ts   # Vision types + utility functions
-│   └── virtual-fs.ts     # In-browser File System
-├── volumes/              # The "Brain" (Markdown Knowledge Base)
-│   ├── system/           # Built-in Agents & Skills
-│   └── user/             # User Data (Local)
-└── __tests__/            # Integration Tests
+Intent → LLM → Python/C → Compiler → Binary → Robot
 ```
 
----
+LLMos explores:
 
-## Hardware Setup (Optional)
+```
+Intent → LLM → LLMBytecode → Runtime → Robot
+```
 
-To use LLMos with real hardware, you need an **ESP32-S3**.
-
-**Basic Wiring:**
-*   **Motors:** GPIO 12/13/14/15 -> Motor Driver
-*   **Sensors:** GPIO 16/17 -> HC-SR04 (Ultrasonic)
-*   **Connection:** Connect via USB. The Electron app will auto-detect the serial port.
-
-*See `docs/hardware/STANDARD_ROBOT_V1.md` for full schematics.*
+Where the runtime executes a structured, loop-native instruction protocol that drives real hardware.
 
 ---
 
-## Research References
+# Core Idea: Loop-Native LLM Bytecode
 
-This project builds on:
+The system currently operates as a **distributed virtual machine**:
 
-| Paper / Model | Role in LLMos |
-|-------|---------------|
-| [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) | Unified vision-language backbone — perceives images + reasons in one pass |
-| [RSA: Recursive Self-Aggregation Unlocks Deep Thinking in LLMs](https://arxiv.org/html/2509.26626v1) | Planner brain — enables local model to match cloud-scale reasoning |
-| [JEPA: A Path Towards Autonomous Machine Intelligence](https://openreview.net/forum?id=BZ5a1r-kVsf) | Mental model architecture — predict-before-act paradigm |
-| [MobileNet V2](https://arxiv.org/abs/1801.04381) | Vision type definitions and depth estimation utilities |
+1. The LLM runs on a host machine.
+2. It generates structured instructions.
+3. These instructions are transmitted to the microcontroller.
+4. The microcontroller runtime interprets and executes them.
+5. Sensor state and execution results are fed back.
+6. The loop repeats.
+
+This structured instruction protocol already functions as:
+
+> **LLMBytecode v0 (Distributed Runtime Version)**
+
+It contains:
+
+* Instruction semantics
+* Variable updates
+* State transitions
+* Closed-loop execution structure
+* External input injection (sensor readings)
+* Deterministic execution on the MCU
+
+The protocol is not human-readable high-level code.
+It is not C.
+It is not assembly.
+It behaves as **bytecode executed by an embedded runtime**.
 
 ---
 
-## Contributing
+# Why This Matters
 
-We are in **Phase 1 (Foundation)** heading into **Phase 2 (Dual-Brain & Local Intelligence)**.
+Traditional programming languages assume open-loop execution:
 
-1.  Check `ROADMAP.md` for current priorities.
-2.  Look for "Good First Issues" related to UI polish or new HAL tool definitions.
-3.  Ensure all new logic includes tests in `__tests__/`.
+```
+Write code → Compile → Run
+```
+
+Physical agents operate in closed loops:
+
+```
+Perceive → Update State → Decide → Act → Observe → Repeat
+```
+
+LLMos encodes this loop explicitly.
+
+Each execution cycle includes:
+
+* Goal
+* History
+* Internal State
+* World Model
+* Sensor Inputs
+* Previous Tool Results
+* Deterministic Fallback Logic
+
+The LLM emits the next instruction frame.
+The firmware executes deterministically.
+The environment feeds back.
+The loop continues.
+
+This loop-native execution model is the foundation for the next step:
+formal bytecode and eventual binary emission.
 
 ---
 
-## License
+# Current Architecture
 
-Apache 2.0 - Open Source. Built by **Evolving Agents Labs**.
+## 1. Distributed LLMBytecode Runtime (v0)
+
+* Structured instruction protocol over serial
+* Microcontroller runtime interprets instructions
+* Deterministic safety validation before actuation
+* Host-side LLM inference
+
+This already behaves as a distributed VM.
+
+---
+
+## 2. Dual-Brain Cognitive System
+
+LLMos uses a two-layer reasoning model:
+
+**Instinct Brain**
+
+* Fast multimodal inference (~200–500ms)
+* Reactive behavior (avoidance, tracking)
+
+**Planner Brain**
+
+* RSA-enhanced deeper reasoning (3–8s)
+* Strategy generation
+* Multi-step planning
+
+Both feed into the bytecode generation layer.
+
+---
+
+## 3. Hardware Abstraction Layer (HAL)
+
+The HAL ensures:
+
+* The same instructions work in simulation and hardware
+* Motor limits and safety constraints are validated
+* Deterministic enforcement before actuation
+
+---
+
+## 4. Firmware Runtime (ESP32-S3)
+
+The microcontroller binary:
+
+* Does NOT run the LLM
+* Runs an execution runtime
+* Interprets structured LLM instructions
+* Maintains execution state
+* Communicates feedback to host
+
+This is the embryo of the future embedded bytecode interpreter.
+
+---
+
+# Technical Stack (Current Codebase)
+
+Frontend / Desktop:
+
+* Next.js
+* Electron
+* Three.js Simulation
+
+Runtime:
+
+* TypeScript
+* Python (host inference)
+* WebAssembly modules
+
+Firmware:
+
+* C++ (ESP32-S3)
+* Serial protocol runtime
+* Deterministic validation layer
+
+LLM:
+
+* Qwen3-VL-8B (multimodal)
+* RSA reasoning engine
+
+---
+
+# Roadmap
+
+## Phase 0 — Distributed Instruction Runtime (Current)
+
+LLM → Structured Protocol → Firmware Runtime
+✅ Implemented
+
+The protocol acts as LLMBytecode v0.
+
+---
+
+## Phase 1 — Formal LLMBytecode Specification
+
+* Define minimal instruction categories
+* Formal grammar/schema
+* State model definition
+* Validation rules
+* Safety invariants
+
+🔄 In Progress
+
+---
+
+## Phase 2 — Embedded LLMBytecode Interpreter
+
+* Move structured execution into a formal VM
+* Define opcode table
+* Replace ad-hoc protocol logic
+* Deterministic execution core on MCU
+
+Planned
+
+---
+
+## Phase 3 — Static LLMBytecode Compilation
+
+* Pre-validated instruction blocks
+* Reduced runtime overhead
+* Safer bounded execution frames
+
+Planned
+
+---
+
+## Phase 4 — Native Binary Generation
+
+* LLM emits machine-level instruction blocks
+* Remove intermediate human-oriented code generation
+* Direct firmware synthesis
+
+Research Stage
+
+---
+
+# Research Direction
+
+LLMos sits at the intersection of:
+
+* LLM-native programming languages
+* Deterministic embedded runtimes
+* Closed-loop embodied agents
+* Edge inference systems
+* Formal safety constraints for AI-driven hardware
+
+The long-term objective is not to replace C with English.
+
+It is to define:
+
+> An agent-native execution model where LLMs generate deterministic machine-driving instructions.
+
+---
+
+# Contributing
+
+This is a research system.
+
+Expect:
+
+* Architectural changes
+* Refactors
+* Breaking changes
+* Experimental modules
+
+Areas of contribution:
+
+* Instruction set formalization
+* Embedded interpreter design
+* Firmware safety invariants
+* Loop validation systems
+* Bytecode specification
+* Testing & simulation consistency
+
+---
+
+# License
+
+Apache 2.0
+Built by Evolving Agents Labs.
+
+---
+
+If you want, next we can:
+
+* Write a separate `LLMBYTECODE_SPEC.md`
+* Or define the minimal opcode table (first concrete ISA draft)
+* Or formalize the execution frame schema (which is the real innovation)
