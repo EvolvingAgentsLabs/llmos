@@ -95,7 +95,7 @@ export class GitService {
       },
       body: JSON.stringify({
         name: repo.repo,
-        description: `LLMunix ${repo.repo.includes('user') ? 'User' : repo.repo.includes('team') ? 'Team' : 'System'} Volume`,
+        description: `LLMos ${repo.repo.includes('user') ? 'User' : repo.repo.includes('team') ? 'Team' : 'System'} Volume`,
         private: true,
         auto_init: true,
       }),
@@ -218,7 +218,7 @@ export class GitService {
       });
     }
 
-    message += `\n🤖 LLMunix Context Memory`;
+    message += `\n🤖 LLMos Context Memory`;
 
     return message;
   }

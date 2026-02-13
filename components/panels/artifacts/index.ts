@@ -1,5 +1,5 @@
 /**
- * Artifact Renderers for LLMunix
+ * Artifact Renderers for LLMos
  *
  * These components render different types of outputs:
  * - PlotRenderer: Charts and graphs (line, scatter, bar)

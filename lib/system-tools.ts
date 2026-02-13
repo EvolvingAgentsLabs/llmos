@@ -1,5 +1,5 @@
 /**
- * System Tools for LLMunix SystemAgent
+ * System Tools for LLMos SystemAgent
  *
  * Provides file system, Python execution, sub-agent delegation, and orchestration tools
  */
