@@ -31,6 +31,9 @@ export interface AgentFrontmatter {
   evolves_from?: string | null;
   version?: string;
   created_at?: string;
+  /** Origin of this agent: 'created' or 'evolved_from: /path/to/parent.md' */
+  origin?: string;
+  category?: string;
 }
 
 export interface LoadedAgent {
@@ -338,6 +341,7 @@ export async function invokePlanningAgent(
  */
 export async function discoverAgents(basePath: string = 'system/agents'): Promise<string[]> {
   // Known system agents (since we can't list directory via fetch)
+  // Must include all 14+ agents that ship with the system
   const knownAgents = [
     'SystemAgent.md',
     'PatternMatcherAgent.md',
@@ -349,6 +353,10 @@ export async function discoverAgents(basePath: string = 'system/agents'): Promis
     'UXDesigner.md',
     'AppletDebuggerAgent.md',
     'ProjectAgentPlanner.md',
+    'ExecutionStrategyAgent.md',
+    'ReactiveRobotAgent.md',
+    'RobotAIAgent.md',
+    'StructuredRobotAgent.md',
   ];
 
   const discoveredAgents: string[] = [];

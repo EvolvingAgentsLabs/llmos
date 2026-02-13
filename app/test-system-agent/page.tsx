@@ -59,7 +59,7 @@ export default function TestSystemAgentPage() {
       <div className="max-w-6xl mx-auto">
         <h1 className="heading-1 mb-2">SystemAgent Test Page</h1>
         <p className="text-fg-secondary mb-8">
-          Test the LLMunix SystemAgent orchestrator - creates projects, executes Python, saves to virtual filesystem
+          Test the LLMos SystemAgent orchestrator - creates projects, executes Python, saves to virtual filesystem
         </p>
 
         {/* Input Section */}
