@@ -87,8 +87,9 @@ This is a **research-grade system**, not a production robotics framework.
 
 Every LLM robotics project today follows the same pipeline:
 
-```
-Human Intent → LLM → Python/C → Compiler → Binary → Robot
+```mermaid
+graph LR
+    A["Human Intent"] --> B["LLM"] --> C["Python/C"] --> D["Compiler"] --> E["Binary"] --> F["Robot"]
 ```
 
 This pipeline was designed for humans writing code. The LLM is forced to produce artifacts optimized for human readability — classes, inheritance, design patterns — then a compiler translates them into what the machine actually needs.
@@ -96,13 +97,15 @@ This pipeline was designed for humans writing code. The LLM is forced to produce
 LLMos inverts this at two levels:
 
 **For agent development** (the OS layer):
-```
-Human Intent → Claude Opus 4.6 → Markdown Agents → Evolving Behaviors → Deployment
+```mermaid
+graph LR
+    A["Human Intent"] --> B["Claude Opus 4.6"] --> C["Markdown Agents"] --> D["Evolving Behaviors"] --> E["Deployment"]
 ```
 
 **For agent execution** (the runtime layer):
-```
-Sensor State → Qwen3-VL-8B → LLMBytecode → Firmware Runtime → Actuators → Loop
+```mermaid
+graph LR
+    A["Sensor State"] --> B["Qwen3-VL-8B"] --> C["LLMBytecode"] --> D["Firmware Runtime"] --> E["Actuators"] --> F["Loop"]
 ```
 
 The development LLM thinks in markdown — agents, skills, and memory are all text files it can read, write, and improve. The runtime LLM thinks in structured instructions — deterministic bytecode that a microcontroller executes directly.
@@ -244,15 +247,15 @@ Skills flow upward through the volumes as they prove reliable. A pattern discove
 
 The LLMos kernel is not compiled code. It is a set of markdown files that define how the system behaves:
 
-```
-public/system/kernel/
-├── config.md              # Runtime parameters, limits, feature flags
-├── orchestration-rules.md # How tasks are decomposed and executed
-├── evolution-rules.md     # How patterns are detected and skills generated
-├── memory-schema.md       # How memories are structured and queried
-├── tool-registry.md       # Available tools and usage patterns
-├── concept-to-tool-map.md # Maps abstract concepts to concrete tools
-└── trace-linking.md       # Execution trace correlation rules
+```mermaid
+graph TD
+    ROOT["public/system/kernel/"] --> CONFIG["config.md<br/>Runtime parameters, limits, feature flags"]
+    ROOT --> ORCH["orchestration-rules.md<br/>How tasks are decomposed and executed"]
+    ROOT --> EVO["evolution-rules.md<br/>How patterns are detected and skills generated"]
+    ROOT --> MEM["memory-schema.md<br/>How memories are structured and queried"]
+    ROOT --> TOOL["tool-registry.md<br/>Available tools and usage patterns"]
+    ROOT --> CONCEPT["concept-to-tool-map.md<br/>Maps abstract concepts to concrete tools"]
+    ROOT --> TRACE["trace-linking.md<br/>Execution trace correlation rules"]
 ```
 
 The Development LLM reads these files before every task. Changes take effect immediately — edit a rule, and the next execution follows it. The kernel supports controlled self-modification: skills are auto-generated, but kernel changes require human approval.
@@ -348,51 +351,50 @@ This is not human-readable high-level code. It is not C. It is not assembly. It 
 
 Every cycle, the Runtime LLM receives a serialized execution frame and emits the next one. The frame is the atomic unit of LLMos computation:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    EXECUTION FRAME                       │
-│                                                         │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │  GOAL   │ │ HISTORY │ │  STATE   │ │ WORLD MODEL │ │
-│  └─────────┘ └─────────┘ └──────────┘ └─────────────┘ │
-│  ┌──────────────────┐ ┌──────────────────────────────┐ │
-│  │  SENSOR READINGS │ │  PREVIOUS ACTION RESULTS     │ │
-│  └──────────────────┘ └──────────────────────────────┘ │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  FALLBACK STATE (deterministic error recovery)   │  │
-│  └──────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                    LLM INFERENCE
-                   (Qwen3-VL-8B)
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    OUTPUT FRAME                           │
-│                                                         │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  NEXT INSTRUCTIONS (commands + parameters)       │  │
-│  └──────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  STATE PREDICTIONS (updated beliefs)             │  │
-│  └──────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  WORLD MODEL UPDATE (spatial/environmental)      │  │
-│  └──────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
-                         │
-                    FIRMWARE RUNTIME
-                      (ESP32-S3)
-                         │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-     ┌────────────────┐   ┌────────────────┐
-     │ ACTUATORS       │   │ SENSORS        │
-     │ (motor neurons) │   │ (sensory       │
-     │                 │   │  neurons)       │
-     └────────────────┘   └───────┬────────┘
-                                  │
-                         [Feed into next frame]
+```mermaid
+graph TB
+    subgraph EXEC_FRAME["EXECUTION FRAME"]
+        direction LR
+        GOAL["Goal"]
+        HISTORY["History"]
+        STATE["State"]
+        WORLD["World Model"]
+    end
+
+    subgraph EXEC_FRAME_2["EXECUTION FRAME (cont.)"]
+        direction LR
+        SENSORS_IN["Sensor Readings"]
+        PREV_RESULTS["Previous Action Results"]
+    end
+
+    FALLBACK["Fallback State<br/>(deterministic error recovery)"]
+
+    LLM_INF["LLM INFERENCE<br/>(Qwen3-VL-8B)"]
+
+    subgraph OUT_FRAME["OUTPUT FRAME"]
+        direction TB
+        INSTRUCTIONS["Next Instructions<br/>(commands + parameters)"]
+        PREDICTIONS["State Predictions<br/>(updated beliefs)"]
+        WORLD_UPDATE["World Model Update<br/>(spatial/environmental)"]
+    end
+
+    FW["FIRMWARE RUNTIME<br/>(ESP32-S3)"]
+
+    ACTUATORS["Actuators<br/>(motor neurons)"]
+    SENSORS_OUT["Sensors<br/>(sensory neurons)"]
+
+    EXEC_FRAME --> LLM_INF
+    EXEC_FRAME_2 --> LLM_INF
+    FALLBACK --> LLM_INF
+    LLM_INF --> OUT_FRAME
+    OUT_FRAME --> FW
+    FW --> ACTUATORS
+    FW --> SENSORS_OUT
+    SENSORS_OUT -->|"Feed into next frame"| EXEC_FRAME
+
+    style EXEC_FRAME fill:#1a1a2e,color:#fff
+    style EXEC_FRAME_2 fill:#1a1a2e,color:#fff
+    style OUT_FRAME fill:#16213e,color:#fff
 ```
 
 Each execution cycle contains:
@@ -556,54 +558,56 @@ graph LR
 
 ## Project Structure
 
-```
-llmos/
-├── .claude/
-│   └── commands/
-│       └── llmos.md                 # /llmos slash command — the SystemAgent
-│
-├── public/system/                   # Kernel + system blueprints (read-only)
-│   ├── kernel/                      # Orchestration rules, config, schemas
-│   ├── agents/                      # 14+ system agent definitions (markdown)
-│   ├── prompts/                     # LLM invocation prompts and templates
-│   ├── domains/                     # Cross-domain reasoning metaphors
-│   ├── tools/                       # Tool specifications
-│   └── memory_log.md               # System-level execution history
-│
-├── public/volumes/system/           # System volume seed
-│   ├── agents/                      # Hardware control agents
-│   ├── skills/                      # 20+ reusable skills (markdown)
-│   ├── hal-tools/                   # HAL tool definitions
-│   └── project-templates/           # Scaffolding templates
-│
-├── volumes/
-│   ├── system/                      # Mutable system volume (runtime)
-│   └── user/                        # User personal workspace
-│
-├── lib/                             # Core implementation
-│   ├── runtime/
-│   │   ├── dual-brain-controller.ts # Instinct + Planner brains
-│   │   ├── rsa-engine.ts            # RSA reasoning engine
-│   │   ├── world-model.ts           # Grid-based world model
-│   │   ├── jepa-mental-model.ts     # JEPA predict-before-act model
-│   │   ├── esp32-agent-runtime.ts   # ESP32 agent runtime loop
-│   │   ├── robot4-runtime.ts        # 60Hz firmware simulator
-│   │   └── vision/
-│   │       └── vlm-vision-detector.ts # Qwen3-VL-8B vision pipeline
-│   ├── hal/                         # Hardware abstraction layer
-│   ├── agents/                      # Agent messenger, validator
-│   ├── evolution/                   # Black-box recorder, mutation engine
-│   └── hardware/                    # ESP32 device manager, fleet config
-│
-├── components/                      # React UI components
-│   └── canvas/
-│       └── RobotCanvas3D.tsx        # Three.js 3D simulation arena
-│
-├── firmware/                        # ESP32-S3 firmware (C++)
-├── backend/                         # Optional Python backend
-├── electron/                        # Electron desktop wrapper
-├── app/                             # Next.js application
-└── docs/                            # Documentation
+```mermaid
+graph TD
+    ROOT["llmos/"]
+
+    ROOT --> CLAUDE[".claude/"]
+    CLAUDE --> COMMANDS["commands/"]
+    COMMANDS --> LLMOS_MD["llmos.md<br/>/llmos slash command — the SystemAgent"]
+
+    ROOT --> PUB_SYS["public/system/<br/>Kernel + system blueprints (read-only)"]
+    PUB_SYS --> PS_KERNEL["kernel/<br/>Orchestration rules, config, schemas"]
+    PUB_SYS --> PS_AGENTS["agents/<br/>14+ system agent definitions"]
+    PUB_SYS --> PS_PROMPTS["prompts/<br/>LLM invocation prompts and templates"]
+    PUB_SYS --> PS_DOMAINS["domains/<br/>Cross-domain reasoning metaphors"]
+    PUB_SYS --> PS_TOOLS["tools/<br/>Tool specifications"]
+    PUB_SYS --> PS_MEMLOG["memory_log.md<br/>System-level execution history"]
+
+    ROOT --> PUB_VOL["public/volumes/system/<br/>System volume seed"]
+    PUB_VOL --> PV_AGENTS["agents/<br/>Hardware control agents"]
+    PUB_VOL --> PV_SKILLS["skills/<br/>20+ reusable skills"]
+    PUB_VOL --> PV_HAL["hal-tools/<br/>HAL tool definitions"]
+    PUB_VOL --> PV_TEMPLATES["project-templates/<br/>Scaffolding templates"]
+
+    ROOT --> VOLUMES["volumes/"]
+    VOLUMES --> VOL_SYS["system/<br/>Mutable system volume (runtime)"]
+    VOLUMES --> VOL_USER["user/<br/>User personal workspace"]
+
+    ROOT --> LIB["lib/<br/>Core implementation"]
+    LIB --> RUNTIME["runtime/"]
+    RUNTIME --> DBC["dual-brain-controller.ts<br/>Instinct + Planner brains"]
+    RUNTIME --> RSA["rsa-engine.ts<br/>RSA reasoning engine"]
+    RUNTIME --> WM["world-model.ts<br/>Grid-based world model"]
+    RUNTIME --> JEPA["jepa-mental-model.ts<br/>JEPA predict-before-act model"]
+    RUNTIME --> ESP_RT["esp32-agent-runtime.ts<br/>ESP32 agent runtime loop"]
+    RUNTIME --> R4RT["robot4-runtime.ts<br/>60Hz firmware simulator"]
+    RUNTIME --> VISION["vision/"]
+    VISION --> VLM["vlm-vision-detector.ts<br/>Qwen3-VL-8B vision pipeline"]
+    LIB --> LIB_HAL["hal/<br/>Hardware abstraction layer"]
+    LIB --> LIB_AGENTS["agents/<br/>Agent messenger, validator"]
+    LIB --> LIB_EVO["evolution/<br/>Black-box recorder, mutation engine"]
+    LIB --> LIB_HW["hardware/<br/>ESP32 device manager, fleet config"]
+
+    ROOT --> COMPONENTS["components/<br/>React UI components"]
+    COMPONENTS --> CANVAS["canvas/"]
+    CANVAS --> ROBOT3D["RobotCanvas3D.tsx<br/>Three.js 3D simulation arena"]
+
+    ROOT --> FIRMWARE["firmware/<br/>ESP32-S3 firmware (C++)"]
+    ROOT --> BACKEND["backend/<br/>Optional Python backend"]
+    ROOT --> ELECTRON["electron/<br/>Electron desktop wrapper"]
+    ROOT --> APP["app/<br/>Next.js application"]
+    ROOT --> DOCS["docs/<br/>Documentation"]
 ```
 
 ---
