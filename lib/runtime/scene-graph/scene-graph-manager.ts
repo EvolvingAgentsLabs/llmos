@@ -717,6 +717,145 @@ export class SceneGraphManager {
   }
 
   /**
+   * Serialize the scene graph into the compact symbolic layer for LLM consumption.
+   * This is Layer 2 of the hybrid world representation (NEXT_STEPS_POC.md).
+   *
+   * Returns a structured object with:
+   *   - objects: typed objects with bounding boxes and labels
+   *   - topology: waypoints and edges with costs and status
+   *   - constraints: keepout zones and minimum clearance
+   */
+  serializeForLLM(): {
+    objects: Array<{
+      id: string;
+      type: string;
+      bbox_m: [number, number, number, number];
+      label?: string;
+    }>;
+    topology: {
+      waypoints: Array<{
+        id: string;
+        pos_m: [number, number];
+        label: string;
+      }>;
+      edges: Array<{
+        from: string;
+        to: string;
+        cost: number;
+        status: 'clear' | 'blocked' | 'unknown';
+      }>;
+    };
+    constraints: {
+      keepout: Array<{ poly_m: [number, number][] }>;
+      min_clearance_m: number;
+    };
+  } {
+    // Serialize objects (non-robot, non-waypoint nodes)
+    const objectNodes = this.sceneGraph.getAllNodes().filter(
+      n => n.type === 'object' || n.type === 'landmark'
+    );
+
+    const objects = objectNodes.map(node => {
+      const pos = node.geometry.pose.position;
+      const bb = node.geometry.boundingBox;
+      // Use bounding box if available, otherwise create a small default
+      const bbox_m: [number, number, number, number] = bb
+        ? [
+            Math.round(bb.min.x * 100) / 100,
+            Math.round(bb.min.z * 100) / 100,
+            Math.round(bb.max.x * 100) / 100,
+            Math.round(bb.max.z * 100) / 100,
+          ]
+        : [
+            Math.round((pos.x - 0.1) * 100) / 100,
+            Math.round((pos.z - 0.1) * 100) / 100,
+            Math.round((pos.x + 0.1) * 100) / 100,
+            Math.round((pos.z + 0.1) * 100) / 100,
+          ];
+
+      return {
+        id: node.id,
+        type: node.semantics.category,
+        bbox_m,
+        label: node.semantics.label || undefined,
+      };
+    });
+
+    // Serialize topology (waypoints + edges)
+    const allWaypoints = this.topology.getAllWaypoints();
+    const waypoints = allWaypoints.map(wp => ({
+      id: wp.id,
+      pos_m: [
+        Math.round(wp.geometry.pose.position.x * 100) / 100,
+        Math.round(wp.geometry.pose.position.z * 100) / 100,
+      ] as [number, number],
+      label: wp.semantics.label || wp.id,
+    }));
+
+    // Build edges from waypoint connections
+    const edges: Array<{
+      from: string;
+      to: string;
+      cost: number;
+      status: 'clear' | 'blocked' | 'unknown';
+    }> = [];
+    const edgeSeen = new Set<string>();
+
+    for (const wp of allWaypoints) {
+      for (const [connectedId, cost] of wp.connections) {
+        // Avoid duplicate edges (A-B and B-A)
+        const edgeKey = [wp.id, connectedId].sort().join('|');
+        if (edgeSeen.has(edgeKey)) continue;
+        edgeSeen.add(edgeKey);
+
+        edges.push({
+          from: wp.id,
+          to: connectedId,
+          cost: Math.round(cost * 100) / 100,
+          status: 'clear', // TODO: check for blocked edges
+        });
+      }
+    }
+
+    // Constraints (keepout zones from regions marked as obstacles)
+    const regionNodes = this.sceneGraph.getAllNodes().filter(n => n.type === 'region');
+    const keepout = regionNodes
+      .filter(n => n.semantics.category === 'obstacle')
+      .map(n => {
+        const pos = n.geometry.pose.position;
+        const bb = n.geometry.boundingBox;
+        if (bb) {
+          return {
+            poly_m: [
+              [bb.min.x, bb.min.z],
+              [bb.max.x, bb.min.z],
+              [bb.max.x, bb.max.z],
+              [bb.min.x, bb.max.z],
+            ] as [number, number][],
+          };
+        }
+        // Default small keepout around position
+        return {
+          poly_m: [
+            [pos.x - 0.2, pos.z - 0.2],
+            [pos.x + 0.2, pos.z - 0.2],
+            [pos.x + 0.2, pos.z + 0.2],
+            [pos.x - 0.2, pos.z + 0.2],
+          ] as [number, number][],
+        };
+      });
+
+    return {
+      objects,
+      topology: { waypoints, edges },
+      constraints: {
+        keepout,
+        min_clearance_m: 0.15, // Robot radius + small margin
+      },
+    };
+  }
+
+  /**
    * Clear all data
    */
   clear(): void {
