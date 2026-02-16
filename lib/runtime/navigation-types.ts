@@ -243,10 +243,99 @@ export function parseNavigationDecision(
   // Remove trailing commas (common LLM mistake)
   cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
 
+  // Strip Qwen3 <think>...</think> tags
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+  // If response starts with non-JSON text, try to extract JSON object
+  if (!cleaned.startsWith('{')) {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[0];
+    }
+  }
+
   try {
     const parsed = JSON.parse(cleaned);
-    return validateNavigationDecision(parsed);
+
+    // Try direct validation first
+    const direct = validateNavigationDecision(parsed);
+    if (direct.valid) return direct;
+
+    // Normalize free-form LLM responses to expected schema
+    const normalized = normalizeLLMResponse(parsed);
+    return validateNavigationDecision(normalized);
   } catch (e) {
     return { valid: false, error: `JSON parse error: ${(e as Error).message}` };
   }
+}
+
+/**
+ * Normalize a free-form LLM JSON response to the expected decision schema.
+ * Handles common variations like:
+ *   - {"action": "move_to", "target": "c1"} → {"action": {"type": "MOVE_TO", "target_id": "c1"}}
+ *   - {"action": "MOVE", "target": [x, y]} → {"action": {"type": "MOVE_TO", "target_m": [x, y]}}
+ */
+function normalizeLLMResponse(parsed: Record<string, unknown>): Record<string, unknown> {
+  // If action is already an object with type, return as-is
+  if (parsed.action && typeof parsed.action === 'object' && (parsed.action as any).type) {
+    // Uppercase the type if needed
+    const action = parsed.action as Record<string, unknown>;
+    action.type = String(action.type).toUpperCase();
+    return parsed;
+  }
+
+  // Map string action to structured action
+  const actionStr = String(parsed.action || parsed.command || parsed.type || 'STOP').toUpperCase();
+
+  // Normalize action type names
+  const ACTION_MAP: Record<string, string> = {
+    'MOVE': 'MOVE_TO',
+    'MOVE_TO': 'MOVE_TO',
+    'MOVETO': 'MOVE_TO',
+    'GO': 'MOVE_TO',
+    'GO_TO': 'MOVE_TO',
+    'NAVIGATE': 'MOVE_TO',
+    'EXPLORE': 'EXPLORE',
+    'SCAN': 'EXPLORE',
+    'ROTATE': 'ROTATE_TO',
+    'ROTATE_TO': 'ROTATE_TO',
+    'TURN': 'ROTATE_TO',
+    'FOLLOW_WALL': 'FOLLOW_WALL',
+    'WALL_FOLLOW': 'FOLLOW_WALL',
+    'STOP': 'STOP',
+    'HALT': 'STOP',
+    'WAIT': 'STOP',
+  };
+
+  const normalizedType = ACTION_MAP[actionStr] ?? 'STOP';
+
+  // Build action object
+  const action: Record<string, unknown> = { type: normalizedType };
+
+  // Extract target
+  const target = parsed.target ?? parsed.target_id ?? parsed.subgoal ?? parsed.candidate;
+  if (typeof target === 'string') {
+    action.target_id = target;
+  } else if (Array.isArray(target) && target.length === 2) {
+    action.target_m = target;
+  }
+
+  // Extract yaw for rotation
+  const yaw = parsed.yaw ?? parsed.yaw_deg ?? parsed.angle ?? parsed.degrees ?? parsed.rotation;
+  if (yaw !== undefined && normalizedType === 'ROTATE_TO') {
+    action.yaw_deg = Number(yaw);
+  }
+
+  // Build fallback
+  const fallbackStr = String(parsed.fallback || 'STOP').toUpperCase();
+  const fallback = {
+    if_failed: ACTION_MAP[fallbackStr] ?? 'STOP',
+  };
+
+  // Extract explanation
+  const explanation = String(
+    parsed.explanation ?? parsed.reason ?? parsed.reasoning ?? parsed.rationale ?? 'LLM decision'
+  );
+
+  return { action, fallback, explanation };
 }
