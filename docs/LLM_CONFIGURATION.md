@@ -1,213 +1,288 @@
-# LLM Configuration - OpenRouter Setup
+# LLM Configuration
 
-## Overview
-The app has been configured to use **OpenRouter** as the default LLM provider with support for multiple models.
+LLMos uses a dual-LLM architecture. One model assists development. A different model
+runs on the robot at runtime. This document covers how both are configured and how
+to set up OpenRouter for runtime inference.
 
-## Default Configuration
+## Dual-LLM Architecture
 
-### Provider: OpenRouter
-- **Base URL**: `https://openrouter.ai/api/v1/`
-- **API Key**: Get from https://openrouter.ai/keys
-- **Compatibility**: Uses OpenAI-compatible API format
+### Development LLM: Claude Opus 4.6
 
-### Default Model
-**xiaomi/mimo-v2-flash:free**
-- **Cost**: Free
-- **Speed**: Fast
-- **Context Window**: 128k tokens
-- **Provider**: Xiaomi via OpenRouter
-- **Recommended**: Yes (default selection)
+Used during development for code generation, architecture decisions, test writing,
+and debugging. Runs via Claude Code CLI or API. Not deployed to robots.
 
-## Available Models
+- **Model**: `claude-opus-4-6` (Anthropic)
+- **Role**: Write and review code, design system architecture, generate tests
+- **Where it runs**: Developer workstation only
+- **Not used at runtime**: Too expensive and too slow for real-time navigation cycles
 
-### 1. xiaomi/mimo-v2-flash:free ⭐ (Default)
-- **Provider**: Xiaomi via OpenRouter
-- **Cost**: Free
-- **Speed**: Very Fast
-- **Context Window**: 128k tokens
-- **Best For**: General use, fast responses, free tier
+### Runtime LLM: Qwen3-VL-8B-Instruct
 
-### 2. google/gemini-3-flash-preview
-- **Provider**: Google via OpenRouter
-- **Cost**: Varies (check OpenRouter pricing)
-- **Speed**: Fast
-- **Context Window**: 1M tokens
-- **Best For**: Large context needs, complex reasoning
+Used at runtime inside the navigation loop. Receives a serialized world model,
+scored candidates, and optional camera/map images each cycle, then returns a
+structured JSON navigation decision.
 
-### 3. anthropic/claude-haiku-4.5
-- **Provider**: Anthropic via OpenRouter
-- **Cost**: Varies (check OpenRouter pricing)
-- **Speed**: Fast
-- **Context Window**: 200k tokens
-- **Best For**: High quality responses, coding tasks
+- **Model**: `qwen/qwen3-vl-8b-instruct` (via OpenRouter)
+- **Role**: Pick navigation strategy (WHERE to go) each cycle
+- **Where it runs**: Cloud API call from the robot controller
+- **Cycle time**: ~1.4s average per navigation cycle
+- **Validated**: 6/6 navigation criteria passed in live testing
 
-### 4. Custom Model
-- **Provider**: Any available on OpenRouter
-- **Cost**: Varies by model
-- **Input**: Enter full model ID (e.g., `meta-llama/llama-3.1-8b-instruct:free`)
-- **Find Models**: https://openrouter.ai/models
+## OpenRouter Setup
 
-## Setup Process
+### 1. Get an API Key
 
-### First Time Setup
+Sign up at [openrouter.ai](https://openrouter.ai/) and create an API key at
+[openrouter.ai/keys](https://openrouter.ai/keys). Keys start with `sk-or-`.
 
-When you first open the app, you'll see the setup wizard:
+### 2. Set the Environment Variable
 
-1. **Step 1: API Key**
-   - Get your OpenRouter API key from: https://openrouter.ai/keys
-   - Enter the key (format: `sk-or-...`)
-   - Click Continue
+Create a `.env.local` file in the project root:
 
-2. **Step 2: Choose Model**
-   - Select one of the pre-configured models:
-     - `xiaomi/mimo-v2-flash:free` (Recommended - Free & Fast)
-     - `google/gemini-3-flash-preview` (Large context)
-     - `anthropic/claude-haiku-4.5` (High quality)
-     - Custom Model (enter your own)
-   - Click Start
+```bash
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
 
-### Configuration Saved
-- API key stored in: `localStorage` (never leaves your device)
-- Model selection persisted across sessions
-- Provider set to: OpenRouter
-- Base URL configured automatically
+Or export it directly:
 
-## Switching Providers (Advanced)
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
 
-While OpenRouter is the default, you can switch to other providers:
+### 3. Verify
 
-### Available Providers
-```javascript
+```bash
+npx tsx scripts/run-navigation.ts --live
+```
+
+If the key is valid, you will see `Mode: LIVE (Qwen3-VL-8B via OpenRouter)` and
+the navigation session will run against the real model.
+
+## Default Model: qwen/qwen3-vl-8b-instruct
+
+This is the default runtime model for navigation. It was selected for the following
+reasons:
+
+- **Vision-capable**: Accepts both text and image inputs (map renders + camera frames)
+- **Fast inference**: Sub-2-second responses at 512 max tokens
+- **Structured output**: Reliably produces valid JSON when prompted with a schema
+- **Cost-effective**: Significantly cheaper per token than frontier models
+- **Small enough for edge**: 8B parameters means future on-device deployment is feasible
+- **Tested and validated**: 6/6 navigation criteria passed in end-to-end live testing
+
+### Default Configuration
+
+```typescript
 {
-  openrouter: 'https://openrouter.ai/api/v1/',      // Default
-  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-  openai: 'https://api.openai.com/v1/',
-  groq: 'https://api.groq.com/openai/v1/',
-  together: 'https://api.together.xyz/v1/',
+  model: 'qwen/qwen3-vl-8b-instruct',
+  temperature: 0.2,        // Low for deterministic navigation
+  maxTokens: 512,          // Enough for decision JSON + explanation
+  timeoutMs: 10000,        // 10s timeout per API call
+  baseUrl: 'https://openrouter.ai/api/v1',
 }
 ```
 
-### To Switch Providers
-1. Open app settings (gear icon)
-2. Change provider and base URL
-3. Update API key for new provider
-4. Save configuration
+## Alternative Models
 
-## File Changes
+You can swap the runtime model by passing a different model ID. These have been
+tested or are expected to work:
 
-### Updated Files
+| Model ID | Vision | Notes |
+|----------|--------|-------|
+| `qwen/qwen3-vl-8b-instruct` | Yes | Default. Best cost/performance for navigation. |
+| `google/gemini-2.5-flash-preview` | Yes | Fast, large context window. Good alternative. |
+| `anthropic/claude-sonnet-4-5-20250929` | Yes | High quality but higher cost per cycle. |
+| `meta-llama/llama-4-scout` | No | Text-only. Works without vision bridge. Cheaper. |
 
-1. **lib/llm/types.ts**
-   - Added OpenRouter models to `AVAILABLE_MODELS`
-   - Includes: mimo-v2-flash, gemini-3-flash, claude-haiku-4.5, custom
+To use an alternative model:
 
-2. **lib/llm/storage.ts**
-   - Already supported multi-provider setup
-   - Provider base URLs configured
-   - OpenRouter URL included
+```typescript
+import { createOpenRouterInference } from '../lib/runtime/llm-inference';
 
-3. **components/setup/APIKeySetup.tsx**
-   - Default provider changed to OpenRouter
-   - Default model set to `xiaomi/mimo-v2-flash:free`
-   - UI updated to show all 4 model options
-   - Custom model input field added
-   - API key placeholder updated to `sk-or-...`
-   - Links updated to point to OpenRouter
-
-4. **.env.example**
-   - Updated with OpenRouter configuration
-   - Added recommended models list
-   - Included provider switching instructions
-   - Better organization and comments
-
-## Environment Variables
-
-**Note: LLM API keys are stored client-side only.**
-
-The browser calls OpenRouter directly - your API key never touches the server:
-```
-Browser (localStorage) → OpenRouter API
+const infer = createOpenRouterInference({
+  model: 'google/gemini-2.5-flash-preview',
+});
 ```
 
-No server-side environment variables are needed for LLM functionality. All configuration is stored in the browser's `localStorage`.
+Or with the full adapter for stats tracking:
 
-## Usage
+```typescript
+import { createOpenRouterAdapter } from '../lib/runtime/openrouter-inference';
 
-### In the App
-Once configured, the LLM will be used for:
-- Chat conversations
-- Agent operations
-- Code generation
-- System tools
-- Autonomous tasks
-
-### Verifying Configuration
-Check browser console (DevTools) for:
-```
-[APIKeySetup] Saving configuration:
-  - API Key (first 20 chars): sk-or-...
-  - Model: xiaomi/mimo-v2-flash:free
-  - Provider: openrouter (OpenAI-compatible API)
-  - Base URL: https://openrouter.ai/api/v1/
+const adapter = createOpenRouterAdapter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  model: 'anthropic/claude-sonnet-4-5-20250929',
+  temperature: 0.2,
+  maxTokens: 512,
+});
 ```
 
-## Cost Considerations
+Browse all available models at [openrouter.ai/models](https://openrouter.ai/models).
 
-### Free Models
-- **xiaomi/mimo-v2-flash:free** - Completely free
-- Check OpenRouter for other free models: https://openrouter.ai/models?free=true
+## Response Format
 
-### Paid Models
-- **google/gemini-3-flash-preview** - Check pricing on OpenRouter
-- **anthropic/claude-haiku-4.5** - Check pricing on OpenRouter
-- Pricing varies by provider and usage
-- See: https://openrouter.ai/models
+### Expected JSON Schema
 
-## Troubleshooting
+The LLM must return a JSON object matching `LLMNavigationDecision`:
 
-### API Key Issues
-- Ensure key starts with `sk-or-`
-- Verify key is active at https://openrouter.ai/keys
-- Check for typos in key entry
+```json
+{
+  "action": {
+    "type": "MOVE_TO",
+    "target_id": "c1"
+  },
+  "fallback": {
+    "if_failed": "EXPLORE"
+  },
+  "explanation": "Moving to candidate c1 which is closest to the goal."
+}
+```
 
-### Model Not Working
-- Verify model ID is correct
-- Check OpenRouter model availability
-- Ensure sufficient credits (for paid models)
-- Try the free model: `xiaomi/mimo-v2-flash:free`
+### Free-Form Normalization
 
-### Connection Issues
-- Check internet connection
-- Verify OpenRouter service status
-- Check browser console for errors
+Real LLMs do not always return the exact schema. The `parseNavigationDecision`
+function in `lib/runtime/navigation-types.ts` handles common deviations:
 
-## Benefits of OpenRouter
+- **Markdown fences**: Strips ` ```json ` wrappers
+- **Trailing commas**: Removes trailing commas before `}` or `]`
+- **Qwen think tags**: Strips `<think>...</think>` reasoning blocks
+- **Flat action strings**: Normalizes `{"action": "move_to", "target": "c1"}` to
+  the nested schema
+- **Synonym mapping**: Maps `GO`, `NAVIGATE`, `MOVE` to `MOVE_TO`; `TURN` to
+  `ROTATE_TO`; `HALT`, `WAIT` to `STOP`; `SCAN` to `EXPLORE`
+- **Alternative field names**: Accepts `reason`, `reasoning`, `rationale` for
+  `explanation`; `target`, `subgoal`, `candidate` for `target_id`
 
-✅ **Single API Key**: Access multiple LLM providers
-✅ **Unified Pricing**: Pay-as-you-go with one account
-✅ **Free Models**: Several free options available
-✅ **Model Diversity**: Choose best model for each task
-✅ **OpenAI Compatible**: Drop-in replacement for OpenAI API
-✅ **No Lock-in**: Switch models anytime
+### Valid Action Types
 
-## Additional Resources
+| Action | Required Fields | Description |
+|--------|----------------|-------------|
+| `MOVE_TO` | `target_id` or `target_m` | Move to a candidate or coordinate. `target_id` references a candidate ID (e.g., `"c1"`, `"f2"`). `target_m` is a `[x, y]` coordinate in meters. |
+| `EXPLORE` | `target_id` (optional) | Explore toward a frontier. If `target_id` is provided, head toward that frontier candidate. |
+| `ROTATE_TO` | `yaw_deg` | Rotate in place to the specified yaw in degrees. Used to scan surroundings. |
+| `FOLLOW_WALL` | none | Follow the nearest wall. Used for systematic exploration. |
+| `STOP` | none | Stop all movement. Used when goal is reached or situation is unsafe. |
 
-- **OpenRouter Website**: https://openrouter.ai/
-- **API Keys**: https://openrouter.ai/keys
-- **Model Directory**: https://openrouter.ai/models
-- **Documentation**: https://openrouter.ai/docs
-- **Pricing**: https://openrouter.ai/pricing
+### Valid Fallback Types
 
-## Next Steps
+The `fallback.if_failed` field accepts: `EXPLORE`, `ROTATE_TO`, `STOP`.
 
-1. Get your OpenRouter API key
-2. Start the app: `npm run electron:dev`
-3. Complete the setup wizard
-4. Choose `xiaomi/mimo-v2-flash:free` for free usage
-5. Start using the app!
+### Optional: World Model Corrections
 
----
+The LLM can optionally include corrections to the world model:
 
-**Configuration Complete** ✅
+```json
+{
+  "world_model_update": {
+    "corrections": [
+      {
+        "pos_m": [1.5, 2.0],
+        "observed_state": "obstacle",
+        "confidence": 0.9
+      }
+    ]
+  }
+}
+```
 
-The app is now configured to use OpenRouter with the free Xiaomi Mimo v2 Flash model as default, with easy options to switch to Google Gemini, Anthropic Claude, or any custom model from OpenRouter.
+Each correction specifies a position, an observed state (`free`, `obstacle`, or
+`unknown`), and a confidence between 0 and 1. These are advisory -- the controller
+validates them before applying.
+
+## Programmatic Usage
+
+### Simple: createOpenRouterInference
+
+Returns an `InferenceFunction` compatible with `NavigationLoop`. Uses
+`process.env.OPENROUTER_API_KEY` by default.
+
+```typescript
+import { createOpenRouterInference } from '../lib/runtime/llm-inference';
+import { NavigationLoop } from '../lib/runtime/navigation-loop';
+
+const infer = createOpenRouterInference();
+// or with explicit config:
+const infer2 = createOpenRouterInference({
+  apiKey: 'sk-or-...',
+  model: 'qwen/qwen3-vl-8b-instruct',
+  temperature: 0.2,
+});
+
+const loop = new NavigationLoop(bridge, infer);
+```
+
+### Advanced: OpenRouterInference with Stats
+
+The `OpenRouterInference` class tracks call counts, token usage, latency, and
+error rates. Useful for monitoring and cost estimation.
+
+```typescript
+import { createOpenRouterAdapter } from '../lib/runtime/openrouter-inference';
+
+const adapter = createOpenRouterAdapter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  model: 'qwen/qwen3-vl-8b-instruct',
+  maxTokens: 512,
+  temperature: 0.3,
+  timeoutMs: 15000,
+  maxRetries: 1,
+  supportsVision: true,
+});
+
+// Use as inference function
+const infer = adapter.createInferenceFunction();
+const response = await infer(systemPrompt, userMessage, [mapImageBase64]);
+
+// Check stats after a session
+const stats = adapter.getStats();
+console.log(`Calls: ${stats.totalCalls}`);
+console.log(`Success: ${stats.successfulCalls}`);
+console.log(`Failed: ${stats.failedCalls}`);
+console.log(`Total tokens: ${stats.totalTokens}`);
+console.log(`Avg latency: ${stats.averageLatencyMs.toFixed(0)}ms`);
+
+// Reset stats between sessions
+adapter.resetStats();
+```
+
+### InferenceStats Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `totalCalls` | number | Total API calls attempted |
+| `successfulCalls` | number | Calls that returned a response |
+| `failedCalls` | number | Calls that failed after all retries |
+| `totalTokens` | number | Sum of prompt + completion tokens |
+| `promptTokens` | number | Total input tokens |
+| `completionTokens` | number | Total output tokens |
+| `averageLatencyMs` | number | Mean response time across successful calls |
+| `totalLatencyMs` | number | Cumulative response time |
+
+## Mock Inference for Testing
+
+All 349 tests run without an API key using the mock inference adapter. The mock
+parses candidate data from the prompt text and applies a deterministic strategy:
+
+- Picks the highest-scoring candidate
+- Prefers recovery candidates when stuck
+- Falls back to `ROTATE_TO` if no candidates are available
+
+```typescript
+import { createMockInference } from '../lib/runtime/llm-inference';
+
+const infer = createMockInference();
+// Returns valid LLMNavigationDecision JSON, no network calls
+const response = await infer(systemPrompt, userMessage);
+```
+
+This is what `npx tsx scripts/run-navigation.ts` uses by default (without `--live`).
+It is also what the test suite uses, so `npx jest` never requires an API key.
+
+## Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENROUTER_API_KEY` | Only for `--live` mode | OpenRouter API key (`sk-or-...`) |
+
+No other LLM-related environment variables are needed. Model selection and
+configuration are set programmatically in code.

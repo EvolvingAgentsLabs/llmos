@@ -97,37 +97,37 @@ A simple 2-wheeled robot that can:
 ### The Parts
 
 ```
-Battery ──► Motor Driver ──► Left Motor
-                           ├─► Right Motor
-                           └─► ESP32 ──► Sensors
-                                      └─► LEDs
+Battery --> Motor Driver --> Left Motor
+                          +-> Right Motor
+                          +-> ESP32 --> Sensors
+                                    +-> LEDs
 ```
 
 ### Basic Wiring
 
 **Motors** (for movement):
 ```
-ESP32 Pin 16 → Motor Driver IN1 (Left Motor)
-ESP32 Pin 17 → Motor Driver IN2 (Left Motor)
-ESP32 Pin 18 → Motor Driver IN3 (Right Motor)
-ESP32 Pin 19 → Motor Driver IN4 (Right Motor)
+ESP32 Pin 16 -> Motor Driver IN1 (Left Motor)
+ESP32 Pin 17 -> Motor Driver IN2 (Left Motor)
+ESP32 Pin 18 -> Motor Driver IN3 (Right Motor)
+ESP32 Pin 19 -> Motor Driver IN4 (Right Motor)
 ```
 
 **Sensor** (to detect walls):
 ```
-ESP32 Pin 4 → Sensor TRIG
-ESP32 Pin 5 → Sensor ECHO
+ESP32 Pin 4 -> Sensor TRIG
+ESP32 Pin 5 -> Sensor ECHO
 ```
 
 **LED** (for status):
 ```
-ESP32 Pin 2 → LED → Resistor → Ground
+ESP32 Pin 2 -> LED -> Resistor -> Ground
 ```
 
 **Power**:
 ```
-Battery + → Motor Driver VCC
-Battery - → Motor Driver GND and ESP32 GND
+Battery + -> Motor Driver VCC
+Battery - -> Motor Driver GND and ESP32 GND
 ```
 
 ### Step-by-Step Assembly
@@ -138,6 +138,99 @@ Battery - → Motor Driver GND and ESP32 GND
 4. **Add the sensor** pointing forward
 5. **Connect battery**
 6. **Test each part** as you go!
+
+## How the ESP32 Connects to the LLMos HAL
+
+The ESP32 is not just a standalone microcontroller -- it is one end of the LLMos Hardware Abstraction Layer (HAL). The HAL physical adapter (`lib/hal/physical-adapter.ts`) creates a bridge between the LLMos NavigationLoop and the real ESP32 hardware.
+
+### Connection protocol
+
+The physical adapter connects to the ESP32 via **serial (USB at 115200 baud)** or **WiFi (WebSocket)**. Communication uses newline-delimited JSON messages:
+
+**Command (LLMos to ESP32)**:
+```json
+{
+  "type": "command",
+  "command": "drive",
+  "params": { "left": 100, "right": 100, "duration_ms": 500 },
+  "timestamp": 1708100000000
+}
+```
+
+**Response (ESP32 to LLMos)**:
+```json
+{
+  "success": true,
+  "data": { "position": { "x": 0.5, "y": 0.3, "z": 0 } },
+  "timestamp": 1708100000000
+}
+```
+
+The timestamp in the response matches the command's timestamp so the adapter can correlate requests with responses.
+
+### HAL interface subsystems
+
+The HAL exposes five subsystems to the NavigationLoop, all of which the ESP32 firmware must implement:
+
+**Locomotion** -- motor control commands:
+- `drive(left, right, durationMs)` -- differential drive with wheel power -255 to 255
+- `moveTo(x, y, z, speed)` -- move to absolute position
+- `rotate(direction, degrees)` -- rotate in place
+- `moveForward(distanceCm)` -- move forward by distance
+- `moveBackward(distanceCm)` -- move backward by distance
+- `stop()` -- stop all motors immediately
+- `get_pose` -- return current position, rotation, and velocity
+
+**Vision** -- camera and sensor data:
+- `capture_camera` -- capture a JPEG frame (sent to Qwen3-VL-8B via OpenRouter for processing)
+- `read_distance` -- return front, left, right distance sensor values
+- `read_line` -- return line sensor array values
+- `read_imu` -- return accelerometer, gyroscope, and heading data
+
+**Communication** -- output:
+- `speak(text, urgency)` -- play audio message
+- `set_led(r, g, b, pattern)` -- control RGB LED (solid, blink, pulse)
+- `play_sound(soundId)` -- play a sound effect
+
+**Safety** -- emergency controls:
+- `emergency_stop(reason)` -- immediately halt all motion
+- `reset_emergency` -- clear emergency stop state
+
+### The full pipeline
+
+When the NavigationLoop runs on a physical robot, the data flows like this:
+
+```
+NavigationLoop
+  -> NavigationHALBridge
+    -> PhysicalHAL (lib/hal/physical-adapter.ts)
+      -> PhysicalConnection (serial or WiFi)
+        -> ESP32 firmware (JSON commands)
+          -> Motors, sensors, LEDs
+```
+
+Sensor data flows back up the same chain. Camera frames captured by the ESP32 are sent through the HAL vision interface to the VisionWorldModelBridge, which forwards them to Qwen3-VL-8B (via OpenRouter) for scene understanding. The LLM's response updates the 50x50 occupancy grid world model.
+
+### Setting up the connection
+
+To create a physical HAL connection from TypeScript:
+
+```typescript
+import { createPhysicalHAL } from '@/lib/hal';
+
+const hal = createPhysicalHAL({
+  deviceId: 'my-esp32-robot',
+  connectionType: 'serial',  // or 'wifi'
+  baudRate: 115200,
+  // host: '192.168.1.100',  // for WiFi mode
+});
+
+await hal.initialize();  // opens serial port via Web Serial API
+```
+
+The Web Serial API prompts the user to select a serial port in the browser. For WiFi mode, provide the ESP32's IP address.
+
+---
 
 ## Programming Your Robot
 
@@ -228,9 +321,9 @@ Make the robot follow the black line
 - **Line follower**: Race on a track
 
 ### Advanced
-- **Object tracking**: Follow a colored ball
-- **Swarm behavior**: Multiple robots working together
-- **Autonomous delivery**: Pick up and drop objects
+- **LLM-driven navigation**: Run the full NavigationLoop with Qwen3-VL-8B vision
+- **Swarm behavior**: Multiple robots with fleet coordination and shared world model merging
+- **Autonomous exploration**: Let the NavigationLoop explore and map unknown environments
 
 ## Troubleshooting
 
@@ -331,8 +424,9 @@ You can ask LLMos to:
 
 ### Learn More
 
-- **[Robot Programming Guide](../architecture/ROBOT4_GUIDE.md)** - Deep dive into robot code
-- **[Desktop App Guide](../guides/DESKTOP.md)** - Faster development workflow
+- **[Robot Programming Guide](../architecture/ROBOT4_GUIDE.md)** - Deep dive into robot code and how Robot4 connects to the NavigationLoop
+- **[Standard Robot v1](STANDARD_ROBOT_V1.md)** - Official hardware specification with HAL integration
+- **[Arena Setup Guide](ARENA_SETUP_GUIDE.md)** - Build a physical 5m x 5m arena matching the simulation
 
 ## Common Projects
 
@@ -394,10 +488,11 @@ You can ask LLMos to:
 ## You Did It!
 
 You now know how to:
-- ✅ Buy and connect an ESP32
-- ✅ Wire up motors and sensors
-- ✅ Program a real robot
-- ✅ Make it do cool things
+- Buy and connect an ESP32
+- Wire up motors and sensors
+- Connect to LLMos via the HAL physical adapter
+- Program a real robot
+- Make it do cool things
 
 ## What's Next?
 

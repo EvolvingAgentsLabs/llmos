@@ -1,3 +1,5 @@
+> **Historical document**: This is an execution log from the code review phase. For current architecture, see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+
 # Code Review & Next Steps: AI Physical Agents that Reason, Collaborate, and Evolve
 
 **Date:** 2026-02-07

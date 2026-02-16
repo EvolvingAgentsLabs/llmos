@@ -18,6 +18,32 @@ This guide shows you how to create a physical 5m x 5m arena that exactly matches
 
 ---
 
+## Coordinate System
+
+The arena uses the same coordinate system as the LLMos NavigationRuntime:
+
+```
+Coordinate System:
+  - Arena size: 5m x 5m
+  - Center: (0, 0)
+  - Bounds: -2.5 to +2.5 in both X and Y axes
+  - Grid resolution: 10cm (50x50 occupancy grid)
+  - Rotation = 0 faces -Y direction (toward the bottom of the arena)
+  - Total grid cells: 2,500
+
+World model grid mapping:
+  Grid cell (0, 0) = world position (-2.5, -2.5)
+  Grid cell (25, 25) = world position (0, 0) = arena center
+  Grid cell (49, 49) = world position (+2.4, +2.4)
+
+  World X -> grid column: col = floor((worldX + 2.5) / 0.1)
+  World Y -> grid row:    row = floor((worldY + 2.5) / 0.1)
+```
+
+This coordinate system is consistent across simulation (Three.js), the 50x50 occupancy grid world model, the A* local planner, and the physical arena.
+
+---
+
 ## Materials Needed
 
 ### Essential
@@ -73,13 +99,13 @@ The arena coordinate system uses (0, 0) at the center.
 ```
     5m x 5m Arena
 
-       ┌─────────────┐
-       │             │
-       │             │
-       │      ●      │  ← Center (0,0)
-       │   (0,0)     │
-       │             │
-       └─────────────┘
+       +-------------+
+       |             |
+       |             |
+       |      *      |  <- Center (0,0)
+       |   (0,0)     |
+       |             |
+       +-------------+
 
     Mark center first, then measure outward
 ```
@@ -92,15 +118,15 @@ The arena coordinate system uses (0, 0) at the center.
 
 2. **Find center using diagonals**
    ```
-   A ───────────── B
-   │ \           / │
-   │   \       /   │
-   │     \   /     │
-   │       X       │  ← X = Center
-   │     /   \     │
-   │   /       \   │
-   │ /           \ │
-   D ───────────── C
+   A ------------- B
+   | \           / |
+   |   \       /   |
+   |     \   /     |
+   |       X       |  <- X = Center
+   |     /   \     |
+   |   /       \   |
+   | /           \ |
+   D ------------- C
 
    Measure diagonals AC and BD
    They cross at center point X
@@ -119,41 +145,44 @@ The arena coordinate system uses (0, 0) at the center.
 Create X and Y axes to define the coordinate system.
 
 ```
-         Y axis (North)
-              ↑
-              │
-              │
-   ───────────┼───────────  X axis (East)
-              │
-              │
+         Y axis (+Y)
+              ^
+              |
+              |
+   -----------+----------->  X axis (+X)
+              |
+              |
             (0,0)
+
+Note: In the LLMos coordinate system, rotation=0 faces -Y.
+The robot starts at center facing "down" (toward -Y).
 ```
 
-**X Axis (East-West)**:
+**X Axis (Left-Right)**:
 1. From center (0,0), measure 2.5m to the RIGHT
    - Mark with tape
-   - Label "+2.5m" or "East"
+   - Label "+2.5m" or "+X"
 
 2. From center (0,0), measure 2.5m to the LEFT
    - Mark with tape
-   - Label "-2.5m" or "West"
+   - Label "-2.5m" or "-X"
 
 3. Connect with **red tape** (or white if you don't have colored)
-   - Lay tape from West (-2.5, 0) to East (+2.5, 0)
+   - Lay tape from (-2.5, 0) to (+2.5, 0)
    - Goes through center point
    - Total length: 5 meters
 
-**Y Axis (North-South)**:
+**Y Axis (Forward-Back)**:
 1. From center (0,0), measure 2.5m FORWARD (away from you)
    - Mark with tape
-   - Label "+2.5m" or "North"
+   - Label "+2.5m" or "+Y"
 
 2. From center (0,0), measure 2.5m BACKWARD (toward you)
    - Mark with tape
-   - Label "-2.5m" or "South"
+   - Label "-2.5m" or "-Y"
 
 3. Connect with **blue tape** (or white)
-   - Lay tape from South (0, -2.5) to North (0, +2.5)
+   - Lay tape from (0, -2.5) to (0, +2.5)
    - Goes through center point
    - Perpendicular to X axis
 
@@ -167,13 +196,13 @@ The arena has 4 walls forming a 5m x 5m square.
 
 ```
     (-2.5, +2.5)          (+2.5, +2.5)
-         ┌─────────────────────┐
-         │                     │
-         │                     │
-         │        (0,0)        │
-         │                     │
-         │                     │
-         └─────────────────────┘
+         +---------------------+
+         |                     |
+         |                     |
+         |        (0,0)        |
+         |                     |
+         |                     |
+         +---------------------+
     (-2.5, -2.5)          (+2.5, -2.5)
 ```
 
@@ -209,23 +238,22 @@ The arena has 4 walls forming a 5m x 5m square.
 
 ### Step 5: Add Coordinate Grid (Optional)
 
-For more precise positioning, add a grid with 0.5m spacing.
+For more precise positioning, add a grid. The NavigationRuntime uses a 50x50 grid at 10cm resolution, but for a physical arena, marking every 0.5m (every 5 grid cells) is practical.
 
 ```
     11 x 11 grid (0.5m spacing)
 
-     ┌─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─●┼─┼─┼─┼─┼─┤  ← Center
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-     └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-*-+-+-+-+-+-+-+  <- Center
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
+     +-+-+-+-+-+-+-+-+-+-+-+
 
     Every 0.5m in both directions
 ```
@@ -251,37 +279,88 @@ For more precise positioning, add a grid with 0.5m spacing.
 - [ ] All 4 corners are exactly 2.5m from center
 - [ ] Opposite sides are parallel
 - [ ] All sides are exactly 5m long
-- [ ] Diagonals are equal (~7.07m, or 5 × √2)
+- [ ] Diagonals are equal (~7.07m, or 5 x sqrt(2))
 - [ ] Floor is relatively flat
 - [ ] Tape is secure and won't peel up
 
 **Measuring diagonal**:
 ```
 From (-2.5, -2.5) to (+2.5, +2.5):
-Distance = √[(5)² + (5)²] = √50 ≈ 7.07m
+Distance = sqrt[(5)^2 + (5)^2] = sqrt(50) ~ 7.07m
 
-If your diagonal is ≠ 7.07m, check your measurements!
+If your diagonal is not 7.07m, check your measurements!
 ```
+
+---
+
+## Test Arena Configurations
+
+The LLMos NavigationRuntime includes 4 standard test arenas that you can replicate physically. These correspond to the TestArenaConfig definitions used in the simulation and test suite (349 tests across 21 suites).
+
+### 1. Simple Navigation Arena
+
+The basic arena with a few obstacles for point-to-point navigation testing.
+
+**Setup**: Place 2-3 medium obstacles (30cm diameter) between a start point and goal point. The robot must navigate around them using the A* local planner.
+
+**Typical configuration**:
+- Start: (-1.5, -1.5)
+- Goal: (+1.5, +1.5)
+- Obstacles at roughly (0, 0) and (-0.5, 0.5)
+
+**Use for**:
+- Motor control testing
+- Basic obstacle avoidance
+- A* path planning validation
+- HAL locomotion verification (moveTo, rotate, moveForward)
+
+---
+
+### 2. Exploration Arena
+
+An arena with scattered obstacles designed to test the exploration and frontier candidate generation.
+
+**Setup**: Place 5-8 obstacles of varying sizes throughout the arena. Leave some areas completely clear and some cluttered. The robot should discover and map the environment using its 50x50 occupancy grid.
+
+**Use for**:
+- Frontier-based exploration
+- World model accuracy testing
+- Vision pipeline validation (camera -> Qwen3-VL-8B -> VisionWorldModelBridge)
+- Occupancy grid coverage measurement
+
+---
+
+### 3. Dead-End Arena
+
+An arena with walls forming dead-end corridors that require the robot to detect it is stuck and use recovery candidates.
+
+**Setup**: Use cardboard walls to create L-shaped or U-shaped enclosures. The robot must enter, recognize the dead end, and back out.
+
+**Use for**:
+- Stuck detection (NavigationLoop stuckThreshold)
+- Recovery candidate generation
+- Backward movement (moveBackward via HAL)
+- Mode transitions in the NavigationLoop
+
+---
+
+### 4. Narrow Corridor Arena
+
+An arena with tight passages that test the A* planner's obstacle inflation and the robot's precision movement.
+
+**Setup**: Create corridors 30-40cm wide using cardboard walls. The robot body is 8cm wide, so these corridors are navigable but require precision.
+
+**Use for**:
+- A* planner obstacle inflation testing
+- Precision locomotion (small moveForward steps)
+- Distance sensor accuracy
+- Narrow passage navigation
 
 ---
 
 ## Adding Challenge Elements
 
-Now that you have a basic arena, add elements for specific challenges.
-
-### 1. Empty Arena (Default)
-
-Already complete! Your arena is ready for basic navigation testing.
-
-**Use for**:
-- Motor control testing
-- Straight-line driving
-- Turning accuracy
-- Speed tests
-
----
-
-### 2. Obstacle Course
+### Obstacle Course
 
 Add circular obstacles using cardboard boxes or cylinders.
 
@@ -295,19 +374,14 @@ Add circular obstacles using cardboard boxes or cylinders.
 Obstacle positions (x, y, radius in cm):
 
 (-1.5, -1.5, 25cm)   (-1.5, +1.5, 20cm)
-       🔴                    🔴
 
-(-1.8, 0, 18cm)          🔴 (0, +1.8, 18cm)
-     🔴
+(-1.8, 0, 18cm)          (0, +1.8, 18cm)
 
          (0, 0, 30cm)
-              🔴🔴
 
-(+1.8, 0, 18cm)          🔴 (0, -1.8, 18cm)
-     🔴
+(+1.8, 0, 18cm)          (0, -1.8, 18cm)
 
 (+1.5, -1.5, 20cm)   (+1.5, +1.5, 25cm)
-       🔴                    🔴
 ```
 
 **How to create obstacles**:
@@ -320,7 +394,7 @@ Obstacle positions (x, y, radius in cm):
 
 ---
 
-### 3. Line Following Track
+### Line Following Track
 
 Use black tape to create a line for the robot to follow.
 
@@ -330,12 +404,12 @@ Use black tape to create a line for the robot to follow.
 
 **Oval Track** (matches `standard5x5LineTrack` map):
 ```
-         ╔═══════════╗
-         ║           ║
-         ║           ║
-    ═════╝           ╚═════
+         +===========+
+         |           |
+         |           |
+    =====+           +=====
 
-    3.6m wide × 2.4m tall oval
+    3.6m wide x 2.4m tall oval
 ```
 
 **How to make it**:
@@ -354,29 +428,29 @@ Use black tape to create a line for the robot to follow.
 
 ---
 
-### 4. Maze Challenge
+### Maze Challenge
 
 Create maze using cardboard walls.
 
 **Materials**:
-- Cardboard sheets (60cm × 40cm panels work well)
+- Cardboard sheets (60cm x 40cm panels work well)
 - Tape or stands to hold walls upright
 - Weights to keep walls stable
 
 **Maze Layout** (matches `standard5x5Maze` map):
 ```
-┌─────────────────────┐
-│  │     │        🏁  │
-│  │     │            │
-│  │  │  │  │         │
-│     │     │      │  │
-│  ───   ──────    │  │
-│                  │  │
-│ 🤖               │  │
-└─────────────────────┘
++---------------------+
+|  |     |        G   |
+|  |     |            |
+|  |  |  |  |         |
+|     |     |      |  |
+|  ---   ------    |  |
+|                  |  |
+| S                |  |
++---------------------+
 
-Start: (-2.0, -2.0)
-Goal:  (+2.0, +2.0)
+Start (S): (-2.0, -2.0)
+Goal (G):  (+2.0, +2.0)
 ```
 
 **Wall positions** (from simulator code):
@@ -392,25 +466,25 @@ Goal:  (+2.0, +2.0)
 
 ---
 
-### 5. Figure-8 Track
+### Figure-8 Track
 
 Advanced line following challenge.
 
 **Black tape in figure-8 pattern**:
 ```
-    ╔═╗
-    ║ ║
-    ╚═╬═╗
-      │ ║
-    ╔═╬═╝
-    ║ ║
-    ╚═╝
+    +==+
+    |  |
+    +==+==+
+       |  |
+    +==+==+
+    |  |
+    +==+
 ```
 
 **Measurements** (matches `standard5x5Figure8` map):
 - Uses parametric equations for smooth curves
-- Width: 3m (±1.5m from center)
-- Height: 2m (±1.0m from center)
+- Width: 3m (+/-1.5m from center)
+- Height: 2m (+/-1.0m from center)
 
 **How to create**:
 1. Plot points on floor using coordinates from simulator
@@ -426,14 +500,14 @@ Advanced line following challenge.
 
 **Starting position for most challenges**:
 - Coordinates: (0, 0)
-- Facing: 0 degrees (East, toward +X axis)
-- Orientation: Front of robot faces right on your grid
+- Facing: rotation=0, which means facing -Y direction (toward the bottom of the arena)
+- Orientation: Front of robot faces "down" on the grid
 
 **How to align robot**:
 1. Place robot center at (0,0) marker
-2. Align robot parallel to X axis
-3. Front facing toward (+X) direction
-4. Use ruler to verify alignment
+2. Point the robot's front toward the -Y edge of the arena
+3. Use ruler to verify alignment
+4. The occupancy grid cell (25, 25) corresponds to this center position
 
 ---
 
@@ -442,12 +516,12 @@ Advanced line following challenge.
 **Test accuracy** with manual measurements:
 
 1. **Place robot at known position**
-   - Example: (1.0, 1.0)
+   - Example: (1.0, 1.0) = grid cell (35, 35)
 
 2. **Run simple navigation code**
-   ```c
-   // Drive to (2.0, 0)
-   // Measure final position
+   ```
+   Move robot to position (2.0, 0)
+   Measure final position with tape
    ```
 
 3. **Compare expected vs actual**
@@ -455,7 +529,7 @@ Advanced line following challenge.
    - Actual: (measure with tape)
    - Calculate error
 
-**Acceptable error**: ±10cm for 5m arena
+**Acceptable error**: +/-10cm for 5m arena (1 grid cell)
 
 ---
 
@@ -472,9 +546,9 @@ Different floor types affect robot behavior:
 | Wood (smooth) | Good | Good | Good |
 
 **Adjustments**:
-- Slippery surface → Lower speed, gradual turns
-- Soft surface → Increase motor power
-- Dark floor → Adjust line sensor calibration
+- Slippery surface: Lower speed, gradual turns
+- Soft surface: Increase motor power
+- Dark floor: Adjust line sensor calibration
 
 ---
 
@@ -521,7 +595,7 @@ Mount camera above arena to record robot paths.
 
 **Setup**:
 - Camera height: 3-4m above arena
-- Field of view: Entire 5m × 5m area
+- Field of view: Entire 5m x 5m area
 - Use for: Path visualization, performance analysis
 
 ---
@@ -548,7 +622,7 @@ See [CHALLENGE_COURSES.md](CHALLENGE_COURSES.md) for detailed setup instructions
 
 ### Uneven Floor
 - **Shim low spots** with thin cardboard
-- **Accept variance** ±5mm is usually OK
+- **Accept variance** +/-5mm is usually OK
 - **Choose different location** if too uneven
 
 ### Robot Can't Detect Tape
@@ -587,11 +661,12 @@ See [CHALLENGE_COURSES.md](CHALLENGE_COURSES.md) for detailed setup instructions
 
 ## Next Steps
 
-1. ✅ Build your 5m × 5m arena
-2. ✅ Calibrate and test with robot
-3. ✅ Try challenges (start with empty arena)
-4. Share your setup! Post photos to GitHub Discussions
-5. Measure sim-to-real accuracy and report results
+1. Build your 5m x 5m arena
+2. Calibrate and test with robot
+3. Try challenges (start with Simple Navigation arena)
+4. Run NavigationLoop with Qwen3-VL-8B vision and verify world model accuracy
+5. Compare simulation results (50x50 occupancy grid) with physical arena measurements
+6. Share your setup! Post photos to GitHub Discussions
 
 ---
 

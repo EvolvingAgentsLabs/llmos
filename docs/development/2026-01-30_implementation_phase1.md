@@ -1,3 +1,5 @@
+> **Historical document**: This is an execution log from the Phase 1 implementation. For current architecture, see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+
 # Implementation Log: Phase 1 - Core Infrastructure
 
 **Timestamp**: 2026-01-30
