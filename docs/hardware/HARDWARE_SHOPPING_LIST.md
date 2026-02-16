@@ -3,9 +3,9 @@
 ## Build Your LLMos-Compatible Robot
 
 This guide covers the hardware needed to build a physical AI robot agent compatible with LLMos. The goal is a robot that can:
-- Run Gemini 3 Flash Agentic Vision for perception
-- Execute markdown skill cartridges
-- Operate both in simulation and real world
+- Run Qwen3-VL-8B (via OpenRouter) for runtime vision and navigation
+- Execute navigation decisions through the HAL interface
+- Operate both in simulation and real world via the same NavigationHALBridge
 
 ---
 
@@ -16,12 +16,12 @@ This guide covers the hardware needed to build a physical AI robot agent compati
 | Component | Specification | Qty | Est. Price | Notes |
 |-----------|--------------|-----|------------|-------|
 | **ESP32-S3 DevKit** | 8MB PSRAM, USB-C | 1 | $15 | Brain of the robot |
-| **OV2640 Camera** | 2MP, 160x120 AI mode | 1 | $8 | For Agentic Vision |
-| **Stepper Motor** | NEMA 17, 1.8°/step | 2 | $12 each | Precise movement |
+| **OV2640 Camera** | 2MP, 160x120 AI mode | 1 | $8 | For vision pipeline (frames sent to Qwen3-VL-8B via OpenRouter) |
+| **Stepper Motor** | NEMA 17, 1.8deg/step | 2 | $12 each | Precise movement |
 | **Stepper Driver** | A4988 or TMC2209 | 2 | $5 each | Motor control circuit |
 | **Power Supply** | 12V 2A DC adapter | 1 | $10 | Motor power |
 | **LiPo Battery** | 3.7V 2000mAh | 1 | $12 | Portable power |
-| **Buck Converter** | 12V→5V, 3A | 1 | $5 | ESP32 power from 12V |
+| **Buck Converter** | 12V to 5V, 3A | 1 | $5 | ESP32 power from 12V |
 
 ### Mechanical Components
 
@@ -60,6 +60,25 @@ This guide covers the hardware needed to build a physical AI robot agent compati
 
 ---
 
+## Vision Pipeline: Qwen3-VL-8B via OpenRouter
+
+LLMos uses a dual-LLM architecture:
+
+- **Claude Opus 4.6**: Development-time reasoning, code generation, and system planning
+- **Qwen3-VL-8B (via OpenRouter)**: Runtime vision processing and navigation decisions
+
+The vision pipeline works as follows:
+
+1. **Camera captures frame** (OV2640 on ESP32, or Three.js renderer in simulation)
+2. **Frame sent to HAL** via `vision.captureFrame()`
+3. **VisionWorldModelBridge** passes the frame to the runtime LLM
+4. **Qwen3-VL-8B (via OpenRouter)** processes the image and returns navigation decisions
+5. **NavigationLoop** converts the decision into HAL locomotion commands
+
+The OpenRouter inference adapter handles the API communication. Camera frames are captured as JPEG and sent as base64-encoded data URLs. No local GPU is required -- all vision inference runs in the cloud via OpenRouter.
+
+---
+
 ## Motor Control Circuit: Yes, You Need One
 
 ### Why a Motor Driver is Required
@@ -83,19 +102,19 @@ This guide covers the hardware needed to build a physical AI robot agent compati
 Wiring Diagram:
 
 ESP32               A4988                NEMA 17
-┌────────┐         ┌──────────┐         ┌─────────┐
-│        │         │          │         │         │
-│   D2 ──┼────────►│ STEP     │         │ A+ (Red)│◄──┐
-│   D3 ──┼────────►│ DIR      │         │ A-(Blue)│◄──┤
-│   D4 ──┼────────►│ EN       │         │ B+(Grn) │◄──┤
-│        │         │          │         │ B-(Blk) │◄──┘
-│  GND ──┼────────►│ GND      │         │         │
-│        │         │    VMOT ◄┼────────►│ 12V     │
-└────────┘         │    GND  ◄┼────────►│ GND     │
-                   │          │         └─────────┘
-                   │  1A  1B  │
-                   │  2A  2B ─┼─────────► Motor Coils
-                   └──────────┘
++--------+         +----------+         +---------+
+|        |         |          |         |         |
+|   D2 --+-------->| STEP     |         | A+ (Red)|<--+
+|   D3 --+-------->| DIR      |         | A-(Blue)|<--+
+|   D4 --+-------->| EN       |         | B+(Grn) |<--+
+|        |         |          |         | B-(Blk) |<--+
+|  GND --+-------->| GND      |         |         |
+|        |         |    VMOT <+-------->| 12V     |
++--------+         |    GND  <+-------->| GND     |
+                   |          |         +---------+
+                   |  1A  1B  |
+                   |  2A  2B -+----------> Motor Coils
+                   +----------+
 ```
 
 #### Option 2: TMC2209 (Quieter, More Precise)
@@ -114,10 +133,10 @@ ESP32               A4988                NEMA 17
 Both A4988 and DRV8825 have adjustable current limiting via a potentiometer. Set this BEFORE connecting motors:
 
 ```
-Vref = I_motor × 8 × R_sense
+Vref = I_motor x 8 x R_sense
 
-For A4988 with 0.1Ω sense resistors and 1A motor:
-Vref = 1.0 × 8 × 0.1 = 0.8V
+For A4988 with 0.1 ohm sense resistors and 1A motor:
+Vref = 1.0 x 8 x 0.1 = 0.8V
 
 Measure with multimeter between potentiometer and GND.
 ```
@@ -129,48 +148,48 @@ Measure with multimeter between potentiometer and GND.
 ### Complete System Wiring
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        POWER SYSTEM                             │
-│                                                                 │
-│    ┌─────────┐     ┌─────────────┐     ┌──────────────────┐   │
-│    │  12V DC │────►│ Buck Conv.  │────►│ ESP32 (5V/3.3V)  │   │
-│    │ Adapter │     │ (12V→5V)    │     └──────────────────┘   │
-│    └────┬────┘     └─────────────┘                             │
-│         │                                                       │
-│         ▼                                                       │
-│    ┌─────────────────────────────────────────┐                 │
-│    │         MOTOR POWER (12V)               │                 │
-│    │   ┌──────────┐      ┌──────────┐       │                 │
-│    │   │  A4988   │      │  A4988   │       │                 │
-│    │   │ Driver 1 │      │ Driver 2 │       │                 │
-│    │   └────┬─────┘      └────┬─────┘       │                 │
-│    │        ▼                  ▼             │                 │
-│    │   ┌──────────┐      ┌──────────┐       │                 │
-│    │   │ Stepper  │      │ Stepper  │       │                 │
-│    │   │ Motor 1  │      │ Motor 2  │       │                 │
-│    │   │ (Left)   │      │ (Right)  │       │                 │
-│    │   └──────────┘      └──────────┘       │                 │
-│    └─────────────────────────────────────────┘                 │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                        POWER SYSTEM                             |
+|                                                                 |
+|    +---------+     +-------------+     +------------------+   |
+|    |  12V DC |---->| Buck Conv.  |---->| ESP32 (5V/3.3V)  |   |
+|    | Adapter |     | (12V->5V)   |     +------------------+   |
+|    +----+----+     +-------------+                             |
+|         |                                                       |
+|         v                                                       |
+|    +-----------------------------------------+                 |
+|    |         MOTOR POWER (12V)               |                 |
+|    |   +----------+      +----------+       |                 |
+|    |   |  A4988   |      |  A4988   |       |                 |
+|    |   | Driver 1 |      | Driver 2 |       |                 |
+|    |   +----+-----+      +----+-----+       |                 |
+|    |        v                  v             |                 |
+|    |   +----------+      +----------+       |                 |
+|    |   | Stepper  |      | Stepper  |       |                 |
+|    |   | Motor 1  |      | Motor 2  |       |                 |
+|    |   | (Left)   |      | (Right)  |       |                 |
+|    |   +----------+      +----------+       |                 |
+|    +-----------------------------------------+                 |
++---------------------------------------------------------------+
 
-┌─────────────────────────────────────────────────────────────────┐
-│                      ESP32-S3 CONNECTIONS                       │
-│                                                                 │
-│   GPIO  │  Function      │  Connected To                       │
-│  ───────┼────────────────┼─────────────────────                │
-│    D2   │  Step Motor 1  │  A4988 #1 STEP                      │
-│    D3   │  Dir Motor 1   │  A4988 #1 DIR                       │
-│    D4   │  Step Motor 2  │  A4988 #2 STEP                      │
-│    D5   │  Dir Motor 2   │  A4988 #2 DIR                       │
-│    D6   │  Enable Both   │  A4988 #1 & #2 EN (parallel)        │
-│   D12   │  Trigger       │  HC-SR04 #1 TRIG                    │
-│   D13   │  Echo          │  HC-SR04 #1 ECHO (via divider!)     │
-│   D14   │  Camera SCL    │  OV2640 SIOC                        │
-│   D15   │  Camera SDA    │  OV2640 SIOD                        │
-│  D16-21 │  Camera Data   │  OV2640 D0-D7                       │
-│   3.3V  │  Logic Power   │  Sensors VCC                        │
-│   GND   │  Ground        │  Common ground                      │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                      ESP32-S3 CONNECTIONS                       |
+|                                                                 |
+|   GPIO  |  Function      |  Connected To                       |
+|  -------+----------------+---------------------                |
+|    D2   |  Step Motor 1  |  A4988 #1 STEP                      |
+|    D3   |  Dir Motor 1   |  A4988 #1 DIR                       |
+|    D4   |  Step Motor 2  |  A4988 #2 STEP                      |
+|    D5   |  Dir Motor 2   |  A4988 #2 DIR                       |
+|    D6   |  Enable Both   |  A4988 #1 & #2 EN (parallel)        |
+|   D12   |  Trigger       |  HC-SR04 #1 TRIG                    |
+|   D13   |  Echo          |  HC-SR04 #1 ECHO (via divider!)     |
+|   D14   |  Camera SCL    |  OV2640 SIOC                        |
+|   D15   |  Camera SDA    |  OV2640 SIOD                        |
+|  D16-21 |  Camera Data   |  OV2640 D0-D7                       |
+|   3.3V  |  Logic Power   |  Sensors VCC                        |
+|   GND   |  Ground        |  Common ground                      |
++---------------------------------------------------------------+
 ```
 
 ### Voltage Divider for 5V Sensors
@@ -178,14 +197,14 @@ Measure with multimeter between potentiometer and GND.
 The HC-SR04 ultrasonic sensor outputs 5V on ECHO, but ESP32 is 3.3V logic. Use a voltage divider:
 
 ```
-HC-SR04 ECHO ──┬── 1kΩ ──┬── ESP32 GPIO
-               │         │
-              GND      2kΩ
-                        │
-                       GND
+HC-SR04 ECHO --+-- 1k ohm --+-- ESP32 GPIO
+               |             |
+              GND          2k ohm
+                             |
+                            GND
 ```
 
-This divides 5V → 3.3V safely.
+This divides 5V to 3.3V safely.
 
 ---
 
@@ -195,25 +214,27 @@ This divides 5V → 3.3V safely.
 
 ```
 OV2640 Module          ESP32-S3
-┌────────────┐        ┌────────────┐
-│    3.3V ───┼───────►│ 3.3V       │
-│    GND  ───┼───────►│ GND        │
-│    SIOC ───┼───────►│ GPIO14     │ (I2C Clock)
-│    SIOD ───┼───────►│ GPIO15     │ (I2C Data)
-│    VSYNC ──┼───────►│ GPIO6      │
-│    HREF ───┼───────►│ GPIO7      │
-│    PCLK ───┼───────►│ GPIO13     │
-│    D0-D7 ──┼───────►│ GPIO16-21  │ (Parallel Data)
-│    XCLK ◄──┼────────│ GPIO0      │ (Clock out)
-│    RESET ──┼───────►│ 3.3V       │ (Always high)
-│    PWDN ───┼───────►│ GND        │ (Always low)
-└────────────┘        └────────────┘
++------------+        +------------+
+|    3.3V ---+------->| 3.3V       |
+|    GND  ---+------->| GND        |
+|    SIOC ---+------->| GPIO14     | (I2C Clock)
+|    SIOD ---+------->| GPIO15     | (I2C Data)
+|    VSYNC --+------->| GPIO6      |
+|    HREF ---+------->| GPIO7      |
+|    PCLK ---+------->| GPIO13     |
+|    D0-D7 --+------->| GPIO16-21  | (Parallel Data)
+|    XCLK <--+--------| GPIO0      | (Clock out)
+|    RESET --+------->| 3.3V       | (Always high)
+|    PWDN ---+------->| GND        | (Always low)
++------------+        +------------+
 ```
 
-### Camera Configuration for Agentic Vision
+### Camera Configuration for Vision Pipeline
 
 ```cpp
 // ESP32 camera init for LLMos
+// Frames captured here are sent to Qwen3-VL-8B via OpenRouter
+// for runtime vision processing and navigation decisions
 camera_config_t config;
 config.ledc_channel = LEDC_CHANNEL_0;
 config.ledc_timer = LEDC_TIMER_0;
@@ -257,9 +278,10 @@ config.fb_count = 2;                 // Double buffering
 
 ### Step 5: Software Integration
 - [ ] Flash LLMos firmware to ESP32
-- [ ] Connect to LLMos browser interface
-- [ ] Test in simulation mode first
-- [ ] Deploy skill and verify operation
+- [ ] Connect to LLMos via HAL physical adapter (serial or WiFi)
+- [ ] Test in simulation mode first using SimulationHAL
+- [ ] Switch to PhysicalHAL and verify real hardware operation
+- [ ] Run NavigationLoop with Qwen3-VL-8B vision pipeline
 
 ---
 
@@ -303,13 +325,15 @@ config.fb_count = 2;                 // Double buffering
 ## Next Steps After Building
 
 1. **Print the Robot**: Use provided 3D models or design your own
-2. **Flash Firmware**: Install WASMachine runtime on ESP32
-3. **Connect to LLMos**: Browser-based interface
-4. **Load a Skill**: Try `explorer.md` for basic navigation
-5. **Iterate**: The dreaming engine will improve your robot over time
+2. **Flash Firmware**: Install LLMos-compatible firmware on ESP32
+3. **Connect to LLMos**: Via HAL physical adapter (serial at 115200 baud or WiFi)
+4. **Test Navigation**: Run NavigationLoop with one of the 4 test arenas (Simple Navigation, Exploration, Dead-End, Narrow Corridor)
+5. **Enable Vision**: Connect Qwen3-VL-8B via OpenRouter for runtime perception
 
 ---
 
-*Hardware Guide Version: 1.0*
-*Last Updated: 2026-01-28*
+*Hardware Guide Version: 1.1*
+*Last Updated: 2026-02-16*
 *Compatibility: LLMos v0.x, ESP32-S3*
+*Runtime Vision: Qwen3-VL-8B via OpenRouter*
+*Development LLM: Claude Opus 4.6*

@@ -1,1489 +1,435 @@
-# LLMos Architecture
+# LLMos System Architecture
 
-Technical architecture documentation for the LLMos - The Evolutionary Operating System for Physical AI Agents.
+Technical architecture documentation for LLMos -- the Operating System for AI Physical Agents.
 
 ---
 
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Architecture Principles](#architecture-principles)
-3. [Directory Structure](#directory-structure)
-4. [Core Architecture](#core-architecture)
-5. [Agent System](#agent-system)
-6. [Runtime Environments](#runtime-environments)
-7. [Hardware Integration](#hardware-integration)
-8. [Evolution System](#evolution-system)
-9. [Tool System](#tool-system)
-10. [State Management](#state-management)
-11. [Data Flow](#data-flow)
-12. [Security Considerations](#security-considerations)
+2. [Full Pipeline](#full-pipeline)
+3. [Module Map](#module-map)
+4. [HAL Layer](#hal-layer)
+5. [Navigation Pipeline](#navigation-pipeline)
+6. [World Model Layers](#world-model-layers)
+7. [Fleet Coordination](#fleet-coordination)
+8. [Testing Architecture](#testing-architecture)
+9. [Technology Stack](#technology-stack)
 
 ---
 
 ## System Overview
 
-LLMos is a **100% client-side operating system** that runs entirely in the browser. There is no backend server required - all computation, compilation, and execution happens in WebAssembly runtimes within the browser.
+LLMos is an operating system for AI physical agents (robots). The central idea: an LLM acts as the robot's "brain," choosing **where** to go, while classical algorithms handle **how** to get there safely. The system maintains a cognitive world model -- a 50x50 occupancy grid at 10cm/cell resolution -- that bridges raw sensor data and high-level LLM reasoning.
 
-```mermaid
-graph TB
-    subgraph "Browser Environment"
-        UI[React UI<br/>Next.js 14]
+The architecture enforces a strict separation of concerns:
 
-        subgraph "Runtimes"
-            PY[Pyodide<br/>Python 3.11]
-            QJS[QuickJS<br/>JavaScript]
-            WASM[Wasmer/Clang<br/>C to WASM]
-            R4[Robot4<br/>Firmware Simulator]
-        end
-
-        subgraph "Storage"
-            VFS[Virtual File System<br/>localStorage]
-            IDB[IndexedDB<br/>Large Artifacts]
-        end
-
-        subgraph "Agents"
-            SA[System Agent]
-            HA[Hardware Agent]
-            MA[Mutation Agent]
-        end
-    end
-
-    subgraph "External APIs"
-        LLM[OpenAI-compatible API<br/>OpenRouter/Gemini/OpenAI]
-        GH[GitHub API<br/>Git Operations]
-    end
-
-    subgraph "Hardware"
-        ESP[ESP32-S3<br/>WASMachine]
-    end
-
-    UI --> PY
-    UI --> QJS
-    UI --> WASM
-    UI --> R4
-    UI --> VFS
-    UI --> IDB
-    UI --> SA
-    SA --> LLM
-    SA --> HA
-    SA --> MA
-    UI --> GH
-    WASM --> ESP
-```
-
----
-
-## Architecture Principles
-
-### Zero Backend
-
-Everything runs in the browser:
-- **No server-side compilation** - Clang runs in WASM
-- **No backend database** - localStorage + IndexedDB
-- **No proxy servers** - Direct API calls to OpenAI-compatible providers
-- **No file servers** - Virtual File System in browser
-
-### File-First
-
-All artifacts are real files in persistent storage:
-- Every output saved to organized project structures
-- Complete file tree with real paths
-- Git-backed persistence via isomorphic-git
-- Read-only system volume with immutable artifacts
-
-### Agent-Native
-
-Agents are first-class citizens:
-- Markdown-defined agent specifications
-- Persistent agent memory and tools
-- Evolutionary improvement over time
-- Inter-agent communication protocol
-
-### Physical AI First-Class
-
-Hardware is a core primitive:
-- Browser-to-hardware deployment pipeline
-- Closed-loop telemetry feedback
-- Robot4 abstraction for LLM-friendly APIs
-- Virtual simulation before physical deployment
-
----
-
-## Directory Structure
-
-```
-llmos/
-├── README.md                       # Project overview
-├── package.json                    # Project configuration
-│
-├── app/                            # Next.js App Router
-│   ├── page.tsx                    # Main entry point
-│   └── api/                        # API routes
-│       ├── auth/github/            # GitHub OAuth
-│       └── git-proxy/              # Git operations
-│
-├── components/                     # React components
-│   ├── workspace/                  # Layout orchestration
-│   ├── panels/                     # UI panels
-│   │   ├── session/                # Chat interface
-│   │   ├── artifacts/              # Artifact viewers
-│   │   └── volumes/                # File explorer
-│   ├── applets/                    # Interactive applets
-│   ├── chat/                       # Chat components
-│   ├── settings/                   # Settings UI
-│   └── common/                     # Shared components
-│
-├── lib/                            # Core libraries
-│   ├── llm/                        # LLM client (OpenAI-compatible)
-│   ├── agents/                     # Agent system
-│   ├── runtime/                    # Execution runtimes
-│   ├── hardware/                   # Hardware integration
-│   ├── kernel/                     # OS kernel
-│   ├── llm-tools/                  # Tool definitions
-│   └── artifacts/                  # Artifact management
-│
-├── contexts/                       # React contexts
-├── hooks/                          # Custom hooks
-│
-├── public/                         # Static assets
-│   ├── sdk/wasi-headers/           # ESP32 SDK headers
-│   └── system/                     # System files
-│       ├── agents/                 # Agent definitions
-│       ├── applets/                # System applets
-│       ├── domains/                # Domain knowledge
-│       ├── kernel/                 # Kernel configuration
-│       └── tools/                  # Tool specifications
-│
-├── volumes/                        # Persistent storage
-│   └── system/                     # System volume
-│       ├── agents/                 # Agent definitions
-│       ├── skills/                 # Learned skills
-│       ├── tools/                  # Tool specs
-│       └── project-templates/      # Scaffolding
-│
-├── backend/                        # Optional backend services
-│   ├── chat.py                     # Chat API
-│   ├── collaboration-server.py    # Collaboration
-│   └── webhooks/                   # Git webhooks
-│
-├── electron/                       # Desktop app
-│   ├── main.ts                     # Electron main process
-│   ├── preload.ts                  # Preload scripts
-│   └── services/                   # Native services
-│
-├── docs/                           # Documentation
-│   ├── architecture/               # Architecture docs
-│   ├── guides/                     # User guides
-│   ├── hardware/                   # Hardware guides
-│   └── ui/                         # UI documentation
-│
-├── __tests__/                      # Test files
-│   ├── lib/                        # Library tests
-│   └── integration/                # Integration tests
-│
-├── scripts/                        # Build scripts
-└── styles/                         # Global styles
-```
-
----
-
-## Core Architecture
-
-### Three-Layer System
-
-```mermaid
-graph TB
-    subgraph "Presentation Layer"
-        RC[React Components]
-        FL[FluidLayout / Holodeck]
-        ME[Monaco Editor]
-        TF[Three.js / Fiber]
-    end
-
-    subgraph "Application Layer"
-        SAO[System Agent Orchestrator]
-        MACO[Multi-Agent Chat Orchestrator]
-        WCM[Workflow Context Manager]
-        TS[Tool System]
-    end
-
-    subgraph "Runtime Layer"
-        PYR[Pyodide Runtime]
-        QJSR[QuickJS Runtime]
-        WR[WASM Runtime]
-        R4R[Robot4 Runtime]
-    end
-
-    subgraph "Persistence Layer"
-        VFS[Virtual File System]
-        IDB[IndexedDB]
-        LS[localStorage]
-    end
-
-    RC --> SAO
-    FL --> SAO
-    ME --> SAO
-    TF --> R4R
-
-    SAO --> MACO
-    MACO --> WCM
-    WCM --> TS
-
-    TS --> PYR
-    TS --> QJSR
-    TS --> WR
-    TS --> R4R
-
-    PYR --> VFS
-    QJSR --> VFS
-    WR --> VFS
-    R4R --> VFS
-
-    VFS --> LS
-    VFS --> IDB
-```
-
-### Kernel Boot Sequence
-
-```mermaid
-sequenceDiagram
-    participant Browser
-    participant Kernel
-    participant VFS
-    participant Agents
-    participant Runtimes
-
-    Browser->>Kernel: Initialize
-    Kernel->>VFS: Mount volumes
-    VFS-->>Kernel: Volumes ready
-
-    Kernel->>Agents: Load system agents
-    Agents-->>Kernel: Agents loaded
-
-    Kernel->>Runtimes: Initialize runtimes
-    Note over Runtimes: Pyodide loads lazily<br/>WASM compiler loads lazily
-    Runtimes-->>Kernel: Core runtimes ready
-
-    Kernel-->>Browser: Boot complete
-```
-
----
-
-## Agent System
-
-### Markdown-First Architecture
-
-Agents are defined as markdown files with YAML frontmatter:
-
-```markdown
----
-name: HardwareControlAgent
-type: specialized
-capabilities:
-  - esp32-control
-  - wasm-deployment
-  - sensor-reading
-version: 1.0.0
----
-
-# Hardware Control Agent
-
-You are a specialized agent for controlling ESP32 hardware...
-
-## Workflow
-
-1. Analyze hardware requirements
-2. Generate appropriate firmware
-3. Compile and deploy
-4. Monitor telemetry
-
-## Tools Available
-
-- deploy-wasm-app
-- query-wasm-apps
-- connect-device
-```
-
-### Agent Hierarchy
-
-```mermaid
-graph TB
-    SA[System Agent<br/>Master Orchestrator]
-
-    SA --> PA[Planning Agent<br/>Task Decomposition]
-    SA --> HA[Hardware Control Agent<br/>ESP32 Operations]
-    SA --> MA[Mutation Agent<br/>Code Evolution]
-    SA --> PMA[Pattern Matcher Agent<br/>Semantic Search]
-
-    HA --> WASM[WASM Compiler]
-    HA --> DEP[Device Deployer]
-    HA --> SIM[Robot Simulator]
-
-    MA --> LE[Lens Evolution]
-    MA --> ME[Mutation Engine]
-
-    style SA fill:#f9f,stroke:#333
-    style HA fill:#bbf,stroke:#333
-    style MA fill:#bfb,stroke:#333
-```
-
-### Agent Execution Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant SAO as System Agent Orchestrator
-    participant LLM as OpenAI-compatible API
-    participant Tools as Tool System
-    participant Runtime as Runtime Environment
-
-    User->>SAO: "Create a wall-avoiding robot"
-    SAO->>LLM: System prompt + User message
-    LLM-->>SAO: Tool call: generate-wasm-app
-
-    SAO->>Tools: Execute generate-wasm-app
-    Tools->>Runtime: Compile C to WASM
-    Runtime-->>Tools: WASM binary
-    Tools-->>SAO: Tool result
-
-    SAO->>LLM: Tool result + Continue
-    LLM-->>SAO: Tool call: spawn-robot
-
-    SAO->>Tools: Execute spawn-robot
-    Tools->>Runtime: Initialize Robot4 simulator
-    Runtime-->>Tools: Robot spawned
-    Tools-->>SAO: Tool result
-
-    SAO->>LLM: Tool result + Continue
-    LLM-->>SAO: Final response
-    SAO-->>User: "Robot created and running in simulator"
-```
-
-### Model-Aware Execution
-
-The orchestrator adapts based on LLM capabilities:
+- **LLM** picks strategy (subgoal selection, exploration direction, recovery)
+- **Local planner** (A\*) computes collision-free paths on the grid
+- **HAL** executes motor commands and enforces safety limits
+- **World model** provides the shared representation all layers read from
 
 ```mermaid
 graph LR
-    subgraph "Advanced Models"
-        AM[Claude Opus 4.5<br/>GPT-4o]
-        NA[Native Agents<br/>Full markdown]
+    subgraph "Perception"
+        CAM[Camera / Sensors]
+        VLM[VLM - Qwen3-VL-8B]
+        GT[Ground Truth Sim]
     end
 
-    subgraph "Standard Models"
-        SM[Claude Sonnet<br/>GPT-4-mini]
-        CA[Compiled Agents<br/>Simplified prompts]
+    subgraph "World Model"
+        WM[50x50 Occupancy Grid]
+        SG[SceneGraph]
+        SER[Serializer - RLE/ASCII/Patch]
     end
 
-    subgraph "Lightweight Models"
-        LM[Free Models<br/>mimo-v2-flash]
-        RA[Robot4 Agents<br/>Minimal context]
+    subgraph "Reasoning"
+        CG[Candidate Generator]
+        PROMPT[Navigation Prompt]
+        LLM_BRAIN[Runtime LLM]
+        PARSE[Decision Parser + Normalizer]
     end
 
-    AM --> NA
-    SM --> CA
-    LM --> RA
+    subgraph "Planning & Execution"
+        CORR[LLM Corrections]
+        PRED[Predictive Model]
+        LP[Local Planner - A*]
+        HAL_E[HAL Bridge]
+        MOT[Motors / Actuators]
+    end
+
+    CAM --> VLM --> WM
+    GT --> WM
+    WM --> SER --> PROMPT
+    SG --> PROMPT
+    CG --> PROMPT
+    PROMPT --> LLM_BRAIN --> PARSE
+    PARSE --> CORR --> WM
+    CORR --> PRED --> WM
+    PARSE --> LP --> HAL_E --> MOT
+    MOT -->|feedback| CAM
 ```
 
 ---
 
-## Runtime Environments
+## Full Pipeline
 
-### Overview
+The navigation cycle runs in a loop. Each iteration:
+
+| Step | Component | Description |
+|------|-----------|-------------|
+| 1 | Sensor / Camera | Capture raw frame or distance readings |
+| 2 | VisionWorldModelBridge / WorldModelBridge | Convert observations to grid cell updates |
+| 3 | WorldModel | 50x50 occupancy grid (10cm/cell), centered at (25,25) |
+| 4 | WorldModelSerializer | Serialize grid to RLE JSON, ASCII, or patch format |
+| 5 | CandidateGenerator | Detect frontiers, generate 3-5 scored subgoals |
+| 6 | NavigationPrompt | Assemble system prompt + world model + map image + camera |
+| 7 | LLM (Qwen3-VL-8B via OpenRouter) | Choose action: MOVE_TO, EXPLORE, ROTATE_TO, FOLLOW_WALL, STOP |
+| 8 | Decision Parser + Normalizer | Parse JSON (strip markdown fences, think tags, free-form normalize) |
+| 9 | LLM Corrections | Apply optional world_model_update with confidence guards |
+| 10 | Predictive Model | 4 heuristics fill unknown cells with low-confidence predictions |
+| 11 | Local Planner (A\*) | Plan collision-free path on cost map |
+| 12 | HAL Bridge | Translate waypoints to HAL locomotion commands |
+| 13 | Motors | Execute movement, report result back to loop |
+
+---
+
+## Module Map
+
+All navigation modules live under `lib/runtime/`. Grouped by subsystem:
+
+### World Model Subsystem
+
+| File | Purpose |
+|------|---------|
+| `world-model.ts` | 50x50 occupancy grid, coordinate conversion, sensor raycasting, ASCII visualization, singleton management |
+| `world-model-serializer.ts` | RLE JSON (Format A), ASCII 25x25 (Format C), patch delta encoding, downsampling |
+| `world-model-bridge.ts` | `IWorldModelBridge` interface + ground-truth `WorldModelBridge` (Bresenham rasterization) |
+| `sensor-bridge.ts` | `VisionWorldModelBridge` -- builds grid from camera + VLM output with temporal decay |
+| `predictive-world-model.ts` | 4 spatial heuristics (wall continuation, corridor, open space, boundary walls) + verification |
+| `world-model-metrics.ts` | Grid accuracy comparison (cell accuracy, obstacle recall/precision, false positive/negative) |
+| `world-model-provider.ts` | Provider interface for world model access |
+| `map-renderer.ts` | Top-down PNG renderer (Format B) for multimodal LLM input |
+
+### Navigation Subsystem
+
+| File | Purpose |
+|------|---------|
+| `navigation-loop.ts` | Top-level orchestrator: cycle counter, stuck detection, LLM inference, corrections, path planning |
+| `navigation-types.ts` | `NavigationFrame` input schema, `LLMNavigationDecision` output schema, free-form normalizer |
+| `navigation-prompt.ts` | System prompt template, user message assembly, multimodal message builder, fallback decisions |
+| `candidate-generator.ts` | Frontier detection, goal subgoals, recovery candidates, scoring (goal/clearance/novelty/feasibility) |
+| `local-planner.ts` | A\* pathfinding with octile heuristic, cost map with obstacle inflation, waypoint downsampling |
+| `navigation-hal-bridge.ts` | Translates `CycleResult` to HAL locomotion commands, continuous run loop |
+| `navigation-ui-bridge.ts` | State bridge to React UI (callbacks for mode, path, predictions, fleet) |
+| `navigation-runtime.ts` | Session entry point, supports ground-truth and vision bridge modes, lightweight physics simulation |
+| `navigation-evaluator.ts` | Pass/fail evaluation (goal reached, collisions, exploration, coherence, cycle limit, stuck recovery) |
+| `navigation-logger.ts` | Cycle-by-cycle logging, run summary generation |
+
+### Test Infrastructure
+
+| File | Purpose |
+|------|---------|
+| `test-arenas.ts` | 4 predefined arenas: Simple Navigation, Exploration, Dead-End Recovery, Narrow Corridor |
+| `vision-simulator.ts` | `GroundTruthVisionSimulator` -- generates VisionFrames from simulation for vision-mode testing |
+| `vision-scene-bridge.ts` | Converts `VisionFrame` detections to `SceneGraph` nodes |
+
+### Scene Graph
+
+| File | Purpose |
+|------|---------|
+| `scene-graph/scene-graph.ts` | Core SceneGraph data structure (nodes with spatial data) |
+| `scene-graph/scene-graph-manager.ts` | Manager for scene graph lifecycle, LLM serialization |
+| `scene-graph/topology.ts` | Topological graph (waypoints + edges with traversal cost/status) |
+| `scene-graph/semantic-query.ts` | Semantic queries over scene graph nodes |
+| `scene-graph/world-model-integration.ts` | Bidirectional sync between SceneGraph and WorldModel |
+| `scene-graph/types.ts` | Shared types for scene graph subsystem |
+
+### LLM Inference
+
+| File | Purpose |
+|------|---------|
+| `openrouter-inference.ts` | OpenRouter API adapter with vision support, retries, exponential backoff, token tracking |
+| `llm-inference.ts` | Generic LLM inference interface |
+
+### Fleet Coordination
+
+| File | Purpose |
+|------|---------|
+| `fleet-coordinator.ts` | Multi-robot world model merging, frontier-based task assignment, conflict resolution |
+
+---
+
+## HAL Layer
+
+The Hardware Abstraction Layer (`lib/hal/`) provides a unified interface that works identically in simulation (Three.js) and on physical hardware (ESP32).
 
 ```mermaid
 graph TB
-    subgraph "Browser Runtimes"
-        PY[Pyodide<br/>Python 3.11 WASM]
-        QJS[QuickJS<br/>JavaScript Sandbox]
-        WASM[Wasmer + Clang<br/>C Compiler]
-        R4[Robot4<br/>Firmware Runtime]
+    subgraph "HAL Interface (lib/hal/types.ts)"
+        LOC[LocomotionInterface]
+        VIS[VisionInterface]
+        COM[CommunicationInterface]
+        SAF[SafetyInterface]
+        MAN[ManipulationInterface]
     end
 
-    subgraph "Capabilities"
-        PY --> |numpy, matplotlib, scipy| SCI[Scientific Computing]
-        QJS --> |Sandboxed execution| SEC[Secure JS Eval]
-        WASM --> |C to WASM| COMP[Native Compilation]
-        R4 --> |60Hz loop| SIM[Robot Simulation]
+    subgraph "Implementations"
+        SIM[simulation-adapter.ts]
+        PHY[physical-adapter.ts]
     end
 
-    subgraph "Output"
-        SCI --> PLOT[Plots & Visualizations]
-        SEC --> APP[React Applets]
-        COMP --> BIN[WASM Binaries]
-        SIM --> V3D[3D Visualization]
+    subgraph "Tooling"
+        EXEC[hal-tool-executor.ts]
+        LOAD[hal-tool-loader.ts]
+        SERV[hal-tools-server.ts]
+        VALID[command-validator.ts]
     end
+
+    LOC --> SIM
+    LOC --> PHY
+    VIS --> SIM
+    VIS --> PHY
+    EXEC --> LOC
+    EXEC --> VIS
 ```
 
-### Pyodide Runtime
+### HAL Files
 
-Python execution in the browser:
+| File | Purpose |
+|------|---------|
+| `types.ts` | All HAL interfaces: `HardwareAbstractionLayer`, `LocomotionInterface`, `VisionInterface`, `CommunicationInterface`, `SafetyInterface`, `ManipulationInterface` |
+| `simulation-adapter.ts` | Three.js simulation backend |
+| `physical-adapter.ts` | ESP32/serial/WiFi/Bluetooth physical backend |
+| `hal-tool-executor.ts` | Executes HAL tool calls from LLM |
+| `hal-tool-loader.ts` | Dynamic tool loading |
+| `hal-tools-server.ts` | Tool server for HAL commands |
+| `command-validator.ts` | Validates HAL commands before execution |
+
+### LocomotionInterface
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `drive` | `(left, right, durationMs?) => HALToolResult` | Differential drive (PWM -255 to 255) |
+| `moveTo` | `(x, y, z, speed?) => HALToolResult` | Move to absolute position |
+| `rotate` | `(direction, degrees) => HALToolResult` | Rotate in place (left/right, 1-360 deg) |
+| `moveForward` | `(distanceCm) => HALToolResult` | Move forward 1-200cm |
+| `moveBackward` | `(distanceCm) => HALToolResult` | Move backward 1-200cm |
+| `stop` | `() => HALToolResult` | Emergency stop |
+| `getPose` | `() => {position, rotation, velocity}` | Current pose |
+
+### VisionInterface
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `captureFrame` | `() => string` | Base64 camera frame |
+| `scan` | `(mode?) => {objects, clearAhead, nearestObstacle}` | Environment scan |
+| `getDistanceSensors` | `() => {front, left, right, ...}` | Distance readings |
+| `getLineSensors` | `() => number[]` | Line following sensors |
+| `getIMU` | `() => {acceleration, gyroscope, heading}` | Inertial measurement |
+
+---
+
+## Navigation Pipeline
+
+The `NavigationLoop` class (`navigation-loop.ts`) is the central orchestrator. Each call to `runCycle()` executes the following steps:
 
 ```mermaid
 sequenceDiagram
-    participant Tool as execute-python Tool
-    participant PY as Pyodide Runtime
-    participant WASM as WASM Engine
+    participant NL as NavigationLoop
+    participant WM as WorldModel
+    participant CG as CandidateGen
+    participant SER as Serializer
+    participant LLM as LLM (Qwen3-VL)
+    participant LP as LocalPlanner
+    participant HAL as HAL Bridge
 
-    Tool->>PY: Execute code
-    PY->>PY: Check initialized
-
-    alt Not initialized
-        PY->>WASM: Load Pyodide (~30MB)
-        PY->>WASM: Load numpy, matplotlib
-    end
-
-    PY->>WASM: Run Python code
-    WASM-->>PY: Stdout, Stderr
-    PY->>PY: Capture matplotlib plots
-    PY-->>Tool: ExecutionResult
+    NL->>NL: Check goal reached
+    NL->>NL: Stuck detection (< 5cm movement)
+    NL->>CG: generate(worldModel, bridge, pose, goal, isStuck)
+    CG-->>NL: 3-5 scored candidates
+    NL->>SER: serialize('auto', pose, goal)
+    SER-->>NL: RLE JSON or patch
+    NL->>NL: Assemble NavigationFrame
+    NL->>LLM: infer(systemPrompt, userMessage, images)
+    LLM-->>NL: Raw JSON response
+    NL->>NL: Parse + normalize decision
+    NL->>WM: Apply LLM corrections (confidence guards)
+    NL->>WM: Predictive model pass
+    NL->>LP: planPathWorld(grid, start, target)
+    LP-->>NL: PathResult (waypoints)
+    NL-->>HAL: CycleResult (decision + path)
+    HAL->>HAL: Execute on motors
 ```
 
-### WASM Compiler
+### Key Configuration
 
-Browser-based C compilation:
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `maxCycles` | 200 | Cycle limit before abort |
+| `maxHistory` | 5 | History entries sent to LLM |
+| `stuckThreshold` | 5 | Cycles without movement to declare stuck |
+| `goalToleranceM` | 0.3 | Distance to consider goal reached |
+| `inferenceTimeoutMs` | 5000 | LLM call timeout |
+| `unknownCellCost` | 5 (GT) / 50 (vision) | A\* cost for unknown cells |
+| `applyLLMCorrections` | true | Whether LLM can correct the grid |
+| `llmCorrectionMinConfidence` | 0.6 | Minimum LLM correction confidence |
+| `llmCorrectionMaxOverride` | 0.7 | Max sensor confidence LLM can override |
+| `enablePredictiveModel` | false | Run spatial heuristics each cycle |
 
-```mermaid
-sequenceDiagram
-    participant Tool as compile-wasm Tool
-    participant WC as WASM Compiler
-    participant CDN as Wasmer CDN
-    participant Clang as clang.wasm
+---
 
-    Tool->>WC: Compile request
+## World Model Layers
 
-    alt SDK not loaded
-        WC->>CDN: Load Wasmer SDK (~30MB)
-        CDN-->>WC: SDK loaded
-    end
-
-    WC->>Clang: Load clang package
-    WC->>WC: Create virtual filesystem
-    WC->>WC: Write source + headers
-
-    WC->>Clang: Execute compilation
-    Note over Clang: --target=wasm32-wasi<br/>-O3 optimization
-
-    Clang-->>WC: WASM binary
-    WC-->>Tool: CompileResult
-```
-
-### Robot4 Runtime
-
-WASM4-inspired robot firmware runtime:
+The navigation system uses a three-layer world representation:
 
 ```mermaid
 graph TB
-    subgraph "Robot4 Architecture"
-        FW[Firmware Code<br/>C with robot4.h]
-
-        subgraph "API Functions"
-            DR[drive(l, r)]
-            DI[distance(sensor)]
-            LE[led(r, g, b)]
-            UP[update() @ 60Hz]
-        end
-
-        subgraph "Execution"
-            LOOP[Main Loop<br/>16.6ms tick]
-            SEN[Sensor Simulation]
-            MOT[Motor Simulation]
-            COL[Collision Detection]
-        end
-
-        subgraph "Visualization"
-            TJS[Three.js Scene]
-            ROB[Robot Model]
-            ENV[Environment]
-        end
+    subgraph "Layer 1: Occupancy Grid"
+        GRID[50x50 GridCell array]
+        GRID --> |RLE JSON| LLM_1[LLM Input]
+        GRID --> |ASCII 25x25| DEBUG[Debug View]
+        GRID --> |Patch Delta| INCR[Incremental Updates]
+        GRID --> |Top-down PNG| VIS_1[Multimodal Input]
     end
 
-    FW --> DR
-    FW --> DI
-    FW --> LE
-    FW --> UP
+    subgraph "Layer 2: Symbolic / Scene Graph"
+        OBJ[Named Objects with BBox]
+        TOPO[Topology Graph - Waypoints + Edges]
+        OBJ --> LLM_2[LLM Input]
+        TOPO --> LLM_2
+    end
 
-    UP --> LOOP
-    LOOP --> SEN
-    LOOP --> MOT
-    LOOP --> COL
-
-    MOT --> TJS
-    COL --> TJS
-    TJS --> ROB
-    TJS --> ENV
+    subgraph "Layer 3: Candidate Subgoals"
+        CAND[3-5 Scored Candidates]
+        CAND --> LLM_3[LLM Selection]
+    end
 ```
+
+### Layer 1: Occupancy Grid (GridCell)
+
+Each cell stores:
+- `state`: one of `unknown`, `free`, `obstacle`, `wall`, `explored`, `path`, `collectible`, `collected`
+- `confidence`: 0.0-1.0
+- `lastUpdated`: timestamp
+- `visitCount`: number of robot visits
+- `distanceReading`: optional distance sensor value
+
+### Layer 2: SceneGraph
+
+Objects with bounding boxes, labels, and types. Topology graph with waypoints (id, position, label) and edges (from, to, cost, status: clear/blocked/unknown).
+
+### Layer 3: Candidates
+
+3-5 ranked subgoals with:
+- `id`: e.g. "c1", "f2", "r3"
+- `type`: subgoal, frontier, waypoint, recovery
+- `pos_m`: world coordinates
+- `score`: 0-1 heuristic score
+- `note`: human-readable explanation
 
 ---
 
-## Hardware Integration
+## Fleet Coordination
 
-### ESP32 Deployment Pipeline
-
-```mermaid
-graph LR
-    subgraph "Browser"
-        C[C Source Code]
-        COMP[Browser Compiler<br/>Clang WASM]
-        BIN[WASM Binary]
-    end
-
-    subgraph "Virtual"
-        SIM[Robot4 Simulator]
-        TEST[Behavior Testing]
-    end
-
-    subgraph "Physical"
-        USB[USB Serial]
-        ESP[ESP32-S3<br/>WASMachine]
-        HW[Physical Robot]
-    end
-
-    C --> COMP
-    COMP --> BIN
-    BIN --> SIM
-    SIM --> TEST
-
-    TEST --> |Success| USB
-    USB --> ESP
-    ESP --> HW
-
-    HW --> |Telemetry| USB
-```
-
-### TCP Deployment Protocol
-
-```mermaid
-sequenceDiagram
-    participant Browser
-    participant TCP as TCP Client
-    participant ESP as ESP32 Device
-
-    Browser->>TCP: installWasmApp(binary)
-
-    TCP->>TCP: Build protocol message
-    Note over TCP: Leading bytes: 0x12 0x34<br/>Type: REQUEST<br/>Command: INSTALL
-
-    TCP->>TCP: Encode metadata JSON
-    Note over TCP: app_name, heap_size, size
-
-    TCP->>TCP: Append WASM binary
-
-    TCP->>ESP: Send via TCP:8080
-    ESP->>ESP: Verify protocol
-    ESP->>ESP: Save to flash
-    ESP->>ESP: Load WASM app
-    ESP-->>TCP: Response: success
-    TCP-->>Browser: Installation complete
-```
-
-### Device Communication
+The `FleetCoordinator` manages multiple robots exploring the same arena.
 
 ```mermaid
 graph TB
-    subgraph "Browser"
-        DM[Device Manager]
-        WS[Web Serial API]
-    end
-
-    subgraph "Protocol"
-        JSON[JSON Commands]
-        BIN[Binary Protocol]
-    end
-
-    subgraph "ESP32"
-        UART[UART Handler]
-        WM[WASMachine Runtime]
-        GPIO[GPIO/Sensors]
-    end
-
-    DM --> WS
-    WS --> |Text| JSON
-    WS --> |Binary| BIN
-
-    JSON --> UART
-    BIN --> UART
-
-    UART --> WM
-    WM --> GPIO
-    GPIO --> |Telemetry| UART
+    R1[Robot 1 WorldModel] --> FC[FleetCoordinator]
+    R2[Robot 2 WorldModel] --> FC
+    R3[Robot 3 WorldModel] --> FC
+    FC --> SM[Shared WorldModel]
+    FC --> TA[Task Assignment]
+    SM --> |distribute| R1
+    SM --> |distribute| R2
+    SM --> |distribute| R3
 ```
+
+### Merge Strategy
+
+- **max_confidence**: keeps the highest-confidence cell across all robots
+- **latest_update**: keeps the most recently updated cell
+
+### Task Assignment
+
+Greedy frontier assignment:
+1. Sort frontiers by exploration value (unknown neighbor count)
+2. Enforce minimum target separation between robots (default 0.5m)
+3. Assign closest available robot to each frontier
+4. Distribute shared model back to all robots (indirect data at 0.8x confidence)
+
+### Key Configuration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `mergeStrategy` | max_confidence | Cell merge rule |
+| `minTargetSeparation` | 0.5m | Minimum distance between robot targets |
+| `reassignIntervalMs` | 5000 | Task reassignment interval |
+| `maxRobots` | 10 | Fleet size limit |
 
 ---
 
-## Evolution System
-
-### Mutation Engine
-
-```mermaid
-graph TB
-    subgraph "Input"
-        CODE[Original Code]
-        ERR[Error/Failure]
-        CTX[Context]
-    end
-
-    subgraph "Mutation Engine"
-        AN[Analyze Failure]
-        GEN[Generate Variants]
-        LENS[Apply Domain Lenses]
-        FIT[Evaluate Fitness]
-        SEL[Select Best]
-    end
-
-    subgraph "Output"
-        NEW[Improved Code]
-        SK[New Skill]
-    end
-
-    CODE --> AN
-    ERR --> AN
-    CTX --> AN
-
-    AN --> GEN
-    GEN --> LENS
-    LENS --> |Multiple variants| FIT
-    FIT --> SEL
-    SEL --> NEW
-    SEL --> SK
-```
-
-### Evolution Loop
-
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant MutationEngine
-    participant Simulator
-    participant SkillStore
-
-    Agent->>MutationEngine: Code failed
-
-    loop Generate Variants
-        MutationEngine->>MutationEngine: Apply lens mutations
-        MutationEngine->>Simulator: Test variant
-        Simulator-->>MutationEngine: Fitness score
-    end
-
-    MutationEngine->>MutationEngine: Select fittest
-    MutationEngine->>SkillStore: Store successful pattern
-    MutationEngine-->>Agent: Return best variant
-```
-
-### Lens Evolution
-
-Domain lenses evolve through:
-
-```mermaid
-graph LR
-    subgraph "Lens Operations"
-        CROSS[Crossover<br/>Combine successful lenses]
-        MUT[Mutation<br/>Random variations]
-        CULL[Culling<br/>Remove poor performers]
-    end
-
-    subgraph "Lens Types"
-        QC[Quantum Computing]
-        ROB[Robotics]
-        BIO[Bioinformatics]
-        FIN[Finance]
-    end
-
-    QC --> CROSS
-    ROB --> CROSS
-    CROSS --> MUT
-    MUT --> CULL
-    CULL --> |Next generation| QC
-    CULL --> |Next generation| ROB
-```
-
----
-
-## Tool System
-
-### Tool Categories
-
-```mermaid
-graph TB
-    subgraph "File Operations"
-        RF[read-file]
-        WF[write-file]
-        LF[list-files]
-        DF[delete-file]
-    end
-
-    subgraph "Code Execution"
-        EP[execute-python]
-        GA[generate-applet]
-        CW[compile-wasm]
-    end
-
-    subgraph "Agent Operations"
-        DSA[delegate-to-sub-agent]
-        QM[query-memory]
-        CA[create-agent]
-    end
-
-    subgraph "Hardware Tools"
-        DWA[deploy-wasm-app]
-        QWA[query-wasm-apps]
-        UWA[uninstall-wasm-app]
-        CD[connect-device]
-        SDC[send-device-command]
-    end
-
-    subgraph "Project Management"
-        CP[create-project]
-        CDP[create-device-project]
-    end
-```
-
-### Tool Execution Architecture
-
-```mermaid
-sequenceDiagram
-    participant LLM
-    participant Orchestrator
-    participant ToolSystem
-    participant Runtime
-    participant VFS
-
-    LLM->>Orchestrator: Tool call JSON
-    Orchestrator->>ToolSystem: executeSystemTool()
-
-    alt File Operation
-        ToolSystem->>VFS: Read/Write/List
-        VFS-->>ToolSystem: File data
-    else Code Execution
-        ToolSystem->>Runtime: Execute code
-        Runtime-->>ToolSystem: Execution result
-    else Hardware Operation
-        ToolSystem->>Runtime: Deploy/Query
-        Runtime-->>ToolSystem: Device response
-    end
-
-    ToolSystem-->>Orchestrator: Tool result
-    Orchestrator-->>LLM: Continue with result
-```
-
----
-
-## State Management
-
-### State Architecture
-
-```mermaid
-graph TB
-    subgraph "React Context"
-        WC[WorkspaceContext<br/>Layout & Agent State]
-        AC[AppletContext<br/>Applet Lifecycle]
-        PC[ProjectContext<br/>Project State]
-    end
-
-    subgraph "Zustand Stores"
-        AS[Artifact Store]
-        CS[Console Store]
-        APS[Applet Store]
-    end
-
-    subgraph "Singletons"
-        VFS[VirtualFileSystem]
-        LLM[LLMClient]
-        SAO[SystemAgentOrchestrator]
-    end
-
-    subgraph "Persistence"
-        LS[localStorage]
-        IDB[IndexedDB]
-    end
-
-    WC --> LS
-    AC --> AS
-    PC --> VFS
-
-    AS --> IDB
-    CS --> LS
-    APS --> LS
-
-    VFS --> LS
-    LLM --> LS
-```
-
-### State Flow
-
-```mermaid
-sequenceDiagram
-    participant UI as React UI
-    participant Context as Contexts
-    participant Store as Zustand Stores
-    participant VFS as Virtual FS
-    participant Storage as localStorage
-
-    UI->>Context: Update state
-    Context->>Store: Sync changes
-
-    Store->>VFS: Persist artifacts
-    VFS->>Storage: Write to localStorage
-
-    Storage-->>VFS: Confirmed
-    VFS-->>Store: Persist complete
-    Store-->>Context: State updated
-    Context-->>UI: Re-render
-```
-
----
-
-## Data Flow
-
-### Complete Request Cycle
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant ChatUI
-    participant SAO as System Agent Orchestrator
-    participant LLM as OpenAI-compatible API
-    participant Tools as Tool System
-    participant Runtime as Runtimes
-    participant VFS as Virtual FS
-    participant Display as UI Display
-
-    User->>ChatUI: "Create a wall-avoiding robot"
-    ChatUI->>SAO: Process message
-
-    SAO->>LLM: System prompt + message
-    LLM-->>SAO: Tool: generate-wasm-app
-
-    SAO->>Tools: Execute tool
-    Tools->>Runtime: Compile C to WASM
-    Runtime->>VFS: Write binary
-    Runtime-->>Tools: Compile result
-
-    alt Compilation Error
-        Tools-->>SAO: Error result
-        SAO->>LLM: Error + retry
-        LLM-->>SAO: Tool: fix-wasm-app
-        SAO->>Tools: Execute fix
-        Tools->>Runtime: Recompile
-    end
-
-    Tools-->>SAO: Success
-    SAO->>LLM: Continue
-    LLM-->>SAO: Tool: spawn-robot
-
-    SAO->>Tools: Execute spawn
-    Tools->>Runtime: Start Robot4 simulator
-    Runtime->>Display: Render 3D scene
-
-    Tools-->>SAO: Robot running
-    SAO->>LLM: Final response
-    LLM-->>SAO: Summary message
-    SAO-->>ChatUI: Display response
-    ChatUI-->>User: "Robot created and running!"
-```
-
-### Artifact Creation Flow
-
-```mermaid
-graph LR
-    subgraph "Input"
-        REQ[User Request]
-    end
-
-    subgraph "Processing"
-        LLM[LLM Generation]
-        TOOL[Tool Execution]
-        RT[Runtime Processing]
-    end
-
-    subgraph "Storage"
-        VFS[Virtual FS]
-        ART[Artifact Store]
-    end
-
-    subgraph "Output"
-        FILE[File in Tree]
-        VIS[Visualization]
-        HW[Hardware Deploy]
-    end
-
-    REQ --> LLM
-    LLM --> TOOL
-    TOOL --> RT
-    RT --> VFS
-    RT --> ART
-    VFS --> FILE
-    ART --> VIS
-    VFS --> HW
-```
-
----
-
-## Security Considerations
-
-### Sandboxed Execution
-
-```mermaid
-graph TB
-    subgraph "Browser Sandbox"
-        subgraph "WASM Isolation"
-            PY[Pyodide<br/>No network access]
-            QJS[QuickJS<br/>Limited APIs]
-            CLANG[Clang<br/>Virtual filesystem only]
-        end
-
-        subgraph "Storage Isolation"
-            LS[localStorage<br/>Origin-bound]
-            IDB[IndexedDB<br/>Origin-bound]
-        end
-    end
-
-    subgraph "API Security"
-        KEY[API Keys<br/>Encrypted in storage]
-        LLMAPI[LLM API<br/>HTTPS only]
-        GH[GitHub<br/>OAuth tokens]
-    end
-
-    PY --> LS
-    QJS --> LS
-    KEY --> LLMAPI
-    KEY --> GH
-```
-
-### Key Security Features
-
-- **No Server-Side Code Execution** - All code runs in browser sandboxes
-- **WASM Isolation** - Runtimes cannot access arbitrary system resources
-- **Origin-Bound Storage** - Data isolated per domain
-- **HTTPS Only** - All external API calls use TLS
-- **No Eval** - JavaScript execution uses QuickJS sandbox, not native eval
-
-### Execution Timeouts
-
-```mermaid
-graph LR
-    CODE[User Code] --> TIMEOUT{Timeout<br/>30 seconds}
-    TIMEOUT --> |Success| RESULT[Return Result]
-    TIMEOUT --> |Exceeded| ERROR[Timeout Error]
-```
-
----
-
-## Performance Characteristics
-
-| Component | First Load | Subsequent |
-|-----------|-----------|------------|
-| Pyodide | ~30MB, 5-10s | Instant (cached) |
-| Wasmer SDK | ~30MB, 5-10s | Instant (cached) |
-| WASM Compilation | 2-5s | 1-3s |
-| Robot4 Simulation | <100ms | <100ms |
-| File Operations | <10ms | <10ms |
-
-### Optimization Strategies
-
-- **Lazy Loading** - Heavy runtimes load on first use
-- **CDN Caching** - WASM modules cached by browser
-- **Virtual FS Caching** - LRU cache for frequently accessed files
-- **Incremental Updates** - Only changed artifacts re-rendered
-
----
-
-## Dependencies
-
-### Core Dependencies
-
-```json
-{
-  "next": "^14.0.0",
-  "react": "^18.2.0",
-  "pyodide": "^0.29.0",
-  "@wasmer/sdk": "^0.10.0",
-  "quickjs-emscripten": "^0.29.2",
-  "@monaco-editor/react": "^4.6.0",
-  "@react-three/fiber": "^8.15.0",
-  "isomorphic-git": "^1.27.1",
-  "zustand": "^4.5.0"
-}
-```
-
-### Browser Requirements
-
-- **Chrome 90+** / **Firefox 90+** / **Safari 15+**
-- **WebAssembly** support required
-- **Web Serial API** for hardware (Chrome only)
-- **SharedArrayBuffer** for optimal performance
-
----
-
-## Future Architecture
-
-### Planned Improvements
-
-```mermaid
-graph TB
-    subgraph "Current"
-        LS[localStorage<br/>5-10MB limit]
-        SYNC[Single-user]
-    end
-
-    subgraph "Planned"
-        OPFS[Origin Private FS<br/>Unlimited storage]
-        COLLAB[Real-time Collaboration<br/>Y.js CRDT]
-        WW[Web Workers<br/>Background runtimes]
-        SW[Service Worker<br/>Offline support]
-    end
-
-    LS --> OPFS
-    SYNC --> COLLAB
-
-    subgraph "Hardware Evolution"
-        ESP32[ESP32-S3]
-        SWARM[Swarm Intelligence]
-        TELEMETRY[Telemetry Loop]
-    end
-
-    ESP32 --> SWARM
-    SWARM --> TELEMETRY
-    TELEMETRY --> ESP32
-```
-
----
-
-## Client-Side Architecture
-
-LLMos runs entirely in the browser with optional backend services. The core principle is zero-backend operation for maximum scalability and privacy.
-
-### Execution Isolation
-
-```mermaid
-graph TB
-    subgraph "Browser Sandbox"
-        subgraph "WASM Isolation"
-            PY[Pyodide<br/>No network access]
-            QJS[QuickJS<br/>Limited APIs]
-            CLANG[Clang<br/>Virtual filesystem only]
-        end
-
-        subgraph "Storage Isolation"
-            LS[localStorage<br/>Origin-bound]
-            IDB[IndexedDB<br/>Origin-bound]
-        end
-    end
-
-    PY --> LS
-    QJS --> LS
-```
-
-### Storage Strategy
-
-```mermaid
-graph LR
-    subgraph "Hybrid Storage"
-        LOCAL[Local First<br/>IndexedDB]
-        REMOTE[Cloud Backup<br/>GitHub/Vercel Blob]
-        SYNC[Background Sync]
-    end
-
-    LOCAL --> SYNC
-    SYNC --> REMOTE
-    REMOTE --> |Recovery| LOCAL
-```
-
-**Key Features:**
-- Files written locally first (instant)
-- Background sync to GitHub (eventual consistency)
-- Offline-capable with full Git functionality
-- 50%+ disk quota in modern browsers
-
----
-
-## Architecture Comparison
-
-### LLMos vs Traditional Backends
-
-| Aspect | With Backend | Full Client-Side |
-|--------|--------------|------------------|
-| **Latency** | +100-500ms | Near-zero |
-| **Scaling** | Server limits | Infinite (CDN) |
-| **Cost** | Server + DB | CDN only |
-| **Privacy** | Data transmitted | Data stays local |
-| **Offline** | No | Yes |
-| **Deployment** | Complex | Static files |
-
-### Feature Status
-
-| Feature | Status | Implementation |
-|---------|--------|----------------|
-| **Markdown Agents** | Complete | 11+ specialized agents in `/public/system/agents/` |
-| **Git-backed Volumes** | Complete | Volume management with isomorphic-git support |
-| **Skill Evolution** | Complete | LLM-driven pattern matching generates markdown skills |
-| **Dynamic Projects** | Complete | Project scaffolding with 3-agent minimum |
-| **Self-healing Applets** | Complete | Validation and retry in SystemAgent.md |
-| **Vector Memory** | Planned | Semantic search with Transformers.js embeddings |
-| **Local LLM** | Planned | WebGPU inference with WebLLM |
-| **WASM Git Client** | Planned | isomorphic-git + LightningFS integration |
+## Testing Architecture
+
+The test suite covers 21 test files with comprehensive coverage of every subsystem.
+
+### Test Files
+
+| Test File | Covers |
+|-----------|--------|
+| `world-model-bridge.test.ts` | Ground-truth rasterization, frontier detection, obstacle inflation |
+| `world-model-serializer.test.ts` | RLE encoding/decoding, ASCII grid, patch computation |
+| `world-model-metrics.test.ts` | Grid accuracy comparison, obstacle recall/precision |
+| `sensor-bridge.test.ts` | VisionWorldModelBridge, temporal decay, ray casting |
+| `predictive-world-model.test.ts` | 4 heuristics, prediction verification, accuracy tracking |
+| `candidate-generator.test.ts` | Goal subgoals, frontier clustering, recovery candidates, scoring |
+| `local-planner.test.ts` | A\* pathfinding, cost map, diagonal movement, blocked paths |
+| `navigation-types.test.ts` | Decision validation, free-form normalization, Qwen3 think-tag stripping |
+| `navigation-hal-bridge.test.ts` | Decision-to-HAL translation, continuous run loop |
+| `navigation-ui-bridge.test.ts` | State callbacks, cycle loop, prediction visualization |
+| `navigation-runtime.test.ts` | End-to-end simulation, ground-truth + vision modes |
+| `navigation-e2e.test.ts` | Full pipeline integration across all 4 arenas |
+| `vision-pipeline-e2e.test.ts` | Camera-to-grid pipeline with VLM simulation |
+| `vision-simulator.test.ts` | Ground-truth VisionFrame generation |
+| `vision-scene-bridge.test.ts` | VisionFrame to SceneGraph conversion |
+| `openrouter-inference.test.ts` | API adapter, retries, token tracking |
+| `llm-corrections.test.ts` | Confidence guards, explored cell protection |
+| `fleet-coordinator.test.ts` | World model merging, task assignment, conflict resolution |
+| `world-model-provider.test.ts` | Provider interface tests |
+| `result.test.ts` | Core result type tests |
+| `adapter.test.ts` | Storage adapter tests |
+
+### Test Arenas
+
+4 predefined arenas for end-to-end evaluation:
+
+| Arena | Layout | Challenge |
+|-------|--------|-----------|
+| Simple Navigation | Open 5m x 5m, 3 obstacles | Corner-to-corner navigation |
+| Exploration | 5 scattered obstacles | Explore >80% coverage |
+| Dead-End Recovery | L-shaped internal wall | Escape dead end, navigate around |
+| Narrow Corridor | Two parallel walls with 0.6m gap | Navigate through tight passage |
 
 ---
 
 ## Technology Stack
 
-### Core Technologies
-
-**Frontend:**
-- Next.js 14 (React 18.2) - Application framework
-- TypeScript - Type safety
-- Tailwind CSS - Styling
-- Monaco Editor - Code editing
-- Three.js / React Three Fiber - 3D visualization
-
-**Runtimes:**
-- Pyodide 0.29+ - Python in browser (WASM)
-- QuickJS - Sandboxed JavaScript execution
-- Wasmer SDK 0.10+ - C to WASM compilation
-- Robot4 Runtime - Firmware simulation
-
-**Storage:**
-- IndexedDB - Large artifacts and binary data
-- localStorage - Configuration and cache
-- isomorphic-git - Git operations in browser
-- LightningFS - POSIX filesystem abstraction
-
-**LLM Integration:**
-- OpenAI-compatible API support (configurable)
-- Model Context Protocol (MCP) compatibility
-- Direct browser-to-API calls (no proxy required)
-
-### Future Enhancements
-
-**Planned Improvements:**
-
-1. **Vector-Based Semantic Memory**
-   - Local embeddings with Transformers.js
-   - Browser-native vector database
-   - Semantic similarity search for skills
-
-2. **WebGPU Local LLM**
-   - 3-8B parameter models in browser
-   - 10-40 tokens/second inference
-   - Zero API costs for common operations
-
-3. **Hybrid LLM Routing**
-   - Route tasks by complexity
-   - Local models for quick operations
-   - Cloud models for complex reasoning
-
-4. **Git Client Implementation**
-   - Full clone/pull/push/merge support
-   - IndexedDB-backed repository storage
-   - Offline Git operations
-
----
-
-## Git Client Architecture
-
-### Current vs Planned
-
-**Current (REST API):**
-- 5 API calls per commit
-- No clone/pull capability
-- Rate-limited by GitHub
-- Requires network
-
-**Planned (WASM Git):**
-- Native Git protocol support
-- Clone repositories locally
-- Offline operations
-- Branch management
-- Diff algorithms
-
-### Implementation Strategy
-
-```mermaid
-graph TB
-    subgraph "Browser"
-        ISO[isomorphic-git<br/>Pure JS Git]
-        LFS[LightningFS<br/>POSIX FS]
-        IDB[IndexedDB<br/>Persistence]
-    end
-
-    subgraph "Remote"
-        GH[GitHub<br/>Repository]
-        CORS[CORS Proxy<br/>Vercel API]
-    end
-
-    ISO --> LFS
-    LFS --> IDB
-    ISO --> CORS
-    CORS --> GH
-```
-
-**Key Features:**
-- ~100KB bundle size
-- Full Git compatibility (95%)
-- Streaming support for large repos
-- Pluggable filesystem abstraction
-
----
-
-## Related Documentation
-
-- **README.md** - Project overview and quick start
-- **docs/architecture/HELLO_WORLD_TUTORIAL.md** - Getting started guide
-- **docs/architecture/ROBOT4_GUIDE.md** - Robot4 firmware development
-- **docs/hardware/ESP32_GUIDE.md** - Comprehensive ESP32 hardware integration guide
-- **docs/guides/** - User guides and tutorials
-- **docs/ui/** - UI-specific documentation
-- **volumes/system/skills/** - Learned skill definitions
-
----
-
----
-
-## Dual-Brain Cognitive Architecture
-
-### Overview
-
-LLMos agents use a **Dual-Brain** architecture that separates fast reactive decisions from deep deliberative planning. This is inspired by [JEPA](https://openreview.net/forum?id=BZ5a1r-kVsf) (fast physical intuition) and [RSA](https://arxiv.org/html/2509.26626v1) (Recursive Self-Aggregation for deep reasoning).
-
-The key insight: a single LLM call is too slow for split-second obstacle avoidance but too shallow for multi-step exploration planning. The Dual-Brain solves this by running **two cognitive layers in parallel**, each optimized for its time scale.
-
-The vision backbone is [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct), a unified multimodal model that processes raw camera frames directly — no separate object detector needed. It serves as both the perception layer and the instinct brain, while RSA enables deep planning by recursively aggregating multiple VLM reasoning chains.
-
-```mermaid
-graph TB
-    subgraph "Sensing Layer"
-        CAM[Camera Frame]
-        SEN[Distance Sensors]
-    end
-
-    subgraph "Perception + Cognition (Unified VLM)"
-        VLM[Qwen3-VL-8B-Instruct<br/>Direct image + text<br/>~200-500ms]
-        VF[VisionFrame JSON<br/>objects + depth + scene + reasoning]
-    end
-
-    subgraph "Dual-Brain Controller"
-        direction TB
-        subgraph "INSTINCT — System 1"
-            RI[Reactive Rules<br/>&lt;5ms]
-            LI[VLM Single-Pass<br/>Qwen3-VL-8B ~200-500ms]
-        end
-
-        subgraph "PLANNER — System 2"
-            RSA[Multimodal RSA Engine<br/>Qwen3-VL-8B + RSA<br/>3-8 seconds]
-        end
-
-        ESC{Escalation<br/>Check}
-    end
-
-    subgraph "Execution Layer"
-        HAL[HAL Tool Executor]
-        SIM[Simulation Adapter]
-        PHY[Physical Adapter<br/>ESP32]
-    end
-
-    CAM --> VLM
-    SEN --> VLM
-    VLM --> VF
-
-    VF --> RI
-    VF --> ESC
-    RI --> |High confidence| HAL
-    RI --> |Low confidence| LI
-    ESC --> |Stuck / Unknown / Complex goal| RSA
-    LI --> HAL
-    RSA --> HAL
-
-    HAL --> SIM
-    HAL --> PHY
-
-    style RSA fill:#f9f,stroke:#333
-    style RI fill:#bfb,stroke:#333
-    style VLM fill:#bbf,stroke:#333
-```
-
-### Brain Decision Flow
-
-```mermaid
-sequenceDiagram
-    participant Sensors
-    participant VLM as Qwen3-VL-8B
-    participant Instinct as Instinct Brain
-    participant Escalation as Escalation Check
-    participant Planner as Planner Brain (Multimodal RSA)
-    participant HAL
-
-    loop Every ~200-500ms (2-5Hz sensing cycle)
-        Sensors->>VLM: Camera frame + distance readings
-        VLM->>Instinct: VisionFrame JSON + scene reasoning
-
-        Instinct->>Instinct: Reactive rules (<5ms)
-
-        alt Clear reactive rule (confidence > 85%)
-            Instinct->>HAL: Execute action immediately
-        else No clear rule
-            Instinct->>Escalation: Check escalation conditions
-            alt Should escalate
-                Escalation->>Planner: Run Multimodal RSA (N=4, K=2, T=2)
-                Note over Planner: Each candidate sees the image<br/>~3-8 seconds
-                Planner->>HAL: Execute planned action sequence
-            else Stay in instinct
-                Instinct->>Instinct: VLM single-pass (~200-500ms)
-                Instinct->>HAL: Execute action
-            end
-        end
-    end
-```
-
-### Escalation Conditions
-
-The Instinct brain escalates to the Planner when:
-
-| Condition | Trigger | RSA Preset |
-|-----------|---------|------------|
-| **Imminent unknown** | VLM detection confidence < 50% on nearby object | `quick` |
-| **Stuck** | No movement for > 5 seconds | `quick` |
-| **Complex goal** | Goal contains "find", "explore", "collect", "bring" | `standard` |
-| **Low confidence** | Instinct confidence < 40% | `quick` |
-| **New area** | Entered exploration frontier | `standard` |
-| **Fleet coordination** | Multi-robot decision needed | `swarm` |
-| **Periodic replan** | Every 50 sensing cycles (~5s) | `quick` |
-
-### RSA (Recursive Self-Aggregation) Engine
-
-RSA is a test-time scaling method from [Venkatraman et al., 2025](https://arxiv.org/html/2509.26626v1) that makes a local model (Qwen3-VL-8B) match cloud-scale reasoning quality. With a VLM, RSA operates on **multimodal reasoning chains** — each candidate independently analyzes the camera frame, and aggregation cross-references spatial observations across candidates for better accuracy.
-
-```mermaid
-graph LR
-    subgraph "Step 0: Generate Population"
-        Q[Query + Context] --> G1[Candidate 1]
-        Q --> G2[Candidate 2]
-        Q --> G3[Candidate 3]
-        Q --> G4[Candidate 4]
-    end
-
-    subgraph "Step 1-T: Recursive Aggregation"
-        G1 --> |Subsample K=2| A1[Aggregate 1+3]
-        G3 --> A1
-        G2 --> |Subsample K=2| A2[Aggregate 2+4]
-        G4 --> A2
-        A1 --> |Next step| R1[Refined 1]
-        A2 --> |Next step| R2[Refined 2]
-    end
-
-    subgraph "Final: Select"
-        R1 --> MV{Majority Vote<br/>or Random}
-        R2 --> MV
-        MV --> BEST[Best Answer]
-    end
-
-    style BEST fill:#bfb,stroke:#333
-```
-
-**Key paper findings applied to robotics:**
-- **K=2 already gives massive improvement** over K=1 (self-refinement). For quick replans, K=2 is sufficient.
-- **Population preserves correct fragments**: Even wrong candidates contain correct intermediate steps (e.g., correct obstacle detection but wrong path). RSA extracts and recombines them.
-- **Consensus measures convergence**: When the population agrees, stop early (no need to run all T steps).
-- **Multimodal RSA**: With Qwen3-VL-8B, candidates independently analyze the same image. Aggregation cross-references spatial claims, verifying against the original image — producing better depth estimates and scene understanding than any single pass.
-
-#### RSA Presets for Robotics
-
-| Preset | N | K | T | Inferences | Latency | Use Case |
-|--------|---|---|---|------------|---------|----------|
-| `quick` | 4 | 2 | 2 | 12 | ~3s | Stuck recovery, quick replan |
-| `standard` | 8 | 3 | 4 | 40 | ~8s | New area exploration, goal planning |
-| `deep` | 16 | 4 | 6 | 112 | ~22s | Skill generation, complex reasoning |
-| `swarm` | fleet_size | all | 3 | 3×fleet | ~6s | Multi-robot world model merge |
-
-### Qwen3-VL-8B Vision Pipeline
-
-[Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) processes raw camera frames directly, producing structured VisionFrame JSON with scene understanding, depth estimation, and OCR — all in a single model pass.
-
-```mermaid
-graph TB
-    subgraph "Camera Input"
-        FRAME[Camera Frame<br/>640×480]
-    end
-
-    subgraph "Qwen3-VL-8B-Instruct (~200-500ms)"
-        VLM[Unified Vision-Language Model<br/>Direct image understanding]
-        OD[Object Detection<br/>Unlimited object vocabulary]
-        DE[Depth Estimation<br/>VLM spatial reasoning]
-        OCR[OCR + Text Reading<br/>32 languages]
-        SA[Scene Analysis<br/>Navigation paths, obstacles]
-    end
-
-    subgraph "VisionFrame Output"
-        DET["detections: [<br/>  { label, confidence,<br/>    bbox, depth_cm, region }<br/>]"]
-        SCN["scene: {<br/>  openings: ['center','right'],<br/>  blocked: ['left'],<br/>  environment: 'indoor'<br/>}"]
-    end
-
-    FRAME --> VLM
-    VLM --> OD
-    VLM --> DE
-    VLM --> OCR
-    VLM --> SA
-    OD --> DET
-    DE --> DET
-    SA --> SCN
-
-    style DET fill:#ffd,stroke:#333
-    style SCN fill:#ffd,stroke:#333
-    style VLM fill:#bbf,stroke:#333
-```
-
-**Depth estimation**: Qwen3-VL-8B estimates object distances directly from visual cues (perspective, occlusion, relative size, scene context). With multimodal RSA, multiple independent depth estimates from different candidates are cross-referenced during aggregation for improved accuracy.
-
-### Swarm Intelligence via RSA
-
-RSA naturally implements the "MapReduce for physical intelligence" described in the project vision. Each robot's world model observation becomes a candidate in the RSA population, and the aggregation step serves as the consensus mechanism.
-
-```mermaid
-sequenceDiagram
-    participant R1 as Robot A<br/>Sector 1
-    participant R2 as Robot B<br/>Sector 2
-    participant R3 as Robot C<br/>Sector 3
-    participant HOST as Host Computer<br/>RSA Swarm Engine
-
-    par Map Phase (parallel exploration)
-        R1->>R1: Explore sector 1
-        R2->>R2: Explore sector 2
-        R3->>R3: Explore sector 3
-    end
-
-    R1->>HOST: World model snapshot (candidate 1)
-    R2->>HOST: World model snapshot (candidate 2)
-    R3->>HOST: World model snapshot (candidate 3)
-
-    loop RSA Aggregation (T=3 rounds)
-        HOST->>HOST: Subsample K candidates
-        HOST->>HOST: LLM aggregates into merged model
-        HOST->>HOST: Check consensus
-    end
-
-    HOST->>R1: Unified world model
-    HOST->>R2: Unified world model
-    HOST->>R3: Unified world model
-
-    Note over HOST: "Collective hallucination":<br/>Complete semantic map<br/>no single robot could build alone
-```
-
-### File Structure
-
-```
-lib/runtime/
-├── rsa-engine.ts              # RSA algorithm (text + multimodal)
-├── dual-brain-controller.ts   # Dual-Brain orchestration
-├── jepa-mental-model.ts       # JEPA-inspired abstract state
-├── world-model.ts             # Grid-based spatial model
-├── camera-vision-model.ts     # Cloud LLM vision (legacy)
-├── robot4-runtime.ts          # Firmware simulator
-├── esp32-agent-runtime.ts     # ESP32 agent runtime
-└── vision/
-    ├── vlm-vision-detector.ts # Qwen3-VL-8B unified vision detector
-    └── mobilenet-detector.ts  # Vision types + utility functions
-```
-
----
-
-*Last Updated: February 2026*
+| Layer | Technology |
+|-------|-----------|
+| Frontend Framework | Next.js 14, React 18 |
+| 3D Simulation | Three.js (via @react-three/fiber) |
+| Language | TypeScript (strict mode) |
+| Test Framework | Jest |
+| LLM Inference | OpenRouter API (Qwen3-VL-8B, Claude Sonnet, configurable) |
+| Build | Next.js built-in (Webpack 5 / Turbopack) |
+| Package Manager | npm |
+
+### Coordinate System
+
+- Rotation 0 faces -Y (North in grid)
+- Rotation PI/2 faces +X (East in grid)
+- Movement: `sin(angle)` for X displacement, `-cos(angle)` for Y displacement
+- Grid center: `(offsetX=25, offsetY=25)` for a 50x50 grid
+- World-to-grid: `gx = floor(worldX * 100 / resolution) + offsetX`
+- Grid-to-world: `x = (gx - offsetX) * resolution / 100`

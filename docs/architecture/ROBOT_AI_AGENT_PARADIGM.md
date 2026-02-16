@@ -1,588 +1,310 @@
-# Robot as AI Agent: Paradigm Analysis
+# The Robot AI Agent Paradigm
 
-**The Conceptual Breakthrough: Physical AI Programming Through Natural Language**
-
----
-
-## Executive Summary
-
-This document analyzes a transformative paradigm shift: treating robots as **physical AI agents** that are programmed through natural language conversation, just as we program digital AI agents (LLMs) through chat.
-
-**Core Insight**: When you chat with LLMos to create a robot behavior, you're not just generating code—you're **programming a physical AI agent** that will autonomously execute in the real world.
+**The LLM is the robot's brain, not its assistant.**
 
 ---
 
-## The Paradigm: Chat = Program Physical AI
+## Core Idea
 
-### Traditional Robotics Workflow
+Traditional robotics places intelligence in compiled firmware: hardcoded state machines, PID controllers, and hand-tuned heuristics. The robot's behavior is fixed at compile time. To change what the robot does, a human must rewrite code, recompile, and reflash.
 
-```
-User → Write C code → Compile → Flash → Test → Debug → Repeat
-      (hours/days)
-```
+LLMos inverts this. The LLM is not a tool that helps a human write robot firmware. The LLM *is* the robot's cognitive layer. It receives sensor data, reasons about a world model, selects subgoals, and emits structured instructions -- every cycle, in closed loop, at runtime.
 
-### LLMos Paradigm
+The microcontroller becomes a peripheral. It exposes sensors as readable tools and actuators as callable tools. All behavioral intelligence lives in the LLM.
 
 ```
-User: "Make a wall-avoiding robot"
-  ↓
-LLM generates firmware
-  ↓
-Auto-compile to binary
-  ↓
-Deploy to simulator (instant) OR real robot (30s)
-  ↓
-Robot executes autonomously
-  ↓
-User sees 3D visualization in real-time
-```
-
-**Result**: Natural language → Physical behavior (minutes, not days)
-
----
-
-## Conceptual Layers
-
-### 1. The Robot as Embodied AI Agent
-
-**Digital AI (LLM)**:
-- Receives text input
-- Processes with neural network
-- Outputs text response
-- Stateless (each interaction independent)
-
-**Physical AI (Robot)**:
-- Receives firmware program (from LLM)
-- Processes with microcontroller + sensors
-- Outputs physical actions (movement, LED colors)
-- Stateful (maintains position, sensor history)
-
-**Key Insight**: The robot is an **execution environment** for AI-generated programs, just like a Python interpreter executes AI-generated code.
-
-### 2. Chat Interface as Robot Programming IDE
-
-When you type in chat:
-```
-"Create a robot that follows a line"
-```
-
-You're actually doing:
-1. **Specification**: Describing desired robot behavior
-2. **Code Generation**: LLM writes Robot4 C firmware
-3. **Compilation**: Automatic WASM/binary build
-4. **Deployment**: Upload to sim or real robot
-5. **Execution**: Robot runs autonomously
-6. **Observation**: 3D view shows results
-7. **Iteration**: "Make it faster" → LLM modifies code → redeploy
-
-**This is a complete development cycle in natural language.**
-
-### 3. Simulation vs Real: Two Execution Environments
-
-| Aspect | Simulation | Real Robot |
-|--------|-----------|------------|
-| **Execution** | Browser WASM | ESP32 firmware |
-| **Physics** | Simulated (perfect) | Real (noisy sensors, motor variance) |
-| **Speed** | Faster than real-time | Real-time only |
-| **Cost** | Free | ~$80 for hardware |
-| **Risk** | Zero | Physical damage possible |
-| **Feedback** | Immediate visual | Requires telemetry setup |
-
-**UX Implication**: Users should **always start in simulation**, then deploy to real robot when confident.
-
-### 4. Volume System: User/Team/System for Robots
-
-```
-user/
-  └── my-robots/
-      ├── wall-avoider-v1.c      # My experimental firmware
-      ├── maze-solver.c           # Work in progress
-      └── telemetry-session-1.log # My test data
-
-team/
-  └── shared-robots/
-      ├── challenge-1-solution.c  # Team's competition entry
-      ├── line-follower-pid.c     # Collaborative development
-      └── team-telemetry/         # Shared test results
-          └── arena-5x5-run-1.log
-
-system/
-  └── robots/
-      ├── standard-robot-v1.json  # Hardware definition (~$80 robot)
-      ├── templates/
-      │   ├── basic-drive.c       # Start here
-      │   ├── obstacle-avoider.c  # Pre-built behaviors
-      │   └── line-follower.c
-      ├── maps/
-      │   ├── standard5x5Empty
-      │   ├── standard5x5Obstacles
-      │   └── standard5x5LineTrack
-      └── robot4.h                # Robot API library
-```
-
-**Key Insight**: The volume system creates a **hierarchy of robot programs**:
-- **User**: Personal experimentation
-- **Team**: Collaboration and competition
-- **System**: Standard capabilities and challenges
-
----
-
-## 3D World Panel: The Central Workspace
-
-### Why 3D View Should Be Primary
-
-**Current LLMos**: Desktop grid → Select applet → Chat programs it
-**Proposed LLMos**: 3D robot world → Chat programs robot → Immediate visual feedback
-
-**Reasoning**:
-1. **Robots are inherently spatial** - 3D is their natural representation
-2. **Immediate feedback loop** - See program results instantly
-3. **Intuitive for all users** - No code knowledge needed
-4. **Bridging sim-to-real** - Same view for both environments
-5. **Team collaboration** - Everyone sees the same robot world
-
-### UX Layout
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  LLMos Desktop - Robot AI Agent Workspace                   │
-├──────────┬──────────────────────────────────┬───────────────┤
-│          │                                  │               │
-│  Files & │      🤖 3D Robot World          │     Chat      │
-│  Volumes │                                  │               │
-│          │   ┌──────────────────────────┐   │   User: Make  │
-│  user/   │   │                          │   │   it avoid    │
-│  ├─ my-  │   │      ┌─────┐             │   │   walls       │
-│  │  robots│   │      │🤖   │ ← Robot    │   │               │
-│  │  ├─wall│   │      └─────┘             │   │   System:     │
-│  │  └─maze│   │         ↓                │   │   Generating  │
-│          │   │         →                │   │   firmware... │
-│  team/   │   │                          │   │               │
-│  ├─shared│   │   🧱  5m × 5m Arena     │   │   ✓ Compiled  │
-│          │   │                          │   │   ✓ Deployed  │
-│  system/ │   └──────────────────────────┘   │               │
-│  ├─robots│                                  │   [3D view    │
-│  └─maps  │   [Sim] [Real] [Record] [Share] │    updates]   │
-│          │                                  │               │
-└──────────┴──────────────────────────────────┴───────────────┘
-              ↑                                      ↑
-         Visual feedback              Natural language programming
-```
-
-### 3D Panel Features
-
-**Core Features**:
-1. **Robot visualization** - Cube robot with orientation, LED color
-2. **Arena rendering** - Walls, obstacles, lines, checkpoints
-3. **Camera controls** - Orbit, pan, zoom, preset views
-4. **Real-time updates** - Position, rotation, sensor readings
-5. **Sim/Real toggle** - Switch execution environment
-6. **Telemetry overlay** - Sensor data, trajectories, heat maps
-
-**Interactive Elements**:
-1. **Click robot** → Show firmware code
-2. **Click arena** → Set waypoint
-3. **Camera presets** → Top-down, side, follow robot
-4. **Playback controls** → Record, replay, slow-mo
-
----
-
-## Implementation Architecture
-
-### Component Hierarchy
-
-```
-RobotWorldWorkspace
-├── RobotWorldPanel (main 3D view)
-│   ├── ThreeJSCanvas
-│   │   ├── RobotMesh (cube with LED)
-│   │   ├── ArenaMesh (floor, walls)
-│   │   ├── ObstaclesMesh
-│   │   └── CameraController
-│   ├── SimulatorEngine (physics, sensors)
-│   └── TelemetryReceiver (real robot data)
-├── RobotControlToolbar
-│   ├── SimRealToggle
-│   ├── PlayPauseReset
-│   ├── RecordReplay
-│   └── DeployButton
-├── ChatPanel (generates firmware)
-└── FileBrowser (user/team/system volumes)
-```
-
-### Data Flow
-
-```
-User types in chat
-  ↓
-LLM generates Robot4 firmware (C code)
-  ↓
-System compiles to WASM (for sim) or binary (for ESP32)
-  ↓
-[SIMULATION PATH]              [REAL ROBOT PATH]
-Simulator loads WASM    →      Flash binary to ESP32
-Robot executes in physics  →   Robot executes physically
-Send position to 3D view   →   Receive telemetry via serial
-  ↓                              ↓
-3D Panel updates in real-time
-  ↓
-User observes, iterates in chat
-```
-
-### State Management
-
-```typescript
-interface RobotWorldState {
-  // Execution mode
-  mode: 'simulation' | 'real-robot' | 'replay';
-
-  // Current robot
-  robot: {
-    position: { x: number; y: number; z: number };
-    rotation: number; // radians
-    velocity: { linear: number; angular: number };
-    ledColor: { r: number; g: number; b: number };
-    sensors: {
-      distance: number[];
-      line: number[];
-      imu: { ax: number; ay: number; az: number };
-    };
-  };
-
-  // Current program
-  program: {
-    firmwareCode: string;
-    compiledWasm?: Uint8Array;
-    compiledBinary?: Uint8Array;
-    volume: 'user' | 'team' | 'system';
-    path: string;
-  };
-
-  // Arena configuration
-  arena: {
-    map: FloorMap;
-    name: string;
-  };
-
-  // Telemetry
-  telemetry: {
-    recording: boolean;
-    data: TelemetryPoint[];
-    session: string;
-  };
-}
+Traditional:  Human -> Code -> Compile -> Flash -> Fixed Behavior
+LLMos:        Sensors -> World Model -> LLM -> Structured Decision -> Classical Planner -> Actuators
 ```
 
 ---
 
-## The Power of This Paradigm
+## Inversion of Control
 
-### 1. **Democratizing Robotics**
+In classical robotics, the firmware is the authority. It reads sensors, runs control loops, and drives motors. The LLM, if present, is called occasionally for advice.
 
-**Before**: Only programmers can create robot behaviors
-**After**: Anyone can describe desired behavior in natural language
+In LLMos, the LLM is the authority. Every cycle:
 
-**Impact**: 10x more people can build robots
+1. Sensors produce readings (distance, camera, IMU)
+2. The world model is updated from sensor data
+3. The world model is serialized (RLE JSON, top-down image, or patch)
+4. Candidate subgoals are generated by classical heuristics
+5. The LLM receives the full context and picks a strategy
+6. A classical A* planner computes a collision-free path
+7. The HAL translates the path into motor commands
+8. The firmware executes the commands and reports results
 
-### 2. **Bridging Digital and Physical AI**
-
-**Insight**: LLMs are digital intelligence, robots are physical intelligence
-
-**Connection**: LLM generates the "brain" (firmware) for the physical body (robot)
-
-**Result**: Symbiotic relationship between digital and physical AI
-
-### 3. **Simulation-to-Real Pipeline**
-
-**Workflow**:
-1. Describe behavior in chat
-2. Test in free simulation (instant)
-3. Refine until perfect
-4. Deploy to real robot (high confidence)
-
-**Impact**: Reduces hardware failures, speeds development
-
-### 4. **Team Collaboration on Physical AI**
-
-**Team Volume Use Cases**:
-- **Robotics competitions**: Team develops winning strategy
-- **Educational projects**: Students collaborate on robot behaviors
-- **Research labs**: Share robot programs and telemetry
-- **Maker spaces**: Community robot library
-
-**Power**: Physical AI development becomes collaborative
-
-### 5. **Learning Loop**
+The LLM decides WHERE to go. Classical planners decide HOW to get there. The firmware handles the physical execution. Each layer has a strict contract with the next.
 
 ```
-User describes behavior
-  ↓
-LLM generates firmware
-  ↓
-Robot executes (sim or real)
-  ↓
-User sees 3D results
-  ↓
-User refines description
-  ↓
-LLM improves firmware
-  ↓
-[Loop until perfect]
+LLM Layer:       Strategy selection (MOVE_TO, EXPLORE, ROTATE, STOP)
+Planner Layer:   A* pathfinding on occupancy grid
+HAL Layer:       Motor commands with safety validation
+Firmware Layer:  Deterministic execution with fallback logic
 ```
 
-**Educational Impact**: Users learn robotics by observing, not by studying code
-
-### 6. **World Modeling: Cognitive Understanding**
-
-**Key Insight**: An intelligent robot must build an internal model of its world.
-
-The robot AI agent maintains a **cognitive world model** that:
-- **Tracks explored vs unexplored areas** - the robot remembers where it has been
-- **Records obstacle locations** - builds a mental map of hazards
-- **Estimates position** - understands its location relative to known landmarks
-- **Updates beliefs** - adapts when new data contradicts old assumptions
-
-**World Model Features**:
-
-```
-┌─────────────────────────────────┐
-│ WORLD MODEL (Robot View)        │
-├─────────────────────────────────┤
-│ · · · · · · · · · · · · · · · · │
-│ · · · · · . . . . . . . · · · · │
-│ · · · · * * * . . . █ . · · · · │
-│ · · · * * * * * . █ . . · · · · │
-│ · · * * * ▲ * * * . . . · · · · │
-│ · · * * * * * * * . . . · · · · │
-│ · · · * * * * . . . . · · · · · │
-│ · · · · · · · · · · · · · · · · │
-├─────────────────────────────────┤
-│ Legend:                         │
-│ · unknown  . free  * explored   │
-│ █ obstacle ▲ robot              │
-└─────────────────────────────────┘
-```
-
-**Implementation**:
-- **WorldModel class**: Grid-based representation of explored environment
-- **Progressive updates**: Each sensor reading improves the model
-- **ASCII visualization**: Robot can "draw" its understanding
-- **Mini-map overlay**: Real-time top-down view in 3D panel
-
-**Agent Prompt Enhancement**:
-Robots are instructed to think about world modeling:
-```
-OBSERVATION: Front=65cm, L=120cm, R=45cm. Position (0.5, 0.8), heading NE.
-WORLD UPDATE: Obstacle detected ahead. Left path leads to unexplored area.
-DECISION: Turn left toward unexplored region at moderate speed.
-```
-
-**This transforms robots from reactive machines to understanding agents.**
-
-### 6. **Real-World AI Agent Network**
-
-**Vision**: Multiple robots (physical AI agents) executing programs generated by LLMs (digital AI agents)
-
-**Scenario**:
-- User: "Make 3 robots search the arena"
-- LLM generates: Leader + 2 follower firmwares
-- System deploys: Each robot gets its firmware
-- Robots coordinate: Swarm intelligence emerges
-
-**This is unprecedented**: Natural language → Multi-robot coordination
+This separation is the safety architecture. Even if the LLM makes a questionable choice, the planner enforces collision-free paths, the HAL enforces motor limits, and the firmware enforces deterministic fallback when host communication fails.
 
 ---
 
-## UX Principles for 3D Robot World
+## Dual-LLM Design
 
-### 1. **Progressive Disclosure**
+LLMos uses two different LLMs for two fundamentally different jobs:
 
-**Level 1 (Beginner)**: Just chat and watch 3D
-- "Make it go forward"
-- See robot move
-- No code visible
+### Claude Opus 4.6 -- The Development Brain
 
-**Level 2 (Intermediate)**: See generated code
-- Expand code panel
-- Understand what LLM created
-- Learn C programming
+Runs on the host machine. Handles everything that requires deep reasoning, large context windows, and multi-step planning:
 
-**Level 3 (Advanced)**: Edit firmware directly
-- Modify generated code
-- Hybrid LLM + manual programming
+- Creating and evolving agent definitions (markdown files)
+- Orchestrating multi-agent workflows
+- Generating and promoting skills across volumes
+- Consolidating execution memory
+- Proposing kernel improvements
+- Debugging and architectural reasoning
 
-### 2. **Immediate Visual Feedback**
+This LLM operates at human timescales (seconds to minutes). Latency does not matter. Reasoning depth does.
 
-**Every action** should update the 3D view within 100ms:
-- Deploy firmware → Robot appears in arena
-- Start simulation → Robot starts moving
-- Adjust camera → Smooth transition
-- Change LED color → Instant update
+### Qwen3-VL-8B -- The Runtime Brain
 
-### 3. **Sim-to-Real Parity**
+Runs locally on host GPU (8GB+ VRAM) or via OpenRouter. Handles real-time perception and decision-making:
 
-**Same interface** for both:
-- Same 3D view
-- Same controls
-- Same file system
-- Only difference: "Sim" vs "Real" toggle
+- **Instinct mode**: Single-pass VLM inference (~200-500ms). Reactive behaviors: obstacle avoidance, wall following, object tracking. The reflex arc.
+- **Planner mode**: RSA-enhanced deeper reasoning (3-8s). Strategy: exploration planning, recovery from novel situations, skill generation. The prefrontal cortex.
+- **Vision**: Unified vision-language model. Sees camera frames, estimates depth, identifies objects, reads text -- all in one multimodal pass.
 
-**Cognitive load**: Near zero (don't learn two systems)
+The DualBrainController (`lib/runtime/dual-brain-controller.ts`) manages escalation between instinct and planner based on:
 
-### 4. **Spatial Consistency**
+| Trigger | Brain | Reason |
+|---|---|---|
+| Imminent collision | Instinct | Time-critical, reflexive |
+| Open corridor | Instinct | Simple, well-understood |
+| Unknown object | Planner | Requires analysis |
+| Stuck for N cycles | Planner | Needs new strategy |
+| Multi-step goal | Planner | Requires planning |
+| Fleet coordination | Planner | Cross-robot reasoning |
 
-**Robot always at center** of attention:
-- 3D camera follows robot
-- Telemetry data overlays on robot
-- Code panel shows robot's firmware
-- Chat discusses robot's behavior
-
-### 5. **Collaborative Awareness**
-
-**Team mode** shows:
-- Other team members' robots (ghosted)
-- Shared telemetry sessions
-- Live collaboration indicators
-- Comment threads on robot programs
+Neither brain blocks the other. The development LLM can reason about architecture while the runtime LLM maintains closed-loop control.
 
 ---
 
-## Implementation Phases
+## The World Model as Cognitive Map
 
-### Phase 1: Core 3D Panel (Week 1)
-- [x] Create RobotWorldPanel component
-- [ ] Integrate CubeRobotSimulator
-- [ ] Camera controls (orbit, zoom, pan)
-- [ ] Real-time rendering loop
-- [ ] Basic robot mesh with LED
+An intelligent robot must build an internal model of its world. The WorldModel class (`lib/runtime/world-model.ts`) maintains a 50x50 occupancy grid (10cm resolution, 5m x 5m arena) that represents the robot's understanding:
 
-### Phase 2: Workspace Restructure (Week 1-2)
-- [ ] Replace desktop grid with 3D panel as primary
-- [ ] Move chat to right sidebar
-- [ ] Add robot control toolbar
-- [ ] Volume browser for robot programs
+### Cell States
 
-### Phase 3: Chat → Robot Pipeline (Week 2)
-- [ ] Chat generates Robot4 firmware
-- [ ] Auto-compile to WASM
-- [ ] Deploy to simulator
-- [ ] 3D view updates with robot state
+| State | Symbol | Meaning |
+|---|---|---|
+| `unknown` | U | Not yet observed |
+| `free` | F | Safe to traverse |
+| `explored` | E | Robot has been here |
+| `obstacle` | O | Contains an obstacle |
+| `wall` | W | Arena boundary |
+| `collectible` | C | Contains a collectible |
+| `collected` | D | Collectible was here, now collected |
+| `path` | P | Part of a planned path |
 
-### Phase 4: Team Collaboration (Week 3)
-- [ ] Team volume for shared programs
-- [ ] Live telemetry sharing
-- [ ] Collaborative debugging
-- [ ] Challenge leaderboards
+### Grid Properties
 
-### Phase 5: Real Robot Integration (Week 4)
-- [ ] Serial communication with ESP32
-- [ ] Telemetry reception and parsing
-- [ ] 3D position estimation from sensors
-- [ ] Sim-to-real comparison view
+Each cell tracks:
+- **State**: One of the above
+- **Confidence** (0.0-1.0): How certain the robot is about this cell
+- **Last updated**: Timestamp for temporal decay
+- **Visit count**: How many times the robot has been in this cell
+- **Distance reading**: Last sensor measurement at this cell
+
+### Three Serialization Formats
+
+The world model is serialized for the LLM in three formats, each serving a different purpose:
+
+1. **Format A -- RLE JSON** (`world-model-serializer.ts`): Compact run-length encoded grid for structured reasoning. Primary format. Example: `"U:1200,F:800,O:200,W:300"`
+2. **Format B -- Top-down image** (`map-renderer.ts`): 500x500 pixel color-coded image for multimodal VLM input. The LLM sees the map visually alongside the camera frame.
+3. **Format C -- ASCII grid** (`world-model-serializer.ts`): 25x25 downsampled text grid for debugging and lightweight contexts.
+4. **Delta patches**: Only cells changed since last serialization, for subsequent cycles.
+
+### Predictive Layer
+
+The PredictiveWorldModel (`lib/runtime/predictive-world-model.ts`) extrapolates what might be in unknown cells based on observed patterns:
+
+- **Wall continuation**: If a wall is observed, predict it continues in the same direction
+- **Corridor detection**: If walls form a corridor, predict the corridor continues
+- **Open space expansion**: If a large open area is seen, predict it extends
+- **Symmetry**: Mirror known structure when symmetry is detected
+
+Predictions are marked with low confidence (0.2-0.3) and automatically verified when the robot observes those cells. Correct predictions boost model confidence; incorrect predictions trigger re-evaluation.
 
 ---
 
-## Technical Considerations
+## The Execution Frame
 
-### Performance
+The execution frame (`lib/runtime/execution-frame.ts`) is the atomic unit of LLMos computation. Every cycle, the runtime LLM receives a frame and emits the next one.
 
-**Target**: 60 FPS in 3D view
-- Use Three.js with optimized rendering
-- LOD (level of detail) for complex scenes
-- Frustum culling for off-screen objects
-- Instanced rendering for multiple robots
+An execution frame contains:
 
-### State Synchronization
+| Element | Description |
+|---|---|
+| **Goal** | What the agent is trying to achieve (text) |
+| **History** | Last N cycles providing temporal context |
+| **Internal State** | Variables representing the agent's beliefs |
+| **World Model** | RLE-encoded occupancy grid + symbolic layer + candidates |
+| **Sensor Inputs** | Current physical readings (distance, camera, IMU) |
+| **Previous Action Results** | Outcomes from last cycle (success, blocked, timeout, collision) |
+| **Fallback Logic** | Deterministic behavior that runs if LLM inference fails |
 
-**Challenge**: Keep 3D view, simulator, and real robot in sync
+The frame is designed so that the LLM can reason about the complete context in a single pass, without needing memory beyond the frame itself.
 
-**Solution**:
-```typescript
-// Centralized state store
-const robotStore = new RobotStateStore();
+---
 
-// All components subscribe
-robotStore.subscribe('robot-position', (pos) => {
-  threeJsScene.updateRobotPosition(pos);
-});
+## The Scene Graph as Semantic Understanding
 
-// Simulator pushes updates
-simulator.onUpdate((state) => {
-  robotStore.publish('robot-position', state.position);
-  robotStore.publish('robot-rotation', state.rotation);
-  robotStore.publish('robot-sensors', state.sensors);
-});
+The occupancy grid tells the robot *where things are*. The scene graph (`lib/runtime/scene-graph/`) tells it *what things are*.
 
-// Real robot pushes telemetry
-serialPort.onTelemetry((data) => {
-  robotStore.publish('robot-position', estimatePosition(data));
-  robotStore.publish('robot-sensors', data.sensors);
-});
+The scene graph maintains:
+- **Typed objects**: wall, obstacle, beacon, collectible, robot -- each with position, bounding box, confidence
+- **Topology**: Waypoint graph with edges (clear, blocked, unknown) for high-level navigation reasoning
+- **Semantic queries**: Natural language queries against the graph (e.g., "nearest obstacle ahead")
+
+The VisionSceneBridge (`lib/runtime/vision-scene-bridge.ts`) projects camera detections into world coordinates and registers them as scene graph nodes with deduplication (spatial threshold of 0.3m).
+
+---
+
+## HAL: Simulation and Physical Duality
+
+The Hardware Abstraction Layer (`lib/hal/types.ts`) provides a unified interface that works identically in both simulation and physical environments:
+
+### HAL Modes
+
+| Mode | Description |
+|---|---|
+| `simulation` | Three.js renderer with simulated physics |
+| `physical` | ESP32-S3 hardware via serial/WiFi |
+| `hybrid` | Physical robot with simulation overlay |
+
+### HAL Interfaces
+
+| Interface | Key Methods |
+|---|---|
+| **Locomotion** | `drive(left, right)`, `moveTo(x, y, z)`, `rotate(dir, deg)`, `moveForward(cm)`, `stop()`, `getPose()` |
+| **Vision** | `captureFrame()`, `scan(mode)`, `getDistanceSensors()`, `getLineSensors()`, `getIMU()` |
+| **Manipulation** | `moveTo(x, y, z)`, `grasp(force)`, `extend(distance)`, `retract()`, `setPrecisionMode(enabled)` |
+| **Communication** | `speak(text)`, `playSound(id)`, `setLED(color)`, `listenForCommand()` |
+| **Safety** | `getStatus()`, `emergencyStop()`, `setOperatingLimits(limits)` |
+
+The same navigation decision from the LLM produces the same robot behavior whether the target is a simulated Three.js scene or a physical ESP32 in a real arena.
+
+---
+
+## Vision Pipeline
+
+The vision pipeline converts camera frames into world model updates:
+
+```
+Camera Frame
+  -> VLM (Qwen3-VL-8B) or GroundTruthVisionSimulator
+  -> VisionFrame (detections + scene analysis)
+  -> VisionWorldModelBridge (sensor-bridge.ts)
+    -> Project detections onto occupancy grid
+    -> Mark free cells in open directions
+    -> Mark obstacle cells at detection positions
+    -> Compute frontier cells
+  -> VisionSceneBridge (vision-scene-bridge.ts)
+    -> Register detections as SceneGraph nodes
+    -> Deduplicate against existing nodes
+  -> World model now updated for next LLM cycle
 ```
 
-### File System Integration
+Two bridge modes exist:
 
-**Robot programs in volumes**:
-```
-user/my-robots/wall-avoider-v1.c       ← Save from chat
-team/shared/challenge-1.c              ← Collaborative edit
-system/templates/basic-drive.c         ← Read-only standard
-```
+- **Ground-truth bridge** (`world-model-bridge.ts`): Rasterizes the full arena (walls, obstacles, beacons) onto the grid from simulation state. Used for development and testing.
+- **Vision bridge** (`sensor-bridge.ts`): Builds the grid incrementally from VLM camera output alone. Grid starts fully unknown, explored area grows as the robot moves. Limited to 60-degree camera FOV per frame.
 
-**Metadata**:
+Both produce identical serialized output. The LLM does not know which bridge is active.
+
+---
+
+## Multi-Robot Fleet Coordination
+
+The FleetCoordinator (`lib/runtime/fleet-coordinator.ts`) manages multiple robots in the same arena:
+
+### Shared World Model Merging
+
+Each robot maintains its own WorldModel (indexed by device ID). The coordinator periodically merges them into a shared view using configurable strategies:
+- **max_confidence**: Keeps the highest-confidence value for each cell
+- **latest_update**: Keeps the most recently updated value
+
+### Frontier Task Assignment
+
+The coordinator identifies frontier cells (boundaries between explored and unknown) across all robots and assigns exploration tasks to minimize overlap. Tasks are typed:
+- `explore_frontier`: Navigate to an unexplored boundary
+- `navigate_to`: Go to a specific coordinate
+- `patrol`: Patrol a region
+- `idle`: No task
+
+### Conflict Resolution
+
+A minimum target separation distance (default 0.5m) prevents multiple robots from claiming the same frontier. Tasks are reassigned periodically (default every 5s).
+
+---
+
+## The Candidate System
+
+The LLM never picks raw coordinates. Each cycle, the CandidateGenerator (`lib/runtime/candidate-generator.ts`) produces 3-5 ranked subgoals that the classical planner has already validated as reachable:
+
+| Candidate Type | Description |
+|---|---|
+| `subgoal` | Point along the path toward the goal |
+| `frontier` | Boundary between explored and unknown (for exploration) |
+| `recovery` | Safe retreat position when stuck |
+| `waypoint` | Named waypoint from the topology graph |
+
+Each candidate has a heuristic score computed from:
+- Distance to goal (closer = higher)
+- Clearance from obstacles (more clearance = higher)
+- Novelty (more unexplored cells nearby = higher)
+- Feasibility (lower path cost = higher)
+
+The LLM receives candidates formatted as a ranked list with scores and explanatory notes, then selects one by ID. This constrains the LLM's output space while preserving strategic flexibility.
+
+---
+
+## LLM Decision Schema
+
+The LLM responds with a structured JSON decision:
+
 ```json
 {
-  "name": "wall-avoider-v1",
-  "type": "robot4-firmware",
-  "created": "2026-01-18T20:30:00Z",
-  "arena": "standard5x5Obstacles",
-  "telemetry": "user/telemetry/session-1.log",
-  "performance": {
-    "collisions": 0,
-    "time": 45.2,
-    "success": true
+  "action": {
+    "type": "MOVE_TO",
+    "target_id": "c1",
+    "target_pos_m": [1.5, 2.0],
+    "speed": "normal"
+  },
+  "fallback": {
+    "if_failed": "ROTATE",
+    "direction": "left",
+    "degrees": 45
+  },
+  "explanation": "Moving toward frontier c1 to explore unknown region northeast.",
+  "world_model_update": {
+    "corrections": [
+      { "gx": 25, "gy": 30, "state": "free", "confidence": 0.7 }
+    ]
   }
 }
 ```
 
----
+Action types: `MOVE_TO`, `EXPLORE`, `ROTATE`, `STOP`, `RECOVER`.
 
-## The Future Vision
-
-### Near Term (3 months)
-- User programs single robot through chat
-- Simulation validates behavior
-- Deploy to real ESP32 robot
-- Team shares programs
-
-### Medium Term (6 months)
-- Multi-robot coordination
-- Swarm intelligence behaviors
-- AR overlay for real robot
-- Mobile app for telemetry
-
-### Long Term (1 year)
-- LLMos as robotics operating system
-- Plugin marketplace for robot behaviors
-- Global challenge competitions
-- Educational curriculum integration
+The `parseNavigationDecision()` function in `navigation-types.ts` extracts JSON from the LLM's response with robust fallback handling for malformed output.
 
 ---
 
-## Conclusion
+## Summary
 
-**This paradigm shift transforms robotics from:**
-- Expert domain → Accessible to all
-- Code-centric → Behavior-centric
-- Individual → Collaborative
-- Abstract → Tangible
+The LLMos robot AI agent paradigm is built on five principles:
 
-**The 3D Robot World Panel is not just a UI—it's the bridge between digital AI (LLMs) and physical AI (robots).**
-
-By making the 3D view central, we make the robot central. By making chat program the robot, we democratize robotics. By bridging sim-to-real, we reduce risk and accelerate learning.
-
-**This is the future of human-robot interaction.**
-
----
-
-**Next Steps**: Implement Phase 1 (Core 3D Panel) and begin workspace restructure.
+1. **Inversion of control**: The LLM decides, classical systems execute
+2. **Dual-LLM separation**: Development brain (deep, slow) vs runtime brain (reactive, fast)
+3. **World model as interface**: The LLM sees a structured representation, not raw sensors
+4. **Safety through layering**: LLM -> planner -> HAL -> firmware, each with validation
+5. **Simulation-physical duality**: Same code, same decisions, different hardware backends

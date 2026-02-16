@@ -1,3 +1,5 @@
+> **Historical document**: This is an execution log from the project creation phase. For current architecture, see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+
 # Execution Log: Project Creation
 
 **Timestamp**: 2026-01-28T00:00:00Z

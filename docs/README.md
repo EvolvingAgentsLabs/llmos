@@ -1,114 +1,231 @@
-# LLMos Documentation for Makers
+# LLMos Documentation
 
-Welcome! This is your guide to building AI robots and smart devices.
+LLMos is an operating system for AI physical agents (robots). It provides a complete
+navigation stack -- from occupancy grid world models through LLM-powered decision
+making to hardware abstraction -- that lets robots reason about and move through
+physical space.
 
-## Start Here
+## Quick Start
 
-New to LLMos? Start with these guides in order:
+```bash
+# Install dependencies
+npm install
 
-1. **[Getting Started](architecture/HELLO_WORLD_TUTORIAL.md)** - Your first 10 minutes with LLMos
-2. **[ESP32 Setup](hardware/ESP32_GUIDE.md)** - Connect your hardware
-3. **[Robot Programming](architecture/ROBOT4_GUIDE.md)** - Make your robot move
+# Start the development server (web UI + backend)
+npm run dev
 
-## What's a "Guide"?
+# Run the full test suite (349 tests across 21 suites)
+npx jest
 
-Think of these as recipes for building cool stuff:
+# Run specific test suite
+npx jest --testPathPattern="navigation-e2e"
 
-### For Beginners
-- **Getting Started** - Try LLMos in 10 minutes (no hardware needed!)
-- **ESP32 Setup** - Connect a tiny computer to make things move
-- **Desktop App** - Install LLMos on your computer for faster builds
+# Run the navigation demo (mock LLM, no API key needed)
+npx tsx scripts/run-navigation.ts
 
-### For Building Robots
-- **Robot Programming** - Make robots move, sense, and think
-- **ESP32 Guide** - Deep dive into robot hardware
+# Run with real LLM via OpenRouter
+OPENROUTER_API_KEY=sk-or-... npx tsx scripts/run-navigation.ts --live
 
-### Understanding How It Works
-- **Project Structure** - Where everything lives
-- **LLM Configuration** - Set up your AI assistant
+# Run with simulated vision pipeline
+npx tsx scripts/run-navigation.ts --vision
+
+# Run all arenas
+npx tsx scripts/run-navigation.ts --all
+
+# Run with per-cycle logging
+npx tsx scripts/run-navigation.ts --verbose
+
+# Combine flags
+npx tsx scripts/run-navigation.ts --live --vision --all --verbose
+```
+
+### CLI Flags for `run-navigation.ts`
+
+| Flag | Description |
+|------|-------------|
+| `--live` | Use real LLM (Qwen3-VL-8B via OpenRouter) instead of mock |
+| `--vision` | Use simulated camera bridge instead of ground-truth rasterization |
+| `--all` | Run all test arenas sequentially |
+| `--verbose` / `-v` | Print per-cycle position, action, and goal distance |
+| `--arena <name>` | Select a specific arena (default: `simple`) |
+
+## Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total tests | 349 |
+| Test suites | 21 |
+| LLM navigation criteria passed | 6/6 (Qwen3-VL-8B via OpenRouter) |
+| Average cycle time | ~1.4s/cycle |
 
 ## What You Can Do
 
-### Without Any Hardware
-- Create virtual robots in the desktop app
-- Test obstacle avoidance
-- Try line following
-- Build maze solvers
-- Make interactive apps
+### Without Hardware
 
-### With an ESP32 Board ($10)
-- Blink LEDs
-- Read sensors
-- Control motors
-- Make sounds
-- Build actual robots!
+- Run the full navigation stack with mock LLM inference (deterministic, no API key)
+- Execute all 349 tests covering world model, vision, planning, fleet coordination
+- Visualize navigation sessions in the web UI
+- Test obstacle avoidance, exploration, and goal-seeking across multiple arenas
+- Evaluate candidate generation, path planning, and stuck recovery
+- Run the vision pipeline with simulated camera frames
 
-## Quick Links
+### With Hardware (ESP32 + Sensors)
 
-**Just want to build?**
-- [Getting Started](architecture/HELLO_WORLD_TUTORIAL.md) - Start here!
-- [ESP32 Setup](hardware/ESP32_GUIDE.md) - Hardware guide
+- Deploy to a physical robot via the HAL bridge
+- Stream real camera frames through the vision pipeline
+- Execute navigation decisions on actual motors via the physical adapter
+- Coordinate multiple robots with fleet coordination
+- Read real sensor data (LiDAR, IMU, encoders) through the sensor bridge
 
-**Want to understand how it works?**
-- [Robot Programming](architecture/ROBOT4_GUIDE.md) - How robots think
-- [Desktop App Guide](guides/DESKTOP.md) - About the desktop version
-
-**Having trouble?**
-- Check [ESP32 Guide troubleshooting](hardware/ESP32_GUIDE.md#troubleshooting)
-- Ask on [GitHub Discussions](https://github.com/EvolvingAgentsLabs/llmos/discussions)
-
-## The Basic Idea
-
-1. You describe what you want in plain English
-2. LLMos writes the code for you
-3. Test it in a virtual robot first
-4. Upload to your real ESP32 (if you have one)
-5. Watch it work in the real world!
-
-## File Guide
+## Documentation Structure
 
 ```
 docs/
+├── README.md                          <- You are here
+├── LLM_CONFIGURATION.md              <- LLM setup, models, OpenRouter config
 ├── architecture/
-│   ├── HELLO_WORLD_TUTORIAL.md    ← Start here!
-│   └── ROBOT4_GUIDE.md             ← Robot programming
+│   ├── ARCHITECTURE.md               <- System architecture overview
+│   ├── WORLD_MODEL_SYSTEM.md         <- Occupancy grid and world model layers
+│   ├── ADAPTIVE_PHYSICAL_INTELLIGENCE.md  <- Adaptive behavior system
+│   ├── ROBOT_AI_AGENT_PARADIGM.md    <- Agent paradigm design
+│   ├── ROBOT_WORLD_IMPLEMENTATION_STATUS.md <- Implementation status tracker
+│   ├── HELLO_WORLD_TUTORIAL.md       <- First 10 minutes tutorial
+│   └── ROBOT4_GUIDE.md              <- Robot programming guide
 ├── hardware/
-│   └── ESP32_GUIDE.md              ← Hardware setup
-├── guides/
-│   ├── DESKTOP.md                  ← Desktop app
-│   └── BROWSER_COMPILATION.md      ← How compilation works
-└── LLM_CONFIGURATION.md            ← AI setup
+│   ├── ESP32_GUIDE.md               <- ESP32 setup and flashing
+│   ├── STANDARD_ROBOT_V1.md         <- Standard robot hardware spec
+│   ├── HARDWARE_SHOPPING_LIST.md    <- Parts list with links
+│   └── ARENA_SETUP_GUIDE.md        <- Physical test arena construction
+├── development/
+│   ├── 2026-01-28_project_creation.md
+│   ├── 2026-01-30_implementation_phase1.md
+│   ├── 2026-01-30_implementation_phase2.md
+│   └── 2026-02-07_code_review_next_steps.md
+├── jepa-implementation-guide.md     <- JEPA world model implementation
+├── jepa-integration-analysis.md     <- JEPA integration analysis
+└── jepa-llm-concepts.md            <- JEPA + LLM conceptual mapping
 ```
 
-## Tips for Success
+## Project Structure
 
-1. **Read "Getting Started" first** - It's quick and easy
-2. **Try virtual robots** - No hardware needed to learn
-3. **Start simple** - Blink an LED before building a maze solver
-4. **Ask for help** - The community is friendly!
+```
+lib/
+├── runtime/                    # Navigation runtime stack
+│   ├── navigation-loop.ts      # Top-level cycle orchestrator
+│   ├── navigation-runtime.ts   # Session manager (arena -> result)
+│   ├── navigation-types.ts     # LLM input/output JSON schemas
+│   ├── navigation-prompt.ts    # Prompt assembly for the LLM
+│   ├── navigation-evaluator.ts # Post-run criteria evaluation
+│   ├── navigation-hal-bridge.ts # HAL bridge (simulation/physical)
+│   ├── navigation-ui-bridge.ts # UI bridge (web dashboard events)
+│   ├── navigation-logger.ts    # Structured logging
+│   ├── world-model.ts          # Occupancy grid world model
+│   ├── world-model-bridge.ts   # World model I/O interface
+│   ├── world-model-serializer.ts # Grid -> RLE JSON serialization
+│   ├── world-model-metrics.ts  # Coverage, entropy, drift metrics
+│   ├── world-model-provider.ts # World model factory
+│   ├── predictive-world-model.ts # Temporal prediction layer
+│   ├── candidate-generator.ts  # Subgoal/frontier candidate scoring
+│   ├── local-planner.ts        # A* path planning
+│   ├── map-renderer.ts         # Top-down map image generation
+│   ├── vision-simulator.ts     # Simulated camera frames
+│   ├── vision-scene-bridge.ts  # Vision -> scene graph bridge
+│   ├── sensor-bridge.ts        # Sensor data abstraction
+│   ├── fleet-coordinator.ts    # Multi-robot coordination
+│   ├── llm-inference.ts        # Inference adapters (OpenRouter + mock)
+│   ├── openrouter-inference.ts # OpenRouter API adapter with stats
+│   └── test-arenas.ts          # Test arena definitions
+│
+├── hal/                        # Hardware Abstraction Layer
+│   ├── types.ts                # HAL interface definitions
+│   ├── physical-adapter.ts     # Real hardware adapter
+│   ├── simulation-adapter.ts   # Simulation adapter
+│   ├── hal-tool-executor.ts    # Tool execution engine
+│   ├── hal-tool-loader.ts      # Dynamic tool loading
+│   └── command-validator.ts    # Command safety validation
+│
+├── hardware/                   # Device-level hardware support
+│   ├── esp32-device-manager.ts # ESP32 connection management
+│   ├── serial-manager.ts       # Serial port communication
+│   ├── virtual-esp32.ts        # Virtual ESP32 for testing
+│   └── cube-robot-simulator.ts # 3D robot simulation
+│
+├── llm/                        # LLM client and model config
+├── kernel/                     # OS kernel (process, memory, scheduler)
+├── agents/                     # Agent framework
+├── skills/                     # Skill system
+└── core/                       # Core utilities (Result type, etc.)
 
-## Common Questions
+components/robot/               # React UI components
+├── RobotAgentPanel.tsx         # Main robot agent dashboard
+├── RobotWorldPanel.tsx         # World model visualization
+├── RobotCanvas3D.tsx           # 3D robot view
+├── AgentDiagnosticsPanel.tsx   # Agent diagnostics
+├── RobotLogsMonitorPanel.tsx   # Log viewer
+└── DreamingDashboardPanel.tsx  # Predictive model dashboard
 
-**Do I need to be a programmer?**
-Nope! LLMos writes code for you. But you'll learn as you go.
+__tests__/lib/runtime/          # Navigation test suites (19 of 21)
+├── navigation-e2e.test.ts      # End-to-end navigation tests
+├── navigation-runtime.test.ts  # Runtime session tests
+├── navigation-types.test.ts    # Schema validation tests
+├── world-model-*.test.ts       # World model tests (4 suites)
+├── vision-*.test.ts            # Vision pipeline tests (3 suites)
+├── local-planner.test.ts       # Path planning tests
+├── candidate-generator.test.ts # Candidate scoring tests
+├── fleet-coordinator.test.ts   # Fleet coordination tests
+├── sensor-bridge.test.ts       # Sensor abstraction tests
+├── openrouter-inference.test.ts # OpenRouter adapter tests
+├── navigation-hal-bridge.test.ts # HAL bridge tests
+├── navigation-ui-bridge.test.ts  # UI bridge tests
+├── llm-corrections.test.ts     # LLM world model correction tests
+└── predictive-world-model.test.ts # Prediction tests
 
-**Do I need to buy stuff?**
-Not to start! Try virtual robots first. An ESP32 is $10 if you want real hardware later.
+scripts/
+├── run-navigation.ts           # Navigation demo CLI
+└── build.sh                    # Build script
+```
 
-**What if I get stuck?**
-Check the troubleshooting sections in each guide, or ask on GitHub.
+## Navigation Loop Architecture
 
-**Can kids use this?**
-Yes! Great for ages 10+ with some adult help.
+Each navigation cycle follows this pipeline:
 
-## Next Steps
+```
+Sensors -> World Model -> Serializer -> Candidates -> Prompt -> LLM
+    -> Decision Validation -> Local Planner -> HAL -> Sensors
+```
 
-1. Read [Getting Started](architecture/HELLO_WORLD_TUTORIAL.md)
-2. Try creating a virtual robot
-3. If you like it, get an ESP32 board
-4. Build something cool!
-5. Share what you made!
+1. **Sensors** feed data into the occupancy grid world model
+2. **Serializer** converts the grid to compact RLE JSON
+3. **Candidate Generator** scores subgoals, frontiers, waypoints, recovery points
+4. **Prompt Builder** assembles the navigation frame for the LLM
+5. **LLM** returns a structured JSON decision (action + fallback + explanation)
+6. **Validator** checks the decision against the schema, normalizes free-form responses
+7. **Local Planner** computes an A* path to the selected target
+8. **HAL** executes the movement command on hardware or simulation
 
----
+The LLM picks strategy (WHERE to go). Classical planners execute (HOW to get there).
+The LLM never touches motor PWM directly.
 
-**Ready to build robots? Let's go!**
+## Running Tests
+
+```bash
+# All tests
+npx jest
+
+# Single suite
+npx jest --testPathPattern="world-model-bridge"
+
+# With coverage
+npx jest --coverage
+
+# Watch mode during development
+npx jest --watch
+```
+
+## Further Reading
+
+- [LLM Configuration](LLM_CONFIGURATION.md) -- Set up OpenRouter and configure models
+- [Architecture Overview](architecture/ARCHITECTURE.md) -- System design and component interactions
+- [World Model System](architecture/WORLD_MODEL_SYSTEM.md) -- Occupancy grid internals
+- [ESP32 Guide](hardware/ESP32_GUIDE.md) -- Hardware setup for physical robots
+- [Arena Setup](hardware/ARENA_SETUP_GUIDE.md) -- Build a physical test arena

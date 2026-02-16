@@ -8,21 +8,40 @@
 
 The LLMos Standard Robot v1.0 is the official hardware platform designed to work seamlessly with the LLMos simulation environment. Every specification matches the virtual robot in the simulator, ensuring code written in simulation transfers directly to real hardware.
 
+The robot connects to the LLMos navigation stack through the **NavigationHALBridge** (`lib/runtime/navigation-hal-bridge.ts`), which translates NavigationLoop decisions into HAL commands. The HAL physical adapter (`lib/hal/physical-adapter.ts`) then sends those commands to the ESP32 over serial or WiFi.
+
 ```
         [Distance Sensor]
              |||
-        ┌────┴┴┴────┐
-        │  ESP32-S3 │  ← Brain
-        │   ┌───┐   │
-        │   │USB│   │  ← Programming port
-        └───┴───┴───┘
-         │         │
-    ┌────┴─┐   ┌──┴────┐
-    │Wheel │   │ Wheel │  ← Motor + wheel assemblies
-    └──────┘   └───────┘
+        +----vvv----+
+        |  ESP32-S3 |  <- Brain
+        |   +---+   |
+        |   |USB|   |  <- Programming port / HAL serial connection
+        +---+---+---+
+         |         |
+    +----+-+   +--+----+
+    |Wheel |   | Wheel |  <- Motor + wheel assemblies
+    +------+   +-------+
 
     8cm x 8cm x 8cm cube form factor
 ```
+
+### Connection to the LLMos Navigation Pipeline
+
+```
+NavigationLoop (LLM-driven navigation cycles)
+  -> NavigationHALBridge (decision-to-command translation)
+    -> PhysicalHAL (lib/hal/physical-adapter.ts)
+      -> ESP32-S3 (serial at 115200 baud or WiFi WebSocket)
+        -> Motors, sensors, LEDs on this robot
+```
+
+The NavigationHALBridge handles:
+- Converting NavigationLoop cycle results into HAL locomotion commands (moveForward, rotate, drive, stop)
+- Capturing camera frames and sending them through the vision pipeline to Qwen3-VL-8B (via OpenRouter)
+- Feeding sensor data back to the 50x50 occupancy grid world model
+- Waypoint arrival detection (default threshold: 5cm)
+- Action timeout enforcement (default: 3000ms per action)
 
 ---
 
@@ -55,7 +74,7 @@ Protection:  Over-discharge, over-current
 Max speed:      ~0.3 m/s (30 cm/s)
 Max turn rate:  ~2 rad/s (115 deg/s)
 Sensor range:   2.0m (distance sensors)
-Precision:      ±5cm position accuracy
+Precision:      +/-5cm position accuracy
 ```
 
 ---
@@ -113,6 +132,50 @@ Precision:      ±5cm position accuracy
 
 ---
 
+## HAL Interface Mapping
+
+Each hardware component maps to a specific HAL interface subsystem. The HAL types are defined in `lib/hal/types.ts`.
+
+### Locomotion Interface (motors + wheels)
+
+| HAL Method | Hardware Action | ESP32 Command |
+|------------|----------------|---------------|
+| `locomotion.drive(left, right)` | Set motor speeds (-255 to 255) | `drive` |
+| `locomotion.moveTo(x, y, z)` | Navigate to position | `move_to` |
+| `locomotion.rotate(dir, deg)` | Spin in place | `rotate` |
+| `locomotion.moveForward(cm)` | Drive forward by distance | `move_forward` |
+| `locomotion.moveBackward(cm)` | Drive backward by distance | `move_backward` |
+| `locomotion.stop()` | Stop all motors | `stop` |
+| `locomotion.getPose()` | Read position + rotation | `get_pose` |
+
+### Vision Interface (sensors + camera)
+
+| HAL Method | Hardware Action | ESP32 Command |
+|------------|----------------|---------------|
+| `vision.captureFrame()` | Capture JPEG from OV2640 | `capture_camera` |
+| `vision.scan(mode)` | Composite sensor sweep | Uses `read_distance` |
+| `vision.getDistanceSensors()` | Read HC-SR04 | `read_distance` |
+| `vision.getLineSensors()` | Read QTR-5RC array | `read_line` |
+| `vision.getIMU()` | Read MPU6050 | `read_imu` |
+
+### Communication Interface (LEDs + buzzer)
+
+| HAL Method | Hardware Action | ESP32 Command |
+|------------|----------------|---------------|
+| `communication.setLED(r,g,b)` | Set WS2812B color | `set_led` |
+| `communication.speak(text)` | Play audio | `speak` |
+| `communication.playSound(id)` | Play sound effect | `play_sound` |
+
+### Safety Interface
+
+| HAL Method | Hardware Action | ESP32 Command |
+|------------|----------------|---------------|
+| `safety.emergencyStop()` | Kill all motors | `emergency_stop` |
+| `safety.resetEmergencyStop()` | Resume from e-stop | `reset_emergency` |
+| `safety.getSafetyStatus()` | Battery + error state | Local check |
+
+---
+
 ## Detailed Component Specs
 
 ### 1. ESP32-S3 DevKit (Brain)
@@ -139,7 +202,7 @@ Why ESP32-S3?
 - Powerful enough for complex algorithms
 - Built-in sensors (accelerometer on some models)
 - WiFi for remote control/data logging
-- Native USB for easy programming
+- Native USB for easy programming and HAL serial connection
 - Cheap and widely available
 ```
 
@@ -155,7 +218,7 @@ Type: DC Gear Motor
 Voltage: 3-6V DC
 No-load speed: 200 RPM @ 6V
 Gear ratio: 1:48
-Torque: ~0.8 kg·cm @ 6V
+Torque: ~0.8 kg-cm @ 6V
 Current: 70-250mA per motor
 Shaft: 3mm D-shaft
 
@@ -233,12 +296,12 @@ Cons:
 ```
 Type: Ultrasonic distance sensor
 Range: 2cm - 400cm (2-4 meters)
-Accuracy: ±3mm
+Accuracy: +/-3mm
 Resolution: 0.3cm
 Frequency: 40kHz
 Voltage: 5V
 Current: 15mA
-Trigger: 10µs pulse
+Trigger: 10us pulse
 Echo: PWM output (proportional to distance)
 
 Pins:
@@ -333,59 +396,59 @@ Usage ideas:
 ## Wiring Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        ESP32-S3                              │
-│                                                              │
-│  3V3  ─────────────────► VCC (Line Sensors)                │
-│  GND  ─────────────────► GND (Common ground)               │
-│                                                              │
-│  GPIO 16 ──────────────► Motor Driver IN1 (Left Motor +)    │
-│  GPIO 17 ──────────────► Motor Driver IN2 (Left Motor -)    │
-│  GPIO 18 ──────────────► Motor Driver IN3 (Right Motor +)   │
-│  GPIO 19 ──────────────► Motor Driver IN4 (Right Motor -)   │
-│                                                              │
-│  GPIO 4  ──────────────► HC-SR04 TRIG                       │
-│  GPIO 5  ──────────────► HC-SR04 ECHO                       │
-│                                                              │
-│  GPIO 32 ──────────────► Line Sensor 1                      │
-│  GPIO 33 ──────────────► Line Sensor 2                      │
-│  GPIO 34 ──────────────► Line Sensor 3                      │
-│  GPIO 35 ──────────────► Line Sensor 4                      │
-│  GPIO 36 ──────────────► Line Sensor 5                      │
-│                                                              │
-│  GPIO 2  ──────────────► WS2812B Data In                    │
-│                                                              │
-│  VIN (5V)  ────────────► HC-SR04 VCC                        │
-│  VIN (5V)  ────────────► WS2812B VCC                        │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-                                │
-                                ↓
-                        ┌───────────────┐
-                        │ Motor Driver  │
-                        │   (L298N)     │
-                        ├───────────────┤
-                        │ IN1  IN2      │
-                        │ IN3  IN4      │
-                        │               │
-                        │ OUT1 OUT2     │ ──► Left Motor
-                        │ OUT3 OUT4     │ ──► Right Motor
-                        │               │
-                        │ +12V  GND     │ ◄── Battery (3.7V)
-                        └───────────────┘
++-------------------------------------------------------------+
+|                        ESP32-S3                              |
+|                                                              |
+|  3V3  ----------------------> VCC (Line Sensors)            |
+|  GND  ----------------------> GND (Common ground)           |
+|                                                              |
+|  GPIO 16 --------------------> Motor Driver IN1 (Left +)    |
+|  GPIO 17 --------------------> Motor Driver IN2 (Left -)    |
+|  GPIO 18 --------------------> Motor Driver IN3 (Right +)   |
+|  GPIO 19 --------------------> Motor Driver IN4 (Right -)   |
+|                                                              |
+|  GPIO 4  --------------------> HC-SR04 TRIG                 |
+|  GPIO 5  --------------------> HC-SR04 ECHO                 |
+|                                                              |
+|  GPIO 32 --------------------> Line Sensor 1                |
+|  GPIO 33 --------------------> Line Sensor 2                |
+|  GPIO 34 --------------------> Line Sensor 3                |
+|  GPIO 35 --------------------> Line Sensor 4                |
+|  GPIO 36 --------------------> Line Sensor 5                |
+|                                                              |
+|  GPIO 2  --------------------> WS2812B Data In              |
+|                                                              |
+|  VIN (5V) -------------------> HC-SR04 VCC                  |
+|  VIN (5V) -------------------> WS2812B VCC                  |
+|                                                              |
++-------------------------------------------------------------+
+                                |
+                                v
+                        +---------------+
+                        | Motor Driver  |
+                        |   (L298N)     |
+                        +---------------+
+                        | IN1  IN2      |
+                        | IN3  IN4      |
+                        |               |
+                        | OUT1 OUT2     | --> Left Motor
+                        | OUT3 OUT4     | --> Right Motor
+                        |               |
+                        | +12V  GND     | <-- Battery (3.7V)
+                        +---------------+
 
 Power Distribution:
-┌──────────────┐
-│   Battery    │
-│ 3.7V 1000mAh │
-└──────┬───────┘
-       │
-       ├──────► Motor Driver VCC (motors)
-       │
-       └──────► ESP32 VIN (via switch)
-                  │
-                  ├──► 3V3 regulator ──► 3.3V sensors
-                  └──► 5V output ──────► 5V sensors
++--------------+
+|   Battery    |
+| 3.7V 1000mAh |
++------+-------+
+       |
+       +--------> Motor Driver VCC (motors)
+       |
+       +--------> ESP32 VIN (via switch)
+                    |
+                    +---> 3V3 regulator --> 3.3V sensors
+                    +---> 5V output ------> 5V sensors
 ```
 
 ---
@@ -472,9 +535,67 @@ Power Distribution:
 
 ---
 
-## Software Flashing
+## Software Integration with HAL
 
-### Option 1: LLMos Desktop (Recommended)
+### Connecting to LLMos
+
+The robot connects to the LLMos navigation stack via the HAL. There are two paths:
+
+**Option 1: PhysicalHAL via serial (recommended for development)**
+
+```typescript
+import { createPhysicalHAL } from '@/lib/hal';
+
+const hal = createPhysicalHAL({
+  deviceId: 'standard-robot-v1',
+  connectionType: 'serial',
+  baudRate: 115200,
+});
+
+await hal.initialize();
+// hal.locomotion.drive(100, 100)  -- drives both motors forward
+// hal.vision.getDistanceSensors() -- reads HC-SR04
+// hal.communication.setLED(0, 255, 0) -- green LED
+```
+
+**Option 2: PhysicalHAL via WiFi (recommended for untethered operation)**
+
+```typescript
+import { createPhysicalHAL } from '@/lib/hal';
+
+const hal = createPhysicalHAL({
+  deviceId: 'standard-robot-v1',
+  connectionType: 'wifi',
+  host: '192.168.1.100',  // ESP32's IP address
+});
+
+await hal.initialize();
+```
+
+### Running the NavigationLoop on this robot
+
+```typescript
+import { NavigationLoop } from '@/lib/runtime/navigation-loop';
+import { NavigationHALBridge } from '@/lib/runtime/navigation-hal-bridge';
+
+// Create the bridge between NavigationLoop and HAL
+const bridge = new NavigationHALBridge(hal, worldModelBridge, {
+  moveSpeedMs: 0.15,
+  rotateSpeedDegS: 45,
+  captureFrames: true,
+});
+
+// The NavigationLoop orchestrates:
+// 1. Sensor reading via HAL vision interface
+// 2. World model update (50x50 occupancy grid)
+// 3. Candidate generation (subgoal, frontier, recovery)
+// 4. LLM inference via Qwen3-VL-8B (OpenRouter)
+// 5. Decision validation
+// 6. A* local planning with obstacle inflation
+// 7. HAL locomotion execution via NavigationHALBridge
+```
+
+### Option 3: LLMos Desktop (easiest)
 
 ```bash
 # 1. Start LLMos Desktop
@@ -489,7 +610,7 @@ npm run electron:dev
 # 5. Done!
 ```
 
-### Option 2: Manual (Advanced)
+### Manual Flashing (Advanced)
 
 ```bash
 # Install esptool
@@ -595,17 +716,24 @@ for (int i = 0; i < 5; i++) {
 - **Weight distribution**: Balance battery and components
 - **Floor surface**: Test on smooth, flat surface
 
+### HAL Connection Issues
+
+- **Serial not connecting**: Verify baud rate is 115200, check USB cable
+- **WiFi not connecting**: Verify ESP32 IP address, check network
+- **Command timeout**: Default is 5 seconds; check ESP32 firmware is responding with JSON
+- **Pose data incorrect**: Verify coordinate system matches (5m x 5m, center at 0,0)
+
 ---
 
 ## Maintenance
 
 ### Regular Checks (Every 10 hours of use)
 
-- ✓ Tighten screws and connections
-- ✓ Check battery voltage (recharge if < 3.5V)
-- ✓ Clean sensors (dust affects readings)
-- ✓ Check wheels for wear
-- ✓ Inspect wires for damage
+- Tighten screws and connections
+- Check battery voltage (recharge if < 3.5V)
+- Clean sensors (dust affects readings)
+- Check wheels for wear
+- Inspect wires for damage
 
 ### Battery Care
 
@@ -627,16 +755,17 @@ for (int i = 0; i < 5; i++) {
 
 ### Sensor Upgrades
 
-- **Camera module**: ESP32-CAM for vision
+- **Camera module**: OV2640 for vision pipeline (frames sent to Qwen3-VL-8B via OpenRouter)
 - **Lidar sensor**: 360-degree scanning (expensive)
 - **Color sensor**: Detect colored objects
 - **Touch sensors**: Tactile feedback
+- **Multiple HC-SR04**: Add left/right/rear distance sensors to match simulation's multi-directional sensing
 
 ### Advanced Features
 
 - **GPS module**: Outdoor navigation
-- **Servo arm**: Pick and place objects
-- **Speaker**: Voice feedback
+- **Servo arm**: Pick and place objects (uses HAL manipulation interface)
+- **Speaker**: Voice feedback (uses HAL communication.speak)
 - **Display**: OLED screen for status
 
 ---
@@ -645,16 +774,21 @@ for (int i = 0; i < 5; i++) {
 
 | Feature | Simulation | Real Robot |
 |---------|------------|------------|
-| Body size | 8cm cube | 8cm cube ✓ |
-| Wheel diameter | 65mm | 65mm ✓ |
-| Wheelbase | 70mm | 70mm ✓ |
-| Max speed | 0.3 m/s | ~0.3 m/s ✓ |
-| Distance sensors | 8 directions | 1 (front) ⚠️ |
-| Line sensors | 5 sensors | 5 sensors ✓ |
-| Battery | 1000mAh | 1000mAh ✓ |
-| Weight | 250g | ~250g ✓ |
+| Body size | 8cm cube | 8cm cube |
+| Wheel diameter | 65mm | 65mm |
+| Wheelbase | 70mm | 70mm |
+| Max speed | 0.3 m/s | ~0.3 m/s |
+| Distance sensors | 8 directions | 1 (front) -- add more to match |
+| Line sensors | 5 sensors | 5 sensors |
+| Battery | 1000mAh | 1000mAh |
+| Weight | 250g | ~250g |
+| HAL interface | SimulationHAL | PhysicalHAL |
+| Arena | 5m x 5m, 50x50 grid | 5m x 5m physical arena |
+| Vision LLM | Qwen3-VL-8B (OpenRouter) | Qwen3-VL-8B (OpenRouter) |
+| World model | 50x50 occupancy grid | 50x50 occupancy grid |
+| Coordinate system | Center (0,0), rotation=0 faces -Y | Center (0,0), rotation=0 faces -Y |
 
-**Note**: ⚠️ = Real robot has fewer distance sensors by default (1 instead of 8). Can add more sensors to match simulation.
+**Note**: The real robot has fewer distance sensors by default (1 instead of 8). Adding more HC-SR04 sensors at left, right, and rear positions will better match the simulation's multi-directional sensing. The HAL `vision.getDistanceSensors()` interface supports front, left, right, frontLeft, and frontRight readings.
 
 ---
 
@@ -663,8 +797,9 @@ for (int i = 0; i < 5; i++) {
 1. **Order Parts**: Use BOM above (~$80 total)
 2. **Follow Assembly Guide**: See [ASSEMBLY_GUIDE.md](ASSEMBLY_GUIDE.md)
 3. **Test Components**: Verify each part works before final assembly
-4. **Build Physical Arena**: See [ARENA_SETUP_GUIDE.md](../ARENA_SETUP_GUIDE.md)
-5. **Run Challenges**: Try standard 5m x 5m challenges
+4. **Build Physical Arena**: See [ARENA_SETUP_GUIDE.md](ARENA_SETUP_GUIDE.md) for the 5m x 5m arena matching the simulation coordinate system
+5. **Connect via HAL**: Use `createPhysicalHAL()` to connect, then run NavigationLoop
+6. **Run Challenges**: Try the 4 standard test arenas (Simple Navigation, Exploration, Dead-End, Narrow Corridor)
 
 ---
 
@@ -680,6 +815,10 @@ Share your build!
 
 ---
 
-**Version**: 1.0
-**Last Updated**: January 18, 2026
+**Version**: 1.1
+**Last Updated**: February 16, 2026
 **License**: CC BY-SA 4.0
+**HAL Interface**: `lib/hal/types.ts`
+**Bridge**: `lib/runtime/navigation-hal-bridge.ts`
+**Runtime Vision**: Qwen3-VL-8B via OpenRouter
+**Development LLM**: Claude Opus 4.6

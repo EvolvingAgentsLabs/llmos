@@ -1,498 +1,386 @@
-# LLMos Architecture v2: Adaptive Physical Intelligence
+# LLMos Architecture: Adaptive Physical Intelligence
 
-## The iPhone Moment for Robotics
+## The Thesis
 
-This architecture transforms LLMos from a robot simulation platform into the **Smartphone of Robotics**:
+The LLM is the operating system kernel for physical agents.
 
-| Smartphone | LLMos Robot |
-|------------|-------------|
-| Hardware (screen, touch) | ESP32 + Camera + Arm |
-| Operating System (iOS/Android) | Gemini 3 Flash Kernel |
-| App (.apk/.ipa) | Skill Cartridge (.md) |
+Traditional robotics treats the LLM as an accessory -- a code generator, a natural language interface, an occasionally-consulted planner. The intelligence lives in compiled firmware. The LLM is a tool.
 
-**Result**: Generic hardware that runs *apps* to do anything.
+LLMos inverts this. The LLM is the kernel. It reads sensor state, maintains an internal world model, selects subgoals, and emits structured instructions every cycle. The microcontroller is a peripheral that exposes tools. The firmware is an instruction interpreter, not a decision-maker.
+
+This is not a metaphor. The LLMos runtime loop is architecturally equivalent to a CPU fetch-decode-execute cycle: fetch sensor state, decode world model context, execute LLM inference, write actuator commands. The cycle repeats until the goal is reached or the system halts.
 
 ---
 
-## System Overview
+## Three-Layer Architecture
 
-```mermaid
-graph TB
-    subgraph "User Layer"
-        User[User/Developer]
-        NL[Natural Language Intent]
-        SkillStore[(Skill Store<br/>Markdown Files)]
-    end
+LLMos is organized into three layers. Each layer has a strict contract with the next, and no layer reaches into the internals of another.
 
-    subgraph "Skill Cartridge Layer"
-        SC[Active Skill Cartridge]
-        Role[Role Definition]
-        VC[Visual Cortex<br/>What to see]
-        MC[Motor Cortex<br/>How to move]
-        EH[Evolution History]
-
-        SC --> Role
-        SC --> VC
-        SC --> MC
-        SC --> EH
-    end
-
-    subgraph "Kernel Layer (Gemini 3 Flash)"
-        Kernel[Gemini 3 Flash Thinking]
-        Context[Context Window<br/>Video + Text + Skill]
-
-        subgraph "Agentic Vision Loop"
-            Think[THINK<br/>Analyze & Plan]
-            Act[ACT<br/>Execute Code]
-            Observe[OBSERVE<br/>Verify Result]
-
-            Think --> Act
-            Act --> Observe
-            Observe --> |Continue| Think
-        end
-
-        ToolExec[Tool Executor<br/>JSON Tool Calls]
-
-        Kernel --> Context
-        Context --> Think
-        Observe --> ToolExec
-    end
-
-    subgraph "HAL (Hardware Abstraction Layer)"
-        ModeRouter{Mode Router}
-
-        subgraph "Simulated World"
-            SimDriver[Simulation Driver]
-            ThreeJS[Three.js Renderer]
-            Physics[Physics Engine]
-            BlackBox[BlackBox Recorder]
-        end
-
-        subgraph "Real World"
-            RealDriver[Hardware Driver]
-            Serial[Web Serial/WiFi]
-            ESP32[ESP32-S3 Device]
-            Sensors[Cameras + Sensors]
-            Actuators[Motors + LEDs]
-        end
-    end
-
-    subgraph "Evolution Engine (The Dreaming)"
-        Replay[Failure Replay]
-        SimEngine[Physics Simulator]
-        Optimizer[Evolution Agent]
-        Patcher[Skill Patcher]
-    end
-
-    User --> NL
-    NL --> |Context Detection| SkillStore
-    SkillStore --> |Load| SC
-    SC --> |System Prompt| Kernel
-
-    ToolExec --> ModeRouter
-    ModeRouter --> |Virtual| SimDriver
-    ModeRouter --> |Physical| RealDriver
-
-    SimDriver --> ThreeJS
-    SimDriver --> Physics
-    SimDriver --> BlackBox
-
-    RealDriver --> Serial
-    Serial --> ESP32
-    ESP32 --> Sensors
-    ESP32 --> Actuators
-
-    Sensors --> |Video Stream| Context
-    BlackBox --> Replay
-    Replay --> SimEngine
-    SimEngine --> Optimizer
-    Optimizer --> Patcher
-    Patcher --> |Update| SkillStore
+```
+Presentation Layer (What the user sees)
+  |
+  v
+Application Layer (What the agents do)
+  |
+  v
+Runtime Layer (How the robot thinks and acts)
 ```
 
+### Presentation Layer
+
+Technology: Next.js 14.1.0, React 18, Three.js, Electron
+
+The presentation layer provides the human interface to the robot system:
+
+| Component | File | Purpose |
+|---|---|---|
+| RobotCanvas3D | `components/robot/RobotCanvas3D.tsx` | Three.js 3D arena rendering with robot, obstacles, paths |
+| RobotWorldPanel | `components/robot/RobotWorldPanel.tsx` | Control panel: mode toggle (sim/real/replay), playback, camera presets, telemetry |
+| AgentDiagnosticsPanel | `components/robot/AgentDiagnosticsPanel.tsx` | Real-time display of agent decisions, escalation events, brain mode |
+| SceneGraphVisualization | `components/robot/SceneGraphVisualization.tsx` | Interactive scene graph explorer |
+| RobotWorkspace | `components/workspace/RobotWorkspace.tsx` | Three-panel layout: file browser + 3D world + chat |
+| NavigationUIBridge | `lib/runtime/navigation-ui-bridge.ts` | State bridge: emits navigation state, predictions, fleet status to React |
+
+The presentation layer subscribes to state updates from the runtime layer via the NavigationUIBridge. It never calls into the navigation loop directly.
+
+### Application Layer
+
+Technology: TypeScript, Markdown agent definitions
+
+The application layer manages agents, skills, and multi-agent orchestration:
+
+| Component | Directory | Purpose |
+|---|---|---|
+| Agent definitions | `public/system/agents/` | 14+ system agents as markdown files with YAML frontmatter |
+| Skill cartridges | `public/volumes/system/skills/` | 20+ reusable skills as markdown files |
+| Agent compiler | `lib/agents/agent-compiler.ts` | Compiles agent markdown into executable runtime configs |
+| Agent loader | `lib/agents/agent-loader.ts` | Discovers and loads agents from the volume system |
+| Multi-agent validator | `lib/agents/multi-agent-validator.ts` | Validates multi-agent workflow plans |
+| Model-aware orchestrator | `lib/agents/model-aware-orchestrator.ts` | Routes tasks to appropriate LLM models |
+| Kernel rules | `public/system/kernel/` | Orchestration, evolution, and memory rules |
+| Volume system | `public/volumes/` | Three-tier: system (read-only) / team (shared) / user (personal) |
+
+### Runtime Layer
+
+Technology: TypeScript, Jest
+
+The runtime layer is the robot's cognitive engine. It is entirely headless -- no browser, no React, no Three.js required. This is the layer that can run as a standalone Node.js process on a Raspberry Pi controlling an ESP32.
+
+| Subsystem | Key Files | Purpose |
+|---|---|---|
+| World Model | `lib/runtime/world-model.ts`, `world-model-serializer.ts`, `world-model-bridge.ts` | 50x50 occupancy grid, RLE serialization, ground-truth and vision bridges |
+| Navigation | `lib/runtime/navigation-loop.ts`, `navigation-runtime.ts`, `local-planner.ts` | Cycle orchestration, A* pathfinding, session management |
+| Candidates | `lib/runtime/candidate-generator.ts` | 3-5 ranked subgoals per cycle for LLM selection |
+| Vision | `lib/runtime/sensor-bridge.ts`, `vision-simulator.ts`, `vision-scene-bridge.ts` | VLM-based grid construction, ground-truth simulation, scene graph projection |
+| Prediction | `lib/runtime/predictive-world-model.ts` | Spatial extrapolation of unknown cells |
+| Fleet | `lib/runtime/fleet-coordinator.ts` | Multi-robot world model merging and task assignment |
+| HAL | `lib/hal/types.ts`, `simulation-adapter.ts`, `physical-adapter.ts` | Unified hardware interface for sim and physical |
+| Dual-Brain | `lib/runtime/dual-brain-controller.ts`, `rsa-engine.ts` | Instinct (fast) + planner (deep) cognitive architecture |
+| Inference | `lib/runtime/openrouter-inference.ts`, `llm-inference.ts` | OpenRouter API adapter and mock inference |
+| Evaluation | `lib/runtime/navigation-evaluator.ts`, `navigation-logger.ts` | Run assessment and cycle-by-cycle recording |
+
 ---
 
-## Component Deep Dive
+## Skill Cartridges: Robot Apps
 
-### 1. Skill Cartridge (The "App")
-
-A Skill Cartridge is a markdown file that transforms a generic robot into a specialist:
+A skill cartridge is a markdown file that transforms a generic robot into a specialist. It is the robot equivalent of a smartphone app.
 
 ```markdown
 ---
-name: PlantCare_Specialist
-type: physical_skill
-base_model: gemini-3-flash
-hardware_profile: standard_arm_v1
-version: 1.2.0
+name: WallFollowerAgent
+type: specialist
+capabilities:
+  - obstacle_avoidance
+  - wall_following
+  - spatial_reasoning
+tools:
+  - Bash
+  - Read
+  - Write
+model: qwen/qwen3-vl-8b-instruct
+version: 2.1.0
 ---
 
-# Role
-You are an expert botanist. Identify dry soil and water plants.
+# WallFollowerAgent
 
-# Visual Cortex Instructions (Gemini Vision)
-**Scan for:** withered_leaves, dry_soil_texture (cracked/light brown)
-**Ignore:** Plastic pots, furniture
-**Alert:** yellow_leaves → flag "Nutrient Deficiency"
+You are a reactive navigation agent specialized in wall-following behavior.
 
-# Motor Cortex Protocols (Tool Use)
-- Use `arm.precision_mode(true)` for watering
-- Verify water flow visually
-- Stop if water reaches 1cm from rim
+## Perception
+Analyze VisionFrame and sensor readings each cycle. Identify walls,
+openings, and obstacles using depth estimates.
 
-# Evolution History
-- v1.0: Initial prompts
-- v1.1: Added check_drainage (Dreaming discovered root rot risk)
-- v1.2: Reduced water flow rate by 20% (field optimization)
+## Decision Rules
+1. If wall detected within 15cm on right: maintain distance, continue forward
+2. If opening detected on right: turn right 45 degrees
+3. If obstacle ahead within 20cm: turn left until clear
+4. If no wall detected: spiral right until wall contact
+
+## Learned Patterns
+- Right-side wall following is 23% more efficient in rectangular rooms
+- Gentle turns (60/100 differential) outperform sharp turns (0/100)
+- Battery conservation: reduce speed below 30% charge
 ```
 
-### 2. Gemini 3 Flash Kernel (The "OS")
+The agent definition IS the documentation IS the evolution history. When the system learns a new pattern, the development LLM writes it into the agent file. When an agent needs to improve, the development LLM edits its markdown.
 
-The kernel processes multimodal inputs with **Agentic Vision**:
-
-```mermaid
-sequenceDiagram
-    participant Robot as Robot Camera
-    participant Browser as LLMos Browser
-    participant Gemini as Gemini 3 Flash
-    participant HAL as HAL Layer
-
-    Robot->>Browser: MJPEG Video Stream
-    Browser->>Gemini: Image + Skill Context
-
-    Note over Gemini: THINK Phase
-    Gemini->>Gemini: Analyze scene + formulate plan
-
-    Note over Gemini: ACT Phase
-    Gemini->>Gemini: Execute Python code<br/>Zoom/Crop/Annotate
-
-    Note over Gemini: OBSERVE Phase
-    Gemini->>Gemini: Verify with transformed image
-
-    Gemini->>Browser: Tool Calls (JSON)
-    Browser->>HAL: hal.move_to(x, y, z)
-    HAL->>Robot: Motor Commands
-```
-
-**Key Insight**: Agentic Vision doesn't just "see" - it *investigates*. When detecting fine details, it:
-- Generates Python code to crop/zoom the region
-- Appends the transformed image to its context
-- Makes decisions grounded in pixel-level evidence
-
-### 3. Hardware Abstraction Layer (HAL)
-
-The HAL enables the same skill to run in both worlds:
-
-```mermaid
-graph LR
-    subgraph "Unified Tool Interface"
-        vision_scan["hal.vision.scan()"]
-        move_to["hal.manipulator.move_to(x,y,z)"]
-        grasp["hal.manipulator.grasp(force)"]
-        speak["hal.voice.speak(text)"]
-    end
-
-    subgraph "Simulated Implementation"
-        sim_scan["ThreeJS Raycasting"]
-        sim_move["Physics Interpolation"]
-        sim_grasp["Collision Detection"]
-        sim_speak["Web Speech API"]
-    end
-
-    subgraph "Physical Implementation"
-        real_scan["ESP32 Camera + Gemini"]
-        real_move["Stepper Motor Control"]
-        real_grasp["Servo + Force Sensor"]
-        real_speak["Speaker Module"]
-    end
-
-    vision_scan --> |Virtual| sim_scan
-    vision_scan --> |Physical| real_scan
-
-    move_to --> |Virtual| sim_move
-    move_to --> |Physical| real_move
-
-    grasp --> |Virtual| sim_grasp
-    grasp --> |Physical| real_grasp
-
-    speak --> |Virtual| sim_speak
-    speak --> |Physical| real_speak
-```
-
-### 4. The Dreaming Engine (Evolution)
-
-Digital twins learn while the live instance operates:
-
-```mermaid
-graph TB
-    subgraph "Live Instance (Real World)"
-        Live[Live Robot]
-        RealWorld[Physical Environment]
-        Experience[Experience Stream]
-
-        Live --> |Actuates| RealWorld
-        RealWorld --> |Feedback| Experience
-    end
-
-    subgraph "Digital Twins (Dream World)"
-        Twin1[Twin #1]
-        Twin2[Twin #2]
-        Twin3[Twin #3]
-        SimWorld[Physics Simulation]
-
-        Twin1 --> SimWorld
-        Twin2 --> SimWorld
-        Twin3 --> SimWorld
-    end
-
-    subgraph "Evolution Process"
-        BlackBox[(BlackBox<br/>Failure Logs)]
-        Mutator[Mutation Engine]
-        Evaluator[Fitness Evaluator]
-        Patcher[Skill Patcher]
-    end
-
-    Experience --> |Record Failures| BlackBox
-    BlackBox --> |Replay| SimWorld
-
-    SimWorld --> |Trial Results| Evaluator
-    Evaluator --> |Select Best| Mutator
-    Mutator --> |Generate Variants| Twin1
-    Mutator --> |Generate Variants| Twin2
-    Mutator --> |Generate Variants| Twin3
-
-    Evaluator --> |Best Strategy| Patcher
-    Patcher --> |Update| Live
-```
-
-**The Dream Cycle**:
-1. **Record**: Live instance logs failures to BlackBox
-2. **Replay**: Dreaming engine reconstructs scenario in simulation
-3. **Mutate**: Generate skill variants with different approaches
-4. **Evaluate**: Test variants in accelerated simulation (1000x real-time)
-5. **Patch**: Deploy winning strategy to live instance
+Skill cartridges flow through the volume system:
+- **User volume**: Personal experiments and custom agents
+- **Team volume**: Agents proven across team members (promoted at 80% success rate over 5+ uses)
+- **System volume**: Immutable foundation agents that ship with the repository
 
 ---
 
-## Data Flow Architecture
+## HAL: Unified Interface for Simulation and Hardware
 
-### Camera to Action Pipeline
+The Hardware Abstraction Layer ensures that the same navigation decision produces the same behavior regardless of the execution environment.
 
-```mermaid
-sequenceDiagram
-    participant Cam as ESP32 Camera
-    participant ESP as ESP32 MCU
-    participant Browser as LLMos Browser
-    participant Gemini as Gemini 3 Flash
-    participant HAL as HAL Layer
-    participant Motor as Motor Driver
+### Interface Design
 
-    Note over Cam,Motor: Frame Rate: 10-30 FPS for vision
-
-    Cam->>ESP: Raw Frame
-    ESP->>Browser: MJPEG over WiFi/Serial
-
-    Browser->>Browser: Frame Buffer (latest N frames)
-    Browser->>Gemini: POST /v1/chat/completions
-
-    Note over Gemini: Multimodal Input:<br/>- Skill System Prompt<br/>- Recent Frames<br/>- Sensor Telemetry
-
-    Gemini->>Gemini: Agentic Vision Loop
-    Gemini-->>Browser: Tool Calls + Reasoning
-
-    Browser->>HAL: Execute Tool Calls
-
-    alt Simulation Mode
-        HAL->>Browser: Update Three.js Scene
-    else Physical Mode
-        HAL->>ESP: JSON Command
-        ESP->>Motor: PWM/Step Signals
-    end
-
-    Motor-->>Cam: Physical State Change
-    Note over Cam,Motor: Loop continues
+```
+HardwareAbstractionLayer
+  |-- mode: simulation | physical | hybrid
+  |-- locomotion: LocomotionInterface
+  |     |-- drive(left, right, durationMs?)
+  |     |-- moveTo(x, y, z, speed?)
+  |     |-- rotate(direction, degrees)
+  |     |-- moveForward(distanceCm)
+  |     |-- moveBackward(distanceCm)
+  |     |-- stop()
+  |     |-- getPose()
+  |
+  |-- vision: VisionInterface
+  |     |-- captureFrame()
+  |     |-- scan(mode: full | targeted | quick)
+  |     |-- getDistanceSensors()
+  |     |-- getLineSensors()
+  |     |-- getIMU()
+  |
+  |-- manipulation: ManipulationInterface
+  |     |-- moveTo(x, y, z, speed?)
+  |     |-- grasp(force, mode)
+  |     |-- extend(distance)
+  |     |-- retract()
+  |     |-- setPrecisionMode(enabled)
+  |
+  |-- communication: CommunicationInterface
+  |     |-- speak(text, urgency?)
+  |     |-- playSound(soundId)
+  |     |-- setLED(color)
+  |     |-- listenForCommand()
+  |
+  |-- safety: SafetyInterface
+        |-- getStatus()
+        |-- emergencyStop()
+        |-- setOperatingLimits(limits)
 ```
 
-### Skill Hot-Swapping
+### Implementation
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Detector as Context Detector
-    participant Loader as Skill Loader
-    participant Kernel as Gemini Kernel
-    participant Robot as Robot
+Two concrete adapters implement this interface:
 
-    User->>Robot: "Look at these plants"
-    Robot->>Detector: Audio/Visual Context
+- **SimulationAdapter** (`lib/hal/simulation-adapter.ts`): Backed by the Three.js renderer and simulated physics. All HAL calls update the simulation state and return computed results.
+- **PhysicalAdapter** (`lib/hal/physical-adapter.ts`): Backed by the ESP32 serial/WiFi connection. HAL calls are translated into serial commands sent to the microcontroller.
 
-    Detector->>Detector: Analyze Intent
-    Note over Detector: Detected: Plants<br/>Current Skill: Navigator<br/>Recommended: Gardener
-
-    Detector->>Loader: Request skill switch
-    Loader->>Kernel: Unmount navigator.md
-    Loader->>Loader: Load gardener.md
-    Loader->>Kernel: Mount new system prompt
-
-    Note over Kernel: Context Window Reset<br/>New skill instructions active
-
-    Kernel->>Robot: New behavior active
-    Note over Robot: Was: Avoiding walls<br/>Now: Scanning for leaf veins
-
-    Robot-->>User: "I see 3 plants. The fern looks dry."
-```
+The NavigationHALBridge (`lib/runtime/navigation-hal-bridge.ts`) connects the NavigationLoop to whichever adapter is active. It translates cycle results (MOVE_TO, ROTATE, STOP) into sequences of HAL method calls and feeds sensor feedback back into the world model.
 
 ---
 
-## Physical/Simulated Duality Architecture
+## Dual-Brain: Instinct Layer and Planner Layer
 
-### Shared Components
+The DualBrainController (`lib/runtime/dual-brain-controller.ts`) implements a two-tier cognitive architecture inspired by JEPA (Joint Embedding Predictive Architecture) and RSA (Recursive Self-Aggregation).
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     SHARED (100% Code Reuse)                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │ Agent Def   │  │ Tool Specs  │  │ 3D Navigation System    │ │
-│  │ (Markdown)  │  │ (JSON)      │  │ (Pathfinding, Mapping)  │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-            ┌─────────────────┼─────────────────┐
-            ▼                                   ▼
-┌───────────────────────┐           ┌───────────────────────────┐
-│    SIMULATED WORLD    │           │       REAL WORLD          │
-│ ┌───────────────────┐ │           │ ┌───────────────────────┐ │
-│ │ Three.js Renderer │ │           │ │ ESP32-S3 + WASMachine │ │
-│ ├───────────────────┤ │           │ ├───────────────────────┤ │
-│ │ Cannon.js Physics │ │           │ │ Real World Physics    │ │
-│ ├───────────────────┤ │           │ ├───────────────────────┤ │
-│ │ Simulated Sensors │ │           │ │ OV2640 Camera         │ │
-│ │ (Raycasting)      │ │           │ │ Distance Sensors      │ │
-│ ├───────────────────┤ │           │ ├───────────────────────┤ │
-│ │ Virtual Motors    │ │           │ │ Stepper/DC Motors     │ │
-│ └───────────────────┘ │           │ └───────────────────────┘ │
-└───────────────────────┘           └───────────────────────────┘
-```
+### Instinct Layer (Fast, Reactive)
 
-### Deployment Pipeline
+- **Model**: Qwen3-VL-8B, single-pass inference
+- **Latency**: ~200-500ms
+- **Purpose**: Reflexive behaviors -- obstacle avoidance, wall following, object tracking
+- **Input**: Compact world model summary (~200 tokens) + camera frame
+- **Output**: Immediate action (MOVE_TO, ROTATE, STOP)
 
-```mermaid
-graph LR
-    subgraph "Development"
-        Skill[Skill.md]
-        Test[Write & Test]
-    end
+The instinct layer is always active. It processes every cycle and provides a baseline response.
 
-    subgraph "Simulation"
-        Sim[Three.js Simulator]
-        Validate[Behavior Validation]
-    end
+### Planner Layer (Deliberative)
 
-    subgraph "Production"
-        Deploy[Deploy to ESP32]
-        Live[Live Operation]
-        Monitor[Telemetry Monitoring]
-    end
+- **Model**: Qwen3-VL-8B + RSA (Recursive Self-Aggregation)
+- **Latency**: ~3-8 seconds
+- **Purpose**: Strategic decisions -- exploration planning, recovery, skill generation, fleet coordination
+- **Input**: Full world model summary (~800-1200 tokens) + camera frame + map image
+- **Output**: Multi-step plan with reasoning
 
-    subgraph "Evolution"
-        Learn[Continuous Learning]
-        Update[Skill Updates]
-    end
+The RSA engine (`lib/runtime/rsa-engine.ts`) implements the algorithm from "Recursive Self-Aggregation Unlocks Deep Thinking in Large Language Models" (Venkatraman et al., 2025):
 
-    Skill --> Test
-    Test --> Sim
-    Sim --> Validate
+1. **Population**: Maintain N=4 candidate reasoning chains
+2. **Subsample**: Draw K=2 candidates
+3. **Aggregate**: LLM produces improved solution from the K candidates
+4. **Recurse**: Repeat for T=3 steps
 
-    Validate --> |Pass| Deploy
-    Validate --> |Fail| Test
+Even K=2 gives substantial improvement over K=1 (simple self-refinement). The robotics configuration uses lighter parameters than the paper's recommended N=16, K=4, T=10 to keep latency acceptable.
 
-    Deploy --> Live
-    Live --> Monitor
-    Monitor --> Learn
-    Learn --> Update
-    Update --> Skill
-```
+### Escalation Logic
+
+The controller escalates from instinct to planner based on:
+
+| Signal | Escalation |
+|---|---|
+| `unknown_object` | MobileNet confidence below threshold |
+| `stuck` | Same position for N+ seconds |
+| `goal_requires_plan` | Multi-step goal |
+| `low_confidence` | Instinct confidence below threshold |
+| `new_area` | Entered exploration frontier |
+| `fleet_coordination` | Swarm decision needed |
 
 ---
 
-## Inversion of Control Model
+## World Model: Occupancy Grid + Scene Graph + Predictive Model
 
-### Traditional Robotics (Firmware-Centric)
+The robot's world model is a three-layer representation:
 
-```
-┌─────────────────────────────────────┐
-│         MICROCONTROLLER             │
-│  ┌───────────────────────────────┐  │
-│  │         FIRMWARE              │  │
-│  │  - Hardcoded behaviors        │  │
-│  │  - Fixed sensor processing    │  │
-│  │  - Predetermined responses    │  │
-│  └───────────────────────────────┘  │
-│                │                    │
-│    ┌───────────┴───────────┐       │
-│    ▼                       ▼       │
-│  Sensors                Motors     │
-└─────────────────────────────────────┘
-```
+### Layer 1: Occupancy Grid
 
-### LLMos (LLM-Centric)
+The WorldModel class (`lib/runtime/world-model.ts`) maintains a 50x50 grid at 10cm resolution covering a 5m x 5m arena. Each cell has a state (unknown, free, explored, obstacle, wall, collectible, collected, path), a confidence score (0.0-1.0), a timestamp, and a visit count.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLOUD LLM (Gemini 3)                     │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              SKILL CARTRIDGE                          │  │
-│  │  - Dynamic behaviors (markdown)                       │  │
-│  │  - Contextual reasoning                               │  │
-│  │  - Natural language evolution                         │  │
-│  └───────────────────────────────────────────────────────┘  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ Tool Calls (JSON)
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    MICROCONTROLLER                          │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              TOOL EXECUTOR                             │  │
-│  │  - Exposes sensors as readable tools                  │  │
-│  │  - Exposes actuators as callable tools                │  │
-│  │  - No behavior logic - just I/O                       │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                     │               │                       │
-│         ┌───────────┘               └───────────┐          │
-│         ▼                                       ▼          │
-│  Tool: read_sensors()                 Tool: drive(l, r)   │
-│  Tool: use_camera(prompt)             Tool: set_led(rgb)   │
-└─────────────────────────────────────────────────────────────┘
-```
+Two bridges populate the grid:
+- **Ground-truth bridge** (`world-model-bridge.ts`): Rasterizes simulation state directly. Perfect knowledge.
+- **Vision bridge** (`sensor-bridge.ts`): Builds incrementally from 60-degree camera FOV + VLM depth estimates. Imperfect, growing knowledge.
 
-**Key Difference**: The microcontroller becomes a "peripheral" that exposes tools. All intelligence lives in the cloud-based LLM with downloadable skill cartridges.
+### Layer 2: Scene Graph
+
+The scene graph (`lib/runtime/scene-graph/`) provides semantic understanding on top of the spatial grid:
+- Typed objects (wall, obstacle, beacon, robot) with bounding boxes and confidence
+- Waypoint topology with edge costs and status (clear, blocked, unknown)
+- Semantic queries for natural language reasoning
+
+### Layer 3: Predictive Model
+
+The PredictiveWorldModel (`lib/runtime/predictive-world-model.ts`) fills unknown cells with low-confidence predictions based on observed patterns:
+- Wall continuation (confidence: 0.3)
+- Corridor detection (confidence: 0.25)
+- Open space expansion (confidence: 0.2)
+
+Predictions are verified when observed and automatically corrected. This runs every cycle without LLM inference cost.
 
 ---
 
-## Implementation Priorities
+## Fleet Coordination: Shared World Models
 
-### Phase 1: Core Infrastructure
-1. Gemini 3 Flash API integration wrapper
-2. Agentic Vision Think-Act-Observe loop
-3. Skill Cartridge loader with hot-swapping
+The FleetCoordinator (`lib/runtime/fleet-coordinator.ts`) manages multiple robots (up to 10) in the same arena:
 
-### Phase 2: HAL Unification
-1. Abstract existing Three.js simulation
-2. Abstract ESP32 hardware interface
-3. Unified tool definitions
+### Architecture
 
-### Phase 3: Dreaming Engine
-1. BlackBox recorder for failures
-2. Headless simulation for replay
-3. Evolutionary skill patcher
+```
+Robot 1 WorldModel --\
+Robot 2 WorldModel ---+-- FleetCoordinator -- Shared WorldModel
+Robot 3 WorldModel --/         |
+                          Task Assignment
+                          Conflict Resolution
+```
 
-### Phase 4: Production Ready
-1. Multi-robot fleet support
-2. Collaborative skill evolution (Team Volume)
-3. Skill marketplace
+### Merging
+
+Each robot maintains its own WorldModel indexed by device ID. The coordinator merges them using configurable strategies:
+- **max_confidence**: For each cell, keep the highest-confidence observation
+- **latest_update**: For each cell, keep the most recently updated observation
+
+### Task Assignment
+
+Frontier cells (boundaries between explored and unknown) are identified across all robots. The coordinator assigns exploration tasks to minimize overlap, with a minimum target separation of 0.5m. Tasks are reassigned every 5 seconds.
+
+### Task Types
+
+- `explore_frontier`: Navigate to unexplored boundary
+- `navigate_to`: Go to specific coordinate
+- `patrol`: Patrol a designated region
+- `idle`: No active task
 
 ---
 
-*Architecture Version: 2.0*
-*Last Updated: 2026-01-28*
-*Status: Design Complete, Implementation Pending*
+## Evolution: Dreaming Engine (Planned)
+
+The evolution engine is implemented at the component level but not yet integrated into the navigation pipeline as an automated loop.
+
+### Implemented Components
+
+| Component | File | Status |
+|---|---|---|
+| BlackBoxRecorder | `lib/evolution/black-box-recorder.ts` | COMPLETE -- Records execution traces |
+| EvolutionaryPatcher | `lib/evolution/evolutionary-patcher.ts` | COMPLETE -- Mutates and evolves behaviors |
+| SimulationReplayer | `lib/evolution/simulation-replayer.ts` | COMPLETE -- Replays recorded sessions |
+| AgenticAuditor | `lib/evolution/agentic-auditor.ts` | COMPLETE -- Audits decision quality |
+
+### Planned Integration
+
+The dreaming engine will operate as follows:
+
+1. **Record**: During live operation, the BlackBoxRecorder captures execution traces including sensor readings, decisions, outcomes, and failures.
+2. **Replay**: The SimulationReplayer reconstructs failure scenarios in headless simulation.
+3. **Mutate**: The EvolutionaryPatcher generates skill variants with different approaches to the same scenario.
+4. **Evaluate**: Variants are tested in accelerated simulation (1000x real-time).
+5. **Patch**: The winning strategy is written back into the agent's markdown definition.
+
+This loop runs offline -- the live robot continues operating while digital twins optimize in simulation. When a better strategy is found, it can be hot-swapped into the live skill cartridge.
+
+---
+
+## Technical Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Development LLM | Claude Opus 4.6 (via Claude Code) | Agent creation, evolution, orchestration |
+| Runtime LLM | Qwen3-VL-8B (local GPU or OpenRouter) | Multimodal perception, real-time decisions |
+| Desktop / Frontend | Next.js 14.1.0, React 18, Electron | Application shell, native USB/FS |
+| 3D Visualization | Three.js (via @react-three/fiber, @react-three/drei) | Robot and arena rendering |
+| Runtime | TypeScript, Node.js | Navigation pipeline, world model, HAL |
+| Testing | Jest 29, ts-jest | 349 tests across 21 suites |
+| Firmware | C++ (ESP32-S3) | Serial protocol runtime, safety |
+| LLM Inference | OpenRouter API | Cloud model serving |
+| Agent Format | Markdown + YAML frontmatter | Agent definitions, skills, memory |
+| State Management | Zustand | React state for UI components |
+
+---
+
+## Navigation Pipeline Summary
+
+The complete navigation cycle, from sensors to actuators:
+
+```
+1. Sensor readings arrive (distance, camera, IMU)
+2. World model bridge updates the occupancy grid
+3. Scene graph bridge updates semantic objects
+4. Predictive model extrapolates unknown cells (optional)
+5. World model is serialized (RLE JSON + top-down image)
+6. Candidate generator produces 3-5 ranked subgoals
+7. Navigation prompt is assembled (system + user + images)
+8. LLM inference produces a structured JSON decision
+9. Decision is parsed and validated (with fallback for malformed output)
+10. LLM world model corrections are applied (optional)
+11. Local planner computes A* path to selected subgoal
+12. HAL bridge translates path into motor commands
+13. Firmware executes commands with safety validation
+14. Results feed back into the next cycle
+```
+
+This cycle runs until the goal is reached, the cycle limit is hit, or the system halts. The NavigationRuntime (`lib/runtime/navigation-runtime.ts`) manages the complete session lifecycle, and the NavigationEvaluator (`lib/runtime/navigation-evaluator.ts`) grades the result against success criteria.
+
+---
+
+## Key Design Decisions
+
+### The LLM selects strategy, not coordinates
+
+The LLM never outputs raw (x, y) coordinates. It selects from curated candidates that classical heuristics have already validated. This bounds the output space while preserving strategic flexibility.
+
+### Safety through layering
+
+Four layers of validation stand between the LLM and the actuators:
+1. LLM decision parsing with fallback (NavigationTypes)
+2. A* path validation with collision checking (LocalPlanner)
+3. HAL command validation with motor limits (CommandValidator)
+4. Firmware safety with deterministic fallback (ESP32 runtime)
+
+### World model as the universal interface
+
+The LLM sees the same serialized world model regardless of whether the robot is simulated or physical, whether the grid was built from ground truth or camera observations. This abstraction is what makes simulation-to-real transfer possible.
+
+### Dual-LLM architecture avoids the latency/quality tradeoff
+
+Development reasoning (Claude Opus 4.6) operates at human timescales with deep context. Runtime reasoning (Qwen3-VL-8B) operates at robot timescales with fast inference. Neither compromises for the other.
