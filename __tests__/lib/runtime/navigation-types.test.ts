@@ -215,8 +215,40 @@ describe('parseNavigationDecision', () => {
     if (!result.valid) expect(result.error).toContain('JSON parse error');
   });
 
-  it('returns error for valid JSON but invalid schema', () => {
+  it('normalizes free-form JSON to valid schema', () => {
+    // Free-form JSON with no recognizable action normalizes to STOP
     const result = parseNavigationDecision('{"foo": "bar"}');
-    expect(result.valid).toBe(false);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.decision.action.type).toBe('STOP');
+    }
+  });
+
+  it('normalizes LLM shorthand actions', () => {
+    const result = parseNavigationDecision('{"action": "move_to", "target": "c3", "reason": "go there"}');
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.decision.action.type).toBe('MOVE_TO');
+      expect(result.decision.action.target_id).toBe('c3');
+      expect(result.decision.explanation).toBe('go there');
+    }
+  });
+
+  it('normalizes action with target_m array', () => {
+    const result = parseNavigationDecision('{"action": "MOVE", "target": [0.5, 0.5], "reason": "nav"}');
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.decision.action.type).toBe('MOVE_TO');
+      expect(result.decision.action.target_m).toEqual([0.5, 0.5]);
+    }
+  });
+
+  it('strips <think> tags from Qwen3 responses', () => {
+    const raw = '<think>I should move to c1</think>{"action":{"type":"MOVE_TO","target_id":"c1"},"fallback":{"if_failed":"STOP"},"explanation":"Moving"}';
+    const result = parseNavigationDecision(raw);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.decision.action.type).toBe('MOVE_TO');
+    }
   });
 });
