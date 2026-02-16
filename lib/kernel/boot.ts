@@ -28,8 +28,6 @@ export interface BootProgress {
 export type BootProgressCallback = (progress: BootProgress) => void;
 
 export interface KernelConfig {
-  enableWASM: boolean;
-  enablePython: boolean;
   loadStdLib: boolean;
   systemVolumeUrl?: string;
 }
@@ -48,18 +46,7 @@ export class KernelBootLoader {
       duration: 800,
       critical: true,
     },
-    {
-      name: 'wasm',
-      description: 'Loading kernel runtime',
-      duration: 1200,
-      critical: false, // Can continue without WASM
-    },
-    {
-      name: 'python',
-      description: 'Initializing Python environment',
-      duration: 2000,
-      critical: false, // Can continue without Python
-    },
+    // WASM and Python stages removed (cleanup)
     {
       name: 'stdlib',
       description: 'Loading standard library',
@@ -80,8 +67,6 @@ export class KernelBootLoader {
 
   constructor(config: Partial<KernelConfig> = {}) {
     this.config = {
-      enableWASM: config.enableWASM ?? true,
-      enablePython: config.enablePython ?? true,
       loadStdLib: config.loadStdLib ?? true,
       systemVolumeUrl: config.systemVolumeUrl ?? '/system',
     };
@@ -168,18 +153,6 @@ export class KernelBootLoader {
         await this.mountVolumes();
         break;
 
-      case 'wasm':
-        if (this.config.enableWASM) {
-          await this.loadWASMRuntime();
-        }
-        break;
-
-      case 'python':
-        if (this.config.enablePython) {
-          await this.initializePython();
-        }
-        break;
-
       case 'stdlib':
         if (this.config.loadStdLib) {
           await this.loadStandardLibrary();
@@ -243,65 +216,7 @@ export class KernelBootLoader {
   }
 
   /**
-   * Stage 3: Load WASM runtime (QuickJS)
-   */
-  private async loadWASMRuntime(): Promise<void> {
-    logger.boot('WASM', 'start', 'QuickJS-WASM runtime');
-
-    try {
-      // Dynamically import WASM runtime
-      const { getWASMRuntime } = await import('./wasm-runtime');
-
-      // Initialize the runtime
-      const runtime = await getWASMRuntime();
-
-      if (typeof window !== 'undefined') {
-        // Store runtime reference in kernel
-        (window as any).__LLMOS_KERNEL__.modules.wasm = {
-          status: 'ready',
-          runtime: 'quickjs',
-          version: '0.29.2',
-          instance: runtime,
-        };
-      }
-
-      logger.success('system', 'WASM runtime initialized');
-    } catch (error) {
-      logger.error('system', 'WASM initialization failed', { error });
-
-      if (typeof window !== 'undefined') {
-        (window as any).__LLMOS_KERNEL__.modules.wasm = {
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-
-      throw error;
-    }
-  }
-
-  /**
-   * Stage 4: Initialize Python (Pyodide)
-   */
-  private async initializePython(): Promise<void> {
-    logger.boot('Python', 'start', 'Pyodide WASM runtime');
-
-    // Use existing Pyodide initialization
-    // The actual loading is deferred until first use
-    if (typeof window !== 'undefined') {
-      (window as any).__LLMOS_KERNEL__.modules.python = {
-        status: 'ready',
-        runtime: 'pyodide',
-        version: '0.24.0',
-      };
-    }
-
-    // Pyodide is lazy-loaded on first execution
-    await this.sleep(500);
-  }
-
-  /**
-   * Stage 5: Load standard library
+   * Stage 3: Load standard library
    */
   private async loadStandardLibrary(): Promise<void> {
     logger.boot('StdLib', 'start', 'Loading kernel APIs');

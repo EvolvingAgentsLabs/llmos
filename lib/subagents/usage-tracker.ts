@@ -5,7 +5,7 @@
  * Separated from system-evolution.ts to avoid circular imports.
  */
 
-import type { VolumeType } from '../git-service';
+type VolumeType = 'system' | 'team' | 'user';
 
 export interface SubAgentUsageRecord {
   agentPath: string;

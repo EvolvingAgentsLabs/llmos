@@ -35,38 +35,6 @@ export interface ElectronFSAPI {
   }): Promise<{ canceled: boolean; filePath?: string }>;
 }
 
-export interface ASCCompileResult {
-  success: boolean;
-  wasmBinary?: Uint8Array;
-  wasmBase64?: string;
-  textOutput?: string;
-  size?: number;
-  error?: string;
-  stderr?: string;
-  compilationTime?: number;
-  exports?: string[];
-}
-
-export interface ASCCompileOptions {
-  name?: string;
-  optimize?: boolean;
-  debug?: boolean;
-  runtime?: 'stub' | 'minimal' | 'incremental';
-  memoryBase?: number;
-  tableBase?: number;
-  exportTable?: boolean;
-  importMemory?: boolean;
-  exportMemory?: boolean;
-  noAssert?: boolean;
-  robot4Mode?: boolean;
-}
-
-export interface ElectronASCAPI {
-  compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult>;
-  getStatus(): Promise<{ ready: boolean; version: string; installed: boolean }>;
-  getVersion(): Promise<string>;
-}
-
 export interface SerialPortInfo {
   path: string;
   manufacturer?: string;
@@ -118,7 +86,6 @@ export interface ElectronSystemAPI {
 declare global {
   interface Window {
     electronFS?: ElectronFSAPI;
-    electronASC?: ElectronASCAPI;
     electronSerial?: ElectronSerialAPI;
     electronSystem?: ElectronSystemAPI;
   }

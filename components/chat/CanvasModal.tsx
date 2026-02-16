@@ -18,10 +18,7 @@ const ThreeJSCanvas = dynamic(() => import('@/components/canvas/ThreeJSCanvas'),
   loading: () => <div className="flex items-center justify-center h-full"><span className="text-fg-tertiary">Loading canvas...</span></div>,
 });
 
-const SplitViewCanvas = dynamic(() => import('@/components/canvas/SplitViewCanvas'), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-full"><span className="text-fg-tertiary">Loading canvas...</span></div>,
-});
+// SplitViewCanvas removed during cleanup
 
 interface CanvasModalProps {
   code: string;
@@ -95,11 +92,9 @@ export default function CanvasModal({ code, language, isOpen, onClose }: CanvasM
         <div className="h-[calc(100%-60px)]">
           {isThreeJS && <ThreeJSCanvas initialCode={code} />}
           {isPython && (
-            <SplitViewCanvas
-              volume="user"
-              filePath="temp_canvas.py"
-              initialContent={code}
-            />
+            <div className="flex items-center justify-center h-full">
+              <p className="text-fg-secondary">Python canvas not available</p>
+            </div>
           )}
           {!isThreeJS && !isPython && (
             <div className="flex items-center justify-center h-full">

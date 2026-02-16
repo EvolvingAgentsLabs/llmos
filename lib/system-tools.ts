@@ -5,7 +5,7 @@
  */
 
 import { getVFS } from './virtual-fs';
-import { executePython } from './pyodide-runtime';
+// Python execution removed (pyodide cleanup)
 import { getSubAgentExecutor } from './subagents/subagent-executor';
 import { getSubAgentUsage, SubAgentUsageRecord } from './subagents/usage-tracker';
 import type { VolumeType } from './volumes/file-operations';
@@ -16,8 +16,7 @@ import {
   MIN_AGENTS_REQUIRED,
 } from './agents/multi-agent-validator';
 
-// Import ESP32 WASM4 tools
-import { getESP32WASM4Tools } from './llm-tools/esp32-wasm4-tools';
+// ESP32 WASM4 tools removed (WASM cleanup)
 
 // Dynamic import for applet runtime to avoid SSR issues
 let compileAppletFn: ((code: string) => Promise<any>) | null = null;
@@ -651,76 +650,7 @@ export const ListDirectoryTool: ToolDefinition = {
 /**
  * Execute Python Tool
  */
-export const ExecutePythonTool: ToolDefinition = {
-  id: 'execute-python',
-  name: 'Execute Python',
-  description: 'Execute Python code in the browser runtime (Pyodide)',
-  inputs: [
-    {
-      name: 'code',
-      type: 'string',
-      description: 'Python code to execute',
-      required: true,
-    },
-    {
-      name: 'workspacePath',
-      type: 'string',
-      description: 'Optional workspace path to save generated images (e.g., user)',
-      required: false,
-    },
-  ],
-  execute: async (inputs) => {
-    const { code, workspacePath } = inputs;
-
-    if (!code || typeof code !== 'string') {
-      throw new Error('Invalid code parameter');
-    }
-
-    const result = await executePython(code);
-
-    if (!result.success) {
-      throw new Error(result.error || 'Python execution failed');
-    }
-
-    // Save images to VFS if workspace path provided
-    const savedImagePaths: string[] = [];
-    if (workspacePath && result.images && result.images.length > 0) {
-      const vfs = getVFS();
-      const visualizationPath = `${workspacePath}/output/visualizations`;
-
-      for (let i = 0; i < result.images.length; i++) {
-        const base64Image = result.images[i];
-        const imageName = `plot_${Date.now()}_${i + 1}.png`;
-        const imagePath = `${visualizationPath}/${imageName}`;
-
-        // Save base64 image as a text file with metadata
-        const imageData = {
-          format: 'png',
-          base64: base64Image,
-          createdAt: new Date().toISOString(),
-          index: i + 1,
-        };
-
-        try {
-          vfs.writeFile(imagePath, JSON.stringify(imageData, null, 2));
-          savedImagePaths.push(imagePath);
-        } catch (error) {
-          console.warn(`Failed to save image to VFS: ${imagePath}`, error);
-        }
-      }
-    }
-
-    return {
-      success: true,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      output: result.output,
-      images: result.images, // Base64 encoded matplotlib images
-      savedImages: savedImagePaths.length > 0 ? savedImagePaths : undefined,
-      executionTime: result.executionTime,
-    };
-  },
-};
+// ExecutePythonTool removed (pyodide cleanup)
 
 /**
  * Discover Sub-Agents Tool
@@ -985,8 +915,8 @@ export const InvokeSubAgentTool: ToolDefinition = {
     console.log(`[InvokeSubAgent] Invoking ${agentName} from ${agentPath}`);
     console.log(`[InvokeSubAgent] Task: ${task?.substring(0, 100)}...`);
 
-    // Execute the Python code
-    const result = await executePython(code);
+    // Python execution removed — sub-agent execution is now handled differently
+    const result = { success: false, error: 'Python execution not available', executionTime: 0, stdout: '', stderr: '', output: null, images: [] as string[] };
 
     const executionTime = Date.now() - startTime;
 
@@ -1474,73 +1404,11 @@ Hardware access via VFS (see esp32-wasm-development.md skill):
       throw new Error('Invalid deviceIp parameter');
     }
 
-    console.log(`[DeployWasmApp] Compiling ${appName}...`);
-
-    // Step 1: Compile C to WASM (Browser-based compilation)
-    try {
-      // Use browser-based WASM compiler (no backend needed!)
-      const { compileWasm } = await import('./runtime/wasm-compiler');
-
-      const compileResult = await compileWasm({
-        source: sourceCode,
-        name: appName,
-        optimizationLevel,
-      });
-
-      if (!compileResult.success) {
-        return {
-          success: false,
-          error: 'Compilation failed',
-          details: compileResult.error || compileResult.details,
-          hint: compileResult.hint,
-          compilationTime: compileResult.compilationTime,
-        };
-      }
-
-      console.log(`[DeployWasmApp] Compilation successful: ${compileResult.size} bytes in ${compileResult.compilationTime}ms`);
-
-      // Step 2: Deploy WASM binary to device
-      const { installWasmApp } = await import('./hardware/wasm-deployer');
-
-      // Convert Uint8Array to Buffer for TCP transmission
-      const wasmBinary = Buffer.from(compileResult.wasmBinary!);
-
-      const deployResult = await installWasmApp(
-        { deviceIp },
-        {
-          appName,
-          wasmBinary,
-          heapSize,
-        }
-      );
-
-      if (!deployResult.success) {
-        return {
-          success: false,
-          error: 'Deployment failed',
-          details: deployResult.error,
-          compiledSize: compileResult.size,
-        };
-      }
-
-      console.log(`[DeployWasmApp] Deployment successful: ${appName} on ${deviceIp}`);
-
-      return {
-        success: true,
-        appName,
-        deviceIp,
-        heapSize,
-        compiledSize: compileResult.size,
-        message: `App "${appName}" compiled (${compileResult.size} bytes) and deployed to ${deviceIp}. Heap: ${heapSize} bytes.`,
-      };
-
-    } catch (error: any) {
-      console.error('[DeployWasmApp] Error:', error);
-      return {
-        success: false,
-        error: error.message || 'Unknown error',
-      };
-    }
+    // WASM compilation and deployment removed during cleanup
+    return {
+      success: false,
+      error: 'WASM deployment removed. Use LLMBytecode pipeline instead.',
+    };
   },
 };
 
@@ -1573,32 +1441,11 @@ export const QueryWasmAppsTool: ToolDefinition = {
       throw new Error('Invalid deviceIp parameter');
     }
 
-    try {
-      const { queryWasmApps } = await import('./hardware/wasm-deployer');
-
-      const result = await queryWasmApps({ deviceIp }, appName);
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error,
-        };
-      }
-
-      return {
-        success: true,
-        deviceIp,
-        apps: result.apps || [],
-        count: result.apps?.length || 0,
-        message: `Found ${result.apps?.length || 0} WASM app(s) on ${deviceIp}`,
-      };
-
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Unknown error',
-      };
-    }
+    // WASM app querying removed during cleanup
+    return {
+      success: false,
+      error: 'WASM app management removed. Use LLMBytecode pipeline instead.',
+    };
   },
 };
 
@@ -1635,31 +1482,11 @@ export const UninstallWasmAppTool: ToolDefinition = {
       throw new Error('Invalid appName parameter');
     }
 
-    try {
-      const { uninstallWasmApp } = await import('./hardware/wasm-deployer');
-
-      const result = await uninstallWasmApp({ deviceIp }, appName);
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error,
-        };
-      }
-
-      return {
-        success: true,
-        deviceIp,
-        appName,
-        message: `App "${appName}" uninstalled from ${deviceIp}`,
-      };
-
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Unknown error',
-      };
-    }
+    // WASM app management removed during cleanup
+    return {
+      success: false,
+      error: 'WASM app management removed. Use LLMBytecode pipeline instead.',
+    };
   },
 };
 
@@ -1714,56 +1541,11 @@ Available APIs:
       throw new Error('Invalid source parameter: must be a string of C code');
     }
 
-    console.log(`[Robot4] Compiling ${name}...`);
-
-    try {
-      const { compileWasm } = await import('./runtime/wasm-compiler');
-
-      const result = await compileWasm({
-        source,
-        name,
-        optimizationLevel,
-      });
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error || 'Compilation failed',
-          details: result.details,
-          hint: result.hint || 'Check that robot4.h is included and start()/update() are defined',
-          compilationTime: result.compilationTime,
-        };
-      }
-
-      console.log(`[Robot4] Compilation successful: ${result.size} bytes in ${result.compilationTime}ms`);
-
-      // Store the binary for the Robot4 runtime to use
-      if (typeof window !== 'undefined') {
-        (window as any).__robot4_firmware = {
-          name,
-          binary: result.wasmBinary,
-          base64: result.wasmBase64,
-          size: result.size,
-          compiledAt: Date.now(),
-        };
-      }
-
-      return {
-        success: true,
-        name,
-        size: result.size,
-        compilationTime: result.compilationTime,
-        message: `Robot4 firmware "${name}" compiled successfully (${result.size} bytes)`,
-      };
-
-    } catch (error: any) {
-      console.error('[Robot4] Compilation error:', error);
-      return {
-        success: false,
-        error: error.message || 'Unknown compilation error',
-        hint: 'Ensure robot4.h is included and syntax is correct',
-      };
-    }
+    // WASM compilation removed during cleanup
+    return {
+      success: false,
+      error: 'WASM compilation removed. Use LLMBytecode pipeline instead.',
+    };
   },
 };
 
@@ -2229,7 +2011,6 @@ export function getSystemTools(): ToolDefinition[] {
     WriteFileTool,
     ReadFileTool,
     ListDirectoryTool,
-    ExecutePythonTool,
     DiscoverSubAgentsTool,
     InvokeSubAgentTool,
     GenerateAppletTool,
@@ -2253,8 +2034,6 @@ export function getSystemTools(): ToolDefinition[] {
     UninstallWasmAppTool,
     CompileRobot4FirmwareTool,
     Robot4RuntimeTool,
-    // ESP32 WASM4 robot tools
-    ...getESP32WASM4Tools(),
   ];
 }
 

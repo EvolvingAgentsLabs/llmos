@@ -8,13 +8,29 @@
  * Browser (Vercel): Virtual filesystem, CDN compilers, limited serial
  */
 
-import type {
-  FileInfo,
-  ASCCompileResult,
-  ASCCompileOptions,
-  SerialPortInfo,
-  SerialPortOptions,
-} from '../types/asc-types';
+// Types for platform APIs
+interface FileInfo {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size?: number;
+  modified?: string;
+}
+interface SerialPortInfo {
+  path: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  pnpId?: string;
+  locationId?: string;
+  vendorId?: string;
+  productId?: string;
+}
+interface SerialPortOptions {
+  baudRate?: number;
+  dataBits?: 5 | 6 | 7 | 8;
+  stopBits?: 1 | 1.5 | 2;
+  parity?: 'none' | 'even' | 'odd' | 'mark' | 'space';
+}
 
 // Platform type (browser or electron)
 export type PlatformType = 'browser' | 'electron';
@@ -46,8 +62,6 @@ export function getPlatformType(): PlatformType {
 export interface PlatformCapabilities {
   nativeFileSystem: boolean;
   virtualFileSystem: boolean;
-  assemblyScript: boolean;
-  nativeAssemblyScript: boolean;
   serialPorts: boolean;
   fullSerialPorts: boolean;
   webSerialAPI: boolean;
@@ -67,8 +81,6 @@ export function getPlatformCapabilities(): PlatformCapabilities {
   return {
     nativeFileSystem: isDesktop,
     virtualFileSystem: true, // Always available via isomorphic-git/lightning-fs
-    assemblyScript: true, // Available on both (native or CDN)
-    nativeAssemblyScript: isDesktop,
     serialPorts: isDesktop || hasWebSerial,
     fullSerialPorts: isDesktop,
     webSerialAPI: hasWebSerial && !isDesktop,
@@ -173,72 +185,6 @@ export const PlatformFS = {
    */
   isNative(): boolean {
     return isElectron();
-  },
-};
-
-/**
- * Platform-agnostic AssemblyScript Compiler API
- * Uses native compiler in Electron (faster), CDN in browser
- */
-export const PlatformASC = {
-  async compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult> {
-    // Prefer Electron native compiler (faster, more features)
-    if (isElectron() && window.electronASC) {
-      return window.electronASC.compile(source, options);
-    }
-
-    // Fallback to browser-based compiler
-    try {
-      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
-      const browserCompiler = getBrowserASCCompiler();
-      return await browserCompiler.compile(source, options);
-    } catch (error: any) {
-      return {
-        success: false,
-        error: 'AssemblyScript compilation failed',
-        stderr: error.message || 'Unknown error',
-      };
-    }
-  },
-
-  async getStatus(): Promise<{ ready: boolean; version: string; installed: boolean }> {
-    if (isElectron() && window.electronASC) {
-      return window.electronASC.getStatus();
-    }
-
-    try {
-      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
-      const browserCompiler = getBrowserASCCompiler();
-      return browserCompiler.getStatus();
-    } catch {
-      return {
-        ready: false,
-        version: 'N/A',
-        installed: false,
-      };
-    }
-  },
-
-  async getVersion(): Promise<string> {
-    if (isElectron() && window.electronASC) {
-      return window.electronASC.getVersion();
-    }
-
-    try {
-      const { getBrowserASCCompiler } = await import('../runtime/assemblyscript-compiler');
-      const browserCompiler = getBrowserASCCompiler();
-      return browserCompiler.getVersion();
-    } catch {
-      return 'N/A';
-    }
-  },
-
-  isAvailable(): boolean {
-    return true; // Available on both platforms
-  },
-
-  isNative(): boolean {
-    return isElectron() && window.electronASC !== undefined;
   },
 };
 
@@ -384,7 +330,6 @@ export function getPlatformInfo(): {
       version: '1.0.0',
       features: [
         'Native file system access',
-        'Native AssemblyScript compilation (faster)',
         'Full serial port communication',
         'Hardware deployment (ESP32)',
         'Offline operation',
@@ -401,9 +346,6 @@ export function getPlatformInfo(): {
     version: '1.0.0',
     features: [
       'Browser-based virtual filesystem',
-      'AssemblyScript compilation (CDN)',
-      'C to WASM compilation (Wasmer)',
-      'Python runtime (Pyodide)',
       '3D robot simulation',
       'AI agent system',
       'Code editor',
@@ -418,4 +360,4 @@ export function getPlatformInfo(): {
 }
 
 // Re-export types
-export type { FileInfo, ASCCompileResult, ASCCompileOptions, SerialPortInfo, SerialPortOptions };
+export type { FileInfo, SerialPortInfo, SerialPortOptions };

@@ -8,7 +8,7 @@
  */
 
 import { getVolumeFileSystem, VolumeType } from '../volumes/file-operations';
-import { getLivePreview } from '../runtime/live-preview';
+// live-preview removed during cleanup
 import { recordSubAgentExecution } from './usage-tracker';
 import { getLLMPatternMatcher, ExecutionTrace, SubAgentTrace } from '../agents/llm-pattern-matcher';
 import { getVFS } from '../virtual-fs';
@@ -39,7 +39,7 @@ export interface AgentExecutionResult {
  */
 export class SubAgentExecutor {
   private fs = getVolumeFileSystem();
-  private runtime = getLivePreview();
+  private runtime: any = null; // live-preview removed during cleanup
   private loadedAgents = new Map<string, SubAgentDefinition>();
 
   /**

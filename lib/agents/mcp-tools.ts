@@ -9,7 +9,7 @@
  */
 
 import { getVFS } from '../virtual-fs';
-import { executePython } from '../pyodide-runtime';
+// Python execution removed (pyodide cleanup)
 import { getLLMPatternMatcher, QueryMemoryOptions } from './llm-pattern-matcher';
 
 // =============================================================================
@@ -411,7 +411,7 @@ async function executeExecutePython(args: Record<string, any>): Promise<MCPToolR
   }
 
   try {
-    const result = await executePython(code);
+    const result = { success: false, error: 'Python execution not available (pyodide removed)', executionTime: 0, stdout: '', stderr: '', output: null, images: [] as string[] };
 
     const contents: MCPToolResult['content'] = [];
 

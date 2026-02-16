@@ -218,24 +218,6 @@ export {
 } from './compiled-agent-runtime';
 
 // =============================================================================
-// Rust/WASM Tools (High-Performance Tool Execution)
-// =============================================================================
-
-export {
-  type WASMToolDefinition,
-  type WASMToolSchema,
-  type WASMFunctionBinding,
-  type WASMParameter,
-  type WASMReturnType,
-  type WASMToolResult,
-  type RustToolConfig,
-  WASMToolLoader,
-  createRustToolExecutor,
-  getWASMToolLoader,
-  FFT_TOOL_EXAMPLE
-} from './rust-wasm-tools';
-
-// =============================================================================
 // Model-Aware Orchestrator (Unified Execution Coordinator)
 // =============================================================================
 

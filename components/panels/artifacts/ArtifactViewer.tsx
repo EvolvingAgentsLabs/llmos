@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import ThreeRenderer, { ThreeScene } from './ThreeRenderer';
 import PlotRenderer, { PlotData } from './PlotRenderer';
-import CodeExecutor from './CodeExecutor';
 import { Eye, Code, Maximize2, Minimize2 } from 'lucide-react';
 
 export type ViewMode = 'preview' | 'code';
@@ -169,7 +168,9 @@ export default function ArtifactViewer({
               </pre>
             </div>
             {isExecutable && (
-              <CodeExecutor code={code} language={language as 'python' | 'javascript'} />
+              <div className="px-4 py-2 text-xs text-fg-muted border-t border-border-primary">
+                Code execution not available
+              </div>
             )}
           </div>
         )}

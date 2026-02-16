@@ -15,7 +15,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import type { ExecutionResult } from '@/lib/pyodide-runtime';
+// ExecutionResult type (pyodide removed)
+interface ExecutionResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  executionTime: number;
+  stdout?: string;
+  stderr?: string;
+  images?: string[];
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -112,12 +121,10 @@ function CodeBlock({ inline, className, children, enableExecution, onExecutionSt
         onExecutionStatusChange?.('Initializing Python runtime...');
       }
 
-      // Dynamic import to avoid SSR/bundling issues
-      const { executePython } = await import('@/lib/pyodide-runtime');
-
+      // Python execution disabled (pyodide removed)
       setExecutionStatus('Executing code...');
       onExecutionStatusChange?.('Executing code...');
-      const execResult = await executePython(codeString);
+      const execResult: ExecutionResult = { success: false, error: 'Python execution not available', executionTime: 0 };
 
       if (execResult.images && execResult.images.length > 0) {
         setExecutionStatus('Rendering visualizations...');

@@ -50,45 +50,6 @@ const fileSystemAPI = {
 };
 
 /**
- * AssemblyScript Compiler API
- * Compile TypeScript-like code to WebAssembly
- */
-const assemblyScriptAPI = {
-  compile: (
-    source: string,
-    options?: {
-      name?: string;
-      optimize?: boolean;
-      debug?: boolean;
-      runtime?: 'stub' | 'minimal' | 'incremental';
-      memoryBase?: number;
-      tableBase?: number;
-      exportTable?: boolean;
-      importMemory?: boolean;
-      exportMemory?: boolean;
-      noAssert?: boolean;
-    }
-  ): Promise<{
-    success: boolean;
-    wasmBinary?: Uint8Array;
-    wasmBase64?: string;
-    textOutput?: string;
-    size?: number;
-    error?: string;
-    stderr?: string;
-    compilationTime?: number;
-  }> => ipcRenderer.invoke('asc:compile', source, options),
-
-  getStatus: (): Promise<{
-    ready: boolean;
-    version: string;
-    installed: boolean;
-  }> => ipcRenderer.invoke('asc:status'),
-
-  getVersion: (): Promise<string> => ipcRenderer.invoke('asc:version'),
-};
-
-/**
  * Serial Port API
  * Hardware communication for ESP32 and other devices
  */
@@ -202,12 +163,10 @@ const systemAPI = {
 // ============ Expose APIs to Renderer ============
 
 contextBridge.exposeInMainWorld('electronFS', fileSystemAPI);
-contextBridge.exposeInMainWorld('electronASC', assemblyScriptAPI);
 contextBridge.exposeInMainWorld('electronSerial', serialAPI);
 contextBridge.exposeInMainWorld('electronSystem', systemAPI);
 
 // Type declarations for TypeScript support in renderer
 export type ElectronFSAPI = typeof fileSystemAPI;
-export type ElectronASCAPI = typeof assemblyScriptAPI;
 export type ElectronSerialAPI = typeof serialAPI;
 export type ElectronSystemAPI = typeof systemAPI;

@@ -100,8 +100,6 @@ export default function Home() {
             setBootProgress(progress);
           },
           {
-            enableWASM: true,
-            enablePython: true,
             loadStdLib: true,
           }
         );

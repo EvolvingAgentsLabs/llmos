@@ -6,7 +6,12 @@
  */
 
 import { getVolumeFileSystem, VolumeType } from '../volumes/file-operations';
-import { getGitOperations } from '../volumes/git-operations';
+// git-operations removed during cleanup
+const getGitOperations = () => ({
+  commit: async (..._args: any[]) => {},
+  status: async () => ({ modified: [], added: [], deleted: [] }),
+  generateDiff: (_old: string, _new: string): string[] => [],
+});
 
 export interface ToolDefinition {
   name: string;

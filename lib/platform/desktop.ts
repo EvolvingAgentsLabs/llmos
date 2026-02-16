@@ -8,17 +8,30 @@
  * Browser support can be re-added in Phase 2 if needed.
  */
 
-import type {
-  ElectronFSAPI,
-  ElectronASCAPI,
-  ElectronSerialAPI,
-  ElectronSystemAPI,
-  FileInfo,
-  ASCCompileResult,
-  ASCCompileOptions,
-  SerialPortInfo,
-  SerialPortOptions,
-} from '../types/asc-types';
+// Types defined locally (no longer imported from deleted asc-types)
+interface FileInfo {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: Date;
+  createdAt: Date;
+}
+
+interface SerialPortInfo {
+  path: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  vendorId?: string;
+  productId?: string;
+}
+
+interface SerialPortOptions {
+  baudRate?: number;
+  dataBits?: 5 | 6 | 7 | 8;
+  stopBits?: 1 | 1.5 | 2;
+  parity?: 'none' | 'even' | 'odd' | 'mark' | 'space';
+}
 
 /**
  * Check if running in Electron
@@ -74,38 +87,6 @@ export const DesktopFS = {
   async openFileDialog(options?: any): Promise<{ canceled: boolean; filePaths: string[] }> {
     assertElectron('File dialogs');
     return window.electronFS!.openFileDialog(options);
-  },
-};
-
-/**
- * Desktop AssemblyScript Compiler API
- * Uses native Electron compilation (faster than browser)
- */
-export const DesktopASC = {
-  async compile(source: string, options?: ASCCompileOptions): Promise<ASCCompileResult> {
-    assertElectron('AssemblyScript compilation');
-    return window.electronASC!.compile(source, options);
-  },
-
-  async getStatus(): Promise<{ ready: boolean; version: string; installed: boolean }> {
-    assertElectron('AssemblyScript compiler');
-    return window.electronASC!.getStatus();
-  },
-
-  async getVersion(): Promise<string> {
-    assertElectron('AssemblyScript compiler');
-    return window.electronASC!.getVersion();
-  },
-
-  isAvailable(): boolean {
-    return isElectron() && window.electronASC !== undefined;
-  },
-
-  /**
-   * Desktop always uses native compilation
-   */
-  isNative(): boolean {
-    return true;
   },
 };
 
@@ -177,12 +158,8 @@ export const DesktopSystem = {
     switch (event) {
       case 'openProject':
         return window.electronSystem.onMenuOpenProject(callback);
-      case 'exportWasm':
-        return window.electronSystem.onMenuExportWasm(callback);
       case 'connectHardware':
         return window.electronSystem.onMenuConnectHardware(callback);
-      case 'deployWasm':
-        return window.electronSystem.onMenuDeployWasm(callback);
       case 'serialMonitor':
         return window.electronSystem.onMenuSerialMonitor(callback);
       default:
@@ -197,25 +174,23 @@ export const DesktopSystem = {
  */
 export interface DesktopCapabilities {
   nativeFileSystem: boolean;
-  assemblyScript: boolean;        // For compatibility
-  nativeAssemblyScript: boolean;
-  serialPorts: boolean;            // For compatibility
+  serialPorts: boolean;
   fullSerialPorts: boolean;
   nativeMenus: boolean;
   systemDialogs: boolean;
   offlineMode: boolean;
+  hardwareDeployment: boolean;
 }
 
 export function getDesktopCapabilities(): DesktopCapabilities {
   return {
     nativeFileSystem: true,
-    assemblyScript: true,          // Always available in desktop
-    nativeAssemblyScript: true,
-    serialPorts: true,              // Always available in desktop
+    serialPorts: true,
     fullSerialPorts: true,
     nativeMenus: true,
     systemDialogs: true,
     offlineMode: true,
+    hardwareDeployment: true,
   };
 }
 
@@ -234,13 +209,12 @@ export function getDesktopInfo(): {
     version: '1.0.0',
     features: [
       'Native file system access',
-      'Native AssemblyScript compilation (faster)',
       'Full serial port communication',
+      'Hardware deployment (ESP32)',
       'Offline operation',
       'System menus',
       'Native dialogs',
       'Hardware auto-detection',
-      'One-click firmware flashing',
     ],
   };
 }
