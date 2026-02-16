@@ -1,4 +1,14 @@
+---
+layout: default
+title: "1. The Thesis"
+nav_order: 1
+---
+
 # Chapter 1: The Thesis -- LLM as Kernel
+
+![The robot at a crossroads between traditional compiled code and glowing LLM text streams](assets/chapter-01.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. The robot at a crossroads. Left path: traditional gears, compiled binaries as dense black blocks, rigid assembly line receding into fog. Right path: glowing text streams, markdown documents, pulsing LLM orb lighting the way. Robot faces right. Text overlay "LLM as Kernel". -->
 
 Every robot ever shipped follows the same pipeline. A human engineer reasons about the
 problem, writes code in a programming language designed for human readability, feeds

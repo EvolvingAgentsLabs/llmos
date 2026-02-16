@@ -1,0 +1,14 @@
+title: "Building Robot Minds"
+description: "A Practical Guide to LLM-Powered Physical Agents"
+baseurl: "/llmos"
+url: "https://evolvingagentslabs.github.io"
+remote_theme: just-the-docs/just-the-docs@v0.10.0
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+back_to_top: true
+aux_links:
+  "GitHub": "https://github.com/EvolvingAgentsLabs/llmos"
+aux_links_new_tab: true
+footer_content: 'Built by <a href="https://github.com/EvolvingAgentsLabs">Evolving Agents Labs</a>'
+exclude: ["node_modules/", "vendor/"]

@@ -1,4 +1,14 @@
+---
+layout: default
+title: "7. The HAL"
+nav_order: 7
+---
+
 # Chapter 7: The Hardware Abstraction Layer -- One Interface, Two Worlds
+
+![Robot straddling simulation and physical hardware with HAL interface bridging both](assets/chapter-07.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot straddles a dividing line. Left: Three.js wireframe 3D environment in browser window. Right: physical workbench with ESP32 chip, wires, motors. Center: single glowing "HAL" interface layer bridges both worlds. -->
 
 There is a moment in every robotics project where you realize that your beautifully
 architected software works perfectly in simulation and catastrophically on real

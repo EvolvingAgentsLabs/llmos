@@ -1,4 +1,14 @@
+---
+layout: default
+title: "9. Predictive Intelligence"
+nav_order: 9
+---
+
 # Chapter 9: Predictive Intelligence -- Thinking Before Acting
+
+![Robot at edge of explored territory with translucent blue predictions ahead](assets/chapter-09.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot at edge of explored territory on occupancy grid. Behind: green and red cells (known). Ahead: grey cells with faint translucent blue predictions showing walls and corridors. Dotted lines connect observed walls to predicted continuations. Thought bubble with crystal ball. -->
 
 A robot exploring an unfamiliar building has a problem that no path planner can solve: most of the world is unknown. At any given moment, the occupancy grid is a small island of observed cells surrounded by a vast sea of grey `unknown` territory. A naive explorer treats every unknown cell the same way -- as a void with no information. But a smarter system can do better. If the robot has observed three wall cells in a straight line, it is a reasonable bet that the fourth cell in that direction is also a wall. If it has seen parallel walls flanking a corridor for five cells, the corridor probably continues. These are not certainties, they are hunches -- spatial hunches that let the robot plan better paths, avoid dead ends, and explore more efficiently. In LLMos, this capability lives in the **Predictive World Model**.
 
