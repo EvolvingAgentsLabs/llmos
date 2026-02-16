@@ -17,6 +17,7 @@
 
 import type WorldModel from './world-model';
 import type { IWorldModelBridge } from './world-model-bridge';
+import { PredictiveWorldModel } from './predictive-world-model';
 import { CandidateGenerator, formatCandidatesForLLM, type Candidate } from './candidate-generator';
 import { MapRenderer } from './map-renderer';
 import { LocalPlanner, type PathResult } from './local-planner';
@@ -57,6 +58,8 @@ export interface NavigationLoopConfig {
   llmCorrectionMinConfidence: number;
   /** Maximum sensor confidence that LLM corrections can override (default: 0.7) */
   llmCorrectionMaxOverride: number;
+  /** Whether to run predictive world model each cycle (default: false) */
+  enablePredictiveModel: boolean;
 }
 
 export interface CycleResult {
@@ -114,6 +117,7 @@ const DEFAULT_CONFIG: NavigationLoopConfig = {
   applyLLMCorrections: true,
   llmCorrectionMinConfidence: 0.6,
   llmCorrectionMaxOverride: 0.7,
+  enablePredictiveModel: false,
 };
 
 // =============================================================================
@@ -127,6 +131,7 @@ export class NavigationLoop {
   private mapRenderer: MapRenderer;
   private localPlanner: LocalPlanner;
   private infer: InferenceFunction;
+  private predictiveModel: PredictiveWorldModel | null = null;
 
   private state: NavigationState;
   private goal: { x: number; y: number; text: string } | null = null;
@@ -148,6 +153,10 @@ export class NavigationLoop {
     this.localPlanner = new LocalPlanner({
       unknownCellCost: this.config.unknownCellCost,
     });
+
+    if (this.config.enablePredictiveModel) {
+      this.predictiveModel = new PredictiveWorldModel();
+    }
 
     this.state = {
       cycle: 0,
@@ -344,6 +353,12 @@ export class NavigationLoop {
     // 7b. Apply LLM world model corrections (if any)
     if (this.config.applyLLMCorrections && decision.world_model_update?.corrections) {
       this.applyCorrections(decision.world_model_update.corrections, worldModel);
+    }
+
+    // 7c. Run predictive world model (if enabled)
+    if (this.predictiveModel) {
+      this.predictiveModel.verify(worldModel);
+      this.predictiveModel.predict(worldModel);
     }
 
     // 8. Plan path with local planner (if MOVE_TO or EXPLORE)
