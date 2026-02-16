@@ -31,12 +31,4 @@ export { LLMClient, createLLMClient } from './client';
 // Backward compatibility - re-export EnhancedLLMClient as alias
 export { LLMClient as EnhancedLLMClient } from './client';
 
-// Gemini Agentic Vision
-export {
-  GeminiAgenticVision,
-  createAgenticVisionClient,
-  type AgenticVisionConfig,
-  type AgenticVisionResult,
-  type CodeExecutionStep,
-  type HALToolDeclaration,
-} from './gemini-agentic-vision';
+// Gemini Agentic Vision removed during cleanup

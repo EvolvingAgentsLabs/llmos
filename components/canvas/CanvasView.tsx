@@ -474,89 +474,11 @@ function CodeView({ node }: { node: { id: string; name: string; path: string; me
     setTimeout(() => setCopied(false), 2000);
   }, [fileContent]);
 
-  // Run Python code using Pyodide
+  // Python execution disabled (pyodide removed)
   const handleRun = useCallback(async () => {
-    if (!isPythonFile || isRunning) return;
-
-    setIsRunning(true);
     setShowOutput(true);
-    setRunOutput({ stdout: 'Initializing Python runtime...', stderr: '' });
-
-    try {
-      setRunOutput({ stdout: 'Loading Pyodide...', stderr: '' });
-
-      // Load Pyodide via script tag (more reliable in Next.js)
-      if (typeof window !== 'undefined' && !(window as any).loadPyodide) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Failed to load Pyodide script'));
-          document.head.appendChild(script);
-        });
-      }
-
-      const loadPyodide = (window as any).loadPyodide;
-      if (!loadPyodide) {
-        throw new Error('Failed to load Pyodide loader');
-      }
-
-      const pyodide = await loadPyodide({
-        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
-      });
-
-      setRunOutput({ stdout: 'Installing packages...', stderr: '' });
-
-      // Load common packages
-      await pyodide.loadPackage(['numpy', 'micropip']);
-
-      // Try to load scipy and matplotlib
-      try {
-        await pyodide.loadPackage(['scipy', 'matplotlib']);
-      } catch {
-        console.log('Some packages not available, continuing...');
-      }
-
-      // Capture stdout/stderr
-      let stdout = '';
-      let stderr = '';
-
-      pyodide.setStdout({
-        batched: (text: string) => {
-          stdout += text + '\n';
-          setRunOutput({ stdout, stderr });
-        }
-      });
-
-      pyodide.setStderr({
-        batched: (text: string) => {
-          stderr += text + '\n';
-          setRunOutput({ stdout, stderr });
-        }
-      });
-
-      setRunOutput({ stdout: 'Running code...\n', stderr: '' });
-
-      // Run the code
-      const result = await pyodide.runPythonAsync(fileContent);
-
-      // Add result to output if not None
-      if (result !== undefined && result !== null) {
-        stdout += `\nResult: ${result}`;
-      }
-
-      setRunOutput({ stdout: stdout || 'Code executed successfully (no output)', stderr });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setRunOutput(prev => ({
-        stdout: prev?.stdout || '',
-        stderr: `Error: ${errorMessage}`
-      }));
-    } finally {
-      setIsRunning(false);
-    }
-  }, [isPythonFile, isRunning, fileContent]);
+    setRunOutput({ stdout: '', stderr: 'Python execution not available (pyodide removed)' });
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {

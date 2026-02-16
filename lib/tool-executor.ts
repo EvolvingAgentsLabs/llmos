@@ -1,20 +1,30 @@
 /**
- * Tool Executor - Execute tools defined in markdown with WebAssembly
+ * Tool Executor - Execute tools defined in markdown
  *
- * Tools can be Python or JavaScript code that runs safely in the browser
+ * Parses tool definitions from markdown with YAML frontmatter.
  */
 
-import { executePython, executeJavaScript, ExecutionResult, ExecutionOptions } from './pyodide-runtime';
+export interface ExecutionResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  executionTime: number;
+}
+
+export interface ExecutionOptions {
+  timeout?: number;
+  packages?: string[];
+  globals?: Record<string, any>;
+}
 
 export interface Tool {
   id: string;
   name: string;
   description: string;
-  language: 'python' | 'javascript';
+  language: 'javascript';
   code: string;
   inputs?: ToolInput[];
   outputs?: ToolOutput[];
-  packages?: string[]; // Python packages required
   metadata?: Record<string, any>;
 }
 
@@ -129,7 +139,7 @@ export function parseToolFromMarkdown(markdown: string): Tool | null {
     }
 
     const code = codeBlockMatch[1];
-    const language = metadata.language === 'javascript' || metadata.language === 'js' ? 'javascript' : 'python';
+    const language = 'javascript' as const; // Python execution removed
 
     return {
       id: metadata.id || metadata.name?.toLowerCase().replace(/\s+/g, '-') || 'unknown',
@@ -139,7 +149,6 @@ export function parseToolFromMarkdown(markdown: string): Tool | null {
       code,
       inputs: metadata.inputs || [],
       outputs: metadata.outputs || [],
-      packages: metadata.packages || [],
       metadata,
     };
   } catch (error) {
@@ -172,23 +181,14 @@ export async function executeTool(
   // Prepare code with input injection
   const wrappedCode = wrapToolCode(tool, inputs);
 
-  // Merge packages from options
-  const packages = [...(tool.packages || []), ...(options.packages || [])];
+  // Packages support removed (was for Python/Pyodide)
 
-  // Execute based on language
-  let result: ExecutionResult;
-  if (tool.language === 'python') {
-    result = await executePython(wrappedCode, {
-      ...options,
-      packages,
-      globals: inputs,
-    });
-  } else {
-    result = await executeJavaScript(wrappedCode, {
-      ...options,
-      globals: inputs,
-    });
-  }
+  // Execute tool
+  const result: ExecutionResult = {
+    success: false,
+    error: 'Tool execution not yet implemented for this environment',
+    executionTime: 0,
+  };
 
   return {
     ...result,
@@ -228,29 +228,8 @@ function validateToolInputs(tool: Tool, inputs: Record<string, any>): string | n
  * Wrap tool code with input/output handling
  */
 function wrapToolCode(tool: Tool, inputs: Record<string, any>): string {
-  if (tool.language === 'python') {
-    // Python wrapper
-    const inputAssignments = Object.entries(inputs)
-      .map(([key, value]) => `${key} = ${JSON.stringify(value)}`)
-      .join('\n');
-
-    return `
-${inputAssignments}
-
-# Tool code
-${tool.code}
-
-# Execute main if it exists
-if 'main' in dir():
-    result = main(${Object.keys(inputs).join(', ')})
-else:
-    result = None
-
-result
-`;
-  } else {
-    // JavaScript wrapper
-    return `
+  // JavaScript wrapper (Python removed)
+  return `
 ${tool.code}
 
 // Execute main if it exists
@@ -258,7 +237,6 @@ if (typeof main === 'function') {
   return await main(${Object.keys(inputs).map(k => k).join(', ')});
 }
 `;
-  }
 }
 
 /**

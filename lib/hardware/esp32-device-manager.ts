@@ -13,7 +13,12 @@
  * - Fleet-wide game synchronization
  */
 
-import { ESP32WASM4VM, ESP32WASM4VMConfig, ESP32WASM4VMState, GAME_MODE, GAME_TEMPLATES } from './esp32-wasm4-vm';
+// WASM4 VM removed — stub types for compatibility
+type ESP32WASM4VMConfig = any;
+type ESP32WASM4VMState = any;
+const ESP32WASM4VM = class { constructor(_config: any) {} start() {} stop() {} getState() { return {} as any; } } as any;
+const GAME_MODE = {} as any;
+const GAME_TEMPLATES: Record<string, any> = {};
 import { FloorMap, FLOOR_MAPS, CubeRobotState } from './cube-robot-simulator';
 
 // HAL Integration
@@ -118,10 +123,10 @@ export class ESP32DeviceManager {
       physicsRate: config?.physicsRate ?? 100,
       floorMap,
       gameMode: GAME_MODE.HYBRID,
-      onFrame: (fb) => this.handleFrame(deviceId, fb),
-      onRobotState: (state) => this.handleRobotState(deviceId, state),
-      onCheckpoint: (idx) => this.handleCheckpoint(deviceId, idx),
-      onCollision: (x, y) => this.handleCollision(deviceId, x, y),
+      onFrame: (fb: any) => this.handleFrame(deviceId, fb),
+      onRobotState: (state: any) => this.handleRobotState(deviceId, state),
+      onCheckpoint: (idx: any) => this.handleCheckpoint(deviceId, idx),
+      onCollision: (x: any, y: any) => this.handleCollision(deviceId, x, y),
       ...config,
     });
 
@@ -276,7 +281,7 @@ export class ESP32DeviceManager {
   async loadGameTemplate(deviceId: string, gameName: keyof typeof GAME_TEMPLATES): Promise<boolean> {
     const source = GAME_TEMPLATES[gameName];
     if (!source) {
-      console.error(`[DeviceManager] Unknown game template: ${gameName}`);
+      console.error(`[DeviceManager] Unknown game template: ${String(gameName)}`);
       return false;
     }
 
@@ -735,7 +740,7 @@ export class ESP32DeviceManager {
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface ManagedDevice extends DeviceInfo {
-  vm: ESP32WASM4VM;
+  vm: InstanceType<typeof ESP32WASM4VM>;
   hal?: HardwareAbstractionLayer;
 }
 

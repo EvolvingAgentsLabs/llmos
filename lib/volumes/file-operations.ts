@@ -1,4 +1,5 @@
-import { getGitOperations } from './git-operations';
+// git-operations removed during cleanup
+const getGitOperations = () => ({ commit: async (..._args: any[]) => {} });
 /**
  * File Operations Layer - Claude Code Style
  *

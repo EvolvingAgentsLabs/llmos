@@ -5,7 +5,8 @@
  * These APIs are injected into the QuickJS context.
  */
 
-import { WASMRuntime } from './wasm-runtime';
+// WASM runtime removed — stub type for compatibility
+type WASMRuntime = any;
 
 export interface KernelAPI {
   version: string;

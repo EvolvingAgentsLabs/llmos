@@ -220,7 +220,7 @@ export default function ChatPanel({
   }, [pendingPrompt, isLoading, onPromptProcessed]);
 
   // Handle file click - open in main panel
-  const handleFileClick = useCallback((file: FileReference) => {
+  const handleFileClick = useCallback((file: { path: string; type?: string; name?: string }) => {
     console.log('[ChatPanel] Opening file:', file.path);
     setActiveFile?.(file.path);
     if (file.type === 'code') {

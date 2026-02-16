@@ -66,9 +66,9 @@ export function PlatformIndicator() {
               />
               <CapabilityBadge
                 icon={<Cpu className="w-3 h-3" />}
-                label="Native ASC"
-                enabled={capabilities.assemblyScript}
-                tooltip="Native AssemblyScript compiler (faster)"
+                label="Hardware"
+                enabled={capabilities.hardwareDeployment}
+                tooltip="Hardware deployment support"
               />
               <CapabilityBadge
                 icon={<Usb className="w-3 h-3" />}

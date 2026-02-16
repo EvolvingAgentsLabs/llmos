@@ -831,35 +831,14 @@ export function createRobot4Runtime(config?: Robot4Config): Robot4Runtime {
 
 /**
  * Compile Robot4 firmware from C source
+ * NOTE: WASM compilation removed during cleanup. Will be replaced by LLMBytecode pipeline.
  */
 export async function compileRobot4Firmware(
-  source: string,
-  name: string = 'robot_firmware'
+  _source: string,
+  _name: string = 'robot_firmware'
 ): Promise<{ success: boolean; wasmBinary?: Uint8Array; error?: string }> {
-  try {
-    const { compileWasm } = await import('./wasm-compiler');
-
-    const result = await compileWasm({
-      source,
-      name,
-      optimizationLevel: '2',
-    });
-
-    if (result.success && result.wasmBinary) {
-      return {
-        success: true,
-        wasmBinary: result.wasmBinary,
-      };
-    } else {
-      return {
-        success: false,
-        error: result.error || 'Compilation failed',
-      };
-    }
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
+  return {
+    success: false,
+    error: 'WASM compilation removed. Use LLMBytecode pipeline instead.',
+  };
 }

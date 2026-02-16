@@ -13,7 +13,7 @@
 import { getLLMPatternMatcher, ConsolidatedPattern, ExecutionTrace } from './llm-pattern-matcher';
 import { getVFS } from '../virtual-fs';
 import { createLLMClient } from '../llm/client';
-import { GitService } from '../git-service';
+// GitService removed during cleanup
 
 // =============================================================================
 // Types
@@ -372,17 +372,7 @@ ${candidate.content}`;
       // Write to VFS
       vfs.writeFile(candidate.suggestedPath, fullContent);
 
-      // Try to commit to Git
-      try {
-        await GitService.commitSkill(
-          'user',
-          candidate.suggestedPath,
-          fullContent,
-          `Add skill: ${candidate.name}\n\nGenerated from pattern analysis with ${(candidate.confidence * 100).toFixed(0)}% confidence.`
-        );
-      } catch (gitError) {
-        console.warn('[Evolution] Git commit failed:', gitError);
-      }
+      // Git commit removed during cleanup
 
       this.triggers.push({
         type: 'skill_generated',

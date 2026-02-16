@@ -5,7 +5,6 @@
  * It handles:
  * - Window management
  * - Native file system access
- * - AssemblyScript compilation
  * - Serial port communication for hardware
  * - IPC communication with renderer
  */
@@ -13,7 +12,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
-import { AssemblyScriptCompiler } from './services/assemblyscript-compiler';
 import { NativeFileSystem } from './services/native-fs';
 import { ElectronSerialManager } from './services/serial-manager';
 
@@ -22,7 +20,6 @@ const isDev = process.env.ELECTRON_DEV_MODE === 'true' || !app.isPackaged;
 const isProduction = app.isPackaged;
 
 // Services
-let assemblyScriptCompiler: AssemblyScriptCompiler;
 let nativeFS: NativeFileSystem;
 let serialManager: ElectronSerialManager;
 
@@ -103,12 +100,6 @@ async function initializeServices(): Promise<void> {
   });
   await nativeFS.initialize();
 
-  // Initialize AssemblyScript compiler
-  assemblyScriptCompiler = new AssemblyScriptCompiler({
-    cachePath: path.join(userDataPath, 'cache', 'assemblyscript'),
-  });
-  await assemblyScriptCompiler.initialize();
-
   // Initialize serial manager
   serialManager = new ElectronSerialManager();
 
@@ -154,20 +145,6 @@ function registerIpcHandlers(): void {
   ipcMain.handle('dialog:saveFile', async (_, options) => {
     if (!mainWindow) return null;
     return dialog.showSaveDialog(mainWindow, options);
-  });
-
-  // ============ AssemblyScript Compiler Handlers ============
-
-  ipcMain.handle('asc:compile', async (_, source: string, options: any) => {
-    return assemblyScriptCompiler.compile(source, options);
-  });
-
-  ipcMain.handle('asc:status', async () => {
-    return assemblyScriptCompiler.getStatus();
-  });
-
-  ipcMain.handle('asc:version', async () => {
-    return assemblyScriptCompiler.getVersion();
   });
 
   // ============ Serial Port Handlers ============
@@ -251,11 +228,6 @@ function createMenu(): void {
           },
         },
         { type: 'separator' },
-        {
-          label: 'Export WASM...',
-          click: () => mainWindow?.webContents.send('menu:exportWasm'),
-        },
-        { type: 'separator' },
         { role: 'quit' },
       ],
     },
@@ -291,11 +263,6 @@ function createMenu(): void {
         {
           label: 'Connect ESP32...',
           click: () => mainWindow?.webContents.send('menu:connectHardware'),
-        },
-        {
-          label: 'Deploy WASM to Device',
-          accelerator: 'CmdOrCtrl+D',
-          click: () => mainWindow?.webContents.send('menu:deployWasm'),
         },
         { type: 'separator' },
         {

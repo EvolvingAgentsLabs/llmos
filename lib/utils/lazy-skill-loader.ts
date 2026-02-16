@@ -501,19 +501,9 @@ export function createLazySkillLoader(
   // Default fetcher that integrates with GitService
   const fetcher = async (volume: 'user' | 'team' | 'system'): Promise<Skill[]> => {
     try {
-      const { GitService } = await import('../git-service');
-      const rawSkills = await GitService.fetchSkills(volume);
-
-      return rawSkills.map((raw, idx) => ({
-        id: `${volume}-skill-${idx}`,
-        name: raw.name,
-        description: raw.name, // Use name as description if not provided
-        content: raw.content,
-        keywords: extractKeywords(raw.name + ' ' + raw.content.slice(0, 500)),
-        category: 'general',
-        volume,
-        usageCount: 0,
-      }));
+      // git-service removed during cleanup - skills loading not yet reimplemented
+      console.debug(`[LazySkillLoader] Skills loading not available for ${volume}`);
+      return [];
     } catch (error) {
       console.warn(`[LazySkillLoader] Failed to fetch skills from ${volume}:`, error);
       return [];

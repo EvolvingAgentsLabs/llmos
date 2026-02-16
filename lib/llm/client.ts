@@ -260,27 +260,9 @@ export class LLMClient {
    */
   private async loadSkillContext(volume: 'user' | 'team' | 'system'): Promise<string | null> {
     try {
-      const { GitService } = await import('../git-service');
-      const skills = await GitService.fetchSkills(volume);
-
-      if (skills.length === 0) {
-        logger.debug('llm', `No skills found in ${volume} volume`);
-        return null;
-      }
-
-      logger.info('llm', `Loaded ${skills.length} skills from ${volume} volume`);
-
-      return `# Available Skills
-
-You have access to the following skills that were learned from previous sessions:
-
-${skills.map((skill, idx) => `## ${idx + 1}. ${skill.name}
-
-${skill.content}
-
----`).join('\n\n')}
-
-Use these skills to provide better, more context-aware responses.`;
+      // git-service removed during cleanup - skills loading not yet reimplemented
+      logger.debug('llm', `Skills loading not available for ${volume} volume`);
+      return null;
     } catch (error) {
       logger.error('llm', 'Failed to load skills', { error });
       return null;
