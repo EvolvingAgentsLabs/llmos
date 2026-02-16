@@ -1,4 +1,14 @@
+---
+layout: default
+title: "5. The Dual Brain"
+nav_order: 5
+---
+
 # Chapter 5: The Dual Brain -- Instinct, Planning, and Escalation
+
+![Robot head cross-section with three stacked layers: reactive, instinct, and planner](assets/chapter-05.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot head in cross-section with three stacked layers. Bottom (green, fastest): Reactive Instinct with reflex arcs. Middle (yellow): LLM Instinct with neural pattern. Top (red, slowest): RSA Planner with branching thought chains. Arrow labeled "Escalation" points upward. -->
 
 ---
 

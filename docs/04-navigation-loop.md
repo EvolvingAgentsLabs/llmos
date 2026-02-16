@@ -1,4 +1,14 @@
+---
+layout: default
+title: "4. The Navigation Loop"
+nav_order: 4
+---
+
 # Chapter 4: The Navigation Loop -- 13 Steps from Sensor to Motor
+
+![Circular pipeline of 13 glowing nodes forming a loop around the robot](assets/chapter-04.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Circular pipeline of 13 numbered glowing nodes connected by arrows forming a loop around the robot. Key nodes labeled: Sensors, World Model, Candidates, LLM, Planner, HAL. Robot in center, data flows clockwise. LLM node glows brightest. -->
 
 Every 200 milliseconds, a robot must answer the most fundamental question in embodied AI: "What do I do next?" Not in the abstract, philosophical sense, but in the concrete, actuator-commanding sense. The answer must account for what the robot currently sees, what it remembers about the world, where it is trying to go, whether it is stuck, and what went wrong last time. In LLMos, this question is answered by the **Navigation Loop** -- a 13-step pipeline that transforms raw sensor data into a planned, collision-free path ready for motor execution.
 

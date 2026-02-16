@@ -1,4 +1,14 @@
+---
+layout: default
+title: "14. What's Next"
+nav_order: 14
+---
+
 # Chapter 14: What's Next -- From Research to Reality
+
+![Robot at cliff edge overlooking landscape with completed modules behind and road ahead](assets/chapter-14.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot at cliff edge overlooking vast landscape. Behind: completed city of tested software modules. Ahead: road to distant landmarks (physical robot on desk, fleet in warehouse, satellite uplink). Road partially built with construction markers. Sunrise on horizon. -->
 
 The system described in the preceding thirteen chapters is not a whiteboard design. It
 runs. The occupancy grid builds a persistent spatial model from sensor data. The

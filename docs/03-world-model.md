@@ -1,4 +1,14 @@
+---
+layout: default
+title: "3. The World Model"
+nav_order: 3
+---
+
 # Chapter 3: The World Model -- How a Robot Thinks About Space
+
+![Robot on a glowing 50x50 occupancy grid with green, red, and grey cells](assets/chapter-03.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot on a massive 50x50 glowing grid floor, three-quarter isometric view. Cells glow green (free), red (obstacle), grey (unknown). Robot casts sensor rays in a fan pattern, grey cells light up where rays touch. Semi-transparent ASCII grid overlay floats above. -->
 
 Close your eyes and picture the room you are sitting in. You know where the door is, where the furniture sits, which paths are clear and which are blocked. You did not always know this. Once, every room you entered was a blank slate, and you built your spatial understanding through a combination of looking, walking, and remembering. A robot must do exactly the same thing -- except it has no innate spatial intuition, no childhood of bumping into coffee tables. It must construct its understanding of space from scratch, cell by cell, sensor reading by sensor reading. In LLMos, the data structure that holds this understanding is called the **World Model**.
 

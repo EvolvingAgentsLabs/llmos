@@ -1,4 +1,14 @@
+---
+layout: default
+title: "8. Agents & Skills"
+nav_order: 8
+---
+
 # Chapter 8: Agents, Skills, and the Markdown OS
+
+![Filing cabinet with markdown skill files floating out as holographic action cards](assets/chapter-08.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Filing cabinet with three drawers labeled System, Team, User. Markdown files with YAML headers float out as holographic cards. Robot reads one, text transforms into action arrows at wheels and sensors. Second robot reads from Team drawer. -->
 
 Most operating systems are written in C. Their kernels are compiled binaries. Their
 configuration lives in opaque registries or arcane dot-files. LLMos is different. Its

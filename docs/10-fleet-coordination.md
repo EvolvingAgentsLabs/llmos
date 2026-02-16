@@ -1,4 +1,14 @@
+---
+layout: default
+title: "10. Fleet Coordination"
+nav_order: 10
+---
+
 # Chapter 10: Fleet Coordination -- Multiple Robots, One World
+
+![Three robots on a grid merging partial maps through a central coordinator](assets/chapter-10.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Three robots on a large grid, each in different quadrant with explored territory in different colors (cyan, magenta, yellow). Central coordinator node pulses, data streams flow up and back down, merging partial maps into one shared holographic overlay. -->
 
 A single robot exploring a 5-meter arena can map it in a few minutes. Two robots can do it in half the time -- but only if they do not both explore the same corner. Three robots are faster still, unless they spend all their time avoiding each other. Fleet coordination is the problem of making multiple robots collaborate rather than collide, share knowledge rather than duplicate effort, and divide territory rather than contest it. In LLMos, this is handled by the **Fleet Coordinator**, a centralized manager that merges individual world models, assigns exploration targets, and synchronizes shared knowledge back to every robot in the fleet.
 

@@ -1,4 +1,14 @@
+---
+layout: default
+title: "12. Testing"
+nav_order: 12
+---
+
 # Chapter 12: 346 Tests -- Proving the System Works
+
+![Wall of green checkmark badges with robot as quality inspector](assets/chapter-12.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Wall of green checkmark badges in grid pattern, number "349" prominent. Robot stands in front like quality inspector with clipboard. Behind wall, faint outlines of components: grid, planner, navigation loop, vision pipeline. -->
 
 A navigation system that cannot be tested is a navigation system that cannot be trusted.
 When your robot is threading a 0.6-meter corridor at walking speed, you do not want to

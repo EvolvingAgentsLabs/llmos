@@ -1,4 +1,14 @@
+---
+layout: default
+title: "11. The Evolution Engine"
+nav_order: 11
+---
+
 # Chapter 11: The Evolution Engine -- Robots That Dream
+
+![Robot sleeping on charging dock with dream bubble showing replaying navigation traces](assets/chapter-11.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Robot sleeps on charging dock, eyes dimmed. Dream bubble above: recorded navigation traces replaying as ghost paths, variant skill files tested in parallel arenas, fitness score rising on small graph. Sunrise gradient on horizon. -->
 
 What if a robot could improve while it sleeps? Not through firmware updates pushed by an engineer, but through a process where the robot reviews its own failures, generates variations of its behavior, tests those variations in simulation, and promotes the ones that work. This is the premise of the Evolution Engine in LLMos -- a system where robots dream about their mistakes and wake up better at their jobs. The metaphor is not accidental. The process is structurally similar to how biological organisms consolidate learning during sleep: replay recent experiences, try alternative responses, reinforce the ones that lead to better outcomes.
 

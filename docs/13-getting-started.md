@@ -1,4 +1,14 @@
+---
+layout: default
+title: "13. Getting Started"
+nav_order: 13
+---
+
 # Chapter 13: Getting Started -- Your First 10 Minutes
+
+![Terminal window with npm commands and robot emerging into test arena](assets/chapter-13.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Terminal window showing "npm install" and "npx tsx scripts/run-navigation.ts" with green output. Robot emerges from terminal into small test arena taking first steps. Clock shows "10:00" counting down. -->
 
 You have read about occupancy grids, navigation loops, dual-brain controllers, and fleet
 coordination. Now it is time to run the thing. This chapter walks you from a fresh clone

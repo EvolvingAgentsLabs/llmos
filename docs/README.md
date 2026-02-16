@@ -1,4 +1,15 @@
+---
+layout: default
+title: Home
+nav_order: 0
+permalink: /
+---
+
 # Building Robot Minds: A Practical Guide to LLM-Powered Physical Agents
+
+![A small wheeled robot at the center of a glowing circuit-board landscape with holographic layers](assets/index.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. A small wheeled robot at the center of a glowing circuit-board landscape. Above it, translucent exploded-view layers: an occupancy grid, neural network pattern, camera lens, and markdown documents as holographic pages. Title "Building Robot Minds" as clean sans-serif text. -->
 
 > A technical book accompanying the [LLMos](https://github.com/EvolvingAgentsLabs/llmos) project.
 
@@ -146,20 +157,6 @@ codebase, every architecture diagram reflects real module boundaries, and every 
 count reflects real test output.
 
 LLMos is built and maintained by [Evolving Agents Labs](https://github.com/EvolvingAgentsLabs).
-
----
-
-## Existing Documentation
-
-For reference material outside the book chapters, see:
-
-- [LLM Configuration](LLM_CONFIGURATION.md) -- Model setup and OpenRouter configuration
-- [Architecture Overview](architecture/ARCHITECTURE.md) -- System architecture diagrams
-- [World Model System](architecture/WORLD_MODEL_SYSTEM.md) -- Occupancy grid internals
-- [Navigation Pipeline](architecture/NAVIGATION_PIPELINE.md) -- Pipeline deep dive
-- [ESP32 Guide](hardware/ESP32_GUIDE.md) -- Hardware setup for physical robots
-- [Arena Setup](hardware/ARENA_SETUP_GUIDE.md) -- Building a physical test arena
-- [Hardware Shopping List](hardware/HARDWARE_SHOPPING_LIST.md) -- Parts and suppliers
 
 ---
 

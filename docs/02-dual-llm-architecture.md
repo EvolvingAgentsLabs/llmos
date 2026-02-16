@@ -1,4 +1,14 @@
+---
+layout: default
+title: "2. Two Brains"
+nav_order: 2
+---
+
 # Chapter 2: Two Brains -- Development and Runtime
+
+![Two brains connected by data streams above the robot - cloud architect and local runtime](assets/chapter-02.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Two brains float above the robot connected by data streams. Left brain: large, ornate, cloud-like with architect tools and markdown files (Claude Opus). Right brain: compact, sharp-edged, mounted close to robot with camera lens (Qwen3-VL). JSON document flows down into the robot. -->
 
 Imagine a self-driving car designed by a team of architects who spend months thinking
 about every scenario, every edge case, every failure mode. Their deliberation is slow,

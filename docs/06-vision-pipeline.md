@@ -1,4 +1,14 @@
+---
+layout: default
+title: "6. Seeing the World"
+nav_order: 6
+---
+
 # Chapter 6: Seeing the World -- Camera to Grid
+
+![Camera captures a scene flowing through four processing stages to occupancy grid](assets/chapter-06.png)
+
+<!-- IMAGE_PROMPT: Isometric digital illustration, clean technical style, dark navy (#0d1117) background, soft neon accent lighting in cyan and magenta, a small wheeled robot with a glowing blue eye sensor as recurring character, flat vector aesthetic with subtle depth, no photorealism, 16:9 aspect ratio. Camera on robot captures a scene with chair and doorway. Image flows through four stages left-to-right: raw pixels, bounding boxes with labels, depth color gradients, projected occupancy grid cells. Arrows between stages. -->
 
 ---
 
