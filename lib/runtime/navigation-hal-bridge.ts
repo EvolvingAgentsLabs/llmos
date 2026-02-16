@@ -209,15 +209,6 @@ export class NavigationHALBridge {
           };
         }
 
-        case 'REVERSE': {
-          await this.hal.locomotion.moveBackward(10);
-          return {
-            success: true,
-            action: 'REVERSE',
-            executionMs: performance.now() - start,
-          };
-        }
-
         case 'STOP':
         default: {
           await this.hal.locomotion.stop();
