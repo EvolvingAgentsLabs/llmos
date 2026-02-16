@@ -12,6 +12,13 @@
  * before it can effectively navigate and act within it.
  */
 
+import {
+  WorldModelSerializer,
+  type GridSerializationJSON,
+  type GridSerializationASCII,
+  type GridPatchUpdate,
+} from './world-model-serializer';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CORE TYPES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -715,6 +722,90 @@ export class WorldModel {
     if (normalized < 11 * Math.PI / 8) return '◿'; // SW
     if (normalized < 13 * Math.PI / 8) return '▶'; // West
     return '◤'; // NW
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MINI-MAP GENERATION FOR UI
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SERIALIZATION FOR LLM CONSUMPTION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private serializer: WorldModelSerializer | null = null;
+
+  private getSerializer(): WorldModelSerializer {
+    if (!this.serializer) {
+      this.serializer = new WorldModelSerializer();
+    }
+    return this.serializer;
+  }
+
+  /**
+   * Serialize the world model for LLM consumption.
+   *
+   * @param format 'json' for RLE JSON (primary), 'ascii' for 25x25 text grid, 'auto' for smart patch/full selection
+   * @param robotPose Current robot pose in world coordinates (meters + radians)
+   * @param goal Optional goal position in world coordinates
+   */
+  serialize(
+    format: 'json' | 'ascii' | 'auto',
+    robotPose: { x: number; y: number; rotation: number },
+    goal?: { x: number; y: number; tolerance?: number }
+  ): GridSerializationJSON | GridSerializationASCII | GridPatchUpdate {
+    const serializer = this.getSerializer();
+    const worldConfig = {
+      worldWidth: this.config.worldWidth,
+      worldHeight: this.config.worldHeight,
+      gridResolution: this.config.gridResolution,
+    };
+
+    switch (format) {
+      case 'json':
+        return serializer.serializeToJSON(this.grid, robotPose, worldConfig, goal);
+
+      case 'ascii':
+        return serializer.serializeToASCII(
+          this.grid,
+          robotPose,
+          (wx, wy) => this.worldToGrid(wx, wy),
+          goal
+        );
+
+      case 'auto':
+        return serializer.serialize(this.grid, robotPose, worldConfig, { goal });
+
+      default:
+        return serializer.serializeToJSON(this.grid, robotPose, worldConfig, goal);
+    }
+  }
+
+  /**
+   * Get the raw grid (for external serializers or renderers)
+   */
+  getGrid(): GridCell[][] {
+    return this.grid;
+  }
+
+  /**
+   * Get grid dimensions
+   */
+  getGridDimensions(): { width: number; height: number } {
+    return { width: this.gridWidth, height: this.gridHeight };
+  }
+
+  /**
+   * Get world config for serialization
+   */
+  getWorldConfig(): WorldModelConfig {
+    return { ...this.config };
+  }
+
+  /**
+   * Reset the serializer state (call when simulation resets)
+   */
+  resetSerializer(): void {
+    this.serializer?.reset();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -41,6 +41,7 @@ import type { AbstractState, RobotAction, PredictedOutcome } from './jepa-mental
 import type { RSAEngine, RSAResult, RSAConfig } from './rsa-engine';
 import type { RSAInferenceProvider } from './rsa-engine';
 import type { VisionFrame } from './vision/mobilenet-detector';
+import type { WorldModelProvider } from './world-model-provider';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -58,7 +59,9 @@ export type EscalationReason =
   | 'new_area'             // Entered exploration frontier
   | 'fleet_coordination'   // Swarm decision needed
   | 'user_request'         // User explicitly asked for deep planning
-  | 'periodic_replan';     // Scheduled replanning interval
+  | 'periodic_replan'      // Scheduled replanning interval
+  | 'looping'              // World model: visiting same cells repeatedly
+  | 'frontier_exhaustion'; // World model: most area explored, few frontiers left
 
 /** The result of a brain decision. */
 export interface BrainDecision {
@@ -212,6 +215,7 @@ export class DualBrainController {
   private config: DualBrainConfig;
   private rsaEngine: RSAEngine | null = null;
   private instinctProvider: RSAInferenceProvider | null = null;
+  private worldModelProvider: WorldModelProvider | null = null;
   private metrics: DualBrainMetrics;
   private cycleCount: number = 0;
   private lastPosition: { x: number; y: number } | null = null;
@@ -247,6 +251,8 @@ export class DualBrainController {
     abstractState?: AbstractState;
     visionFrame?: VisionFrame | null;
     worldModelSummary?: string;
+    /** Map image from WorldModelProvider (base64 data URL) for multimodal RSA */
+    mapImage?: string;
   }): Promise<BrainDecision> {
     const startTime = Date.now();
     this.cycleCount++;
@@ -335,6 +341,16 @@ export class DualBrainController {
     }
     this.lastPosition = { x: context.pose.x, y: context.pose.y };
 
+    // World-model-aware escalation: looping detection
+    if (this.worldModelProvider?.isLooping()) {
+      return 'looping';
+    }
+
+    // World-model-aware escalation: frontier exhaustion
+    if (this.worldModelProvider?.isFrontierExhausted()) {
+      return 'frontier_exhaustion';
+    }
+
     // Unknown object in vision
     if (context.visionFrame) {
       const hasUnknown = context.visionFrame.detections.some(
@@ -373,6 +389,7 @@ export class DualBrainController {
       goal: string;
       worldModelSummary?: string;
       visionFrame?: VisionFrame | null;
+      mapImage?: string;
     },
     reason: EscalationReason,
     startTime: number
@@ -385,14 +402,25 @@ export class DualBrainController {
 
     const situation = `Goal: ${context.goal}\nSensors: front=${context.sensorData.front}cm, left=${context.sensorData.left}cm, right=${context.sensorData.right}cm\nPosition: (${context.pose.x.toFixed(2)}, ${context.pose.y.toFixed(2)}), rotation=${(context.pose.rotation * 180 / Math.PI).toFixed(1)}deg\nEscalation reason: ${reason}`;
 
+    // Use full world model summary from provider if available, else fall back to context string
+    const worldModelSummary = this.worldModelProvider
+      ? this.worldModelProvider.getFullSummary()
+      : (context.worldModelSummary ?? '');
+
     const visionContext = context.visionFrame
       ? JSON.stringify(context.visionFrame.detections, null, 2)
       : undefined;
 
+    // Pass map image for multimodal RSA (allocentric view alongside camera)
+    const mapImage = this.worldModelProvider
+      ? this.worldModelProvider.getMapImage() ?? undefined
+      : context.mapImage;
+
     const rsaResult = await this.rsaEngine!.planRobotAction(
       situation,
-      context.worldModelSummary ?? '',
-      visionContext
+      worldModelSummary,
+      visionContext,
+      mapImage
     );
 
     // Parse actions from RSA result
@@ -442,13 +470,17 @@ export class DualBrainController {
       return decision;
     }
 
-    // Single-pass LLM for quick decision
-    const prompt = `You are a robot's fast-thinking instinct. Given sensor data, pick ONE action.
+    // Single-pass LLM for quick decision — include compact world model if available
+    const worldContext = this.worldModelProvider
+      ? `\n${this.worldModelProvider.getCompactSummary()}\n`
+      : '';
+
+    const prompt = `You are a robot's fast-thinking instinct. Given sensor data and world model, pick ONE action.
 
 Sensors: front=${context.sensorData.front}cm, left=${context.sensorData.left}cm, right=${context.sensorData.right}cm, back=${context.sensorData.back}cm
 Goal: ${context.goal}
 Position: (${context.pose.x.toFixed(2)}, ${context.pose.y.toFixed(2)})
-
+${worldContext}
 Actions: move_forward, turn_left, turn_right, backup, stop
 
 Reply with ONLY: {"action": "<action>", "confidence": <0-1>, "reasoning": "<brief>"}`;
@@ -581,6 +613,11 @@ Reply with ONLY: {"action": "<action>", "confidence": <0-1>, "reasoning": "<brie
     this.instinctProvider = provider;
   }
 
+  /** Set the world model provider for world-model-aware decisions. */
+  setWorldModelProvider(provider: WorldModelProvider): void {
+    this.worldModelProvider = provider;
+  }
+
   /** Update configuration. */
   setConfig(config: Partial<DualBrainConfig>): void {
     this.config = { ...this.config, ...config };
@@ -595,6 +632,7 @@ Reply with ONLY: {"action": "<action>", "confidence": <0-1>, "reasoning": "<brie
     this.currentPlan = [];
     this.decisionLog = [];
     this.metrics = this.initMetrics();
+    this.worldModelProvider?.reset();
   }
 }
 

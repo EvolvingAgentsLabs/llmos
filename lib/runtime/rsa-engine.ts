@@ -528,18 +528,33 @@ export class RSAEngine {
    * uses multimodal RSA where each candidate independently analyzes
    * the camera frame. This enables RSA to improve visual-spatial
    * reasoning through cross-referencing multiple VLM interpretations.
+   *
+   * The mapImageBase64 parameter provides an allocentric (top-down) map view
+   * alongside the egocentric camera view, giving candidates both perspectives
+   * for more accurate spatial reasoning.
    */
   async planRobotAction(
     situation: string,
     worldModelSummary: string,
     visionContext?: string,
-    imageBase64?: string
+    imageBase64?: string,
+    mapImageBase64?: string
   ): Promise<RSAResult> {
-    const systemPrompt = [
+    const systemParts = [
       '## World Model State',
       worldModelSummary,
-      visionContext ? `\n## Vision Detection\n${visionContext}` : '',
-    ].join('\n');
+    ];
+
+    if (mapImageBase64) {
+      systemParts.push('\n## Map Image');
+      systemParts.push('[A top-down map of the arena is attached. Green=robot, Red=goal, Blue/Orange=candidates, Black=obstacle, White=free, Gray=unknown]');
+    }
+
+    if (visionContext) {
+      systemParts.push(`\n## Vision Detection\n${visionContext}`);
+    }
+
+    const systemPrompt = systemParts.join('\n');
 
     // If we have a raw image AND a multimodal provider, use vision RSA
     if (imageBase64) {
@@ -548,6 +563,16 @@ export class RSAEngine {
         imageBase64,
         systemPrompt,
         VISION_AGGREGATION_PROMPT
+      );
+    }
+
+    // If we have only a map image but no camera, still use multimodal RSA
+    if (mapImageBase64) {
+      return this.runWithImage(
+        situation,
+        mapImageBase64,
+        systemPrompt,
+        ROBOT_AGGREGATION_PROMPT
       );
     }
 
