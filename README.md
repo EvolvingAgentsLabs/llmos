@@ -10,7 +10,7 @@
 
 **An operating system that runs on the host machine to develop, deploy, and evolve AI agents that operate in the physical world.**
 
-[GitHub](https://github.com/EvolvingAgentsLabs/llmos) · [Roadmap](ROADMAP.md) · [Architecture](docs/architecture/ARCHITECTURE.md) · [Contributing](#contributing)
+[GitHub](https://github.com/EvolvingAgentsLabs/llmos) · [Roadmap](ROADMAP.md) · [Book](https://evolvingagentslabs.github.io/llmos/) · [Contributing](#contributing)
 
 </div>
 
