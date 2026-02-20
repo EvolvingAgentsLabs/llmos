@@ -174,6 +174,86 @@ export function validateSafetyConfig(
 }
 
 // ---------------------------------------------------------------------------
+// Stepper Safety (V1 Hardware)
+// ---------------------------------------------------------------------------
+
+export interface StepperSafetyConfig {
+  maxStepsPerSecond: number;
+  maxContinuousSteps: number;
+  hostHeartbeatMs: number;
+  maxCoilCurrentMa: number;
+}
+
+export const DEFAULT_STEPPER_SAFETY_CONFIG: StepperSafetyConfig = {
+  maxStepsPerSecond: 1024,
+  maxContinuousSteps: 40960,
+  hostHeartbeatMs: 2000,
+  maxCoilCurrentMa: 300,
+};
+
+export function serializeStepperSafetyConfig(config: StepperSafetyConfig): string {
+  return JSON.stringify({
+    action: 'stepper_safety_config',
+    params: {
+      maxStepsPerSecond: config.maxStepsPerSecond,
+      maxContinuousSteps: config.maxContinuousSteps,
+      hostHeartbeatMs: config.hostHeartbeatMs,
+      maxCoilCurrentMa: config.maxCoilCurrentMa,
+    },
+  });
+}
+
+export function validateStepperSafetyConfig(
+  config: Partial<StepperSafetyConfig>,
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (config.maxStepsPerSecond !== undefined) {
+    if (config.maxStepsPerSecond < 1) errors.push('maxStepsPerSecond must be >= 1');
+    if (config.maxStepsPerSecond > 2048) errors.push('maxStepsPerSecond must be <= 2048');
+  }
+
+  if (config.maxContinuousSteps !== undefined) {
+    if (config.maxContinuousSteps < 1) errors.push('maxContinuousSteps must be >= 1');
+  }
+
+  if (config.hostHeartbeatMs !== undefined) {
+    if (config.hostHeartbeatMs < 500) errors.push('hostHeartbeatMs must be >= 500');
+    if (config.hostHeartbeatMs > 10000) errors.push('hostHeartbeatMs must be <= 10000');
+  }
+
+  if (config.maxCoilCurrentMa !== undefined) {
+    if (config.maxCoilCurrentMa < 0) errors.push('maxCoilCurrentMa must be >= 0');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Clamp stepper speed to safe limit (mirrors firmware logic).
+ */
+export function clampStepperSpeed(
+  requestedSpeed: number,
+  config: StepperSafetyConfig,
+): number {
+  if (requestedSpeed < 0) return 0;
+  if (requestedSpeed > config.maxStepsPerSecond) return config.maxStepsPerSecond;
+  return requestedSpeed;
+}
+
+/**
+ * Clamp step count to safe limit (mirrors firmware logic).
+ */
+export function clampStepperSteps(
+  requestedSteps: number,
+  config: StepperSafetyConfig,
+): number {
+  if (requestedSteps > config.maxContinuousSteps) return config.maxContinuousSteps;
+  if (requestedSteps < -config.maxContinuousSteps) return -config.maxContinuousSteps;
+  return requestedSteps;
+}
+
+// ---------------------------------------------------------------------------
 // Host-side PWM clamping (mirrors firmware logic)
 // ---------------------------------------------------------------------------
 
