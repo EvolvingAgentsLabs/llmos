@@ -19,6 +19,22 @@ models from multiple robots. There are 346 tests proving all of this works. But 
 is a significant distance between "works in simulation with a mock LLM" and "works on
 a physical robot navigating your living room." This chapter maps that distance.
 
+```mermaid
+graph LR
+    P0["Phase 0-2<br/>Navigation POC"] -->|DONE| V1["V1 Hardware<br/>Software Layer"]
+    V1 -->|DONE| DEPLOY["Physical<br/>Deployment"]
+    DEPLOY -->|NEXT| FLEET["Fleet over<br/>MQTT"]
+    FLEET --> PLUGIN["Plugin<br/>Architecture"]
+    PLUGIN --> NATIVE["Native Binary<br/>Generation"]
+
+    style P0 fill:#065f46,color:#fff
+    style V1 fill:#065f46,color:#fff
+    style DEPLOY fill:#b45309,color:#fff
+    style FLEET fill:#1e3a5f,color:#fff
+    style PLUGIN fill:#1e3a5f,color:#fff
+    style NATIVE fill:#4a1d96,color:#fff
+```
+
 ---
 
 ## Current Implementation Status

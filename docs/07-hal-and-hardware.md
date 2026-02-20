@@ -4,7 +4,7 @@ title: "7. The HAL"
 nav_order: 7
 ---
 
-# Chapter 7: The Hardware Abstraction Layer -- One Interface, Two Worlds
+# Chapter 7: The Nervous System -- One Interface, Two Worlds
 
 ![Robot straddling simulation and physical hardware with HAL interface bridging both](assets/chapter-07.png)
 
@@ -14,10 +14,44 @@ There is a moment in every robotics project where you realize that your beautifu
 architected software works perfectly in simulation and catastrophically on real
 hardware. Motors overshoot. Sensors return garbage. Serial connections drop mid-command.
 The gap between the simulated world and the physical one is not a crack -- it is a
-canyon. Traditional robotics deals with this by writing two separate codebases: one for
+canyon.
+
+Traditional robotics deals with this by writing two separate codebases: one for
 testing, one for deployment. LLMos takes a different approach. It places a single
 interface between the LLM and all hardware, simulated or physical, and guarantees that
 the same high-level command produces equivalent behavior in both worlds.
+
+```mermaid
+graph TB
+    LLM["LLM Decision<br/>'move to (2.5, 1.0)'"]
+    HAL["HAL Interface<br/>lib/hal/types.ts"]
+
+    subgraph SIM["Simulation World"]
+        THREE["Three.js Physics"]
+        MESH["Robot Mesh"]
+    end
+
+    subgraph PHYS["Physical World"]
+        UDP["UDP JSON<br/>port 4210"]
+        ESP["ESP32-S3"]
+        MOT["Stepper Motors"]
+    end
+
+    LLM --> HAL
+    HAL -->|"SimulationHAL"| THREE
+    THREE --> MESH
+    HAL -->|"PhysicalHAL"| UDP
+    UDP --> ESP
+    ESP --> MOT
+
+    style LLM fill:#b45309,color:#fff
+    style HAL fill:#5b21b6,color:#fff
+    style SIM fill:#1e3a5f,color:#fff
+    style PHYS fill:#065f46,color:#fff
+```
+
+The LLM says "move to (2.5, 1.0)." The HAL translates. The robot neither knows
+nor cares whether it exists inside a browser or on a desk.
 
 ---
 
@@ -199,16 +233,25 @@ export class PhysicalHAL implements HardwareAbstractionLayer {
 
 ## The Safety Stack
 
-Safety in LLMos is a four-layer stack. Each layer can independently prevent dangerous
-actions:
+Safety is a four-layer gate. Every command must pass all four before wheels turn:
 
-1. **LLM picks an action** -- The navigation loop produces MOVE_TO or ROTATE_TO.
-2. **HAL validates parameters** -- Coordinates within bounds, device not e-stopped.
-3. **Firmware checks safety invariants** -- Motor current, stall detection, battery.
-4. **Motors execute** -- Only after passing all three gates.
+```mermaid
+graph TD
+    LLM["Layer 1: LLM Decision<br/>MOVE_TO (2.5, 1.0)"] -->|"Valid action?"| HAL_V["Layer 2: HAL Validation<br/>Bounds check, e-stop check"]
+    HAL_V -->|"Parameters safe?"| FW["Layer 3: Firmware Safety<br/>Speed limits, step limits,<br/>host timeout"]
+    FW -->|"All clear?"| MOT["Layer 4: Motor Execution<br/>Wheels turn"]
+
+    HAL_V -->|"VETO"| FAIL["HALToolResult<br/>success: false"]
+    FW -->|"VETO"| ESTOP["Emergency Stop"]
+
+    style LLM fill:#b45309,color:#fff
+    style FW fill:#065f46,color:#fff
+    style FAIL fill:#991b1b,color:#fff
+    style ESTOP fill:#991b1b,color:#fff
+```
 
 If any layer vetoes, the result propagates up as `HALToolResult` with `success: false`.
-The LLM receives this and reasons about what went wrong.
+The LLM receives this on the next cycle and reasons about what went wrong.
 
 ---
 

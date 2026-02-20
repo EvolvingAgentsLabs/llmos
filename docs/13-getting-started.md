@@ -12,31 +12,26 @@ nav_order: 13
 
 You have read about occupancy grids, navigation loops, dual-brain controllers, and fleet
 coordination. Now it is time to run the thing. This chapter walks you from a fresh clone
-to a working navigation demo in under ten minutes. No GPU required for simulation mode.
-No ESP32 required for the first run. Just a terminal and Node.js.
+to a working navigation demo in under ten minutes. No GPU. No API key. No hardware.
+Just a terminal and Node.js.
 
 ---
 
 ## Prerequisites
 
-You need three things on your machine:
+- **Node.js 18+** -- Any LTS release from 18 onward.
+- **npm** -- Comes with Node.js.
+- **GPU with 8GB+ VRAM** -- Only needed for local Qwen3-VL-8B. All tests and demos run on CPU.
 
-- **Node.js 18+** -- The runtime. LLMos is a Next.js 14.1.0 application written in
-  TypeScript. Any LTS release from Node 18 onward will work.
-- **npm** -- Comes with Node.js. Used for dependency installation and script execution.
-- **GPU with 8GB+ VRAM** -- Only required if you want to run the local Qwen3-VL-8B
-  model for real-time inference. The simulation mode and all tests run on CPU.
-
-Optional but recommended:
-
-- **Claude Code** -- Anthropic's CLI for Claude. Enables the `/llmos` slash command
-  for agent creation through natural language.
-- **OpenRouter API key** -- For live LLM inference without a local GPU. Set the
-  `OPENROUTER_API_KEY` environment variable.
+Optional:
+- **Claude Code** -- Enables the `/llmos` slash command for agent creation.
+- **OpenRouter API key** -- For live LLM inference without a local GPU.
 
 ---
 
-## Step 1: Clone and Install
+## Path A: Software Only (5 Commands)
+
+### 1. Clone and Install
 
 ```bash
 git clone https://github.com/EvolvingAgentsLabs/llmos
@@ -44,225 +39,184 @@ cd llmos
 npm install
 ```
 
-The install pulls in Next.js, React Three Fiber, Jest, ts-jest, and the rest of the
-dependency tree. On a typical connection this takes about a minute.
-
----
-
-## Step 2: Run the Tests
-
-Before you change anything, verify that the codebase is healthy:
+### 2. Run the Tests
 
 ```bash
 npx jest --no-coverage
 ```
 
-You should see 346+ passing tests across 21 test suites. Every test runs without
-network access, GPU, or canvas. If any test fails on a fresh clone, something is
-wrong with your Node.js version or platform -- check the error output.
+You should see 346+ passing tests across 21 suites. Every test runs without
+network, GPU, or hardware. If any fail on a fresh clone, check your Node.js version.
 
-You can also run the TypeScript type checker independently:
+> **Checkpoint:** Do you see green? All 346+ tests pass? If yes, the codebase is healthy.
 
-```bash
-npx tsc --noEmit
-```
-
-This catches type errors without producing build output. It is faster than a full
-build and useful during development.
-
----
-
-## Step 3: Run the Navigation Demo
-
-The CLI demo script runs a complete navigation session using the LLMos navigation
-stack. By default it uses a deterministic mock LLM, so no API key is needed:
+### 3. Run the Navigation Demo
 
 ```bash
-npx tsx scripts/run-navigation.ts
-```
-
-This runs the Simple Navigation arena: a robot starting in the bottom-left corner
-of a 5m x 5m arena, navigating to the top-right corner while avoiding three
-obstacles. You will see cycle-by-cycle output showing the robot's position, the
-action chosen, and the distance to goal.
-
-### Demo Options
-
-The script at `scripts/run-navigation.ts` accepts several flags:
-
-```bash
-# Run all four test arenas in sequence
-npx tsx scripts/run-navigation.ts --all
-
-# Use a specific arena
-npx tsx scripts/run-navigation.ts --arena exploration
-npx tsx scripts/run-navigation.ts --arena dead_end
-npx tsx scripts/run-navigation.ts --arena narrow_corridor
-
-# Use a real LLM via OpenRouter (requires OPENROUTER_API_KEY)
-npx tsx scripts/run-navigation.ts --live
-
-# Enable vision mode (simulated camera)
-npx tsx scripts/run-navigation.ts --vision
-
-# Verbose output: show every cycle's position and action
 npx tsx scripts/run-navigation.ts --all --verbose
 ```
 
-The `--all` flag runs all four arenas and prints a summary showing how many passed.
-The `--live` flag swaps the mock LLM for Qwen3-VL-8B via OpenRouter, turning the
-demo into a real LLM-driven navigation session.
+This runs all four test arenas with a deterministic mock LLM:
+- **Simple Navigation**: Corner-to-corner with 3 obstacles
+- **Exploration**: Reach 80% coverage of a 5m x 5m area
+- **Dead-End Recovery**: Escape an L-shaped corridor
+- **Narrow Corridor**: Thread a 0.6m gap
 
----
+You will see cycle-by-cycle output: position, action chosen, distance to goal.
 
-## Step 4: Explore the Web UI
+> **Checkpoint:** Do all four arenas pass? You're watching the full navigation
+> stack -- world model, candidate generator, A* planner, mock LLM -- working
+> end to end. Everything from here makes it smarter or more physical.
 
-Start the Next.js development server:
+### 4. Try Real LLM Decisions
+
+```bash
+# Set your OpenRouter API key
+export OPENROUTER_API_KEY=sk-or-...
+
+# Run with Qwen3-VL-8B making every decision
+npx tsx scripts/run-navigation.ts --live
+
+# Run with simulated camera vision
+npx tsx scripts/run-navigation.ts --vision
+```
+
+Same arenas, same code -- but now a language model reasons about each cycle instead
+of following a script. The robot picks different routes, handles surprises differently,
+and explains its choices.
+
+### 5. Explore the 3D UI
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser. The RobotWorldPanel component
-(`components/robot/RobotWorldPanel.tsx`) renders the 3D arena using React Three
-Fiber. You can see the robot, obstacles, walls, and the occupancy grid visualized
-in real time.
-
-The 3D visualization is powered by the RobotCanvas3D component
-(`components/robot/RobotCanvas3D.tsx`), which renders the Three.js scene with
-orbit controls, lighting, and robot model display.
+Open `http://localhost:3000`. The RobotWorldPanel renders the 3D arena using
+React Three Fiber -- robot, obstacles, walls, and occupancy grid in real time.
 
 ---
 
-## Step 5: Use Claude Code with /llmos
+## Path B: Awaken the Physical Agent
 
-If you have Claude Code installed, you can use the `/llmos` slash command to invoke
-the SystemAgent. This is the development-time LLM interface where Claude Opus 4.6
-creates and evolves robot agents:
+If you have the V1 Stepper Cube Robot hardware on your desk:
+
+```bash
+# 1. Flash the motor controller (ESP32-S3)
+#    firmware/esp32-s3-stepper/esp32-s3-stepper.ino
+#    Set WiFi credentials first
+
+# 2. Flash the camera (ESP32-CAM)
+#    firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino
+
+# 3. Test the eyes
+#    Open http://<ESP32-CAM-IP>/stream in browser
+
+# 4. Test the muscles
+echo '{"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}' | \
+  nc -u <ESP32-S3-IP> 4210
+
+# 5. If you see video AND the robot moved 10cm:
+#    The LLM takes over the steering wheel
+```
+
+> **Maker Checkpoint:** Video at `/stream`? Robot moved 10cm? If both yes,
+> skip to [Chapter 15](15-v1-hardware-deployment.md) for full calibration.
+
+---
+
+## Use Claude Code for Agent Creation
+
+If you have Claude Code installed:
 
 ```
 /llmos Create an AI agent for a wall-avoiding robot
 ```
 
-The SystemAgent executes an 8-phase workflow: understanding the request, planning
-which agents to involve, executing the multi-agent pipeline, and producing the
-result as markdown agent definitions in the volume system.
-
----
-
-## Step 6: Build for Production
-
-When you are ready to deploy:
-
-```bash
-npm run build
-```
-
-This runs the Next.js production build. Do not use `npx next build` directly --
-the `npm run build` script is configured correctly for the project's build pipeline.
-
-For the Electron desktop application:
-
-```bash
-npm run electron:dev    # Development mode with hot reload
-npm run electron:build  # Production build
-```
+The SystemAgent discovers existing agents, consults memory, creates a multi-agent
+plan, and produces the result as markdown agent definitions in the volume system.
 
 ---
 
 ## Key Files to Explore
 
-Once the demo is running, these are the files worth reading first:
+Start with `navigation-loop.ts`. It is the center of the system. Every other file
+is a dependency of this one.
 
-| File | Purpose |
-|------|---------|
-| `lib/runtime/navigation-loop.ts` | The main navigation cycle orchestrator |
-| `lib/runtime/world-model.ts` | The 50x50 occupancy grid |
-| `lib/runtime/local-planner.ts` | A* pathfinding on the grid |
-| `lib/runtime/candidate-generator.ts` | Subgoal candidates for the LLM |
-| `lib/runtime/navigation-types.ts` | LLM input/output schemas |
-| `lib/hal/types.ts` | Hardware abstraction layer interface |
-| `lib/runtime/dual-brain-controller.ts` | Instinct + planner architecture |
-| `lib/runtime/test-arenas.ts` | The four predefined test environments |
-| `scripts/run-navigation.ts` | The CLI demo script |
-| `components/robot/RobotWorldPanel.tsx` | The 3D arena React component |
-| `lib/hal/stepper-kinematics.ts` | 28BYJ-48 motor math (steps, distance, rotation) |
-| `lib/hal/wifi-connection.ts` | UDP transport for V1 robot (port 4210) |
+| File | What It Does |
+|------|-------------|
+| `lib/runtime/navigation-loop.ts` | The 13-step cycle orchestrator |
+| `lib/runtime/world-model.ts` | 50x50 occupancy grid |
+| `lib/runtime/local-planner.ts` | A* pathfinding |
+| `lib/runtime/candidate-generator.ts` | Subgoal scoring for the LLM |
+| `lib/runtime/navigation-types.ts` | LLM I/O schemas |
+| `lib/hal/types.ts` | HAL interface (5 subsystems) |
+| `lib/runtime/dual-brain-controller.ts` | Instinct + planner brains |
+| `lib/runtime/test-arenas.ts` | 4 test environments |
+| `scripts/run-navigation.ts` | CLI demo script |
+| `components/robot/RobotCanvas3D.tsx` | Three.js 3D visualization |
+| `lib/hal/stepper-kinematics.ts` | 28BYJ-48 motor math |
+| `lib/hal/wifi-connection.ts` | UDP transport (port 4210) |
 | `firmware/esp32-s3-stepper/esp32-s3-stepper.ino` | Motor controller firmware |
 | `firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino` | Camera streaming firmware |
-
-Start with `navigation-loop.ts`. It is the center of the system. The `runCycle()`
-method shows the complete flow: check goal, detect stuck state, generate candidates,
-serialize the world model, call the LLM, validate the decision, plan a path, and
-return the result. Every other file is a dependency of this one.
 
 ---
 
 ## The Navigation Loop in 30 Seconds
 
-The entire navigation stack boils down to one cycle that repeats until the goal is
-reached or the cycle limit is hit:
+```mermaid
+graph LR
+    SENSE["Sensors"] --> WM["World<br/>Model"]
+    WM --> SER["Serializer"]
+    SER --> CAND["Candidates"]
+    CAND --> LLM["LLM"]
+    LLM --> VAL["Validate"]
+    VAL --> PLAN["A* Planner"]
+    PLAN --> HAL["HAL"]
+    HAL --> ACT["Actuators"]
+    ACT --> SENSE
 
-```
-Sensors --> WorldModel --> Serializer --> Candidates --> Prompt --> LLM
-  --> Decision Validation --> Local Planner --> HAL --> Sensors
+    style LLM fill:#b45309,color:#fff
+    style PLAN fill:#1e3a5f,color:#fff
 ```
 
 The `NavigationLoop` class orchestrates this cycle. It does not run the LLM itself.
 It assembles the input, delegates to whatever `InferenceFunction` you provide, and
-processes the output. This is the key architectural decision that makes the system
-both testable and backend-agnostic.
-
----
-
-## Step 7: Deploy to V1 Hardware (Optional)
-
-If you have the V1 Stepper Cube Robot hardware:
-
-```bash
-# 1. Flash ESP32-S3 with firmware/esp32-s3-stepper/esp32-s3-stepper.ino
-#    (Set WiFi credentials in the firmware source first)
-
-# 2. Flash ESP32-CAM with firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino
-
-# 3. Test UDP motor commands (Python example):
-# python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'{\"cmd\":\"move_cm\",\"left_cm\":10,\"right_cm\":10,\"speed\":500}', ('<ESP32-S3-IP>', 4210))"
-
-# 4. Test camera stream: open http://<ESP32-CAM-IP>/stream in browser
-```
-
-See [Chapter 15: V1 Hardware Deployment](15-v1-hardware-deployment.md) for the
-complete assembly and deployment guide.
+processes the output. This is the key design decision that makes the system both
+testable (mock the LLM) and backend-agnostic (swap OpenRouter for local inference).
 
 ---
 
 ## What to Try Next
 
-1. **Modify a test arena** -- Edit `lib/runtime/test-arenas.ts` to add a fifth arena
-   with your own wall layout. Run `npx tsx scripts/run-navigation.ts --arena your_key`.
+1. **Design your own arena** -- Edit `lib/runtime/test-arenas.ts`. Add walls, obstacles,
+   a start pose and goal. Run with `--arena your_key`.
 
-2. **Read the world model chapter** -- Chapter 3 explains the occupancy grid in detail.
+2. **Dive into the brain** -- [Chapter 3: The World Model](03-world-model.md) explains
+   how 50x50 cells represent an entire room.
 
-3. **Run with a real LLM** -- Set `OPENROUTER_API_KEY` and run with `--live` to see
-   how Qwen3-VL-8B makes navigation decisions.
+3. **Run with a real LLM** -- Set `OPENROUTER_API_KEY` and use `--live` to watch
+   Qwen3-VL-8B make navigation decisions.
 
-4. **Explore the HAL** -- Read `lib/hal/types.ts` to understand the hardware
-   abstraction that lets the same navigation code run in simulation and on an ESP32.
+4. **Understand the HAL** -- [Chapter 7](07-hal-and-hardware.md) shows how the same
+   code drives both simulation and real hardware.
 
-5. **Deploy to hardware** -- Follow [Chapter 15](15-v1-hardware-deployment.md) to
-   build and program the V1 Stepper Cube Robot.
+5. **Build the robot** -- [Chapter 15](15-v1-hardware-deployment.md) walks through
+   assembly, calibration, and first autonomous navigation.
 
 ---
 
 ## Chapter Summary
 
-From clone to running demo in five commands: install, test, run, dev server, build.
-The mock LLM makes the demo work without any API keys or GPU. The test arenas provide
-structured challenges. The web UI gives you a 3D view. And the `/llmos` Claude Code
-command connects you to the development-time LLM for agent creation. Everything else
-in this book is about understanding what happens inside those five commands.
+From clone to running demo in five commands: install, test, run, explore, build.
+The mock LLM makes everything work without API keys or hardware. The four test
+arenas exercise different navigation challenges. The `--live` flag brings real
+LLM reasoning. And the `/llmos` command connects you to the development-time
+intelligence for agent creation.
+
+Everything else in this book is about understanding what happens inside those
+five commands.
 
 ---
 
-*Previous: [Chapter 12 -- 349 Tests: Proving the System Works](12-testing.md)*
+*Previous: [Chapter 12 -- 346+ Tests: Proving the System Works](12-testing.md)*
 *Next: [Chapter 14 -- What's Next: From Research to Reality](14-whats-next.md)*
