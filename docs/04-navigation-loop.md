@@ -451,25 +451,75 @@ const DEFAULT_CONFIG: NavigationLoopConfig = {
 
 For tests, the typical overrides are `generateMapImages: false` (no DOM canvas in Jest) and a mock `InferenceFunction` that returns predetermined JSON responses.
 
-## The Cycle in Motion
+## The 13 Steps as a Flowchart
 
-To make this concrete, here is what a single cycle looks like during a typical navigation run:
+```mermaid
+graph TD
+    S1["1. Goal reached?"] -->|No| S2["2. Am I stuck?"]
+    S1 -->|Yes| DONE["STOP — done"]
+    S2 --> S3["3. Generate candidates<br/>(subgoals, frontiers, recovery)"]
+    S3 --> S4["4. Serialize world model<br/>(RLE or patch)"]
+    S4 --> S5["5. Render map image"]
+    S5 --> S6["6. Assemble NavigationFrame"]
+    S6 --> S7["7. Call LLM<br/>(5s timeout)"]
+    S7 -->|Success| S8["8. Parse + validate JSON"]
+    S7 -->|Timeout/Error| FALL["Use fallback action"]
+    S8 --> S9["9. Apply world model corrections"]
+    S9 --> S10["10. Run predictive model"]
+    S10 --> S11["11. A* path planning"]
+    S11 --> S12["12. Update mode"]
+    S12 --> S13["13. Return CycleResult"]
+    FALL --> S12
 
-1. The robot is at position (0.5, 0.3) facing east, trying to reach goal (2.0, 1.5).
-2. It has moved 8cm since the last cycle, so it is not stuck.
-3. The candidate generator produces: subgoal `c1` at (1.0, 0.7), subgoal `c2` at (1.5, 1.1), frontier `f3` at (0.2, -0.5), and the goal itself as `c4` at (2.0, 1.5).
-4. The world model serializes as a patch with 12 changed cells.
-5. A map image renders showing the explored corridor, an obstacle wall to the north, and the candidates marked with colored dots.
-6. Everything is assembled into a NavigationFrame and sent to the LLM.
-7. The LLM responds: `{"action": {"type": "MOVE_TO", "target_id": "c2"}, "fallback": {"if_failed": "EXPLORE"}, "explanation": "c2 makes good progress toward goal while avoiding the obstacle cluster to the north."}`.
-8. The parser validates the response. It is clean JSON, valid schema.
-9. No world model corrections in this response.
-10. Predictive model is disabled.
-11. The A* planner finds a 14-cell path from (0.5, 0.3) to (1.5, 1.1), avoiding the obstacle wall. Planning time: 2ms.
-12. Mode set to `navigating`.
-13. CycleResult returned with the path. The HAL bridge begins executing waypoints.
+    style S7 fill:#b45309,color:#fff
+    style S11 fill:#1e3a5f,color:#fff
+    style DONE fill:#065f46,color:#fff
+```
 
-Total cycle time: ~180ms, of which ~150ms was waiting for the LLM.
+## A Day in the Life: One Navigation Run
+
+*The robot narrates its own thinking across a full session.*
+
+```
+CYCLE 1 | pos: (0.5, 0.3) | goal: (2.0, 1.5) | mode: navigating
+  I just started. Grid is mostly unknown — I've only explored cells around me.
+  Candidates: c1=(1.0, 0.7) score=0.72, c2=(1.5, 1.1) score=0.65, f3=(0.2, -0.5) score=0.31
+  Decision: MOVE_TO c1 — closest subgoal with good clearance.
+  Fallback: EXPLORE if path fails.
+  A* found 6 waypoints in 1ms. Moving.
+
+CYCLE 3 | pos: (1.18, 0.81) | goal: 1.1m away | mode: navigating
+  Good progress. The corridor behind me is explored. Ahead looks clear.
+  c2 at (1.5, 1.1) now scores 0.81 — closer to goal, well-explored approach path.
+  Decision: MOVE_TO c2. A* plans 8 waypoints. Moving.
+
+CYCLE 5 | pos: (1.42, 0.95) | goal: 0.78m away | stuck_counter: 2
+  Something's wrong. Only moved 3cm in two cycles.
+  Camera shows: chair leg at (1.3, 0.9). VLM missed it last cycle.
+  I add a world_model_update: mark (1.3, 0.9) as obstacle, confidence 0.8.
+  New candidate c3 routes around the chair at (1.6, 0.7).
+  Decision: MOVE_TO c3. Fallback: FOLLOW_WALL.
+  A* reroutes. 10 waypoints around the chair. Moving again.
+  stuck_counter resets to 0.
+
+CYCLE 7 | pos: (1.75, 1.15) | goal: 0.45m away | mode: navigating
+  I can see the goal area now. Camera shows open floor.
+  c4 is the goal itself at (2.0, 1.5), score=0.95.
+  Decision: MOVE_TO c4. Final approach.
+  A* finds 5 clean waypoints. 2ms.
+
+CYCLE 8 | pos: (1.92, 1.41) | goal: 0.12m away | mode: goal_reached
+  Distance: 0.12m — within tolerance (0.3m).
+  STOP. Goal reached.
+
+  Session: 8 cycles | 0 collisions | 14.2s total | 2.8m traveled
+```
+
+The key moments: the stuck detection at cycle 5, the world model correction when
+the VLM missed the chair leg, and the A* reroute that got the robot moving again.
+Each cycle, the LLM sees the full context — grid, candidates, history, stuck state —
+and makes a reasoned choice. When the primary action fails, the fallback fires
+without another inference call.
 
 ## Chapter Summary
 
