@@ -4,7 +4,7 @@ title: "12. Testing"
 nav_order: 12
 ---
 
-# Chapter 12: 346 Tests -- Proving the System Works
+# Chapter 12: 346+ Tests -- Proving the System Works
 
 ![Wall of green checkmark badges with robot as quality inspector](assets/chapter-12.png)
 
@@ -233,8 +233,10 @@ and criteria as hard pass/fail thresholds.
 The 21 test suites in `__tests__/lib/runtime/` cover the full stack: world model
 (bridge, serializer, metrics, provider), navigation (types, e2e, runtime, LLM
 corrections), vision (simulator, scene bridge, pipeline e2e), sensors (sensor bridge),
-planning (candidate generator, local planner), and the Phase 5 additions (predictive
-world model, fleet coordinator, HAL bridge, UI bridge, OpenRouter inference).
+planning (candidate generator, local planner), the Phase 5 additions (predictive
+world model, fleet coordinator, HAL bridge, UI bridge, OpenRouter inference), and the
+V1 hardware layer (stepper kinematics, WiFi connection, firmware safety configuration,
+serial protocol, command validator).
 
 ---
 

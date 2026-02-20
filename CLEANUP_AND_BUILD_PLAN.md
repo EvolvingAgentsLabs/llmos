@@ -733,17 +733,20 @@ Each step has clear success criteria that can be tested independently.
 
 ## Summary
 
-| Phase | Steps | What You Get |
-|-------|-------|-------------|
-| **Cleanup** | 0.1-0.5 | Clean buildable repo, ~40% fewer files |
-| **Foundation** | 1.1-2.5 | World model serialization + ground truth bridge |
-| **Intelligence** | 3.1-4.6 | Candidate generation + LLM integration |
-| **Execution** | 5.1-6.4 | Single-cycle runtime loop working |
-| **Navigation** | 7.1-7.4 | **First POC**: Robot navigates to goal autonomously |
-| **Dual Brain** | 8.1-8.5 | Instinct + Planner with escalation |
-| **Exploration** | 9.1-9.3 | Frontier-based exploration |
-| **Dashboard** | 10.1-10.5 | Full visual debugging UI |
-| **Hardware** | 11.1-11.4 | Physical robot running the same loop |
-| **Autonomy** | 12.1-12.5 | Observation-based world model |
+| Phase | Steps | What You Get | Status |
+|-------|-------|-------------|--------|
+| **Cleanup** | 0.1-0.5 | Clean buildable repo, ~40% fewer files | Partial |
+| **Foundation** | 1.1-2.5 | World model serialization + ground truth bridge | **DONE** |
+| **Intelligence** | 3.1-4.6 | Candidate generation + LLM integration | **DONE** |
+| **Execution** | 5.1-6.4 | Single-cycle runtime loop working | **DONE** |
+| **Navigation** | 7.1-7.4 | **First POC**: Robot navigates to goal autonomously | **DONE** |
+| **Dual Brain** | 8.1-8.5 | Instinct + Planner with escalation | **DONE** |
+| **Exploration** | 9.1-9.3 | Frontier-based exploration | **DONE** |
+| **Dashboard** | 10.1-10.5 | Full visual debugging UI | Partial |
+| **Hardware** | 11.1-11.4 | Physical robot running the same loop | **Software DONE** |
+| **Autonomy** | 12.1-12.5 | Observation-based world model | **DONE** |
+| **V1 Deploy** | NEW | Physical V1 Stepper Cube Robot deployment | Pending |
+
+> **Note**: Steps 1-9 and 12 are fully implemented with 346+ tests. Step 10 (Dashboard) is partial — RobotWorldPanel exists but not all overlays. Step 11 (Hardware) software layer is complete — firmware, kinematics, WiFi transport, HAL bridge all built. Physical assembly and validation is the next milestone.
 
 Every step is independently testable. Every step builds on the previous one. No step requires more than ~1-2 days of focused work.
