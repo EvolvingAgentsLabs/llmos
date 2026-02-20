@@ -213,7 +213,9 @@ a clear boundary between what the LLM decides and what classical systems execute
 And it requires an operating system metaphor that maps every traditional OS concept
 to an LLM-native equivalent.
 
-The rest of this book shows how it works in practice.
+The rest of this book shows how it works in practice -- from the 50x50 occupancy grid
+through the 13-step navigation loop to the V1 Stepper Cube Robot hardware that brings
+the thesis off the screen and onto a desk.
 
 ---
 

@@ -6,11 +6,11 @@ Thanks for your interest in contributing to LLMos! We're building an OS for phys
 
 LLMos makes robotics accessible through natural language. Our goal: anyone should be able to build robots by just describing what they want.
 
-## 🚀 Development Status
+## Development Status
 
-We're currently in **Phase 1** (Foundation). Check the [ROADMAP.md](ROADMAP.md) for our development plan.
+The navigation POC is **complete** (Phases 0-5 done, 346+ tests, 21 suites). The V1 Stepper Cube Robot hardware layer is built. Check the [ROADMAP.md](ROADMAP.md) for our development plan.
 
-**Current Focus**: Desktop-first experience with ESP32 support
+**Current Focus**: V1 Stepper Cube Robot physical deployment and sim-to-real validation
 
 ## 🛠️ How to Contribute
 
@@ -34,6 +34,12 @@ cd llmos
 # Install dependencies
 npm install
 
+# Run the test suite (346+ tests, no GPU/network required)
+npx jest --no-coverage
+
+# Run the navigation demo
+npx tsx scripts/run-navigation.ts --all --verbose
+
 # Run in development
 npm run dev            # Web mode
 npm run electron:dev   # Desktop mode
@@ -41,9 +47,10 @@ npm run electron:dev   # Desktop mode
 # Make your changes
 git checkout -b feature/your-feature-name
 
-# Test your changes
-npm run build
-npm run electron:compile
+# Verify your changes
+npx tsc --noEmit       # Type check
+npx jest --no-coverage # Run tests
+npm run build          # Production build
 
 # Submit PR
 ```
@@ -201,28 +208,28 @@ Before/after screenshots
 4. Address feedback
 5. Approved & merged
 
-## 🎯 Areas We Need Help
+## Areas We Need Help
 
 ### High Priority
-- [ ] ESP32 one-click flashing
-- [ ] Plugin system implementation
-- [ ] Error handling improvements
-- [ ] Hardware auto-detection
-- [ ] Windows/Linux support
+- [ ] V1 Stepper Cube Robot physical testing and calibration
+- [ ] Sim-to-real gap closure (sensor noise, motor drift, latency)
+- [ ] Local Qwen3-VL-8B inference setup (llama.cpp or vLLM)
+- [ ] GitHub Actions CI pipeline
+- [ ] Windows/Linux platform testing
 
 ### Medium Priority
-- [ ] Visual simulation
-- [ ] Auto-debug features
-- [ ] Community plugin examples
-- [ ] Documentation improvements
-- [ ] Example robot projects
+- [ ] New test arenas in `lib/runtime/test-arenas.ts`
+- [ ] HAL drivers for new hardware (LiDAR, depth cameras, different motors)
+- [ ] Fleet coordination over MQTT for physical multi-robot
+- [ ] Navigation strategy improvements (candidate generator, local planner)
+- [ ] Documentation and book chapter improvements
 
 ### Good for Beginners
-- [ ] UI polish
-- [ ] Error message improvements
-- [ ] Documentation fixes
-- [ ] Example projects
-- [ ] Testing on hardware
+- [ ] UI polish for RobotWorldPanel
+- [ ] Error message improvements in HAL
+- [ ] Documentation fixes and typo corrections
+- [ ] Example robot projects and arenas
+- [ ] Agent definitions and skill patterns (markdown)
 
 ## 🐛 Reporting Bugs
 
@@ -281,24 +288,34 @@ How might it work?
 Other ways to solve this
 ```
 
-## 🧪 Testing
+## Testing
 
-### Manual Testing
+### Automated Tests (346+ tests)
 ```bash
-# Run desktop app
-npm run electron:dev
+# Run the full test suite
+npx jest --no-coverage
 
-# Test with real hardware
-# 1. Connect ESP32
-# 2. Try: "Connect to my ESP32"
-# 3. Try: "Make a wall avoiding robot"
-# 4. Verify robot code generates
+# Run a specific test suite
+npx jest --no-coverage world-model-bridge
+npx jest --no-coverage navigation-e2e
+npx jest --no-coverage stepper-kinematics
+
+# Type check
+npx tsc --noEmit
+
+# Run navigation demo (mock LLM, all 4 arenas)
+npx tsx scripts/run-navigation.ts --all --verbose
+
+# Run with real LLM (requires OPENROUTER_API_KEY)
+npx tsx scripts/run-navigation.ts --live
 ```
 
-### Automated Tests (Future)
+### V1 Hardware Testing
 ```bash
-npm run test
-npm run test:e2e
+# 1. Flash ESP32-S3 with firmware/esp32-s3-stepper/esp32-s3-stepper.ino
+# 2. Flash ESP32-CAM with firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino
+# 3. Test UDP command: {"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}
+# 4. Test MJPEG stream: http://<ESP32-CAM-IP>/stream
 ```
 
 ## 📚 Resources

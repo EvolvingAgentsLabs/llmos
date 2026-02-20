@@ -53,7 +53,7 @@ Jump to [Chapter 3: The World Model](03-world-model.md) and [Chapter 4: The Navi
 Go straight to [Chapter 13: Getting Started](13-getting-started.md) for your first 10 minutes with LLMos.
 
 **If you want to understand the hardware side:**
-Read [Chapter 7: The HAL](07-hal-and-hardware.md), then the [ESP32 Guide](hardware/ESP32_GUIDE.md).
+Read [Chapter 7: The HAL](07-hal-and-hardware.md), then [Chapter 15: V1 Hardware Deployment](15-v1-hardware-deployment.md).
 
 **If you want to understand the agent/skill system:**
 Start with [Chapter 8: Agents and Skills](08-agents-and-skills.md).
@@ -78,6 +78,7 @@ Start with [Chapter 8: Agents and Skills](08-agents-and-skills.md).
 | 12 | [349 Tests: Proving the System Works](12-testing.md) | The testing philosophy and how every layer is validated without real hardware |
 | 13 | [Getting Started: Your First 10 Minutes](13-getting-started.md) | Install, run, and see navigation results in under 10 minutes |
 | 14 | [What's Next: From Research to Reality](14-whats-next.md) | The roadmap from simulation to physical deployment |
+| 15 | [V1 Hardware Deployment: From Code to Robot](15-v1-hardware-deployment.md) | Physical assembly, protocol validation, and first autonomous navigation |
 
 ---
 
@@ -94,11 +95,13 @@ For running with real LLM inference (optional, not required for the book):
 - **OpenRouter API key** -- for cloud-based inference with Qwen3-VL-8B or Claude
 - **GPU with 8GB+ VRAM** -- if running the runtime LLM locally instead of via API
 
-For physical robot deployment (covered in later chapters):
+For physical robot deployment (covered in [Chapter 15](15-v1-hardware-deployment.md)):
 
-- **ESP32-S3 microcontroller** with camera module
-- **Standard Robot V1 chassis** (see [Hardware Shopping List](hardware/HARDWARE_SHOPPING_LIST.md))
-- **5m x 5m test arena** (see [Arena Setup Guide](hardware/ARENA_SETUP_GUIDE.md))
+- **ESP32-S3-DevKitC-1** -- Motor controller (WiFi UDP on port 4210)
+- **ESP32-CAM (AI-Thinker)** -- Camera (WiFi HTTP MJPEG on port 80)
+- **2x 28BYJ-48 stepper motors** + **2x ULN2003 drivers** -- Differential drive
+- **V1 Stepper Cube chassis** -- 8cm 3D-printed cube (see `Agent_Robot_Model/Readme.md`)
+- **5V 2A USB-C power supply** -- Powers both ESP32s and motors
 
 All navigation demos can run with a mock LLM (no API key needed):
 
@@ -132,7 +135,7 @@ and see the exact code being discussed.
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 349 |
+| Total tests | 346+ |
 | Test suites | 21 |
 | Navigation criteria passed (live LLM) | 6/6 |
 | Average navigation cycle time | ~1.4s/cycle |
@@ -140,6 +143,9 @@ and see the exact code being discussed.
 | Supported action types | 5 (MOVE_TO, EXPLORE, ROTATE_TO, FOLLOW_WALL, STOP) |
 | HAL subsystems | 5 (locomotion, vision, manipulation, communication, safety) |
 | Test arenas | 4 predefined configurations |
+| V1 Robot wheel diameter | 6.0 cm |
+| V1 Robot max speed | 1024 steps/s (~4.71 cm/s) |
+| V1 Motor precision | 4096 steps/revolution |
 
 ---
 
@@ -157,6 +163,10 @@ codebase, every architecture diagram reflects real module boundaries, and every 
 count reflects real test output.
 
 LLMos is built and maintained by [Evolving Agents Labs](https://github.com/EvolvingAgentsLabs).
+
+The book covers 15 chapters: from the philosophical thesis (LLM as kernel) through
+the complete navigation stack to physical hardware deployment with the V1 Stepper
+Cube Robot.
 
 ---
 

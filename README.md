@@ -72,12 +72,21 @@ The system uses **two different LLMs** for two fundamentally different jobs:
 
 ## Project Status
 
-LLMos is under **active development and architectural refactoring**.
+LLMos has a **working end-to-end navigation stack** validated with 346+ tests across 21 suites.
 
-- The repository contains working simulation, firmware, HAL, dual-brain runtime, RSA reasoning engine, and the full agent/volume/kernel system.
-- The structured protocol between host and microcontroller already functions as a **distributed LLM bytecode runtime**.
-- The architecture is evolving toward a formalized embedded bytecode interpreter and eventually direct binary generation.
-- Some parts of the repository reflect earlier iterations and may not match the latest architectural direction.
+- **Phases 0-5 complete**: World model, LLM navigation loop, vision pipeline, predictive intelligence, fleet coordination — all implemented and tested.
+- **V1 Hardware layer built**: ESP32-S3 stepper motor firmware (UDP), ESP32-CAM MJPEG streaming (HTTP), stepper kinematics, WiFi transport, firmware safety — all coded.
+- **Real LLM validation**: Navigation passes 6/6 criteria with live Qwen3-VL-8B inference via OpenRouter.
+- **Next milestone**: Physical deployment of the V1 Stepper Cube Robot (8cm chassis, 28BYJ-48 steppers, 6cm wheels).
+
+| Metric | Value |
+|--------|-------|
+| Tests | 346+ across 21 suites |
+| Navigation criteria (live LLM) | 6/6 passed |
+| World model grid | 50x50 cells at 10cm resolution |
+| Action types | 5 (MOVE_TO, EXPLORE, ROTATE_TO, FOLLOW_WALL, STOP) |
+| Test arenas | 4 predefined configurations |
+| V1 max speed | 1024 steps/s (~4.71 cm/s) |
 
 This is a **research-grade system**, not a production robotics framework.
 
@@ -489,14 +498,34 @@ The HAL ensures that:
 - Deterministic safety invariants are enforced regardless of what the LLM generates
 - New hardware targets can be added without changing the bytecode specification
 
+### V1 Stepper Cube Robot
+
+The reference hardware platform is the **Robot V1 — Stepper Cube Robot**:
+
+| Component | Specification |
+|-----------|--------------|
+| **Motor Controller** | ESP32-S3-DevKitC-1, WiFi UDP on port 4210 |
+| **Camera** | ESP32-CAM (AI-Thinker), HTTP MJPEG on port 80, 320x240 @ 10fps |
+| **Motors** | 2x 28BYJ-48 stepper (5V, 4096 steps/rev, 64:1 gear ratio) |
+| **Drivers** | 2x ULN2003 Darlington arrays |
+| **Wheels** | 6cm diameter, 12cm wheel base |
+| **Chassis** | 8cm 3D-printed cube with rear ball caster |
+| **Kinematics** | 217.3 steps/cm, max 1024 steps/s (~4.71 cm/s) |
+
+Communication uses two parallel networks:
+- **Motor commands**: UDP JSON on port 4210 (`move_cm`, `rotate_deg`, `stop`, `get_status`)
+- **Camera stream**: HTTP MJPEG on port 80 (`GET /stream`)
+
+See `Agent_Robot_Model/Readme.md` for full BOM, wiring diagrams, and kinematic constants.
+
 ### Firmware Runtime (ESP32-S3)
 
 The microcontroller does **not** run the LLM. It runs an execution runtime that:
-- Interprets structured LLM instructions received over serial
-- Maintains local execution state between cycles
-- Enforces safety constraints at the hardware boundary
-- Communicates sensor readings and execution results back to the host
-- Executes deterministic fallback logic when host communication is interrupted
+- Listens for UDP JSON commands on port 4210
+- Drives 28BYJ-48 steppers via AccelStepper (HALF4WIRE mode)
+- Tracks pose via differential drive odometry (step counting)
+- Enforces safety constraints: 2-second host timeout → emergency stop, max 40960 steps/command
+- Responds with pose, step counts, and running state
 
 ### Agent Execution Workflow
 
@@ -534,11 +563,14 @@ graph LR
 | **Runtime LLM Inference** | llama.cpp / vLLM / OpenRouter | Local or cloud model serving for Qwen3-VL-8B |
 | **RSA Engine** | Recursive Self-Aggregation | Planner brain — multimodal cross-referencing of visual observations |
 | **Desktop / Frontend** | Next.js 14, Electron, Three.js | Application shell, native USB/FS access, 3D simulation |
-| **Host Runtime** | TypeScript | System agent orchestrator, tool system, workflow context |
-| **Firmware** | C++ (ESP32-S3) | Serial protocol runtime, deterministic validation, safety enforcement |
-| **Bytecode Runtime** | Structured instruction interpreter | Embedded runtime on MCU |
+| **Host Runtime** | TypeScript | Navigation loop, world model, local planner, HAL bridges |
+| **Motor Firmware** | C++ (ESP32-S3) | AccelStepper control, UDP JSON protocol (port 4210), odometry |
+| **Camera Firmware** | C++ (ESP32-CAM) | MJPEG streaming (port 80), 320x240 @ 10fps |
+| **Stepper Kinematics** | TypeScript (`lib/hal/stepper-kinematics.ts`) | 28BYJ-48 step/distance conversion, differential drive math |
+| **WiFi Transport** | UDP JSON + HTTP MJPEG | Motor commands (port 4210) + camera stream (port 80) |
 | **Agent Format** | Markdown + YAML frontmatter | Agent definitions, skills, memory, kernel rules |
-| **Volume Storage** | Local FS / Vercel Blob | Three-tier volume system |
+| **Volume Storage** | Local FS | Three-tier volume system |
+| **Testing** | Jest + ts-jest (jsdom) | 346+ tests across 21 suites, no hardware required |
 
 ---
 
@@ -603,7 +635,9 @@ graph TD
     COMPONENTS --> CANVAS["canvas/"]
     CANVAS --> ROBOT3D["RobotCanvas3D.tsx<br/>Three.js 3D simulation arena"]
 
-    ROOT --> FIRMWARE["firmware/<br/>ESP32-S3 firmware (C++)"]
+    ROOT --> FIRMWARE["firmware/<br/>ESP32 firmware (C++)"]
+    FIRMWARE --> FW_STEPPER["esp32-s3-stepper/<br/>Motor controller, UDP, odometry"]
+    FIRMWARE --> FW_CAM["esp32-cam-mjpeg/<br/>MJPEG camera streamer"]
     ROOT --> BACKEND["backend/<br/>Optional Python backend"]
     ROOT --> ELECTRON["electron/<br/>Electron desktop wrapper"]
     ROOT --> APP["app/<br/>Next.js application"]
@@ -614,32 +648,50 @@ graph TD
 
 ## Getting Started
 
+### Quick Start (5 minutes)
+
+```bash
+# Clone and install
+git clone https://github.com/EvolvingAgentsLabs/llmos
+cd llmos
+npm install
+
+# Run the full test suite (346+ tests, no GPU/network required)
+npx jest --no-coverage
+
+# Run the navigation demo (mock LLM, all 4 arenas)
+npx tsx scripts/run-navigation.ts --all --verbose
+
+# Run with real LLM inference (requires OPENROUTER_API_KEY)
+npx tsx scripts/run-navigation.ts --live
+
+# Run with simulated vision pipeline
+npx tsx scripts/run-navigation.ts --vision
+```
+
 ### Using Claude Code (Development LLM)
 
 LLMos integrates directly with Claude Code via the `/llmos` slash command:
 
 ```bash
-# Clone the repository
-git clone https://github.com/EvolvingAgentsLabs/llmos
-cd llmos
-npm install
-
 # Use the /llmos command in Claude Code to invoke the SystemAgent
 # Example: /llmos Create an AI agent for a wall-avoiding robot
 ```
 
 The `/llmos` command activates the SystemAgent, which discovers existing agents, consults memory, creates a multi-agent plan, and executes it — all through markdown files.
 
-### Running the Desktop Application
-
-```bash
-npm run electron:dev
-```
-
 ### Running the Web Application
 
 ```bash
-npm run dev
+npm run dev        # Start Next.js dev server at localhost:3000
+npm run build      # Production build (do NOT use npx next build)
+```
+
+### Running the Desktop Application
+
+```bash
+npm run electron:dev    # Development mode with hot reload
+npm run electron:build  # Production build
 ```
 
 ---
@@ -650,8 +702,9 @@ npm run dev
 |---|---|---|
 | **Phase 0** | Distributed Instruction Runtime — LLM → Structured Protocol → Firmware | Done |
 | **Phase 1** | Foundation — Desktop app, ESP32 pipeline, agent/volume/kernel system | Done |
-| **Phase 2** | Dual-Brain & Local Intelligence — Qwen3-VL-8B runtime, multimodal RSA, VLM vision | In Progress |
-| **Phase 3** | Swarm Intelligence — Multi-robot RSA consensus, world model merging, fleet coordination | Planned |
+| **Phase 2** | Navigation POC — World model, LLM loop, vision pipeline, predictive intelligence | Done |
+| **V1 Hardware** | Stepper Cube Robot — ESP32-S3 firmware, stepper kinematics, WiFi transport, MJPEG | Done (software), Assembly pending |
+| **Phase 3** | Fleet Intelligence — Multi-robot world model merging, fleet coordination | Partial (in-memory done, MQTT pending) |
 | **Phase 4** | Plugin Architecture — Community skills, custom domains, aggregation-aware RL | Planned |
 | **Phase 5** | Native Binary Generation — LLM emits machine-level instruction blocks | Research |
 
@@ -663,17 +716,17 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestones, timelines, and architectur
 
 LLMos is a research system. Expect architectural changes, refactors, breaking changes, and experimental modules.
 
-**Areas of contribution:**
+**Current priority areas:**
 
+- V1 Stepper Cube Robot physical testing and calibration
+- Sim-to-real gap closure (sensor noise, motor drift, latency)
+- Local Qwen3-VL-8B inference optimization (latency < 500ms)
+- New test arenas in `lib/runtime/test-arenas.ts`
+- HAL drivers for new hardware platforms (LiDAR, depth cameras, different motors)
+- Navigation strategy improvements (candidate generator, local planner)
+- Fleet coordination over MQTT for physical multi-robot
 - Agent definitions and skill patterns (markdown)
-- LLMBytecode instruction set formalization
-- Dual-Brain controller tuning and escalation logic
-- RSA engine optimization and multimodal aggregation
-- Embedded interpreter design and optimization
-- Firmware safety invariant specification
-- Simulation-to-hardware consistency verification
-- New sensor/actuator HAL definitions
-- Volume system tooling and skill promotion
+- Documentation and book chapter improvements
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 

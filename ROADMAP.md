@@ -77,7 +77,7 @@ graph TB
 
 ## Development Phases
 
-### Phase 1: Foundation (Q1 2026) — CURRENT
+### Phase 1: Foundation (Q1 2026) — DONE
 
 **Goal**: Working desktop application with ESP32 pipeline and full agent/volume/kernel system.
 
@@ -103,11 +103,12 @@ graph LR
 - [x] File system integration
 - [x] Streamlined for desktop-only
 
-#### Milestone 1.2: ESP32 Pipeline
-- [ ] USB serial connection and device detection (Electron)
-- [ ] One-click firmware flashing
-- [ ] Natural language → LLMBytecode generation
-- [ ] Test workflow: "avoid walls" → working robot
+#### Milestone 1.2: ESP32 Pipeline — DONE
+- [x] ESP32-S3 stepper motor firmware (`firmware/esp32-s3-stepper/`)
+- [x] ESP32-CAM MJPEG firmware (`firmware/esp32-cam-mjpeg/`)
+- [x] WiFi UDP transport for motor commands (`lib/hal/wifi-connection.ts`)
+- [x] Stepper kinematics and calibration (`lib/hal/stepper-kinematics.ts`)
+- [x] HAL physical adapter (`lib/hal/physical-adapter.ts`)
 
 #### Milestone 1.3: Agent & Volume System — DONE
 - [x] Pure markdown agent definitions with YAML frontmatter
@@ -131,9 +132,9 @@ graph LR
 
 ---
 
-### Phase 2: Dual-Brain & Local Intelligence (Q2 2026)
+### Phase 2: Navigation POC & Dual-Brain Intelligence (Q1-Q2 2026) — DONE
 
-**Goal**: Wire the Dual-LLM architecture end-to-end. Claude Opus 4.6 develops agents, Qwen3-VL-8B runs them in real-time.
+**Goal**: Wire the Dual-LLM architecture end-to-end. Claude Opus 4.6 develops agents, Qwen3-VL-8B runs them in real-time. Complete navigation stack with world model, LLM loop, vision pipeline, predictive intelligence, and fleet coordination.
 
 This phase is driven by three key insights:
 1. Cloud LLMs are too slow (~1-2s) and expensive (~$36/hr at 10Hz) for physical agent runtime
@@ -162,68 +163,97 @@ gantt
         Integration tests                :d3, after d2, 7d
 ```
 
-#### Milestone 2.1: Qwen3-VL-8B Vision Pipeline (Runtime LLM)
-- [x] Create `VLMVisionDetector` for direct image → VisionFrame conversion
-- [x] Implement `VLMBackend` interface for OpenAI-compatible vision API
-- [x] Add `vlm_estimate` depth method to Detection type
-- [ ] Wire `VisionFrame` JSON output to world model updates
-- [ ] Connect to camera source (webcam for desktop, ESP32-CAM stream for real robot)
-- [ ] Benchmark: <500ms per frame on host GPU
+#### Milestone 2.1: Navigation Stack — DONE
+- [x] `lib/runtime/world-model-serializer.ts` — RLE JSON, ASCII, patch serialization
+- [x] `lib/runtime/world-model-bridge.ts` — Ground-truth bridge (Robot4World → grid)
+- [x] `lib/runtime/candidate-generator.ts` — Subgoal candidates for LLM
+- [x] `lib/runtime/map-renderer.ts` — Top-down PNG rendering
+- [x] `lib/runtime/local-planner.ts` — A* pathfinding on occupancy grid
+- [x] `lib/runtime/navigation-types.ts` — LLM I/O schemas + validation
+- [x] `lib/runtime/navigation-loop.ts` — Top-level cycle orchestrator
+- [x] `lib/runtime/navigation-runtime.ts` — NavigationRuntime with physics simulation
 
-**Success criteria**: Robot can detect and describe arbitrary objects from a camera frame with depth estimates via Qwen3-VL-8B
+#### Milestone 2.2: Vision Pipeline — DONE
+- [x] `lib/runtime/vision-simulator.ts` — GroundTruthVisionSimulator
+- [x] `lib/runtime/vision-scene-bridge.ts` — VisionFrame → SceneGraph
+- [x] `lib/runtime/sensor-bridge.ts` — VisionWorldModelBridge (observations only)
+- [x] VisionFrame JSON output wired to world model updates
+- [x] Vision pipeline end-to-end tested
 
-#### Milestone 2.2: Local LLM Inference (Runtime LLM Server)
-- [ ] Set up [llama.cpp](https://github.com/ggerganov/llama.cpp) or [vLLM](https://github.com/vllm-project/vllm) server on host
-- [ ] Load [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) with multimodal support
-- [ ] Implement `RSAMultimodalProvider` adapter for local server
-- [ ] Benchmark: <500ms for single-pass, <3s for RSA quick preset
-- [ ] OpenRouter cloud API as alternative ($0.08/M input, $0.50/M output)
-
-**Success criteria**: Physical agents operate fully offline with local Qwen3-VL-8B as runtime LLM
-
-#### Milestone 2.3: Multimodal RSA Engine Integration (Runtime LLM Planner)
+#### Milestone 2.3: Multimodal RSA Engine — DONE
 - [x] Implement RSA algorithm (`lib/runtime/rsa-engine.ts`)
 - [x] Implement preset configurations (quick/standard/deep/swarm)
 - [x] Add `RSAMultimodalProvider` interface for VLM-based RSA
 - [x] Add `runWithImage()` method for multimodal RSA
 - [x] Add `VISION_AGGREGATION_PROMPT` for visual cross-referencing
-- [ ] Integration tests with robot planning scenarios
 - [ ] Tune aggregation prompts for navigation tasks
 - [ ] Benchmark multimodal RSA quality vs. single-pass vs. cloud LLM
-- [ ] Implement swarm consensus mode for multi-robot
 
-**Success criteria**: Multimodal RSA `quick` preset (N=4, K=2, T=2) where each candidate independently analyzes the camera frame produces better spatial understanding than single-pass VLM
+#### Milestone 2.4: Predictive Intelligence & Fleet — DONE
+- [x] `lib/runtime/predictive-world-model.ts` — Spatial heuristic predictions (wall continuation, corridor detection, open space expansion)
+- [x] `lib/runtime/fleet-coordinator.ts` — Multi-robot fleet coordination + world model merging
+- [x] `lib/runtime/navigation-hal-bridge.ts` — NavigationLoop → HAL execution bridge
+- [x] `lib/runtime/navigation-ui-bridge.ts` — NavigationLoop → React UI state bridge
+- [x] `lib/runtime/openrouter-inference.ts` — OpenRouter API adapter with vision + stats
 
-#### Milestone 2.4: Dual-Brain Controller (Runtime LLM Decision Layer)
-- [x] Implement `DualBrainController` (`lib/runtime/dual-brain-controller.ts`)
-- [x] Implement reactive instinct rules
-- [ ] Wire escalation logic to RSA engine
-- [ ] Implement async planning (planner runs in background while instinct acts)
-- [ ] Add brain-decision tracking to black-box recorder
-- [ ] Dashboard: show which brain made each decision with latency
+#### Milestone 2.5: V1 Hardware Layer — DONE
+- [x] `firmware/esp32-s3-stepper/esp32-s3-stepper.ino` — Motor controller, UDP JSON, odometry
+- [x] `firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino` — MJPEG camera streamer
+- [x] `lib/hal/stepper-kinematics.ts` — 28BYJ-48 motor math
+- [x] `lib/hal/wifi-connection.ts` — UDP transport layer
+- [x] `lib/hal/firmware-safety-config.ts` — Motor safety limits
+- [x] `lib/hal/serial-protocol.ts` — CRC-16 framing, ack/retry
 
-**Success criteria**: Robot navigates complex environment using instinct for reactive avoidance and planner for goal-directed exploration
+#### Milestone 2.6: Testing — DONE
+- [x] 346+ tests across 21 suites — all passing
+- [x] Navigation end-to-end tests with 4 predefined arenas
+- [x] 6/6 navigation criteria passed with live LLM inference
+- [x] CLI demo: `npx tsx scripts/run-navigation.ts` (--all, --live, --vision)
+- [ ] GitHub Actions CI pipeline
 
-#### Milestone 2.5: Development LLM Integration (Claude Opus 4.6)
-- [x] Claude Code `/llmos` slash command for SystemAgent invocation
-- [x] 8-phase agent execution workflow
-- [x] Multi-agent planning with minimum 3 agents per project
+#### Milestone 2.7: Remaining Integration Work
+- [ ] Wire escalation logic from DualBrainController to RSA engine
+- [ ] Local Qwen3-VL-8B server setup (llama.cpp or vLLM)
 - [ ] Automatic agent evolution from runtime execution traces
 - [ ] Skill promotion from runtime patterns to volume system
-- [ ] Cross-session memory consolidation
-
-**Success criteria**: Claude Opus 4.6 can create agents that Qwen3-VL-8B runs successfully on physical hardware, and evolve them based on runtime performance data
-
-#### Milestone 2.6: Testing & CI
-- [ ] Unit tests: world model, JEPA, HAL validator, skill parser, RSA engine
-- [ ] GitHub Actions: lint → type-check → test → build on every PR
-- [ ] Integration test: spawn robot → set goal → verify world model updates
 
 ---
 
-### Phase 3: Swarm Intelligence & Fleet (Q3 2026)
+### V1 Physical Deployment (Q1-Q2 2026) — IN PROGRESS
 
-**Goal**: Multiple robots collaborating via RSA-based consensus, with the Development LLM coordinating fleet strategy.
+**Goal**: Deploy the LLMos navigation stack to the V1 Stepper Cube Robot physical hardware. Software layer is complete; this phase is about physical assembly, protocol validation, and sim-to-real closure.
+
+#### Step 1: Physical Assembly & Kinematic Calibration
+- [ ] 3D print the 8cm cube chassis from `Agent_Robot_Model/Robot_one/`
+- [ ] Mount ESP32-S3, ESP32-CAM, ULN2003 drivers, 28BYJ-48 motors
+- [ ] Install rear ball caster for low-friction third contact point
+- [ ] Verify wheel dimensions match codebase constants (6cm diameter, 12cm wheel base)
+- [ ] If wheels differ, calibrate via `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}`
+
+#### Step 2: Communication Protocol Validation
+- [ ] Flash ESP32-CAM with `firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino`
+- [ ] Validate MJPEG stream at `http://<IP>/stream` (320x240 @ 10fps)
+- [ ] Flash ESP32-S3 with `firmware/esp32-s3-stepper/esp32-s3-stepper.ino`
+- [ ] Validate UDP commands: `{"cmd":"move_cm","left_cm":10.0,"right_cm":10.0,"speed":500}` → 10cm forward
+- [ ] Validate rotation: `{"cmd":"rotate_deg","degrees":90.0,"speed":1024}` → exact 90° turn
+
+#### Step 3: LLMos Navigation Loop on Real Hardware
+- [ ] Configure ESP32 IP addresses in runtime environment
+- [ ] Run NavigationHALBridge with PhysicalHAL connected to V1 robot
+- [ ] Validate movement commands stay within max speed (1024 steps/s)
+- [ ] Test obstacle avoidance with real camera + VLM
+
+#### Step 4: Spatial Memory & Odometry
+- [ ] Continuous `get_status` polling for step-count odometry
+- [ ] Dead-reckoning pose updates from differential drive math
+- [ ] Wall detection → rotate response in physical environment
+- [ ] Compare physical world model accuracy against measured ground truth
+
+---
+
+### Phase 3: Swarm Intelligence & Fleet (Q3 2026) — PARTIAL
+
+**Goal**: Multiple robots collaborating via RSA-based consensus, with the Development LLM coordinating fleet strategy. The in-memory FleetCoordinator (world model merging, task assignment, frontier distribution) is implemented and tested. What remains is MQTT transport for physical robots.
 
 ```mermaid
 graph TB
@@ -393,15 +423,20 @@ graph LR
 | State | Zustand | Lightweight state management |
 | 3D | Three.js / React-Three-Fiber | Robot simulation arena |
 
-### Hardware Layer
+### Hardware Layer (V1 Stepper Cube Robot)
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
+| Motor Controller | ESP32-S3-DevKitC-1 | Stepper motor control, WiFi UDP (port 4210) |
+| Camera | ESP32-CAM (AI-Thinker) | MJPEG streaming, WiFi HTTP (port 80) |
+| Motors | 2x 28BYJ-48 + ULN2003 | Differential drive, 4096 steps/rev |
+| Kinematics | `lib/hal/stepper-kinematics.ts` | Step/distance conversion, differential drive math |
+| WiFi Transport | `lib/hal/wifi-connection.ts` | UDP JSON commands, 2s timeout, 3 retries |
+| Serial Protocol | `lib/hal/serial-protocol.ts` | CRC-16 framing, sequence numbers |
+| Safety | `lib/hal/firmware-safety-config.ts` | Host heartbeat, max steps, coil current |
 | Desktop Serial | `node-serialport` | Automatic device detection |
 | Web Serial | `navigator.serial` | Browser-based robot control |
-| Flashing | `esptool.js` / `esptool.py` | Firmware deployment |
-| Fleet Protocol | MQTT | Multi-robot communication |
-| Microcontroller | ESP32-S3 | Robot hardware |
+| Fleet Protocol | MQTT (planned) | Multi-robot communication |
 
 ---
 

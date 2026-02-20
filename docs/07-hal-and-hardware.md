@@ -271,26 +271,156 @@ simulation or physical mode based on device type.
 
 ---
 
-## Hardware Target: The Standard Robot V1
+## Hardware Target: Robot V1 -- Stepper Cube Robot
 
-The reference hardware platform is a minimal but capable wheeled robot:
+The reference hardware platform is the **Robot V1 -- Stepper Cube Robot**, an 8cm
+3D-printed cube designed to tightly mount all components:
 
-- **MCU**: ESP32-S3, dual-core 240MHz, built-in WiFi/BLE
-- **Drive**: Differential drive, two DC motors, 0.5m wheel base
-- **Sensors**: 3-5 ultrasonic/ToF distance sensors (front, left, right)
-- **Camera**: OV2640 module for vision frames sent to Qwen3-VL
-- **Communication**: Status LED, USB-C for firmware and serial
-- **Protocol**: Newline-delimited JSON at 115200 baud
+| Component | Specification |
+|-----------|--------------|
+| Motor Controller | ESP32-S3-DevKitC-1 (GPIO4-7, GPIO15-18 for ULN2003) |
+| Camera | ESP32-CAM (AI-Thinker), OV2640, MJPEG streaming |
+| Motors | 2x 28BYJ-48 stepper (5V unipolar, 4096 steps/rev, 64:1 gear ratio) |
+| Drivers | 2x ULN2003 Darlington arrays |
+| Wheels | 6cm diameter, 12cm wheel base |
+| Support | Rear ball caster (low friction for stepper torque) |
+| Power | 5V 2A USB-C |
+| Chassis | 8cm 3D-printed cube from `Agent_Robot_Model/Robot_one/` |
 
-Motor power ranges from -255 to 255. Differential drive kinematics:
+The full bill of materials, wiring diagrams, and assembly instructions are in
+`Agent_Robot_Model/Readme.md`.
+
+---
+
+## Stepper Kinematics
+
+The file `lib/hal/stepper-kinematics.ts` encodes the precise math for the 28BYJ-48
+stepper motors. Every distance and rotation command flows through these conversions:
+
+| Parameter | Value |
+|-----------|-------|
+| Steps per revolution | 4096 (with 64:1 gear ratio) |
+| Wheel circumference | 18.85 cm (pi x 6cm) |
+| Steps per cm | ~217.3 |
+| Max speed | 1024 steps/s (~4.71 cm/s) |
+| Max acceleration | 512 steps/s^2 |
+
+Key conversion functions:
+
+```typescript
+// lib/hal/stepper-kinematics.ts
+
+distanceToSteps(cm)        // 217.3 steps per cm
+rotationToSteps(degrees)   // differential drive arc calculation
+velocityToStepsPerSecond(cmPerSec)
+calculateArcSpeeds(radiusCm, speedCmS)  // inner/outer wheel speeds
+calculateMoveDuration()    // trapezoidal motion profile
+```
+
+The `rotationToSteps` function computes the arc length each wheel must travel for an
+in-place rotation. For a 90-degree turn with a 12cm wheel base, each wheel travels
+`pi * 12 / 4 = 9.42 cm` in opposite directions, which is `9.42 * 217.3 = 2047 steps`.
+If the calibrated wheel dimensions differ from the codebase defaults, the
+`set_config` command updates the firmware constants.
+
+---
+
+## WiFi Transport
+
+The V1 robot communicates over WiFi using two separate protocols on two separate
+ESP32 chips. The file `lib/hal/wifi-connection.ts` implements the motor control
+transport.
+
+### Motor Commands (ESP32-S3, UDP, Port 4210)
+
+UDP is used instead of TCP because it has zero handshake latency, which is required
+for the 200ms instinct loop. The WiFi connection class provides:
+
+- Sequence-based request-response matching
+- Timeout: 2000ms with max 3 retries
+- Continuous round-trip time tracking
+- Statistics: commands sent, responses received, timeouts, retries
+
+### Camera Stream (ESP32-CAM, HTTP, Port 80)
+
+The camera serves standard HTTP MJPEG:
+
+- `GET /stream` -- multipart/x-mixed-replace JPEG frames at 320x240 @ 10fps
+- `GET /status` -- JSON status (FPS, frames served, uptime, WiFi RSSI)
+
+The host PC's VLM (Qwen3-VL-8B) reads frames from this endpoint to generate
+VisionFrames for the navigation loop.
+
+---
+
+## Communication Protocol
+
+The ESP32-S3 firmware (`firmware/esp32-s3-stepper/esp32-s3-stepper.ino`) accepts
+UDP JSON commands on port 4210:
+
+```json
+{"cmd":"move_steps","left":N,"right":N,"speed":N}
+{"cmd":"move_cm","left_cm":F,"right_cm":F,"speed":F}
+{"cmd":"rotate_deg","degrees":F,"speed":F}
+{"cmd":"stop"}
+{"cmd":"get_status"}
+{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}
+```
+
+The `get_status` response returns the current pose (x, y, heading), accumulated
+step counts for each motor, whether the motors are currently running, and the
+uptime. The host uses these step counts for dead-reckoning pose updates:
 
 ```
-Linear velocity:  v = (v_right + v_left) / 2
-Angular velocity: w = (v_right - v_left) / wheel_base
+deltaLeft = currentLeftSteps - prevLeftSteps
+deltaRight = currentRightSteps - prevRightSteps
+linearCm = (leftDistCm + rightDistCm) / 2
+angularRad = (rightDistCm - leftDistCm) / wheelBase
 ```
 
-Pose updates at 100ms intervals via dead reckoning. The LLM corrects drift through
-the vision pipeline.
+Because stepper motors execute precise discrete steps (unlike DC motors which can
+slip), the odometry is highly accurate -- accurate enough for the navigation loop's
+world model to remain consistent over many cycles.
+
+---
+
+## Firmware Safety
+
+The file `lib/hal/firmware-safety-config.ts` defines the safety parameters that
+the firmware enforces independently of the host:
+
+**Stepper Safety (V1 hardware):**
+
+| Parameter | Default | Range |
+|-----------|---------|-------|
+| Max steps/second | 1024 | 1-2048 |
+| Max continuous steps | 40960 (10 revolutions) | per command |
+| Host heartbeat timeout | 5000ms | 500-10000ms |
+| Max coil current | 240mA | 0-300mA |
+
+**Emergency Stop Triggers:**
+- Host timeout (no command received for 2+ seconds)
+- Step limit exceeded in single command
+- Firmware watchdog timer
+
+The firmware disables motor coils when idle to save power and prevent overheating.
+When the host connection drops, the robot stops immediately rather than continuing
+on its last command.
+
+---
+
+## Serial Protocol
+
+For wired connections, `lib/hal/serial-protocol.ts` provides a reliable framing
+protocol with:
+
+- Monotonic sequence numbers for request-response matching
+- CRC-16/CCITT-FALSE checksums on the payload
+- Ack timeout (2000ms default) with retry (3 attempts)
+- Statistics tracking: frames sent, acks received, checksum errors, timeouts
+
+This protocol is used for development and debugging. For deployment, the WiFi UDP
+transport is preferred because it eliminates the physical tether.
 
 ---
 
@@ -298,11 +428,14 @@ the vision pipeline.
 
 The HAL is the seam between the LLM's abstract reasoning and the physical world. Five
 subsystems provide a complete interface. The `PhysicalHAL` adapter translates HAL calls
-into JSON commands over serial. The Navigation HAL Bridge connects the decision loop to
-actuators. The four-layer safety stack ensures no single failure produces dangerous
-behavior. The key insight: the LLM says "move to (2.5, 1.0)" and the HAL translates.
-This separation is what makes it possible to develop in simulation and deploy to
-hardware with zero code changes.
+into UDP JSON commands over WiFi. The V1 Stepper Cube Robot uses two ESP32 chips: one
+for motor control (UDP port 4210) and one for camera streaming (HTTP port 80). The
+stepper kinematics library converts distance and rotation commands to precise step
+counts. The firmware enforces safety independently: host timeout triggers emergency stop,
+step limits prevent runaway commands, and motor coils disable when idle. The four-layer
+safety stack ensures no single failure produces dangerous behavior. The key insight: the
+LLM says "move to (2.5, 1.0)" and the HAL translates -- whether to Three.js physics or
+to UDP packets driving real stepper motors.
 
 ---
 

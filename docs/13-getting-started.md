@@ -186,6 +186,10 @@ Once the demo is running, these are the files worth reading first:
 | `lib/runtime/test-arenas.ts` | The four predefined test environments |
 | `scripts/run-navigation.ts` | The CLI demo script |
 | `components/robot/RobotWorldPanel.tsx` | The 3D arena React component |
+| `lib/hal/stepper-kinematics.ts` | 28BYJ-48 motor math (steps, distance, rotation) |
+| `lib/hal/wifi-connection.ts` | UDP transport for V1 robot (port 4210) |
+| `firmware/esp32-s3-stepper/esp32-s3-stepper.ino` | Motor controller firmware |
+| `firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino` | Camera streaming firmware |
 
 Start with `navigation-loop.ts`. It is the center of the system. The `runCycle()`
 method shows the complete flow: check goal, detect stuck state, generate candidates,
@@ -211,6 +215,27 @@ both testable and backend-agnostic.
 
 ---
 
+## Step 7: Deploy to V1 Hardware (Optional)
+
+If you have the V1 Stepper Cube Robot hardware:
+
+```bash
+# 1. Flash ESP32-S3 with firmware/esp32-s3-stepper/esp32-s3-stepper.ino
+#    (Set WiFi credentials in the firmware source first)
+
+# 2. Flash ESP32-CAM with firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino
+
+# 3. Test UDP motor commands (Python example):
+# python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'{\"cmd\":\"move_cm\",\"left_cm\":10,\"right_cm\":10,\"speed\":500}', ('<ESP32-S3-IP>', 4210))"
+
+# 4. Test camera stream: open http://<ESP32-CAM-IP>/stream in browser
+```
+
+See [Chapter 15: V1 Hardware Deployment](15-v1-hardware-deployment.md) for the
+complete assembly and deployment guide.
+
+---
+
 ## What to Try Next
 
 1. **Modify a test arena** -- Edit `lib/runtime/test-arenas.ts` to add a fifth arena
@@ -223,6 +248,9 @@ both testable and backend-agnostic.
 
 4. **Explore the HAL** -- Read `lib/hal/types.ts` to understand the hardware
    abstraction that lets the same navigation code run in simulation and on an ESP32.
+
+5. **Deploy to hardware** -- Follow [Chapter 15](15-v1-hardware-deployment.md) to
+   build and program the V1 Stepper Cube Robot.
 
 ---
 

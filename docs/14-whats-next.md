@@ -47,44 +47,66 @@ The full test suite: 346+ tests across 21 suites, all passing.
 
 ---
 
-## The Next Milestone: Closing the Sim-to-Real Gap
+## The Next Milestone: V1 Stepper Cube Robot Physical Deployment
 
-The most important remaining work is connecting the simulation stack to physical
-hardware. The code is designed for this -- the HAL interface in `lib/hal/types.ts`
-abstracts every hardware interaction behind a clean TypeScript interface -- but the
-wiring is not yet complete.
+The software layer is complete. Every component -- firmware, kinematics, WiFi
+transport, HAL bridge, navigation loop -- is implemented and tested. The next
+milestone is physical deployment: assembling the V1 Stepper Cube Robot, flashing the
+firmware, validating the communication protocols, and running the LLMos navigation
+loop on real hardware.
 
-### Wire VisionFrame to Live Camera
+The repository already dictates the exact hardware (ESP32-S3 + ESP32-CAM + 28BYJ-48
+steppers + 8cm cube chassis). See `Agent_Robot_Model/Readme.md` for the complete BOM
+and wiring diagrams. The full deployment plan is in
+[Chapter 15](15-v1-hardware-deployment.md).
 
-The `GroundTruthVisionSimulator` in `lib/runtime/vision-simulator.ts` generates
-synthetic camera frames from the arena definition. The next step is replacing this
-with a real camera source: a webcam for desktop development, or an ESP32-CAM stream
-for physical robots. The `VisionInterface` in the HAL already defines `captureFrame()`
-returning a base64 data URL. The implementation needs to connect to a real video
-source.
+### Phase 1: Physical Assembly and Kinematic Calibration
+
+The LLMos math relies on precise physical measurements. If the hardware deviates from
+the `.stl` / `.blend` files, the LLM will hallucinate its location in space.
+
+- 3D print the chassis from `Agent_Robot_Model/Robot_one/` (8cm cube)
+- Mount the rear ball caster (stepper motors have low torque; reducing friction
+  prevents wheel slip)
+- Verify wheel dimensions match the codebase: 6.0 cm wheel diameter (18.85 cm
+  circumference), 12.0 cm wheel base
+- If wheels differ, calibrate with:
+  `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}`
+
+### Phase 2: Communication Protocol Validation
+
+Two parallel networks for brain and body:
+
+- **The "Eyes" (ESP32-CAM, Port 80)**: Flash with
+  `firmware/esp32-cam-mjpeg/esp32-cam-mjpeg.ino`. Validate: hit
+  `http://<ESP32-CAM-IP>/stream` in a browser and see 320x240 @ 10fps MJPEG.
+- **The "Spinal Cord" (ESP32-S3, Port 4210)**: Flash with
+  `firmware/esp32-s3-stepper/esp32-s3-stepper.ino`. Validate: send via UDP:
+  `{"cmd":"move_cm","left_cm":10.0,"right_cm":10.0,"speed":500}` -- robot should
+  move forward exactly 10cm (~2173 steps).
+
+### Phase 3: Activating the LLMos Navigation Loop
+
+- Configure ESP32 IP addresses in the runtime environment
+- Run the NavigationHALBridge with PhysicalHAL connected to the V1 robot
+- The local Qwen3-VL-8B looks at `/stream`, identifies open paths, and the TypeScript
+  runtime compiles that into UDP commands
+- Respect max speed: 1024 steps/s (~4.71 cm/s) -- exceeding this causes stepper skip
+
+### Phase 4: Closing the Loop with Spatial Memory
+
+- Continuously poll `{"cmd":"get_status"}` for step-count odometry
+- Stepper motors are precise -- step counts provide accurate dead-reckoning
+- Test: place robot facing a wall. Camera detects wall. Host LLM queries odometry.
+  Generates `{"cmd":"rotate_deg","degrees":90.0,"speed":1024}`.
 
 ### Local Qwen3-VL-8B Server
 
 The OpenRouter adapter (`lib/runtime/openrouter-inference.ts`) provides cloud-based
-LLM inference, but real-time robot control requires local inference. The plan is to
-run Qwen3-VL-8B-Instruct through either llama.cpp or vLLM on the host machine's GPU.
-Target latency: under 500ms per frame for single-pass instinct decisions, under 3
-seconds for RSA-enhanced planning.
-
-### Integration Tests with Real Robot Planning
-
-The current end-to-end tests use a deterministic mock LLM. The next layer of testing
-sends actual prompts to a real (or locally-hosted) Qwen3-VL-8B model and validates
-that the decisions are physically reasonable. This is not unit testing -- it is
-behavioral testing of the LLM's spatial reasoning.
-
-### Performance Benchmarks
-
-How fast can the full cycle run? The navigation loop needs to complete a cycle
-(serialize world model, generate candidates, call LLM, validate decision, plan path)
-within the robot's control loop deadline. For a robot moving at 0.3 m/s, a 500ms
-cycle means the world changes by 15cm between decisions. Benchmarking this pipeline
-end-to-end on target hardware is critical.
+LLM inference, but real-time robot control will benefit from local inference. The plan
+is to run Qwen3-VL-8B-Instruct through llama.cpp or vLLM on the host machine's GPU.
+Target latency: under 500ms per frame for instinct decisions, under 3 seconds for
+RSA-enhanced planning.
 
 ---
 
@@ -246,13 +268,15 @@ required.
 
 The thirteen chapters before this one describe the machinery that makes this
 possible: occupancy grids, navigation loops, vision pipelines, fleet coordination,
-hardware abstraction, and a test suite that proves it all works. What remains is the
-engineering work to bridge simulation and reality, the research work to push the
-boundaries of on-device inference, and the community work to build an ecosystem of
-shared robot intelligence.
+hardware abstraction, and a test suite that proves it all works. The V1 Stepper Cube
+Robot hardware layer is built -- firmware, kinematics, WiFi transport, safety
+enforcement. What remains is the physical assembly, protocol validation, and the
+first time a robot navigates a room using LLMos as its brain.
 
-The foundation is laid. The tests pass. Now we build.
+The foundation is laid. The tests pass. The firmware is written. Now we build the
+robot.
 
 ---
 
 *Previous: [Chapter 13 -- Getting Started: Your First 10 Minutes](13-getting-started.md)*
+*Next: [Chapter 15 -- V1 Hardware Deployment: From Code to Robot](15-v1-hardware-deployment.md)*
