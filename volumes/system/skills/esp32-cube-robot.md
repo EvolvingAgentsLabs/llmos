@@ -252,8 +252,84 @@ if (response.virtual) {
 | Position error accumulates | No encoder feedback | Use get_pose periodically |
 | Motors not responding | Not armed | Send arm command first |
 
+## V1 Hardware — Stepper Motors over WiFi
+
+The V1 hardware replaces DC motors with 28BYJ-48 steppers and USB serial with WiFi UDP.
+
+### V1 Hardware Overview
+
+| Component | Purpose |
+|-----------|---------|
+| ESP32-S3-DevKitC-1 | WiFi motor controller |
+| ESP32-CAM (AI-Thinker) | WiFi camera (MJPEG streaming) |
+| 2x 28BYJ-48 + ULN2003 | Stepper motors with drivers |
+| 6cm wheels, 12cm wheel base | Differential drive |
+
+### WiFi UDP Command Protocol (Port 4210)
+
+Replaces the serial JSON protocol with UDP JSON for lower latency:
+
+```json
+// Move by steps
+{"cmd":"move_steps", "left":2173, "right":2173, "speed":512}
+
+// Move by centimeters
+{"cmd":"move_cm", "left_cm":10.0, "right_cm":10.0, "speed":5.0}
+
+// Rotate in place
+{"cmd":"rotate_deg", "degrees":90, "speed":5.0}
+
+// Stop immediately
+{"cmd":"stop"}
+
+// Get robot status (pose, step counts, running state)
+{"cmd":"get_status"}
+
+// Update calibration
+{"cmd":"set_config", "wheel_diameter_cm":6.0, "wheel_base_cm":12.0}
+```
+
+### Camera Streaming Setup
+
+The ESP32-CAM streams MJPEG over HTTP:
+
+```
+Stream URL: http://<ESP32-CAM-IP>/stream
+Status URL: http://<ESP32-CAM-IP>/status
+```
+
+Resolution: 320x240 (QVGA), ~10fps, JPEG quality 12.
+
+### V1 Stepper Drive Commands
+
+| Left Steps | Right Steps | Movement |
+|-----------|------------|----------|
+| +2173 | +2173 | Forward 10cm |
+| -2173 | -2173 | Backward 10cm |
+| +1664 | -1664 | Rotate right 90° |
+| -1664 | +1664 | Rotate left 90° |
+| +2173 | +1087 | Arc right |
+| +1087 | +2173 | Arc left |
+
+### Key Differences from DC Motor Protocol
+
+| Feature | DC Motor (v0) | Stepper (V1) |
+|---------|--------------|--------------|
+| Transport | USB Serial JSON | WiFi UDP JSON |
+| Motor control | PWM -255 to 255 | Step counts + speed |
+| Movement | Continuous (time-based) | Discrete (step-based) |
+| Pose tracking | Host-side estimation | Firmware dead reckoning |
+| Camera | Same ESP32 | Separate ESP32-CAM |
+| Max speed | ~1 m/s | ~4.7 cm/s |
+| Precision | Low (PWM deadband) | High (individual steps) |
+
 ## Version History
 
+- **v1.1.0** (2026-02): V1 stepper hardware support
+  - WiFi UDP command protocol
+  - 28BYJ-48 stepper motor support
+  - ESP32-CAM MJPEG streaming
+  - Stepper-specific drive commands
 - **v1.0.0** (2026-01-10): Initial protocol specification
   - Differential drive motor control
   - Pose tracking (x, y, rotation)

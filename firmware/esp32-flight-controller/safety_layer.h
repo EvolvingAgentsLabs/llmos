@@ -215,4 +215,79 @@ inline void safety_update_config(SafetyConfig newConfig) {
   }
 }
 
+// ==========================================================================
+// Stepper Motor Safety (V1 Hardware)
+// ==========================================================================
+
+#ifdef USE_STEPPER_MOTORS
+
+struct StepperSafetyConfig {
+  int maxStepsPerSecond;              // Max step rate (default: 1024)
+  long maxContinuousSteps;            // Max steps per command (default: 40960)
+  unsigned long hostHeartbeatMs;      // Host heartbeat timeout (default: 2000)
+  int maxCoilCurrentMa;              // Max current per coil (default: 300mA)
+};
+
+static StepperSafetyConfig stepperSafetyConfig = {
+  1024,   // maxStepsPerSecond
+  40960,  // maxContinuousSteps (10 revolutions)
+  2000,   // hostHeartbeatMs
+  300     // maxCoilCurrentMa
+};
+
+/**
+ * Clamp a requested step speed to the safe maximum.
+ */
+inline int stepper_safety_clamp_speed(int requestedSpeed) {
+  if (safetyState.emergencyStopped) {
+    return 0;
+  }
+  if (requestedSpeed > stepperSafetyConfig.maxStepsPerSecond) {
+    return stepperSafetyConfig.maxStepsPerSecond;
+  }
+  if (requestedSpeed < 0) {
+    return 0;
+  }
+  return requestedSpeed;
+}
+
+/**
+ * Clamp a requested step count to the safe maximum.
+ */
+inline long stepper_safety_clamp_steps(long requestedSteps) {
+  if (safetyState.emergencyStopped) {
+    return 0;
+  }
+  if (requestedSteps > stepperSafetyConfig.maxContinuousSteps) {
+    return stepperSafetyConfig.maxContinuousSteps;
+  }
+  if (requestedSteps < -stepperSafetyConfig.maxContinuousSteps) {
+    return -stepperSafetyConfig.maxContinuousSteps;
+  }
+  return requestedSteps;
+}
+
+/**
+ * Check stepper-specific safety conditions.
+ * Uses the existing host heartbeat from the base safety layer.
+ */
+inline bool stepper_safety_check() {
+  // Use the shorter stepper heartbeat timeout
+  if (millis() - safetyState.lastHostCommandTime > stepperSafetyConfig.hostHeartbeatMs) {
+    safety_emergency_stop();
+    safetyState.violations++;
+    return false;
+  }
+  return safety_check();
+}
+
+/**
+ * Update stepper safety config at runtime.
+ */
+inline void stepper_safety_update_config(StepperSafetyConfig newConfig) {
+  stepperSafetyConfig = newConfig;
+}
+
+#endif // USE_STEPPER_MOTORS
+
 #endif // SAFETY_LAYER_H

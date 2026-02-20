@@ -48,6 +48,81 @@ export const ROBOT_SPECS = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// V1 STEPPER ROBOT CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const ROBOT_SPECS_V1_STEPPER = {
+  // Physical dimensions (meters)
+  BODY_SIZE: 0.08,           // 8cm cube (same chassis)
+  WHEEL_RADIUS: 0.03,        // 3cm (6cm diameter wheels)
+  WHEEL_BASE: 0.12,          // 12cm between wheels
+  WHEEL_WIDTH: 0.01,         // 1cm wheel width
+
+  // Stepper motor specs (28BYJ-48)
+  MAX_RPM: 15,               // 28BYJ-48 max with 64:1 gear ratio
+  STEPS_PER_REV: 4096,       // 64:1 gear ratio × 64 steps
+  MAX_STEPS_PER_SEC: 1024,   // Safe operating speed
+  MAX_ACCELERATION: 512,     // steps/s²
+
+  // Sensor specs (same as DC motor version)
+  DISTANCE_MAX: 2.0,
+  LINE_SENSOR_WIDTH: 0.06,
+  LINE_SENSOR_COUNT: 5,
+
+  // Battery
+  BATTERY_VOLTAGE: 5.0,      // USB 5V supply
+  BATTERY_CAPACITY_MAH: 2000,
+
+  // Mass (heavier than DC version due to steppers)
+  MASS: 0.30,                // 300g with steppers + ULN2003 boards
+
+  // Wall thickness (same)
+  WALL_THICKNESS: 0.03,
+};
+
+/**
+ * Convert stepper step-rate (steps/s) to wheel velocity (m/s).
+ * Matches the 28BYJ-48 + 6cm wheel kinematics.
+ */
+export function stepperStepRateToVelocity(stepsPerSecond: number): number {
+  const wheelCircumference = 2 * Math.PI * ROBOT_SPECS_V1_STEPPER.WHEEL_RADIUS;
+  const revsPerSecond = stepsPerSecond / ROBOT_SPECS_V1_STEPPER.STEPS_PER_REV;
+  return revsPerSecond * wheelCircumference;
+}
+
+/**
+ * Convert velocity (m/s) to stepper step-rate (steps/s).
+ */
+export function velocityToStepperStepRate(velocityMs: number): number {
+  const wheelCircumference = 2 * Math.PI * ROBOT_SPECS_V1_STEPPER.WHEEL_RADIUS;
+  const revsPerSecond = velocityMs / wheelCircumference;
+  return revsPerSecond * ROBOT_SPECS_V1_STEPPER.STEPS_PER_REV;
+}
+
+/**
+ * Simulate one stepper kinematics tick for differential drive.
+ * Returns updated pose given left/right step rates and time delta.
+ */
+export function stepperKinematicsUpdate(
+  pose: { x: number; y: number; rotation: number },
+  leftStepsPerSec: number,
+  rightStepsPerSec: number,
+  dt: number,
+): { x: number; y: number; rotation: number } {
+  const leftVel = stepperStepRateToVelocity(leftStepsPerSec);
+  const rightVel = stepperStepRateToVelocity(rightStepsPerSec);
+
+  const linear = (leftVel + rightVel) / 2;
+  const angular = (rightVel - leftVel) / ROBOT_SPECS_V1_STEPPER.WHEEL_BASE;
+
+  const newRotation = pose.rotation + angular * dt;
+  const newX = pose.x + linear * Math.sin(pose.rotation) * dt;
+  const newY = pose.y + linear * Math.cos(pose.rotation) * dt;
+
+  return { x: newX, y: newY, rotation: newRotation };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // TYPES AND INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
 
