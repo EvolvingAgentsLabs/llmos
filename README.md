@@ -2,7 +2,7 @@
 
 # LLMos
 
-### What if a robot's brain was a language model — not a chatbot bolted on, but the actual kernel?
+### The first OS where LLMs compile directly to hardware. From Markdown to Machine Code.
 
 ![Status](https://img.shields.io/badge/Status-Active%20Research-red)
 ![Hardware](https://img.shields.io/badge/Target-ESP32%20S3-green)
@@ -30,7 +30,7 @@
 
 LLMos is an operating system for AI physical agents. It treats language models the way Unix treats C programs — as the native executable format. Agents are markdown files. The kernel is markdown. Skills, memory, and configuration are all markdown. Two LLMs divide the work: **Claude Opus 4.6** develops and evolves agents at design time, **Qwen3-VL-8B** drives them through the physical world at runtime.
 
-The result is a complete navigation stack — occupancy grids, A* pathfinding, vision pipelines, fleet coordination — that runs identically on a Three.js simulation and an [8cm cube robot](#the-robot) with two ESP32 chips and stepper motors.
+The result is a complete navigation stack — occupancy grids, A* pathfinding, vision pipelines, fleet coordination — that runs identically on a Three.js simulation and an [8cm cube robot](#the-robot) with two ESP32 chips and stepper motors. And the endgame is eliminating JSON, Python, and C++ entirely — the LLM generates bytecode, then native machine code, speaking directly to the silicon.
 
 [Book](https://evolvingagentslabs.github.io/llmos/) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
 
@@ -124,7 +124,7 @@ graph LR
     CG -->|scored subgoals| LLM["Qwen3-VL-8B<br/>(navigation)"]
     LLM -->|JSON decision| PLAN["A* Planner"]
     PLAN -->|waypoints| HAL["HAL"]
-    HAL -->|UDP JSON| ESP["ESP32-S3<br/>Steppers"]
+    HAL -->|"UDP JSON<br/>(→ Bytecode in Epoch 2)"| ESP["ESP32-S3<br/>Steppers"]
     ESP -->|step counts| ODO["Odometry"]
     ODO -->|pose update| WM
 
@@ -139,6 +139,48 @@ graph LR
 Each cycle takes ~1-2s with cloud inference, ~200-500ms with local GPU. The robot sees, thinks, acts, observes the result, and repeats. Every component is tested independently — 346 tests across 21 suites, zero require hardware or network.
 
 **The key architectural decision:** the LLM picks strategy (where to go, when to explore, how to recover from being stuck). Classical algorithms handle tactics (A* pathfinding, occupancy grid updates, motor control). Neither does the other's job.
+
+---
+
+## The Evolution of Execution
+
+LLMos is not just a robot controller. It is a research project in **neural compilation** — teaching LLMs to bypass human programming languages entirely and speak directly to hardware.
+
+```mermaid
+graph LR
+    subgraph PAST["Past: Human Toolchain"]
+        H["Human writes C++"] --> GCC["GCC compiles"] --> BIN["Binary"] --> R1["Robot executes"]
+    end
+
+    subgraph NOW["Present: LLMos Epoch 1"]
+        L1["LLM reasons"] --> JSON["JSON over UDP"] --> PARSE["ESP32 parses JSON"] --> R2["Robot executes"]
+    end
+
+    subgraph NEXT["Next: LLMos Epoch 2"]
+        L2["LLM reasons"] --> HEX["6-byte Bytecode"] --> EXEC["ESP32 executes<br/>directly"]
+    end
+
+    subgraph GOAL["Goal: LLMos Epoch 3"]
+        L3["LLM reasons"] --> NATIVE["Native Xtensa<br/>binary"] --> METAL["Direct to<br/>silicon"]
+    end
+
+    style PAST fill:#374151,color:#fff
+    style NOW fill:#065f46,color:#fff
+    style NEXT fill:#b45309,color:#fff
+    style GOAL fill:#7c3aed,color:#fff
+```
+
+| Epoch | Mechanism | Latency | Status |
+|-------|-----------|---------|--------|
+| **1: Semantic** | JSON strings over UDP | ~15ms parse time | **Current** |
+| **2: Bytecode** | 6-byte hex arrays, zero parsing | ~0.1ms | Designed, [ISA defined](https://evolvingagentslabs.github.io/llmos/16-the-neural-compiler.html) |
+| **3: Native** | LLM emits Xtensa machine code | ~0.00001ms | Research goal |
+
+Today, the LLM outputs `{"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}` — a 58-byte JSON string the ESP32 must parse character by character. Tomorrow, the LLM outputs `AA 01 64 64 CB FF` — 6 bytes the ESP32 reads directly into hardware registers. Eventually, the LLM generates raw Xtensa machine code that executes without any interpreter at all.
+
+This is the trajectory from "LLM as chatbot" to **"LLM as compiler."**
+
+Read the full vision: [Chapter 16: The Neural Compiler](https://evolvingagentslabs.github.io/llmos/16-the-neural-compiler.html)
 
 ---
 
@@ -335,8 +377,10 @@ llmos/
 | Phase 2: Navigation POC (world model, LLM loop, vision, prediction) | Done |
 | V1 Hardware: Stepper Cube firmware, kinematics, WiFi | Done (software) |
 | Physical deployment: Assembly, calibration, first autonomous run | **Next** |
+| Epoch 2: Bytecode VM — LLM generates 6-byte hex, ESP32 executes directly | Designed |
 | Phase 3: Fleet over MQTT, multi-robot physical coordination | Planned |
 | Phase 4: Plugin architecture, community skills | Planned |
+| Epoch 3: Native binary generation — LLM emits Xtensa machine code | Research |
 
 See [ROADMAP.md](ROADMAP.md) for detailed milestones.
 
@@ -358,6 +402,8 @@ LLMos is a research system. Expect architectural changes and experimental module
 - V1 robot physical testing and calibration
 - Sim-to-real gap closure (sensor noise, motor drift)
 - Local Qwen3-VL-8B inference optimization (< 500ms)
+- **Bytecode VM for ESP32-S3** — replace JSON parser with 6-byte command handler
+- **Grammar-constrained decoding** — GBNF grammars for LLM bytecode output
 - New test arenas and navigation strategies
 - HAL drivers for new hardware (LiDAR, depth cameras)
 - Fleet coordination over MQTT
@@ -373,6 +419,6 @@ Apache 2.0 — Built by [Evolving Agents Labs](https://github.com/EvolvingAgents
 
 <div align="center">
 
-*A markdown file becomes an agent. The agent sees through a camera. It thinks with a language model. It moves with stepper motors. 346 tests prove it works. This is LLMos.*
+*A markdown file becomes an agent. The agent sees through a camera. It thinks with a language model. It moves with stepper motors. Tomorrow, the LLM writes the machine code directly. This is LLMos.*
 
 </div>

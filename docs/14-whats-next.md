@@ -194,32 +194,46 @@ change -- it talks to the HAL, and the HAL talks to whatever hardware is plugged
 
 ---
 
-## Phase 5: Native Binary Generation (2027+)
+## The Neural Compiler: From JSON to Machine Code
 
-This is the research frontier. Today, the runtime LLM emits structured JSON that
-a TypeScript interpreter on the host machine translates into serial commands for the
-ESP32. Each layer in this pipeline adds latency and potential for translation errors.
+This is the defining research direction for LLMos. Today, the LLM outputs JSON
+strings that the ESP32 must parse. Tomorrow, the LLM generates bytecode -- 6-byte
+hex arrays that the ESP32 reads directly into hardware registers. Eventually, the
+LLM generates native Xtensa machine code that executes without any interpreter.
 
-### Formal LLMBytecode Specification
+```mermaid
+graph LR
+    E1["Epoch 1<br/>JSON strings<br/>~15ms parse"] -->|NOW| E2["Epoch 2<br/>6-byte bytecode<br/>~0.1ms"]
+    E2 -->|NEXT| E3["Epoch 3<br/>Native Xtensa<br/>~0.00001ms"]
 
-The LLMBytecode concept defines a formal instruction set -- categories of operations,
-a state model, and safety invariants -- that the LLM can emit directly. Instead of
-"move to position (1.5, 1.5)" expressed as JSON, the LLM would emit a compact
-binary instruction that the MCU executes without parsing.
+    style E1 fill:#065f46,color:#fff
+    style E2 fill:#b45309,color:#fff
+    style E3 fill:#7c3aed,color:#fff
+```
 
-### Embedded Interpreter on MCU
+### Epoch 2: The Bytecode VM
 
-An intermediate step: a formal virtual machine running on the ESP32 with an opcode
-table, replacing the current ad-hoc serial protocol. The LLM emits opcodes, the VM
-executes them. This is faster than JSON parsing and provides a well-defined execution
-model.
+The **LLMos Instruction Set Architecture (ISA) v1** defines 13 opcodes in a 6-byte
+frame. The same move command that takes 58 bytes of JSON becomes 6 bytes of hex:
 
-### LLM Emits Machine-Level Instructions
+```
+JSON:     {"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}  (58 bytes)
+Bytecode: AA 01 64 64 CB FF                                         (6 bytes)
+```
 
-The end state: the LLM generates machine-level instruction blocks that the MCU
-executes directly, with no intermediate representation designed for human
-readability. This removes every layer of abstraction between the model's reasoning
-and the robot's actuators.
+Grammar-constrained decoding via llama.cpp/vLLM ensures that Qwen3-VL-8B outputs
+*only* valid hex -- no conversational text, no formatting drift. The firmware
+transition is incremental: dual-mode (JSON + bytecode), then bytecode only.
+
+### Epoch 3: Native Binary Generation
+
+The LLM understands the Xtensa instruction set and generates raw `.bin` blocks that
+execute via function pointers in the ESP32's IRAM. No parser. No interpreter. The
+LLM's output *is* the machine code.
+
+See [Chapter 16: The Neural Compiler](16-the-neural-compiler.md) for the full ISA
+specification, grammar definitions, prompting techniques, and the firmware transition
+plan.
 
 ---
 
@@ -247,6 +261,13 @@ architecture becomes unnecessary overhead. When does this crossover happen? 2027
 2030? The answer depends on how fast edge inference catches up to the model sizes
 that spatial reasoning requires.
 
+**Can an LLM reliably generate safe machine code?** Grammar-constrained decoding
+ensures valid bytecode format, but native code generation requires safety
+guarantees -- the LLM must not emit code that violates step limits, disables the
+emergency stop, or causes memory corruption. Formal verification of LLM-generated
+binaries for constrained domains (motor control) is an open research problem that
+sits at the intersection of AI safety and compiler verification.
+
 ---
 
 ## Contributing
@@ -259,6 +280,9 @@ The project welcomes contributions in several areas:
 - **Navigation strategies** -- Improve the candidate generator or local planner
 - **Documentation** -- Expand the book, add diagrams, improve code comments
 - **Performance** -- Profile and optimize the navigation cycle pipeline
+- **Bytecode VM** -- ESP32-S3 firmware that accepts 6-byte hex commands
+- **Grammar-constrained inference** -- GBNF grammars for bytecode output
+- **Native code safety** -- Formal methods for LLM-generated Xtensa binaries
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup instructions and contribution
 guidelines. See [ROADMAP.md](../ROADMAP.md) for the full development plan with
@@ -290,9 +314,10 @@ enforcement. What remains is the physical assembly, protocol validation, and the
 first time a robot navigates a room using LLMos as its brain.
 
 The foundation is laid. The tests pass. The firmware is written. Now we build the
-robot.
+robot -- and then we teach the LLM to speak silicon's native language.
 
 ---
 
 *Previous: [Chapter 13 -- Getting Started: Your First 10 Minutes](13-getting-started.md)*
 *Next: [Chapter 15 -- V1 Hardware Deployment: From Code to Robot](15-v1-hardware-deployment.md)*
+*See also: [Chapter 16 -- The Neural Compiler: From JSON to Machine Code](16-the-neural-compiler.md)*

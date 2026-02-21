@@ -52,6 +52,9 @@ Read [Chapter 7: The HAL](07-hal-and-hardware.md), then [Chapter 15: V1 Hardware
 **"I want to understand how the robot learns."**
 Start with [Chapter 8: Agents and Skills](08-agents-and-skills.md), then [Chapter 11: The Evolution Engine](11-evolution-engine.md).
 
+**"I want to see where this is going — LLM as compiler."**
+Read [Chapter 16: The Neural Compiler](16-the-neural-compiler.md) — the path from JSON to native machine code.
+
 ---
 
 ## The Book
@@ -103,6 +106,16 @@ its social behavior in a fleet, and the mutation engine that makes it better.
 | 8 | [Identity: Agents, Skills, and the Markdown OS](08-agents-and-skills.md) | What does it mean for a program to be a markdown file? |
 | 10 | [Social Behavior: Multiple Robots, One World](10-fleet-coordination.md) | How do robots share what they know? |
 | 11 | [Dreams: The Evolution Engine](11-evolution-engine.md) | How does a robot improve while it sleeps? |
+
+---
+
+### The North Star: LLM as Compiler
+
+| # | Chapter | The Question It Answers |
+|---|---------|------------------------|
+| 16 | [The Neural Compiler: From JSON to Machine Code](16-the-neural-compiler.md) | How does an LLM learn to speak directly to silicon? |
+
+The three epochs: JSON strings (now) → 6-byte bytecode (next) → native Xtensa machine code (goal).
 
 ---
 
