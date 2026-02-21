@@ -176,7 +176,20 @@ graph LR
 | **2: Bytecode** | 6-byte hex arrays, zero parsing | ~0.1ms | Designed, [ISA defined](https://evolvingagentslabs.github.io/llmos/16-the-neural-compiler.html) |
 | **3: Native** | LLM emits Xtensa machine code | ~0.00001ms | Research goal |
 
-Today, the LLM outputs `{"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}` — a 58-byte JSON string the ESP32 must parse character by character. Tomorrow, the LLM outputs `AA 01 64 64 CB FF` — 6 bytes the ESP32 reads directly into hardware registers. Eventually, the LLM generates raw Xtensa machine code that executes without any interpreter at all.
+The same motor command, three ways:
+
+```
+Epoch 1 (JSON — 58 bytes, ~15ms parse):
+  {"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":500}
+
+Epoch 2 (Bytecode — 6 bytes, ~0.1ms):
+  AA 01 64 64 CB FF
+
+Epoch 3 (Native Xtensa — 4 bytes, direct execute):
+  0x006420  (MOVI.N a2, 100; executes on silicon)
+```
+
+Today the ESP32 parses JSON character by character. Tomorrow it reads 6 bytes into a struct. Eventually the LLM generates raw machine code that executes without any interpreter at all.
 
 This is the trajectory from "LLM as chatbot" to **"LLM as compiler."**
 
