@@ -1,237 +1,77 @@
-# Chapter 15: The Chassis — From Code to Robot (20cm V1 Platform)
+# Chapter 15 — V1 Hardware Deployment
 
-The fourteen chapters before this one describe a complete navigation stack that runs in simulation: occupancy grids, A* pathfinding, LLM decision-making, vision pipelines, fleet coordination, and 346 tests proving it all works.
+## Step-by-Step Build & Test Guide (20cm Cube, 10cm Wheel Base)
 
-This chapter brings that stack into physical reality.
+This chapter walks you through building and validating the V1 robot in logical, testable stages:
 
-The **V1 Stepper Cube Robot (20cm Edition)** is the reference hardware platform — a lightweight (under 200g) 20×20×20 cm cube powered by two stepper motors, two ESP32 chips, and a camera.
+1. Power Infrastructure
+2. Camera Subsystem (Eyes)
+3. Motor Subsystem (Muscles)
+4. Mechanical Assembly
+5. Calibration (10cm Wheel Base)
+6. Full System Integration
 
-The software layer is already built.
+The robot consists of:
 
-What follows is physical assembly, calibration, protocol validation, and the first time the robot moves under LLM control.
+* 20×20×20 cm lightweight cube chassis
+* 10 cm wheel base (center-to-center)
+* 6 cm diameter wheels
+* Two 28BYJ-48 stepper motors
+* ESP32-CAM (vision)
+* ESP32-S3 (motor controller)
 
----
-
-## The Two Nervous Systems
-
-The robot maintains two completely independent communication pathways — one for vision, one for motion.
-
-```mermaid
-graph LR
-    subgraph ROBOT["V1 Stepper Cube (20cm)"]
-        CAM["ESP32-CAM<br/>The Eyes"]
-        S3["ESP32-S3<br/>The Muscles"]
-        M1["Left Stepper<br/>28BYJ-48"]
-        M2["Right Stepper<br/>28BYJ-48"]
-        S3 --> M1
-        S3 --> M2
-    end
-
-    subgraph HOST["Host PC — The Brain"]
-        VLM["Qwen3-VL-8B<br/>Vision"]
-        NAV["Navigation Loop"]
-        HAL["HAL Bridge"]
-    end
-
-    CAM -->|"HTTP MJPEG<br/>320x240 @ ~10fps"| VLM
-    VLM --> NAV
-    NAV --> HAL
-    HAL -->|"UDP JSON<br/>port 4210"| S3
-    S3 -->|"pose + steps"| HAL
-```
-
-**Eyes (ESP32-CAM):**
-Streams MJPEG over HTTP (port 80).
-
-**Muscles (ESP32-S3):**
-Listens for UDP JSON movement commands on port 4210.
-
-UDP is used instead of TCP to avoid handshake latency in the 200ms control loop.
+Because the wheel base is only 10 cm, the system is mechanically efficient and ideal for the 28BYJ-48 motors.
 
 ---
 
-## Hardware Overview (20cm Platform)
+# Stage 1 — Power Infrastructure
 
-| Component        | Part                              | Purpose                          |
-| ---------------- | --------------------------------- | -------------------------------- |
-| Motor Controller | ESP32-S3-DevKitC-1                | WiFi UDP listener, drives motors |
-| Camera           | ESP32-CAM (AI Thinker)            | WiFi MJPEG streaming             |
-| Motors           | 2× 28BYJ-48                       | Differential drive               |
-| Drivers          | 2× ULN2003                        | Stepper motor drivers            |
-| Wheels           | 6 cm diameter                     | Mounted to 28BYJ shaft           |
-| Support          | Rear ball caster                  | Low friction pivot               |
-| Power            | 5V 3A recommended (5V 2A minimum) | Stable system power              |
-| Chassis          | 20 cm lightweight cube (<200g)    | Structural frame                 |
+## Components
 
-Even though the chassis is larger than the original 8 cm prototype, its low mass keeps torque requirements within safe limits for the 28BYJ-48 motors.
+* 5V 3A power supply (recommended)
+* Protoboard (or MB102)
+* 1000uF 16V electrolytic capacitor
 
 ---
 
-## Why 20cm Changes the Physics
-
-The larger chassis increases:
-
-* Moment of inertia during rotation
-* Mechanical leverage
-* Oscillation amplitude
-
-Even at low weight, rotational precision becomes more sensitive to:
-
-* Wheel base accuracy
-* Friction in the ball caster
-* Motor speed limits
-
-Because of this, **calibration is mandatory before autonomous navigation**.
-
----
-
-# Phase 1: Mechanical Assembly
-
-### Mount Motors and Wheels
-
-* Ensure wheel bore fits tightly on the shaft
-* No wobble
-* No vertical tilt
-* Wheels must spin freely
-
-### Install the Ball Caster
-
-Critical for stepper performance.
-
-28BYJ-48 motors have limited torque. Excess friction in the third contact point will:
-
-* Cause skipped steps
-* Corrupt odometry
-* Create rotational drift
-
-The ball caster must roll freely in all directions.
-
----
-
-# Phase 2: Physical Parameter Calibration (Mandatory)
-
-The codebase previously assumed:
-
-* Wheel diameter: 6.0 cm
-* Wheel base: 12.0 cm
-
-With a 20cm chassis, **wheel base must be measured**.
-
----
-
-## Step 1 — Measure Wheel Base
-
-Measure center-to-center distance between wheels.
-
-Example:
-
-If measured 16.4 cm:
-
-```json
-{"cmd":"set_config","wheel_diameter_cm":6.0,"wheel_base_cm":16.4}
-```
-
----
-
-## Step 2 — Forward Calibration
-
-Send:
-
-```json
-{"cmd":"move_cm","left_cm":50,"right_cm":50,"speed":600}
-```
-
-Measure real distance.
-
-If robot moved 52 cm:
+## Wiring
 
 ```
-actual_diameter = 6.0 * (52 / 50) = 6.24
+5V Power Supply → + Rail
+GND Power Supply → – Rail
+
+Capacitor (+) → + Rail
+Capacitor (–) → – Rail
 ```
 
-Apply:
+### Why 3A?
 
-```json
-{"cmd":"set_config","wheel_diameter_cm":6.24}
+Even though the robot is light, the system includes:
+
+* 2 steppers
+* 2 ESP32 boards
+* WiFi bursts from ESP32-CAM
+
+3A provides headroom and prevents brownouts.
+
+---
+
+# Stage 2 — Camera Subsystem (Test Independently)
+
+## Wiring
+
+```
+ESP32-CAM 5V → + Rail
+ESP32-CAM GND → – Rail
 ```
 
----
-
-## Step 3 — Rotation Calibration
-
-Send:
-
-```json
-{"cmd":"rotate_deg","degrees":360,"speed":600}
-```
-
-If it over-rotates → wheel_base too small
-If under-rotates → wheel_base too large
-
-Adjust and repeat.
+Do NOT use 3.3V.
 
 ---
 
-# Recommended Speed Limits (20cm Edition)
+## Validation
 
-Even though motors support 1024 steps/sec, the 20cm chassis is more stable at:
-
-* **Default: 600–800 steps/sec**
-* Absolute max: 1024 (may skip steps)
-
-Top speed ≈ 4.7 cm/s.
-
-Faster speeds increase skipped-step risk.
-
----
-
-# Wiring (Unchanged)
-
-### Left Motor
-
-| ESP32-S3 GPIO | ULN2003 |
-| ------------- | ------- |
-| GPIO 4        | IN1     |
-| GPIO 5        | IN2     |
-| GPIO 6        | IN3     |
-| GPIO 7        | IN4     |
-
-### Right Motor
-
-| ESP32-S3 GPIO | ULN2003 |
-| ------------- | ------- |
-| GPIO 15       | IN1     |
-| GPIO 16       | IN2     |
-| GPIO 17       | IN3     |
-| GPIO 18       | IN4     |
-
-VCC → 5V
-GND → Common ground
-
-All grounds must be connected.
-
----
-
-# Power Requirements
-
-Because the system includes:
-
-* 2 stepper motors
-* ESP32-S3
-* ESP32-CAM (WiFi bursts)
-
-Power recommendation:
-
-* **5V 3A supply preferred**
-* 5V 2A minimum (may brownout during peaks)
-
-Add a **1000uF capacitor** across 5V and GND rails.
-
----
-
-# Phase 3: Eyes and Muscles Validation
-
-## Eyes
+Flash camera firmware.
 
 Open:
 
@@ -243,104 +83,240 @@ Confirm:
 
 * 320x240 MJPEG
 * ~10fps
-* Stable image
+* Stable stream
+* No random resets
+
+If stable → Eyes validated.
 
 ---
 
-## Muscles
+# Stage 3 — Motor Subsystem (Test Without Chassis)
 
-Send UDP:
+## Left Motor Wiring
+
+| ESP32-S3 | ULN2003 |
+| -------- | ------- |
+| GPIO 4   | IN1     |
+| GPIO 5   | IN2     |
+| GPIO 6   | IN3     |
+| GPIO 7   | IN4     |
+
+ULN2003:
+
+* VCC → 5V
+* GND → GND
+
+---
+
+## Right Motor Wiring
+
+| ESP32-S3 | ULN2003 |
+| -------- | ------- |
+| GPIO 15  | IN1     |
+| GPIO 16  | IN2     |
+| GPIO 17  | IN3     |
+| GPIO 18  | IN4     |
+
+---
+
+## Independent Tests
+
+Left only:
+
+```json
+{"cmd":"move_steps","left":1000,"right":0,"speed":600}
+```
+
+Right only:
+
+```json
+{"cmd":"move_steps","left":0,"right":1000,"speed":600}
+```
+
+Forward:
 
 ```json
 {"cmd":"move_cm","left_cm":10,"right_cm":10,"speed":600}
 ```
 
-Measure movement.
+If stable → Muscles validated.
 
 ---
 
-## Full Loop Test
+# Stage 4 — Mechanical Assembly
 
-1. Open camera stream
-2. Command 360° rotation
-3. Observe visual feedback
+Now mount everything onto the 20cm cube.
 
-If video shows environment rotating while robot spins, the physical system matches software.
+## Important Geometry
+
+* Outer cube: 20 cm
+* Wheel base (center-to-center): **10 cm**
+* Wheel diameter: 6 cm
+
+The smaller 10 cm wheel base:
+
+* Improves turning efficiency
+* Reduces required torque
+* Increases rotational responsiveness
+* Slightly increases angular sensitivity to calibration errors
 
 ---
 
-# Odometry on a 20cm Chassis
+## Install Ball Caster
 
-Odometry equations remain unchanged:
+Because wheel base is compact (10 cm), ball caster alignment is critical.
+
+If caster has friction:
+
+* Robot will yaw during straight movement
+* Odometry error increases
+
+Ensure free rolling in all directions.
+
+---
+
+# Stage 5 — Calibration (10cm Wheel Base)
+
+These are your starting physical constants:
+
+| Parameter      | Value   |
+| -------------- | ------- |
+| Wheel diameter | 6.0 cm  |
+| Wheel base     | 10.0 cm |
+
+Apply:
+
+```json
+{"cmd":"set_config","wheel_diameter_cm":6.0,"wheel_base_cm":10.0}
+```
+
+---
+
+## Forward Calibration
+
+Send:
+
+```json
+{"cmd":"move_cm","left_cm":50,"right_cm":50,"speed":600}
+```
+
+Measure real distance.
+
+If actual = 49cm:
 
 ```
-linearCm = (leftDistCm + rightDistCm) / 2
+6.0 × (49/50) = 5.88
+```
+
+Apply correction.
+
+---
+
+## Rotation Calibration
+
+Send:
+
+```json
+{"cmd":"rotate_deg","degrees":360,"speed":600}
+```
+
+Because wheel base is 10 cm (shorter than previous 12 cm), rotation should feel:
+
+* Faster
+* More responsive
+* Less torque-demanding
+
+If rotation overshoots:
+
+* Wheel base constant too small
+
+If under-rotates:
+
+* Wheel base constant too large
+
+---
+
+# Updated Kinematic Implications (10cm Base)
+
+Angular displacement formula:
+
+```
 angularRad = (rightDistCm - leftDistCm) / wheelBaseCm
 ```
 
-The only difference is that `wheelBaseCm` must reflect the real measured value.
+With 10 cm base:
 
-Because stepper motors execute discrete steps, short-distance precision is high.
+* Same wheel difference produces larger rotation
+* Calibration precision becomes more important
 
-Longer paths accumulate small drift — corrected by vision.
+However:
 
----
-
-# Updated Diagnostics
-
-### “It overshoots rotation more than before”
-
-Large chassis amplifies small errors.
-
-Recalibrate wheel_base_cm precisely.
+* Lower inertia
+* Less torque stress on motors
+* More stable at 800 steps/sec
 
 ---
 
-### “It vibrates during turns”
+# Recommended Speed Limits
 
-Likely causes:
+Because chassis is light and wheel base compact:
 
-* Speed too high
-* Ball caster friction
-* Wheel not centered
-* Slight motor shaft misalignment
+* Default: 700–800 steps/sec
+* Safe max: 1024 steps/sec
+* Typical linear speed ≈ 4.7 cm/s
 
-Reduce speed to 600.
-
----
-
-### “It drifts over long runs”
-
-Normal with dead reckoning.
-
-Vision correction loop compensates.
+This configuration is well within 28BYJ safe torque limits.
 
 ---
 
-# Final Architecture (Unchanged)
+# Stage 6 — Integrated Test
 
-* Vision via HTTP MJPEG
-* Motion via UDP JSON
-* Navigation loop on host
-* LLM-driven decisions
-* Firmware-enforced safety
+Reconnect camera.
 
-Only physical constants changed.
+Confirm:
+
+* No brownouts
+* Motors move
+* Video stable during motion
 
 ---
 
-# Summary
+## Full Rotation + Vision Test
 
-The 20cm V1 Stepper Cube Robot preserves the original architecture but requires careful physical calibration.
+1. Open camera stream.
+2. Send:
 
-Despite its larger footprint, its sub-200g weight keeps the 28BYJ-48 motors within safe torque limits.
+```json
+{"cmd":"rotate_deg","degrees":360,"speed":700}
+```
+
+You should see the room rotate smoothly.
+
+Because base is only 10 cm, rotation should appear tight and clean.
+
+---
+
+# Expected Performance (10cm Wheel Base)
 
 With proper calibration:
 
-* Linear accuracy within ±1cm over 50cm
-* Rotational accuracy within ±2–3°
-* Stable 600–800 steps/sec operation
-* Fully functional LLM-driven navigation
+* ±1 cm linear accuracy over 50 cm
+* ±2° rotational accuracy
+* No skipped steps at 800 steps/sec
+* Smooth pivot turns
 
-The body is larger.
-The mind remains the same.
+---
+
+# Final Mechanical Summary
+
+Even though the outer cube is 20 cm, the effective drive geometry is compact:
+
+* Wheel base: 10 cm
+* Wheel diameter: 6 cm
+* Mass: <200g
+
+This makes the robot mechanically efficient and ideal for stepper-based differential drive.
+
+The body is large.
+The drivetrain is compact.
+The control loop remains identical.
