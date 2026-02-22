@@ -263,7 +263,7 @@ The V1 hardware replaces DC motors with 28BYJ-48 steppers and USB serial with Wi
 | ESP32-S3-DevKitC-1 | WiFi motor controller |
 | ESP32-CAM (AI-Thinker) | WiFi camera (MJPEG streaming) |
 | 2x 28BYJ-48 + ULN2003 | Stepper motors with drivers |
-| 6cm wheels, 12cm wheel base | Differential drive |
+| 6cm wheels, 10cm wheel base | Differential drive |
 
 ### WiFi UDP Command Protocol (Port 4210)
 
@@ -286,7 +286,7 @@ Replaces the serial JSON protocol with UDP JSON for lower latency:
 {"cmd":"get_status"}
 
 // Update calibration
-{"cmd":"set_config", "wheel_diameter_cm":6.0, "wheel_base_cm":12.0}
+{"cmd":"set_config", "wheel_diameter_cm":6.0, "wheel_base_cm":10.0}
 ```
 
 ### Camera Streaming Setup

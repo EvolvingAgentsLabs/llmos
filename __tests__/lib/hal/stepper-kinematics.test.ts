@@ -18,7 +18,7 @@ describe('StepperKinematics', () => {
     const spec = kin.getSpec();
     expect(spec.stepsPerRevolution).toBe(4096);
     expect(spec.wheelDiameterCm).toBe(6.0);
-    expect(spec.wheelBaseCm).toBe(12.0);
+    expect(spec.wheelBaseCm).toBe(10.0);
     expect(spec.maxStepsPerSecond).toBe(1024);
     expect(spec.maxAcceleration).toBe(512);
   });
@@ -74,9 +74,9 @@ describe('StepperKinematics', () => {
   // ===========================================================================
 
   test('360 degree rotation uses correct arc length', () => {
-    // Arc for 360° in-place rotation: PI * wheelBase = PI * 12 ≈ 37.7 cm
+    // Arc for 360° in-place rotation: PI * wheelBase = PI * 10 ≈ 31.4 cm
     const steps = kin.rotationToSteps(360);
-    const expectedArcCm = Math.PI * 12;
+    const expectedArcCm = Math.PI * 10;
     const expectedSteps = Math.round(expectedArcCm * kin.getStepsPerCm());
     expect(steps).toBe(expectedSteps);
   });

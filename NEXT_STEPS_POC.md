@@ -557,7 +557,7 @@ The LLMos codebase now includes a complete hardware specification — officially
 
 1. **3D print the "Stepper Cube" chassis** from `Agent_Robot_Model/Robot_one/`. The 8cm cube mounts the ESP32s, ULN2003 drivers, and motors.
 2. **Mount the rear ball caster** — stepper motors have low torque, so reducing friction prevents wheel slip (which ruins dead-reckoning).
-3. **Verify wheel dimensions** — the codebase hardcodes 6.0 cm wheel diameter (18.85 cm circumference) and 12.0 cm wheel base. If your wheels differ, use `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}` to calibrate.
+3. **Verify wheel dimensions** — the codebase hardcodes 6.0 cm wheel diameter (18.85 cm circumference) and 10.0 cm wheel base. If your wheels differ, use `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}` to calibrate.
 
 ### 6.2 Communication Protocol Deployment
 

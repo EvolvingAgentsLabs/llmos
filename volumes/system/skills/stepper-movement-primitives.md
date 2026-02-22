@@ -36,7 +36,7 @@ steps = distance_cm × STEPS_PER_CM
 ### Rotation to Steps (In-Place Turn)
 ```
 ARC_CM = (degrees / 360) × π × WHEEL_BASE
-       = (degrees / 360) × π × 12.0
+       = (degrees / 360) × π × 10.0
 
 left_steps  = +ARC_CM × STEPS_PER_CM   (forward)
 right_steps = -ARC_CM × STEPS_PER_CM   (backward)
@@ -100,8 +100,8 @@ Backward 10cm: left=-2173 steps, right=-2173 steps
 
 ### Point Turn (Rotate in Place)
 ```
-Turn right 90°:  left=+1664 steps, right=-1664 steps
-Turn left 90°:   left=-1664 steps, right=+1664 steps
+Turn right 90°:  left=+1707 steps, right=-1707 steps
+Turn left 90°:   left=-1707 steps, right=+1707 steps
 ```
 
 ### Arc Turn

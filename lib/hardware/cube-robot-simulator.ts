@@ -55,7 +55,7 @@ export const ROBOT_SPECS_V1_STEPPER = {
   // Physical dimensions (meters)
   BODY_SIZE: 0.08,           // 8cm cube (same chassis)
   WHEEL_RADIUS: 0.03,        // 3cm (6cm diameter wheels)
-  WHEEL_BASE: 0.12,          // 12cm between wheels
+  WHEEL_BASE: 0.10,          // 10cm between wheels
   WHEEL_WIDTH: 0.01,         // 1cm wheel width
 
   // Stepper motor specs (28BYJ-48)

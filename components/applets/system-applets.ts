@@ -1212,7 +1212,7 @@ void update(void) {
     const simulatePhysics = () => {
       const dt = 0.05;
       const SPEED_SCALE = 0.008;
-      const WHEEL_BASE = 0.15;
+      const WHEEL_BASE = 0.10;
       const vL = motors.left * SPEED_SCALE;
       const vR = motors.right * SPEED_SCALE;
       const v = (vR + vL) / 2.0;

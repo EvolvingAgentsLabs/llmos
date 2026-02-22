@@ -325,7 +325,7 @@ The reference hardware platform is the **Robot V1 -- Stepper Cube Robot**, an 8c
 | Camera | ESP32-CAM (AI-Thinker), OV2640, MJPEG streaming |
 | Motors | 2x 28BYJ-48 stepper (5V unipolar, 4096 steps/rev, 64:1 gear ratio) |
 | Drivers | 2x ULN2003 Darlington arrays |
-| Wheels | 6cm diameter, 12cm wheel base |
+| Wheels | 6cm diameter, 10cm wheel base |
 | Support | Rear ball caster (low friction for stepper torque) |
 | Power | 5V 2A USB-C |
 | Chassis | 8cm 3D-printed cube from `Agent_Robot_Model/Robot_one/` |
@@ -361,8 +361,8 @@ calculateMoveDuration()    // trapezoidal motion profile
 ```
 
 The `rotationToSteps` function computes the arc length each wheel must travel for an
-in-place rotation. For a 90-degree turn with a 12cm wheel base, each wheel travels
-`pi * 12 / 4 = 9.42 cm` in opposite directions, which is `9.42 * 217.3 = 2047 steps`.
+in-place rotation. For a 90-degree turn with a 10cm wheel base, each wheel travels
+`pi * 10 / 4 = 7.85 cm` in opposite directions, which is `7.85 * 217.3 = 1706 steps`.
 If the calibrated wheel dimensions differ from the codebase defaults, the
 `set_config` command updates the firmware constants.
 

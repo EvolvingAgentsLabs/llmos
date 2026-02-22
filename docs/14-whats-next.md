@@ -85,7 +85,7 @@ the `.stl` / `.blend` files, the LLM will hallucinate its location in space.
 - Mount the rear ball caster (stepper motors have low torque; reducing friction
   prevents wheel slip)
 - Verify wheel dimensions match the codebase: 6.0 cm wheel diameter (18.85 cm
-  circumference), 12.0 cm wheel base
+  circumference), 10.0 cm wheel base
 - If wheels differ, calibrate with:
   `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}`
 
