@@ -8,7 +8,7 @@
  *   - 4096 steps/rev (64:1 gear ratio)
  *   - ~15 RPM max
  *   - 6cm diameter wheels
- *   - 12cm wheel base
+ *   - 10cm wheel base
  */
 
 // =============================================================================
@@ -40,7 +40,7 @@ export interface ArcSpeeds {
 export const DEFAULT_28BYJ48_SPEC: StepperMotorSpec = {
   stepsPerRevolution: 4096,
   wheelDiameterCm: 6.0,
-  wheelBaseCm: 12.0,
+  wheelBaseCm: 10.0,
   maxStepsPerSecond: 1024,
   maxAcceleration: 512,
 };

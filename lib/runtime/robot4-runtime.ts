@@ -107,7 +107,7 @@ export class Robot4Runtime {
   private encoders = { left: 0, right: 0 };
 
   // Robot physical constants
-  private readonly WHEEL_BASE = 0.15;      // 15cm between wheels
+  private readonly WHEEL_BASE = 0.10;      // 10cm between wheels
   private readonly WHEEL_RADIUS = 0.0325;  // 32.5mm wheel radius
   private readonly TICKS_PER_REV = 360;    // Encoder resolution
   private readonly MAX_SPEED = 1.0;        // m/s at PWM 255

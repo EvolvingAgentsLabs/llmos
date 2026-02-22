@@ -227,7 +227,7 @@ gantt
 - [ ] 3D print the 8cm cube chassis from `Agent_Robot_Model/Robot_one/`
 - [ ] Mount ESP32-S3, ESP32-CAM, ULN2003 drivers, 28BYJ-48 motors
 - [ ] Install rear ball caster for low-friction third contact point
-- [ ] Verify wheel dimensions match codebase constants (6cm diameter, 12cm wheel base)
+- [ ] Verify wheel dimensions match codebase constants (6cm diameter, 10cm wheel base)
 - [ ] If wheels differ, calibrate via `{"cmd":"set_config","wheel_diameter_cm":F,"wheel_base_cm":F}`
 
 #### Step 2: Communication Protocol Validation

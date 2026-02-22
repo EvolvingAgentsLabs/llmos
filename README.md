@@ -207,7 +207,7 @@ The **V1 Stepper Cube** — an 8cm 3D-printed cube with everything inside:
 | **ESP32-CAM (AI-Thinker)** | Camera | Streams MJPEG at 320x240 @ 10fps over HTTP |
 | **2x 28BYJ-48** | Stepper motors | 4096 steps/rev, ~217 steps/cm, max ~4.7 cm/s |
 | **2x ULN2003** | Motor drivers | Darlington arrays driving the steppers |
-| **6cm wheels** | Locomotion | 12cm wheel base, differential drive |
+| **6cm wheels** | Locomotion | 10cm wheel base, differential drive |
 | **Ball caster** | Rear support | Low friction — critical for rotation accuracy |
 | **5V 2A USB-C** | Power | Powers both ESP32s and both motors |
 

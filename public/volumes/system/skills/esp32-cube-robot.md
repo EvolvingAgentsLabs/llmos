@@ -17,7 +17,7 @@ When controlling or simulating a two-wheeled differential drive cube robot based
 |-----------|-------------|
 | MCU | ESP32-S3 |
 | Drive System | Differential (Left/Right motors) |
-| Wheel Base | 0.5 meters (distance between wheels) |
+| Wheel Base | 0.10 meters (distance between wheels) |
 | Sensors | Front Camera, Wheel Encoders |
 | Protocol | JSON over Serial (115200 baud) |
 | Motor Range | -255 (full reverse) to 255 (full forward) |
