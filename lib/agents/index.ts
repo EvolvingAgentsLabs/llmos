@@ -126,19 +126,6 @@ export {
 } from './agentic-orchestrator';
 
 // =============================================================================
-// Evolution Integration (Skill Generation from Patterns)
-// =============================================================================
-
-export {
-  type EvolutionTrigger,
-  type SkillCandidate,
-  type EvolutionReport,
-  EvolutionIntegration,
-  getEvolutionIntegration,
-  runEvolutionCycle
-} from './evolution-integration';
-
-// =============================================================================
 // Model Capabilities (Strategy Selection for Different LLMs)
 // =============================================================================
 

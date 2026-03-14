@@ -14,8 +14,6 @@ import ResizablePanel from './ResizablePanel';
 import ViewManager from './ViewManager';
 import CommandPalette from './CommandPalette';
 import AgentCortexHeader from './AgentCortexHeader';
-import RobotWorkspace from './RobotWorkspace';
-
 // Lazy load heavy 3D components
 const CoreEntityBackground = dynamic(
   () => import('@/components/system/CoreEntity').then(mod => ({ default: mod.CoreEntityBackground })),
@@ -246,12 +244,48 @@ export default function AdaptiveLayout() {
       {/* Keyboard shortcuts hint */}
       <KeyboardHint />
 
-      {/* Robot Mode: Full 3D Robot World Workspace (Only Mode) */}
-      <div className="flex-1 overflow-hidden relative z-10">
-        <RobotWorkspace
-          activeVolume={activeVolume}
-          onVolumeChange={setActiveVolume}
-        />
+      {/* Main workspace: Sidebar + Chat + Context */}
+      <div className="flex-1 overflow-hidden relative z-10 flex">
+        {/* Sidebar */}
+        {!layout.isSidebarCollapsed && (
+          <ResizablePanel
+            width={state.panelWidths.sidebar}
+            minWidth={200}
+            maxWidth={400}
+            onResize={(w) => resizePanel('sidebar', w)}
+            side="left"
+          >
+            <div className="relative h-full">
+              <FocusIndicator panel="sidebar" />
+              <SidebarPanel />
+            </div>
+          </ResizablePanel>
+        )}
+
+        {/* Chat panel */}
+        <div
+          className="relative flex-1 min-w-0"
+          onClick={() => setFocusedPanel('chat')}
+        >
+          <FocusIndicator panel="chat" />
+          <ChatPanel />
+        </div>
+
+        {/* Context panel */}
+        {!layout.isContextCollapsed && (
+          <ResizablePanel
+            width={state.panelWidths.context}
+            minWidth={300}
+            maxWidth={800}
+            onResize={(w) => resizePanel('context', w)}
+            side="right"
+          >
+            <div className="relative h-full">
+              <FocusIndicator panel="context" />
+              <ViewManager />
+            </div>
+          </ResizablePanel>
+        )}
       </div>
     </div>
   );

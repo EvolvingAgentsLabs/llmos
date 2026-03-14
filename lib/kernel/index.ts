@@ -10,7 +10,6 @@
  * ClientKernel
  * ├── FileSystemStorage     (IndexedDB-backed filesystem)
  * ├── ClientSkillsManager   (skill loading and filtering)
- * ├── ClientEvolutionEngine (pattern detection and skill generation)
  * └── ClientAgentManager    (agent discovery and invocation)
  * ```
  *
@@ -36,9 +35,6 @@
  *   'Analyze this dataset',
  *   project.path
  * );
- *
- * // Run evolution to generate skills
- * await kernel.runEvolution(project.path);
  * ```
  */
 

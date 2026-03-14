@@ -7,7 +7,6 @@
 
 import { FileSystemStorage, getFileSystem } from '../storage/filesystem';
 import { ClientSkillsManager, getSkillsManager, Skill } from '../skills/client-skills-manager';
-import { ClientEvolutionEngine, getEvolutionEngine, EvolutionResult } from '../evolution/client-evolution';
 import { ClientAgentManager, getAgentManager, Agent, AgentValidationResult } from '../agents/client-agent-manager';
 import { Result, ok, err, AppError, appError, ErrorCodes } from '../core/result';
 
@@ -17,7 +16,6 @@ import { Result, ok, err, AppError, appError, ErrorCodes } from '../core/result'
 
 export interface KernelConfig {
   minAgentsPerProject: number;
-  evolutionEnabled: boolean;
   memoryConsolidationEnabled: boolean;
   selfModifyingEnabled: boolean;
   defaultModel: string;
@@ -75,7 +73,6 @@ export interface MemoryMatch {
 export class ClientKernel {
   private fs: FileSystemStorage;
   private skillsManager: ClientSkillsManager;
-  private evolutionEngine: ClientEvolutionEngine;
   private agentManager: ClientAgentManager;
   private config: KernelConfig;
   private llmCallback?: (messages: Array<{ role: string; content: string }>) => Promise<string>;
@@ -89,15 +86,8 @@ export class ClientKernel {
     this.agentManager = getAgentManager();
     this.llmCallback = llmCallback;
 
-    // Create evolution engine with LLM callback
-    const evolutionLlmCallback = llmCallback
-      ? async (prompt: string) => llmCallback([{ role: 'user', content: prompt }])
-      : undefined;
-    this.evolutionEngine = getEvolutionEngine(evolutionLlmCallback);
-
     this.config = {
       minAgentsPerProject: config?.minAgentsPerProject ?? 3,
-      evolutionEnabled: config?.evolutionEnabled ?? true,
       memoryConsolidationEnabled: config?.memoryConsolidationEnabled ?? true,
       selfModifyingEnabled: config?.selfModifyingEnabled ?? true,
       defaultModel: config?.defaultModel ?? 'anthropic/claude-sonnet-4-20250514',
@@ -530,30 +520,6 @@ Project: ${projectPath}
 
       return err(appError(ErrorCodes.PROCESSING_ERROR, 'Agent invocation failed', error));
     }
-  }
-
-  // ============================================================================
-  // EVOLUTION
-  // ============================================================================
-
-  /**
-   * Run evolution to generate skills from patterns
-   */
-  async runEvolution(projectPath?: string): Promise<Result<EvolutionResult, AppError>> {
-    if (!this.config.evolutionEnabled) {
-      return ok({
-        tracesAnalyzed: 0,
-        patternsDetected: 0,
-        viablePatterns: 0,
-        skillsCreated: 0,
-        skills: [],
-      });
-    }
-
-    return this.evolutionEngine.runEvolution(
-      projectPath ? 'project' : 'user',
-      projectPath
-    );
   }
 
   // ============================================================================
