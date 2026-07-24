@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **Archived 2026-07-24.** Dismantled by its author in commit `323e717` (2026-03-14), which moved robotics to [skillos_robot](https://github.com/EvolvingAgentsLabs/skillos_robot) and the dream engine to [evolving-memory](https://github.com/EvolvingAgentsLabs/evolving-memory). The markdown-agent thesis continues in [skillos](https://github.com/EvolvingAgentsLabs/skillos).
+>
+> **The `docs/` book is stale** — it documents modules deleted in that commit and cites a test count (346) that no longer matches the 46 tests remaining. Not related to [llm_os](https://github.com/EvolvingAgentsLabs/llm_os), despite the name.
+
+---
+
 <div align="center">
 
 # LLMos
